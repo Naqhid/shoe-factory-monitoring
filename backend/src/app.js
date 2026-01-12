@@ -1,13 +1,35 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const logger = require('./utils/logger');
 const fileWatcherService = require('./services/fileWatcherService');
 const apiController = require('./controllers/apiController');
 const errorHandler = require('./middleware/errorHandler');
 
+// Create required directories
+const createDirectories = () => {
+  const dirs = [
+    process.env.INCOMING_DIR,
+    process.env.SUCCESS_DIR,
+    process.env.FAILURE_DIR,
+    process.env.LOGS_DIR
+  ];
+  
+  dirs.forEach(dir => {
+    if (dir && !fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      logger.info(`Created directory: ${dir}`);
+    }
+  });
+};
+
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Create directories on startup
+createDirectories();
 
 // Middleware
 app.use(cors());
