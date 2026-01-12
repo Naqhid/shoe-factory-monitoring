@@ -46,7 +46,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, efficiency, o
             ) : (
               <Square className="h-5 w-5 text-idle fill-current" />
             )}
-            {/* Tooltip */}
+            {/* Tooltip. */}
             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
               {statusTooltip}
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
