@@ -1,0 +1,38 @@
+export interface MachineStatus {
+  machine_id: string;
+  status: 0 | 1;
+  event_time: string;
+  source_file: string;
+  created_at: string;
+}
+
+export interface RunIdleData {
+  machine_id: string;
+  run_minutes: number;
+  idle_minutes: number;
+  total_events: number;
+  efficiency_percentage?: number;
+}
+
+export interface HourlyData {
+  machine_id: string;
+  hour: number;
+  event_count: number;
+  run_events: number;
+  idle_events: number;
+}
+
+export interface OverallEfficiency {
+  total_machines: number;
+  total_run_minutes: number;
+  total_idle_minutes: number;
+  total_events: number;
+  overall_efficiency: number;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  date?: string;
+  error?: string;
+}

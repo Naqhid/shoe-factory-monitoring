@@ -1,0 +1,6 @@
+{
+  "data": [
+    { "machine_id": "US-10", "status": 1 },
+    { "machine_id": "US-11", "status": 0 }
+  ]
+}
