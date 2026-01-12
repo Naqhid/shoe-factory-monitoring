@@ -11,6 +11,11 @@ dist/
 logs/
 *.log
 
+# Data directories
+incoming/
+success/
+failure/
+
 # OS
 .DS_Store
 Thumbs.db
