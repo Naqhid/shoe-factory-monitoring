@@ -6,7 +6,6 @@ const path = require('path');
 const logger = require('./utils/logger');
 const fileWatcherService = require('./services/fileWatcherService');
 const apiController = require('./controllers/apiController');
-const testController = require('./controllers/testController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
