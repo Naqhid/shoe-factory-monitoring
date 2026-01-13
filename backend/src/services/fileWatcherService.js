@@ -11,6 +11,11 @@ class FileWatcherService {
   start() {
     const watchDir = process.env.INCOMING_DIR;
     
+    if (!watchDir) {
+      logger.warn('INCOMING_DIR not set, skipping file watcher');
+      return;
+    }
+    
     logger.info(`Starting file watcher on directory: ${watchDir}`);
     
     this.watcher = chokidar.watch(path.join(watchDir, '*.json'), {

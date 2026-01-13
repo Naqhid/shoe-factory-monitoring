@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { MachineStatus, RunIdleData, HourlyData, OverallEfficiency, ApiResponse } from '../types';
 
-const API_BASE = process.env.NODE_ENV === 'production' 
-  ? 'https://shoe-factory-monitoring-production.up.railway.app/api'
-  : 'http://localhost:3001/api';
+// Always use Railway backend
+const API_BASE = 'https://shoe-factory-monitoring-production-8c06.up.railway.app/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -37,10 +36,7 @@ export const apiService = {
   },
 
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
-    const healthUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://shoe-factory-monitoring-production.up.railway.app/health'
-      : 'http://localhost:3001/health';
-    const response = await axios.get(healthUrl);
+    const response = await axios.get('https://shoe-factory-monitoring-production-8c06.up.railway.app/health');
     return response.data;
   },
 };
