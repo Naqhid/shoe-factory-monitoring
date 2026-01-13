@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://naqhid.github.io/Florence-IOT",
+  "homepage": "https://naqhid.github.io/shoe-factory-monitoring",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
