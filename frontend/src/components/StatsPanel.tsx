@@ -56,24 +56,24 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ machines, overallEfficie
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4 mb-4 sm:mb-6">
       {stats.map((stat, index) => (
         <div
           key={index}
-          className={`${stat.bgColor} ${stat.borderColor} border rounded-lg p-4 transition-all hover:shadow-md`}
+          className={`${stat.bgColor} ${stat.borderColor} border rounded-lg p-2 sm:p-4 transition-all hover:shadow-md`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <stat.icon className={`h-5 w-5 ${stat.color}`} />
-            <span className={`text-2xl font-bold ${stat.color}`}>
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <stat.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.color}`} />
+            <span className={`text-lg sm:text-2xl font-bold ${stat.color}`}>
               {stat.value}
             </span>
           </div>
-          <p className="text-sm font-medium text-gray-700">{stat.label}</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-700">{stat.label}</p>
           {stat.label === 'Overall Efficiency' && overallEfficiency && (
-            <div className="mt-2">
-              <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="mt-1 sm:mt-2">
+              <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  className="bg-blue-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(overallEfficiency.overall_efficiency, 100)}%` }}
                 ></div>
               </div>

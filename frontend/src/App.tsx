@@ -97,7 +97,7 @@ function Dashboard() {
     <div className="min-h-screen bg-gray-50">
       <Header isConnected={isConnected} lastRefresh={lastRefresh} />
       
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {/* Loading State */}
         {isLoading && (
           <div className="flex items-center justify-center py-8">
@@ -110,17 +110,17 @@ function Dashboard() {
         <StatsPanel machines={machines} overallEfficiency={overallEfficiency} />
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Machine Grid */}
-          <div className="xl:col-span-2">
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">
                 Production Floor Status
-                <span className="text-sm font-normal text-gray-500 ml-2">
+                <span className="text-xs sm:text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
                   (Click machine for details)
                 </span>
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4">
                 {machines.map((machine) => (
                   <MachineCard
                     key={machine.machine_id}
@@ -140,8 +140,8 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Efficiency Chart */}
-          <div className="xl:col-span-1">
+          {/* Efficiency Chart - Desktop Only */}
+          <div className="hidden lg:block lg:col-span-1">
             {efficiencyData.length > 0 && (
               <EfficiencyChart data={efficiencyData} />
             )}
@@ -149,7 +149,7 @@ function Dashboard() {
         </div>
 
         {/* Mobile Efficiency Chart */}
-        <div className="xl:hidden mt-6">
+        <div className="lg:hidden mt-6">
           {efficiencyData.length > 0 && (
             <EfficiencyChart data={efficiencyData} />
           )}
