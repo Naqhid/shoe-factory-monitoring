@@ -6,6 +6,7 @@ const path = require('path');
 const logger = require('./utils/logger');
 const fileWatcherService = require('./services/fileWatcherService');
 const apiController = require('./controllers/apiController');
+const masterController = require('./controllers/masterController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
@@ -47,6 +48,21 @@ app.get('/api/reports/run-idle', apiController.getRunIdleReport);
 app.get('/api/reports/hourly', apiController.getHourlyReport);
 app.get('/api/reports/efficiency', apiController.getEfficiencyReport);
 app.get('/api/reports/overall-efficiency', apiController.getOverallEfficiency);
+
+// Master CRUD routes
+const allowedTables = ['customers', 'groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres'];
+app.use('/api/masters/:table', (req, res, next) => {
+  if (!allowedTables.includes(req.params.table)) {
+    return res.status(400).json({ success: false, error: 'Invalid table' });
+  }
+  next();
+});
+
+app.get('/api/masters/:table', masterController.getAll);
+app.get('/api/masters/:table/:id', masterController.getById);
+app.post('/api/masters/:table', masterController.create);
+app.put('/api/masters/:table/:id', masterController.update);
+app.delete('/api/masters/:table/:id', masterController.delete);
 
 // Health check
 app.get('/health', (req, res) => {

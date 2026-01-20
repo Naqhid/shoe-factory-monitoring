@@ -6,6 +6,7 @@ import { StatsPanel } from './components/StatsPanel';
 import { MachineCard } from './components/MachineCard';
 import { EfficiencyChart } from './components/EfficiencyChart';
 import { MachineDetailModal } from './components/MachineDetailModal';
+import { ERPApp } from './components/ERPApp';
 import { useMachineStatus, useEfficiencyReport, useOverallEfficiency } from './hooks/useApi';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
@@ -42,7 +43,6 @@ function Dashboard() {
     isLoading: overallLoading 
   } = useOverallEfficiency(selectedDate);
 
-  // Update last refresh time when data changes
   React.useEffect(() => {
     if (dataUpdatedAt) {
       setLastRefresh(new Date(dataUpdatedAt));
@@ -52,7 +52,6 @@ function Dashboard() {
   const isConnected = !machinesError;
   const isLoading = machinesLoading || efficiencyLoading || overallLoading;
 
-  // Create efficiency map for quick lookup
   const efficiencyMap = React.useMemo(() => {
     const map = new Map();
     efficiencyData.forEach(item => {
@@ -98,7 +97,6 @@ function Dashboard() {
       <Header isConnected={isConnected} lastRefresh={lastRefresh} />
       
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">
-        {/* Loading State */}
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -106,57 +104,43 @@ function Dashboard() {
           </div>
         )}
 
-        {/* Stats Panel */}
         <StatsPanel machines={machines} overallEfficiency={overallEfficiency} />
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Machine Grid */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">
-                Production Floor Status
-                <span className="text-xs sm:text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
-                  (Click machine for details)
-                </span>
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4">
-                {machines.map((machine) => (
-                  <MachineCard
-                    key={machine.machine_id}
-                    machine={machine}
-                    efficiency={efficiencyMap.get(machine.machine_id)}
-                    onClick={() => handleMachineClick(machine)}
-                  />
-                ))}
-              </div>
-              
-              {machines.length === 0 && !isLoading && (
-                <div className="text-center py-8 text-gray-500">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <p>No machine data available</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Efficiency Chart - Desktop Only */}
-          <div className="hidden lg:block lg:col-span-1">
-            {efficiencyData.length > 0 && (
-              <EfficiencyChart data={efficiencyData} />
-            )}
-          </div>
-        </div>
-
-        {/* Mobile Efficiency Chart */}
-        <div className="lg:hidden mt-6">
+        {/* Efficiency Chart First */}
+        <div className="mb-6">
           {efficiencyData.length > 0 && (
             <EfficiencyChart data={efficiencyData} />
           )}
         </div>
+
+        {/* Production Floor Status Below */}
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">
+            Production Floor Status
+            <span className="text-xs sm:text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
+              (Click machine for details)
+            </span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
+            {machines.map((machine) => (
+              <MachineCard
+                key={machine.machine_id}
+                machine={machine}
+                efficiency={efficiencyMap.get(machine.machine_id)}
+                onClick={() => handleMachineClick(machine)}
+              />
+            ))}
+          </div>
+          
+          {machines.length === 0 && !isLoading && (
+            <div className="text-center py-8 text-gray-500">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <p>No machine data available</p>
+            </div>
+          )}
+        </div>
       </main>
 
-      {/* Machine Detail Modal */}
       {selectedMachine && (
         <MachineDetailModal
           machine={selectedMachine}
@@ -170,9 +154,40 @@ function Dashboard() {
 }
 
 function App() {
+  const [currentApp, setCurrentApp] = React.useState<'dashboard' | 'erp'>('dashboard');
+
   return (
     <QueryClientProvider client={queryClient}>
-      <Dashboard />
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white shadow-sm border-b">
+          <div className="container mx-auto px-4">
+            <div className="flex space-x-4 py-2">
+              <button
+                onClick={() => setCurrentApp('dashboard')}
+                className={`px-4 py-2 rounded-md text-sm font-medium ${
+                  currentApp === 'dashboard'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Production Dashboard
+              </button>
+              <button
+                onClick={() => setCurrentApp('erp')}
+                className={`px-4 py-2 rounded-md text-sm font-medium ${
+                  currentApp === 'erp'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                ERP Masters
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {currentApp === 'dashboard' ? <Dashboard /> : <ERPApp />}
+      </div>
       <Toaster position="top-right" />
     </QueryClientProvider>
   );
