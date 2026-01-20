@@ -24,7 +24,7 @@ export const ERPApp: React.FC = () => {
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
-  const API_BASE = process.env.NODE_ENV === 'production' 
+  const API_BASE = import.meta.env.PROD 
     ? 'https://shoe-factory-monitoring-production-8c06.up.railway.app'
     : 'http://localhost:3001';
 

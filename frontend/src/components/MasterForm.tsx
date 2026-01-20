@@ -21,7 +21,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
   const [formData, setFormData] = React.useState({ code: '', name: '' });
   const [loading, setLoading] = React.useState(false);
 
-  const API_BASE = process.env.NODE_ENV === 'production' 
+  const API_BASE = import.meta.env.PROD 
     ? 'https://shoe-factory-monitoring-production-8c06.up.railway.app'
     : 'http://localhost:3001';
 
