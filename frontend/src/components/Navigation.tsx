@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X } from 'lucide-react';
 
 interface NavigationProps {
   activeMenu: string;
@@ -18,51 +18,81 @@ const masterMenus = [
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuClick }) => {
   const [mastersExpanded, setMastersExpanded] = React.useState(true);
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   return (
-    <div className="w-64 bg-white shadow-lg h-full overflow-y-auto">
-      <div className="p-4 border-b">
-        <h2 className="text-lg font-semibold text-gray-800">ERP System</h2>
-      </div>
-      
-      <nav className="p-4">
-        {/* Masters Section */}
-        <div className="mb-4">
+    <>
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setSidebarOpen(true)}
+        className="lg:hidden fixed top-4 left-4 z-50 bg-white p-2 rounded-md shadow-md"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="text-lg font-semibold text-gray-800">ERP System</h2>
           <button
-            onClick={() => setMastersExpanded(!mastersExpanded)}
-            className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1"
           >
-            <span className="font-medium">Masters</span>
-            {mastersExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
+            <X className="h-5 w-5" />
           </button>
-          
-          {mastersExpanded && (
-            <div className="ml-4 mt-2 space-y-1">
-              {masterMenus.map((menu) => {
-                const Icon = menu.icon;
-                return (
-                  <button
-                    key={menu.key}
-                    onClick={() => onMenuClick(menu.key)}
-                    className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
-                      activeMenu === menu.key
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 mr-2" />
-                    {menu.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
-      </nav>
-    </div>
+        
+        <nav className="p-4 h-full overflow-y-auto">
+          <div className="mb-4">
+            <button
+              onClick={() => setMastersExpanded(!mastersExpanded)}
+              className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              <span className="font-medium">Masters</span>
+              {mastersExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+            
+            {mastersExpanded && (
+              <div className="ml-4 mt-2 space-y-1">
+                {masterMenus.map((menu) => {
+                  const Icon = menu.icon;
+                  return (
+                    <button
+                      key={menu.key}
+                      onClick={() => {
+                        onMenuClick(menu.key);
+                        setSidebarOpen(false);
+                      }}
+                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
+                        activeMenu === menu.key
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {menu.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </nav>
+      </div>
+    </>
   );
 };

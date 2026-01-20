@@ -96,7 +96,7 @@ function Dashboard() {
     <div className="min-h-screen bg-gray-50">
       <Header isConnected={isConnected} lastRefresh={lastRefresh} />
       
-      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-full overflow-x-hidden">
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />

@@ -64,10 +64,11 @@ export const ERPApp: React.FC = () => {
   const currentConfig = masterConfigs[activeMenu as keyof typeof masterConfigs];
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
       <Navigation activeMenu={activeMenu} onMenuClick={handleMenuClick} />
       
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto lg:ml-0">
+        <div className="lg:hidden h-16"></div>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
