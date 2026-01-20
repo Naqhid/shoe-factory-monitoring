@@ -24,9 +24,9 @@ export const ERPApp: React.FC = () => {
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
-  const API_BASE = import.meta.env.PROD 
-    ? 'https://shoe-factory-monitoring-production-8c06.up.railway.app'
-    : 'http://localhost:3001';
+  const API_BASE = window.location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   const fetchRecords = async (table: string) => {
     setLoading(true);
