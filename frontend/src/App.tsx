@@ -6,7 +6,8 @@ import { StatsPanel } from './components/StatsPanel';
 import { MachineCard } from './components/MachineCard';
 import { EfficiencyChart } from './components/EfficiencyChart';
 import { MachineDetailModal } from './components/MachineDetailModal';
-import { ERPApp } from './components/ERPApp';
+import { Navigation } from './components/Navigation';
+import { MasterForm } from './components/MasterForm';
 import { useMachineStatus, useEfficiencyReport, useOverallEfficiency } from './hooks/useApi';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
@@ -20,10 +21,30 @@ const queryClient = new QueryClient({
   },
 });
 
-function Dashboard() {
+interface MasterRecord {
+  id: number;
+  code: string;
+  name: string;
+}
+
+const masterConfigs = {
+  customers: { title: 'Customer', table: 'customers' },
+  groups: { title: 'Group', table: 'groups_master' },
+  leather: { title: 'Leather', table: 'leather' },
+  styles: { title: 'Style', table: 'styles' },
+  colors: { title: 'Color', table: 'colors' },
+  work_centres: { title: 'Work Centre', table: 'work_centres' },
+  machine_centres: { title: 'Machine Centre', table: 'machine_centres' },
+};
+
+function App() {
+  const [activeMenu, setActiveMenu] = React.useState('overview');
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [selectedDate] = React.useState(new Date());
   const [selectedMachine, setSelectedMachine] = React.useState<MachineStatus | null>(null);
   const [lastRefresh, setLastRefresh] = React.useState<Date>(new Date());
+  const [records, setRecords] = React.useState<MasterRecord[]>([]);
+  const [loading, setLoading] = React.useState(false);
   
   const { 
     data: machines = [], 
@@ -43,11 +64,37 @@ function Dashboard() {
     isLoading: overallLoading 
   } = useOverallEfficiency(selectedDate);
 
+  const API_BASE = window.location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
+
+  const fetchRecords = async (table: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/masters/${table}`);
+      const result = await response.json();
+      if (result.success) {
+        setRecords(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching records:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   React.useEffect(() => {
     if (dataUpdatedAt) {
       setLastRefresh(new Date(dataUpdatedAt));
     }
   }, [dataUpdatedAt]);
+
+  React.useEffect(() => {
+    const config = masterConfigs[activeMenu as keyof typeof masterConfigs];
+    if (config) {
+      fetchRecords(config.table);
+    }
+  }, [activeMenu]);
 
   const isConnected = !machinesError;
   const isLoading = machinesLoading || efficiencyLoading || overallLoading;
@@ -67,6 +114,21 @@ function Dashboard() {
   const handleCloseModal = () => {
     setSelectedMachine(null);
   };
+
+  const handleMenuClick = (menu: string) => {
+    setActiveMenu(menu);
+  };
+
+  const handleRefresh = () => {
+    const config = masterConfigs[activeMenu as keyof typeof masterConfigs];
+    if (config) {
+      fetchRecords(config.table);
+    }
+  };
+
+  const currentConfig = masterConfigs[activeMenu as keyof typeof masterConfigs];
+  const isProductionView = ['overview', 'machines', 'reports'].includes(activeMenu);
+  const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
 
   if (machinesError) {
     return (
@@ -93,53 +155,84 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header isConnected={isConnected} lastRefresh={lastRefresh} />
+    <div className="flex h-screen bg-gray-50">
+      <Navigation 
+        activeMenu={activeMenu} 
+        onMenuClick={handleMenuClick} 
+        sidebarOpen={sidebarOpen} 
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
+      />
       
-      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-full overflow-x-hidden">
-        {isLoading && (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-600">Loading dashboard...</span>
+      <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
+        {isProductionView ? (
+          <>
+            <Header isConnected={isConnected} lastRefresh={lastRefresh} />
+            
+            <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-full overflow-x-hidden">
+              {isLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <span className="ml-2 text-gray-600">Loading dashboard...</span>
+                </div>
+              )}
+
+              <StatsPanel machines={machines} overallEfficiency={overallEfficiency} />
+
+              {/* Efficiency Chart First */}
+              <div className="mb-6">
+                {efficiencyData.length > 0 && (
+                  <EfficiencyChart data={efficiencyData} />
+                )}
+              </div>
+
+              {/* Production Floor Status Below */}
+              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">
+                  Production Floor Status
+                  <span className="text-xs sm:text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
+                    (Click machine for details)
+                  </span>
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
+                  {machines.map((machine) => (
+                    <MachineCard
+                      key={machine.machine_id}
+                      machine={machine}
+                      efficiency={efficiencyMap.get(machine.machine_id)}
+                      onClick={() => handleMachineClick(machine)}
+                    />
+                  ))}
+                </div>
+                
+                {machines.length === 0 && !isLoading && (
+                  <div className="text-center py-8 text-gray-500">
+                    <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                    <p>No machine data available</p>
+                  </div>
+                )}
+              </div>
+            </main>
+          </>
+        ) : isMasterView && currentConfig ? (
+          loading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <span className="ml-2 text-gray-600">Loading...</span>
+            </div>
+          ) : (
+            <MasterForm
+              title={currentConfig.title}
+              table={currentConfig.table}
+              records={records}
+              onRefresh={handleRefresh}
+            />
+          )
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500">Select a menu item</p>
           </div>
         )}
-
-        <StatsPanel machines={machines} overallEfficiency={overallEfficiency} />
-
-        {/* Efficiency Chart First */}
-        <div className="mb-6">
-          {efficiencyData.length > 0 && (
-            <EfficiencyChart data={efficiencyData} />
-          )}
-        </div>
-
-        {/* Production Floor Status Below */}
-        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">
-            Production Floor Status
-            <span className="text-xs sm:text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
-              (Click machine for details)
-            </span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
-            {machines.map((machine) => (
-              <MachineCard
-                key={machine.machine_id}
-                machine={machine}
-                efficiency={efficiencyMap.get(machine.machine_id)}
-                onClick={() => handleMachineClick(machine)}
-              />
-            ))}
-          </div>
-          
-          {machines.length === 0 && !isLoading && (
-            <div className="text-center py-8 text-gray-500">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p>No machine data available</p>
-            </div>
-          )}
-        </div>
-      </main>
+      </div>
 
       {selectedMachine && (
         <MachineDetailModal
@@ -153,44 +246,13 @@ function Dashboard() {
   );
 }
 
-function App() {
-  const [currentApp, setCurrentApp] = React.useState<'dashboard' | 'erp'>('dashboard');
-
+function AppWithProvider() {
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm border-b">
-          <div className="container mx-auto px-4">
-            <div className="flex space-x-4 py-2">
-              <button
-                onClick={() => setCurrentApp('dashboard')}
-                className={`px-4 py-2 rounded-md text-sm font-medium ${
-                  currentApp === 'dashboard'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Production Dashboard
-              </button>
-              <button
-                onClick={() => setCurrentApp('erp')}
-                className={`px-4 py-2 rounded-md text-sm font-medium ${
-                  currentApp === 'erp'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                ERP Masters
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {currentApp === 'dashboard' ? <Dashboard /> : <ERPApp />}
-      </div>
+      <App />
       <Toaster position="top-right" />
     </QueryClientProvider>
   );
 }
 
-export default App;
+export default AppWithProvider;

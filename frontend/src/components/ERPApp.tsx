@@ -23,6 +23,7 @@ export const ERPApp: React.FC = () => {
   const [activeMenu, setActiveMenu] = React.useState('customers');
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
 
   const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:3001'
@@ -65,10 +66,14 @@ export const ERPApp: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
-      <Navigation activeMenu={activeMenu} onMenuClick={handleMenuClick} />
+      <Navigation 
+        activeMenu={activeMenu} 
+        onMenuClick={handleMenuClick} 
+        sidebarOpen={sidebarOpen} 
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
+      />
       
-      <div className="flex-1 overflow-auto lg:ml-0">
-        <div className="lg:hidden h-16"></div>
+      <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />

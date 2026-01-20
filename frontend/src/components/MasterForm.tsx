@@ -97,16 +97,18 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Add New
-        </button>
-      </div>
+      <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add New
+          </button>
+        </div>
+      </header>
 
       {/* Form Modal */}
       {showForm && (
