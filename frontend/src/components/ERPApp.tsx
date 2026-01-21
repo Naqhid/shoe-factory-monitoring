@@ -68,7 +68,6 @@ export const ERPApp: React.FC = () => {
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       <Navigation 
         activeMenu={activeMenu} 
-        onMenuClick={handleMenuClick} 
         sidebarOpen={sidebarOpen} 
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
       />
