@@ -72,11 +72,11 @@ class ProductionPlanningController {
         group_id,
         leather_id,
         color_id,
-        production_line,
+        work_centre,
         target_per_day
       } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !production_line || !target_per_day) {
+      if (!plan_date || !style_id || !customer_id || !work_centre || !target_per_day) {
         return res.status(400).json({ 
           success: false, 
           error: 'Required fields are missing' 
@@ -87,7 +87,7 @@ class ProductionPlanningController {
         `INSERT INTO production_plan 
         (plan_date, style_id, customer_id, group_id, leather_id, color_id, production_line, target_per_day) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, production_line, target_per_day]
+        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre, target_per_day]
       );
 
       res.status(201).json({ 
@@ -111,11 +111,11 @@ class ProductionPlanningController {
         group_id,
         leather_id,
         color_id,
-        production_line,
+        work_centre,
         target_per_day
       } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !production_line || !target_per_day) {
+      if (!plan_date || !style_id || !customer_id || !work_centre || !target_per_day) {
         return res.status(400).json({ 
           success: false, 
           error: 'Required fields are missing' 
@@ -127,7 +127,7 @@ class ProductionPlanningController {
         SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?, 
             leather_id = ?, color_id = ?, production_line = ?, target_per_day = ?
         WHERE id = ?`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, production_line, target_per_day, id]
+        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre, target_per_day, id]
       );
 
       if (result.affectedRows === 0) {

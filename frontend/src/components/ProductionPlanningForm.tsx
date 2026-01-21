@@ -15,12 +15,13 @@ interface FormData {
   group_id: string;
   leather_id: string;
   color_id: string;
-  production_line: string;
+  work_centre: string;
   target_per_day: string;
 }
 
 export const ProductionPlanningForm: React.FC = () => {
   const [styles, setStyles] = React.useState<MasterOption[]>([]);
+  const [workCentres, setWorkCentres] = React.useState<MasterOption[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [bulkMode, setBulkMode] = React.useState(false);
   const [bulkData, setBulkData] = React.useState<any[]>([]);
@@ -32,7 +33,7 @@ export const ProductionPlanningForm: React.FC = () => {
     group_id: '',
     leather_id: '',
     color_id: '',
-    production_line: '1',
+    work_centre: '',
     target_per_day: '',
   });
 
@@ -47,7 +48,7 @@ export const ProductionPlanningForm: React.FC = () => {
     ? 'http://localhost:3001'
     : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
-  // Fetch styles on mount
+  // Fetch styles and work centres on mount
   React.useEffect(() => {
     const fetchStyles = async () => {
       try {
@@ -62,7 +63,21 @@ export const ProductionPlanningForm: React.FC = () => {
       }
     };
 
+    const fetchWorkCentres = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/masters/work_centres`);
+        const result = await response.json();
+        if (result.success) {
+          setWorkCentres(result.data);
+        }
+      } catch (error) {
+        toast.error('Error loading work centres');
+        console.error(error);
+      }
+    };
+
     fetchStyles();
+    fetchWorkCentres();
   }, []);
 
   // Auto-populate when style is selected
@@ -130,7 +145,7 @@ export const ProductionPlanningForm: React.FC = () => {
           obj[header] = values[index]?.trim();
         });
         return obj;
-      }).filter(row => row.plan_date && row.style_code && row.production_line && row.target_per_day);
+      }).filter(row => row.plan_date && row.style_code && row.work_centre && row.target_per_day);
 
       setBulkData(data);
       setBulkMode(true);
@@ -161,7 +176,7 @@ export const ProductionPlanningForm: React.FC = () => {
           group_id: null,
           leather_id: null,
           color_id: null,
-          production_line: row.production_line,
+          work_centre: row.work_centre,
           target_per_day: parseInt(row.target_per_day),
         };
 
@@ -201,7 +216,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.style_id || !formData.customer_id || !formData.production_line || !formData.target_per_day) {
+    if (!formData.style_id || !formData.customer_id || !formData.work_centre || !formData.target_per_day) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -216,7 +231,7 @@ export const ProductionPlanningForm: React.FC = () => {
         group_id: parseInt(formData.group_id) || null,
         leather_id: parseInt(formData.leather_id) || null,
         color_id: parseInt(formData.color_id) || null,
-        production_line: formData.production_line,
+        work_centre: formData.work_centre,
         target_per_day: parseInt(formData.target_per_day),
       };
 
@@ -238,7 +253,7 @@ export const ProductionPlanningForm: React.FC = () => {
           group_id: '',
           leather_id: '',
           color_id: '',
-          production_line: '1',
+          work_centre: '',
           target_per_day: '',
         });
         setReadOnlyFields({
@@ -275,7 +290,7 @@ export const ProductionPlanningForm: React.FC = () => {
             className="border border-gray-300 rounded-md px-3 py-2"
           />
           <span className="text-sm text-gray-600">
-            Upload CSV with columns: plan_date, style_code, production_line, target_per_day
+            Upload CSV with columns: plan_date, style_code, work_centre, target_per_day
           </span>
         </div>
         {bulkData.length > 0 && (
@@ -387,27 +402,27 @@ export const ProductionPlanningForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Line Items */}
+        {/* Work Centre Assignment */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Production Line Assignment</h2>
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">Work Centre Assignment</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Production Line <span className="text-red-500">*</span>
+                Work Centre <span className="text-red-500">*</span>
               </label>
               <select
-                value={formData.production_line}
-                onChange={(e) => setFormData({ ...formData, production_line: e.target.value })}
+                value={formData.work_centre}
+                onChange={(e) => setFormData({ ...formData, work_centre: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
-                <option value="1">Line 1</option>
-                <option value="2">Line 2</option>
-                <option value="3">Line 3</option>
-                <option value="4">Line 4</option>
-                <option value="5">Line 5</option>
-                <option value="6">Line 6</option>
+                <option value="">Select Work Centre</option>
+                {workCentres.map((centre) => (
+                  <option key={centre.id} value={centre.id}>
+                    {centre.code} - {centre.name}
+                  </option>
+                ))}
               </select>
             </div>
 
