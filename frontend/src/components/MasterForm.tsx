@@ -1,11 +1,14 @@
 import React from 'react';
-import { Plus, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 interface MasterRecord {
   id: number;
   code: string;
   name: string;
+  work_centre_id?: number;
+  work_centre_name?: string;
 }
 
 interface MasterFormProps {
@@ -18,15 +21,29 @@ interface MasterFormProps {
 export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, onRefresh }) => {
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<MasterRecord | null>(null);
-  const [formData, setFormData] = React.useState({ code: '', name: '' });
+  const [formData, setFormData] = React.useState({ code: '', name: '', work_centre_id: '' });
   const [loading, setLoading] = React.useState(false);
+  const [workCentres, setWorkCentres] = React.useState<MasterRecord[]>([]);
 
   const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:3001'
     : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
+  React.useEffect(() => {
+    if (table === 'machine_centres') {
+      fetch(`${API_BASE}/api/masters/work_centres`)
+        .then(res => res.json())
+        .then(result => {
+          if (result.success) {
+            setWorkCentres(result.data);
+          }
+        })
+        .catch(err => console.error('Error fetching work centres:', err));
+    }
+  }, [table]);
+
   const resetForm = () => {
-    setFormData({ code: '', name: '' });
+    setFormData({ code: '', name: '', work_centre_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -70,7 +87,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
 
   const handleEdit = (record: MasterRecord) => {
     setEditingRecord(record);
-    setFormData({ code: record.code, name: record.name });
+    setFormData({ 
+      code: record.code, 
+      name: record.name, 
+      work_centre_id: record.work_centre_id?.toString() || '' 
+    });
     setShowForm(true);
   };
 
@@ -95,18 +116,61 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
     }
   };
 
+  const handleExportToExcel = () => {
+    if (records.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    // Prepare data for export
+    const exportData = records.map(record => {
+      const row: any = {
+        Code: record.code,
+        Name: record.name,
+      };
+      
+      if (table === 'machine_centres' && record.work_centre_name) {
+        row['Work Centre'] = record.work_centre_name;
+      }
+      
+      return row;
+    });
+
+    // Create workbook and worksheet
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, title);
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `${title}_Master_${timestamp}.xlsx`;
+
+    // Save file
+    XLSX.writeFile(wb, filename);
+    toast.success('Exported successfully');
+  };
+
   return (
     <div className="p-6">
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Add New
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportToExcel}
+              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export to Excel
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add New
+            </button>
+          </div>
         </div>
       </header>
 
@@ -150,6 +214,27 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                 />
               </div>
               
+              {table === 'machine_centres' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Work Centre
+                  </label>
+                  <select
+                    value={formData.work_centre_id}
+                    onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select Work Centre</option>
+                    {workCentres.map((wc) => (
+                      <option key={wc.id} value={wc.id}>
+                        {wc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
               <div className="flex gap-2 pt-4">
                 <button
                   type="submit"
@@ -182,6 +267,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Name
               </th>
+              {table === 'machine_centres' && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Work Centre
+                </th>
+              )}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -196,6 +286,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {record.name}
                 </td>
+                {table === 'machine_centres' && (
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.work_centre_name || 'N/A'}
+                  </td>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
                     onClick={() => handleEdit(record)}

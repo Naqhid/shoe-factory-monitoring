@@ -1,5 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from 'react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { Header } from './components/Header';
 import { StatsPanel } from './components/StatsPanel';
@@ -8,6 +9,9 @@ import { EfficiencyChart } from './components/EfficiencyChart';
 import { MachineDetailModal } from './components/MachineDetailModal';
 import { Navigation } from './components/Navigation';
 import { MasterForm } from './components/MasterForm';
+import { ProductionPlanningForm } from './components/ProductionPlanningForm';
+import { Reports } from './components/Reports';
+import { ProductionRoutingForm } from './components/ProductionRoutingForm';
 import { useMachineStatus, useEfficiencyReport, useOverallEfficiency } from './hooks/useApi';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
@@ -38,7 +42,12 @@ const masterConfigs = {
 };
 
 function App() {
-  const [activeMenu, setActiveMenu] = React.useState('overview');
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get active menu from URL path, default to 'overview'
+  const activeMenu = location.pathname.slice(1) || 'overview';
+  
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [selectedDate] = React.useState(new Date());
   const [selectedMachine, setSelectedMachine] = React.useState<MachineStatus | null>(null);
@@ -116,7 +125,7 @@ function App() {
   };
 
   const handleMenuClick = (menu: string) => {
-    setActiveMenu(menu);
+    navigate(`/${menu}`);
   };
 
   const handleRefresh = () => {
@@ -126,9 +135,12 @@ function App() {
     }
   };
 
-  const currentConfig = masterConfigs[activeMenu as keyof typeof masterConfigs];
-  const isProductionView = ['overview', 'machines', 'reports'].includes(activeMenu);
+  const isProductionDashboard = activeMenu === 'overview';
+  const isReports = activeMenu === 'reports';
+  const isProductionRouting = activeMenu === 'production_routing';
+  const isProductionPlanning = activeMenu === 'production_planning';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
+  const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
   if (machinesError) {
     return (
@@ -158,13 +170,12 @@ function App() {
     <div className="flex h-screen bg-gray-50">
       <Navigation 
         activeMenu={activeMenu} 
-        onMenuClick={handleMenuClick} 
         sidebarOpen={sidebarOpen} 
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
       />
       
       <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
-        {isProductionView ? (
+        {isProductionDashboard ? (
           <>
             <Header isConnected={isConnected} lastRefresh={lastRefresh} />
             
@@ -213,7 +224,13 @@ function App() {
               </div>
             </main>
           </>
-        ) : isMasterView && currentConfig ? (
+        ) : isReports ? (
+          <Reports />
+        ) : isProductionRouting ? (
+          <ProductionRoutingForm />
+        ) : isProductionPlanning ? (
+          <ProductionPlanningForm />
+        ) : isMasterView ? (
           loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -221,8 +238,8 @@ function App() {
             </div>
           ) : (
             <MasterForm
-              title={currentConfig.title}
-              table={currentConfig.table}
+              title={currentConfig!.title}
+              table={currentConfig!.table}
               records={records}
               onRefresh={handleRefresh}
             />

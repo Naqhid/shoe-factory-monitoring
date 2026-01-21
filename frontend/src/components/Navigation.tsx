@@ -1,17 +1,18 @@
 import React from 'react';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar } from 'lucide-react';
 
 interface NavigationProps {
   activeMenu: string;
-  onMenuClick: (menu: string) => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
 
 const productionMenus = [
-  { key: 'overview', label: 'Overview', icon: BarChart3 },
-  { key: 'machines', label: 'Machines', icon: Factory },
+  { key: 'overview', label: 'TV Dashboard', icon: BarChart3 },
   { key: 'reports', label: 'Reports', icon: TrendingUp },
+  { key: 'production_routing', label: 'Production Routing', icon: Route },
+  { key: 'production_planning', label: 'Production Planning', icon: Calendar },
 ];
 
 const masterMenus = [
@@ -24,7 +25,7 @@ const masterMenus = [
   { key: 'machine_centres', label: 'Machine Centre', icon: Cpu, table: 'machine_centres' },
 ];
 
-export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuClick, sidebarOpen, onToggleSidebar }) => {
+export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {
   const [productionExpanded, setProductionExpanded] = React.useState(true);
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
 
@@ -80,10 +81,10 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuClick,
                 {productionMenus.map((menu) => {
                   const Icon = menu.icon;
                   return (
-                    <button
+                    <Link
                       key={menu.key}
+                      to={`/${menu.key}`}
                       onClick={() => {
-                        onMenuClick(menu.key);
                         // Don't close sidebar on desktop
                         if (window.innerWidth < 1024) {
                           onToggleSidebar();
@@ -97,7 +98,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuClick,
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {menu.label}
-                    </button>
+                    </Link>
                   );
                 })}
               </div>
@@ -123,10 +124,10 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuClick,
                 {masterMenus.map((menu) => {
                   const Icon = menu.icon;
                   return (
-                    <button
+                    <Link
                       key={menu.key}
+                      to={`/${menu.key}`}
                       onClick={() => {
-                        onMenuClick(menu.key);
                         // Don't close sidebar on desktop
                         if (window.innerWidth < 1024) {
                           onToggleSidebar();
@@ -140,7 +141,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuClick,
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {menu.label}
-                    </button>
+                    </Link>
                   );
                 })}
               </div>

@@ -6,6 +6,9 @@ const path = require('path');
 const logger = require('./utils/logger');
 const fileWatcherService = require('./services/fileWatcherService');
 const apiController = require('./controllers/apiController');
+const masterController = require('./controllers/masterController');
+const productionRoutingController = require('./controllers/productionRoutingController');
+const productionPlanningController = require('./controllers/productionPlanningController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
@@ -47,6 +50,28 @@ app.get('/api/reports/run-idle', apiController.getRunIdleReport);
 app.get('/api/reports/hourly', apiController.getHourlyReport);
 app.get('/api/reports/efficiency', apiController.getEfficiencyReport);
 app.get('/api/reports/overall-efficiency', apiController.getOverallEfficiency);
+
+// Master routes
+app.get('/api/masters/:table', masterController.getAll);
+app.get('/api/masters/:table/:id', masterController.getById);
+app.post('/api/masters/:table', masterController.create);
+app.put('/api/masters/:table/:id', masterController.update);
+app.delete('/api/masters/:table/:id', masterController.delete);
+
+// Production routing routes
+app.get('/api/production-routing', productionRoutingController.getAll);
+app.get('/api/production-routing/:id', productionRoutingController.getById);
+app.get('/api/production-routing/style/:styleId', productionRoutingController.getByStyleId);
+app.post('/api/production-routing', productionRoutingController.create);
+app.put('/api/production-routing/:id', productionRoutingController.update);
+app.delete('/api/production-routing/:id', productionRoutingController.delete);
+
+// Production planning routes
+app.get('/api/production-planning', productionPlanningController.getAll);
+app.get('/api/production-planning/:id', productionPlanningController.getById);
+app.post('/api/production-planning', productionPlanningController.create);
+app.put('/api/production-planning/:id', productionPlanningController.update);
+app.delete('/api/production-planning/:id', productionPlanningController.delete);
 
 // Health check
 app.get('/health', (req, res) => {
