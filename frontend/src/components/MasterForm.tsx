@@ -9,6 +9,7 @@ interface MasterRecord {
   name: string;
   work_centre_id?: number;
   work_centre_name?: string;
+  machine_id?: string;
 }
 
 interface MasterFormProps {
@@ -21,7 +22,7 @@ interface MasterFormProps {
 export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, onRefresh }) => {
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<MasterRecord | null>(null);
-  const [formData, setFormData] = React.useState({ code: '', name: '', work_centre_id: '' });
+  const [formData, setFormData] = React.useState({ code: '', name: '', work_centre_id: '', machine_id: '' });
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<MasterRecord[]>([]);
 
@@ -43,7 +44,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
   }, [table]);
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', work_centre_id: '' });
+    setFormData({ code: '', name: '', work_centre_id: '', machine_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -90,7 +91,8 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
     setFormData({ 
       code: record.code, 
       name: record.name, 
-      work_centre_id: record.work_centre_id?.toString() || '' 
+      work_centre_id: record.work_centre_id?.toString() || '',
+      machine_id: record.machine_id || ''
     });
     setShowForm(true);
   };
@@ -131,6 +133,10 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
       
       if (table === 'machine_centres' && record.work_centre_name) {
         row['Work Centre'] = record.work_centre_name;
+      }
+      
+      if (table === 'machine_centres' && record.machine_id) {
+        row['Machine ID'] = record.machine_id;
       }
       
       return row;
@@ -237,6 +243,20 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                 </div>
               )}
               
+              {table === 'machine_centres' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Machine ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.machine_id}
+                    onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              
               <div className="flex gap-2 pt-4">
                 <button
                   type="submit"
@@ -274,6 +294,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                   Work Centre
                 </th>
               )}
+              {table === 'machine_centres' && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Machine ID
+                </th>
+              )}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -291,6 +316,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                 {table === 'machine_centres' && (
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {record.work_centre_name || 'N/A'}
+                  </td>
+                )}
+                {table === 'machine_centres' && (
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.machine_id || 'N/A'}
                   </td>
                 )}
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

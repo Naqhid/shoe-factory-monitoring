@@ -7,6 +7,9 @@ interface MasterRecord {
   id: number;
   code: string;
   name: string;
+  work_centre_id?: number;
+  work_centre_name?: string;
+  machine_id?: string;
 }
 
 const masterConfigs = {

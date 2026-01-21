@@ -43,7 +43,7 @@ class MasterController {
   async create(req, res) {
     try {
       const { table } = req.params;
-      const { code, name, work_centre_id } = req.body;
+      const { code, name, work_centre_id, machine_id } = req.body;
 
       if (!code || !name) {
         return res.status(400).json({ success: false, error: 'Code and name are required' });
@@ -52,8 +52,8 @@ class MasterController {
       let result;
       if (table === 'machine_centres' && work_centre_id) {
         [result] = await db.execute(
-          `INSERT INTO ${table} (code, name, work_centre_id) VALUES (?, ?, ?)`,
-          [code, name, work_centre_id]
+          `INSERT INTO ${table} (code, name, work_centre_id, machine_id) VALUES (?, ?, ?, ?)`,
+          [code, name, work_centre_id, machine_id]
         );
       } else {
         [result] = await db.execute(
@@ -64,7 +64,7 @@ class MasterController {
 
       res.status(201).json({ 
         success: true, 
-        data: { id: result.insertId, code, name, work_centre_id } 
+        data: { id: result.insertId, code, name, work_centre_id, machine_id } 
       });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
@@ -78,7 +78,7 @@ class MasterController {
   async update(req, res) {
     try {
       const { table, id } = req.params;
-      const { code, name, work_centre_id } = req.body;
+      const { code, name, work_centre_id, machine_id } = req.body;
 
       if (!code || !name) {
         return res.status(400).json({ success: false, error: 'Code and name are required' });
@@ -87,8 +87,8 @@ class MasterController {
       let result;
       if (table === 'machine_centres' && work_centre_id) {
         [result] = await db.execute(
-          `UPDATE ${table} SET code = ?, name = ?, work_centre_id = ? WHERE id = ?`,
-          [code, name, work_centre_id, id]
+          `UPDATE ${table} SET code = ?, name = ?, work_centre_id = ?, machine_id = ? WHERE id = ?`,
+          [code, name, work_centre_id, machine_id, id]
         );
       } else {
         [result] = await db.execute(
@@ -101,7 +101,7 @@ class MasterController {
         return res.status(404).json({ success: false, error: 'Record not found' });
       }
 
-      res.json({ success: true, data: { id, code, name, work_centre_id } });
+      res.json({ success: true, data: { id, code, name, work_centre_id, machine_id } });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
         return res.status(400).json({ success: false, error: 'Code already exists' });

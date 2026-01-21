@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS machine_centres (
     work_centre_id INT,
     code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
+    machine_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (work_centre_id) REFERENCES work_centres(id)
