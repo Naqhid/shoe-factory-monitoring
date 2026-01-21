@@ -57,3 +57,6 @@ CREATE TABLE IF NOT EXISTS machine_centres (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (work_centre_id) REFERENCES work_centres(id)
 );
+
+-- Add machine_id column if it doesn't exist
+ALTER TABLE machine_centres ADD COLUMN IF NOT EXISTS machine_id VARCHAR(100);

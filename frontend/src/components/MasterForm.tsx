@@ -126,17 +126,17 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
 
     // Prepare data for export
     const exportData = records.map(record => {
-      const row: any = {
-        Code: record.code,
-        Name: record.name,
-      };
-      
-      if (table === 'machine_centres' && record.work_centre_name) {
-        row['Work Centre'] = record.work_centre_name;
-      }
+      const row: any = {};
       
       if (table === 'machine_centres' && record.machine_id) {
         row['Machine ID'] = record.machine_id;
+      }
+      
+      row.Code = record.code;
+      row.Name = record.name;
+      
+      if (table === 'machine_centres' && record.work_centre_name) {
+        row['Work Centre'] = record.work_centre_name;
       }
       
       return row;
@@ -196,6 +196,20 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-4">
+              {table === 'machine_centres' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Machine ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.machine_id}
+                    onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {title} Code
@@ -243,20 +257,6 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                 </div>
               )}
               
-              {table === 'machine_centres' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Machine ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.machine_id}
-                    onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-              
               <div className="flex gap-2 pt-4">
                 <button
                   type="submit"
@@ -283,6 +283,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              {table === 'machine_centres' && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Machine ID
+                </th>
+              )}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Code
               </th>
@@ -294,11 +299,6 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                   Work Centre
                 </th>
               )}
-              {table === 'machine_centres' && (
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Machine ID
-                </th>
-              )}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -307,6 +307,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
           <tbody className="bg-white divide-y divide-gray-200">
             {records.map((record) => (
               <tr key={record.id}>
+                {table === 'machine_centres' && (
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.machine_id || 'N/A'}
+                  </td>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {record.code}
                 </td>
@@ -316,11 +321,6 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                 {table === 'machine_centres' && (
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {record.work_centre_name || 'N/A'}
-                  </td>
-                )}
-                {table === 'machine_centres' && (
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {record.machine_id || 'N/A'}
                   </td>
                 )}
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
