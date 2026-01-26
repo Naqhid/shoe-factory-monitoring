@@ -2,7 +2,7 @@ import React from 'react';
 import { Save, ArrowLeft, QrCode, Camera } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { QrReader } from 'react-qr-reader';
+import QrReader from 'react-qr-scanner';
 
 interface FormData {
   login: string;
@@ -55,10 +55,10 @@ export const MobileLineSetupForm: React.FC = () => {
     toast.success('Logged in successfully');
   };
 
-  const handleEmployeeScan = (result: any, error: any) => {
-    if (result) {
+  const handleEmployeeScan = (data: string | null) => {
+    if (data) {
       try {
-        const parsed = JSON.parse(result.text);
+        const parsed = JSON.parse(data);
         setFormData(prev => ({
           ...prev,
           employee_id: parsed.id,
@@ -70,21 +70,13 @@ export const MobileLineSetupForm: React.FC = () => {
         toast.error('Invalid QR code format');
       }
     }
-    if (error) {
-      console.error(error);
-      toast.error('Scanning error');
-    }
   };
 
-  const handleMachineScan = (result: any, error: any) => {
-    if (result) {
-      setFormData(prev => ({ ...prev, machine_id: result.text }));
+  const handleMachineScan = (data: string | null) => {
+    if (data) {
+      setFormData(prev => ({ ...prev, machine_id: data }));
       setScanningMachine(false);
       toast.success('Machine scanned successfully');
-    }
-    if (error) {
-      console.error(error);
-      toast.error('Scanning error');
     }
   };
 
@@ -293,8 +285,14 @@ export const MobileLineSetupForm: React.FC = () => {
                 </button>
               </div>
               <QrReader
-                onResult={handleEmployeeScan}
-                constraints={{ facingMode: 'environment' }}
+                delay={100}
+                style={{ width: '100%' }}
+                onError={(err) => {
+                  console.error(err);
+                  toast.error('Scanning error');
+                }}
+                onScan={handleEmployeeScan}
+                facingMode="environment"
               />
             </div>
           </div>
@@ -314,8 +312,14 @@ export const MobileLineSetupForm: React.FC = () => {
                 </button>
               </div>
               <QrReader
-                onResult={handleMachineScan}
-                constraints={{ facingMode: 'environment' }}
+                delay={100}
+                style={{ width: '100%' }}
+                onError={(err) => {
+                  console.error(err);
+                  toast.error('Scanning error');
+                }}
+                onScan={handleMachineScan}
+                facingMode="environment"
               />
             </div>
           </div>
