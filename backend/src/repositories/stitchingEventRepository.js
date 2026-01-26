@@ -25,6 +25,15 @@ class StitchingEventRepository {
     }
   }
 
+  async insertEvent(machineId, status, eventTime, sourceFile) {
+    const query = `
+      INSERT INTO stitching_events (machine_id, status, event_time, source_file, created_at)
+      VALUES (?, ?, ?, ?, NOW())
+    `;
+    
+    await pool.execute(query, [machineId, status, eventTime, sourceFile]);
+  }
+
   async getLatestMachineStatus() {
     const query = `
       SELECT 
@@ -101,32 +110,188 @@ class StitchingEventRepository {
     return rows;
   }
 
-  async getOverallEfficiency(date) {
-    const query = `
+  async getDailyDashboardData(date) {
+    // Get production plan data
+    const planQuery = `
       SELECT 
-        COUNT(DISTINCT machine_id) as total_machines,
-        SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as total_run_minutes,
-        SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as total_idle_minutes,
-        COUNT(*) as total_events,
-        COALESCE(
-          ROUND(
-            (SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)) * 100, 2
-          ), 0
-        ) as overall_efficiency
-      FROM stitching_events
-      WHERE DATE(event_time) = ?
+        pp.work_centre_id,
+        wc.name as work_centre_name,
+        SUM(pp.target_pairs_per_day) as total_target,
+        SUM(pp.man_hours_minutes) as total_man_hours
+      FROM production_plan pp
+      LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
+      WHERE pp.plan_date = ?
+      GROUP BY pp.work_centre_id, wc.name
     `;
     
-    const [rows] = await pool.execute(query, [date]);
-    const result = rows[0];
+    const [planRows] = await pool.execute(planQuery, [date]);
     
-    // Return default values if no data
+    // Get actual output by work centre
+    const outputQuery = `
+      SELECT 
+        mc.work_centre_id,
+        wc.name as work_centre_name,
+        COUNT(*) as output
+      FROM stitching_events se
+      LEFT JOIN machine_centres mc ON se.machine_id = mc.machine_id
+      LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id
+      WHERE DATE(se.event_time) = ? AND se.status = 1
+      GROUP BY mc.work_centre_id, wc.name
+    `;
+    
+    const [outputRows] = await pool.execute(outputQuery, [date]);
+    
+    // Get SMV data from line setup (assuming average SMV per work centre)
+    const smvQuery = `
+      SELECT 
+        ls.work_centre_id,
+        AVG(ls.smv_per_pair) as avg_smv
+      FROM line_setup ls
+      WHERE DATE(ls.login_date_time) <= ? 
+      AND (ls.logout_date_time IS NULL OR DATE(ls.logout_date_time) >= ?)
+      GROUP BY ls.work_centre_id
+    `;
+    
+    const [smvRows] = await pool.execute(smvQuery, [date, date]);
+    
+    // Get employee count per work centre
+    const employeeQuery = `
+      SELECT 
+        ls.work_centre_id,
+        COUNT(DISTINCT ls.employee_id) as employee_count
+      FROM line_setup ls
+      WHERE DATE(ls.login_date_time) <= ? 
+      AND (ls.logout_date_time IS NULL OR DATE(ls.logout_date_time) >= ?)
+      GROUP BY ls.work_centre_id
+    `;
+    
+    const [employeeRows] = await pool.execute(employeeQuery, [date, date]);
+    
+    // Combine data
+    const workCentreMap = new Map();
+    
+    // Initialize with plan data
+    planRows.forEach(plan => {
+      workCentreMap.set(plan.work_centre_id, {
+        work_centre_id: plan.work_centre_id,
+        work_centre_name: plan.work_centre_name,
+        target: plan.total_target || 0,
+        output: 0,
+        output_percentage: 0,
+        efficiency_percentage: 0,
+        man_hours: plan.total_man_hours || 0,
+        smv: 0,
+        employees: 0
+      });
+    });
+    
+    // Add output data
+    outputRows.forEach(output => {
+      const existing = workCentreMap.get(output.work_centre_id);
+      if (existing) {
+        existing.output = output.output;
+        existing.output_percentage = existing.target > 0 ? (output.output / existing.target) * 100 : 0;
+      } else {
+        workCentreMap.set(output.work_centre_id, {
+          work_centre_id: output.work_centre_id,
+          work_centre_name: output.work_centre_name,
+          target: 0,
+          output: output.output,
+          output_percentage: 0,
+          efficiency_percentage: 0,
+          man_hours: 0,
+          smv: 0,
+          employees: 0
+        });
+      }
+    });
+    
+    // Add SMV data
+    smvRows.forEach(smv => {
+      const existing = workCentreMap.get(smv.work_centre_id);
+      if (existing) {
+        existing.smv = smv.avg_smv || 0;
+      }
+    });
+    
+    // Add employee data
+    employeeRows.forEach(emp => {
+      const existing = workCentreMap.get(emp.work_centre_id);
+      if (existing) {
+        existing.employees = emp.employee_count || 0;
+        // Calculate efficiency: (Output * SMV) / (Employees * Man Hours in minutes)
+        if (existing.output > 0 && existing.smv > 0 && existing.employees > 0 && existing.man_hours > 0) {
+          existing.efficiency_percentage = (existing.output * existing.smv) / (existing.employees * existing.man_hours) * 100;
+        }
+      }
+    });
+    
+    return Array.from(workCentreMap.values());
+  }
+
+  async getOverallDailyData(date) {
+    // Get total target from production plan
+    const targetQuery = `
+      SELECT SUM(target_pairs_per_day) as total_target
+      FROM production_plan 
+      WHERE plan_date = ?
+    `;
+    
+    const [targetRows] = await pool.execute(targetQuery, [date]);
+    const totalTarget = targetRows[0]?.total_target || 0;
+    
+    // Get total output
+    const outputQuery = `
+      SELECT COUNT(*) as total_output
+      FROM stitching_events 
+      WHERE DATE(event_time) = ? AND status = 1
+    `;
+    
+    const [outputRows] = await pool.execute(outputQuery, [date]);
+    const totalOutput = outputRows[0]?.total_output || 0;
+    
+    // Get total man hours
+    const manHoursQuery = `
+      SELECT SUM(man_hours_minutes) as total_man_hours
+      FROM production_plan 
+      WHERE plan_date = ?
+    `;
+    
+    const [manHoursRows] = await pool.execute(manHoursQuery, [date]);
+    const totalManHours = manHoursRows[0]?.total_man_hours || 0;
+    
+    // Get average SMV
+    const smvQuery = `
+      SELECT AVG(ls.smv_per_pair) as avg_smv
+      FROM line_setup ls
+      WHERE DATE(ls.login_date_time) <= ? 
+      AND (ls.logout_date_time IS NULL OR DATE(ls.logout_date_time) >= ?)
+    `;
+    
+    const [smvRows] = await pool.execute(smvQuery, [date, date]);
+    const avgSmv = smvRows[0]?.avg_smv || 0;
+    
+    // Get total employees
+    const employeeQuery = `
+      SELECT COUNT(DISTINCT ls.employee_id) as total_employees
+      FROM line_setup ls
+      WHERE DATE(ls.login_date_time) <= ? 
+      AND (ls.logout_date_time IS NULL OR DATE(ls.logout_date_time) >= ?)
+    `;
+    
+    const [employeeRows] = await pool.execute(employeeQuery, [date, date]);
+    const totalEmployees = employeeRows[0]?.total_employees || 0;
+    
+    const outputPercentage = totalTarget > 0 ? (totalOutput / totalTarget) * 100 : 0;
+    const overallEfficiency = (totalOutput > 0 && avgSmv > 0 && totalEmployees > 0 && totalManHours > 0) 
+      ? (totalOutput * avgSmv) / (totalEmployees * totalManHours) * 100 
+      : 0;
+    
     return {
-      total_machines: result.total_machines || 0,
-      total_run_minutes: result.total_run_minutes || 0,
-      total_idle_minutes: result.total_idle_minutes || 0,
-      total_events: result.total_events || 0,
-      overall_efficiency: result.overall_efficiency || 0
+      todays_target: totalTarget,
+      output: totalOutput,
+      output_percentage: outputPercentage,
+      overall_efficiency_percentage: overallEfficiency
     };
   }
 }

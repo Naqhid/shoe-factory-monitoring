@@ -56,3 +56,25 @@ export const useOverallEfficiency = (date: Date) => {
     }
   );
 };
+
+export const useDailyDashboardData = (date: Date) => {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  return useQuery(
+    ['dailyDashboardData', dateStr],
+    () => apiService.getDailyDashboardData(dateStr),
+    {
+      refetchInterval: 30000,
+    }
+  );
+};
+
+export const useOverallDailyData = (date: Date) => {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  return useQuery(
+    ['overallDailyData', dateStr],
+    () => apiService.getOverallDailyData(dateStr),
+    {
+      refetchInterval: 30000,
+    }
+  );
+};

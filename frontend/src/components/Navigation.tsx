@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar, UserCheck, User, Smartphone } from 'lucide-react';
 
 interface NavigationProps {
   activeMenu: string;
@@ -13,6 +13,13 @@ const productionMenus = [
   { key: 'reports', label: 'Reports', icon: TrendingUp },
   { key: 'production_routing', label: 'Production Routing', icon: Route },
   { key: 'production_planning', label: 'Production Planning', icon: Calendar },
+  { key: 'line_setup', label: 'Line Setup', icon: UserCheck },
+];
+
+const mobileMenus = [
+  { key: 'mobile_line_setup', label: 'Line Setup', icon: UserCheck },
+  { key: 'mobile_live_dashboard', label: 'Live Dashboard', icon: BarChart3 },
+  { key: 'tracker_app', label: 'Work Tracker', icon: Factory },
 ];
 
 const masterMenus = [
@@ -23,10 +30,13 @@ const masterMenus = [
   { key: 'colors', label: 'Color', icon: Palette, table: 'colors' },
   { key: 'work_centres', label: 'Work Centre', icon: Settings, table: 'work_centres' },
   { key: 'machine_centres', label: 'Machine Centre', icon: Cpu, table: 'machine_centres' },
+  { key: 'users', label: 'User', icon: User, table: 'users' },
+  { key: 'employees', label: 'Employee', icon: UserCheck, table: 'employees' },
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {
   const [productionExpanded, setProductionExpanded] = React.useState(true);
+  const [mobileExpanded, setMobileExpanded] = React.useState(false);
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
 
   return (
@@ -79,6 +89,52 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
             {productionExpanded && (
               <div className="ml-4 mt-2 space-y-1">
                 {productionMenus.map((menu) => {
+                  const Icon = menu.icon;
+                  return (
+                    <Link
+                      key={menu.key}
+                      to={`/${menu.key}`}
+                      onClick={() => {
+                        // Don't close sidebar on desktop
+                        if (window.innerWidth < 1024) {
+                          onToggleSidebar();
+                        }
+                      }}
+                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
+                        activeMenu === menu.key
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {menu.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Mobile App Menu */}
+          <div className="mb-4">
+            <button
+              onClick={() => setMobileExpanded(!mobileExpanded)}
+              className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              <div className="flex items-center">
+                <Smartphone className="h-5 w-5 mr-2" />
+                <span className="font-medium">Mobile App</span>
+              </div>
+              {mobileExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+            
+            {mobileExpanded && (
+              <div className="ml-4 mt-2 space-y-1">
+                {mobileMenus.map((menu) => {
                   const Icon = menu.icon;
                   return (
                     <Link

@@ -1,13 +1,13 @@
 import React from 'react';
 import { Play, Square, Zap, BarChart3, Target } from 'lucide-react';
-import { MachineStatus, OverallEfficiency } from '../types';
+import { MachineStatus, OverallDailyData } from '../types';
 
 interface StatsPanelProps {
   machines: MachineStatus[];
-  overallEfficiency?: OverallEfficiency;
+  overallDailyData?: OverallDailyData;
 }
 
-export const StatsPanel: React.FC<StatsPanelProps> = ({ machines, overallEfficiency }) => {
+export const StatsPanel: React.FC<StatsPanelProps> = ({ machines, overallDailyData }) => {
   const runningCount = machines.filter(m => m.status === 1).length;
   const idleCount = machines.filter(m => m.status === 0).length;
   const totalMachines = machines.length;
@@ -30,28 +30,36 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ machines, overallEfficie
       borderColor: 'border-red-200',
     },
     {
-      label: 'Overall Efficiency',
-      value: overallEfficiency ? `${overallEfficiency.overall_efficiency}%` : 'N/A',
-      icon: Zap,
+      label: 'Today\'s Target',
+      value: overallDailyData?.todays_target || 0,
+      icon: Target,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
       borderColor: 'border-blue-200',
     },
     {
-      label: 'Total Events',
-      value: overallEfficiency?.total_events || 0,
+      label: 'Output',
+      value: overallDailyData?.output || 0,
       icon: BarChart3,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
       borderColor: 'border-purple-200',
     },
     {
-      label: 'Target Achieved',
-      value: overallEfficiency && overallEfficiency.overall_efficiency >= 80 ? '✅' : '❌',
-      icon: Target,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
-      borderColor: 'border-orange-200',
+      label: 'Output %',
+      value: overallDailyData ? `${overallDailyData.output_percentage.toFixed(1)}%` : 'N/A',
+      icon: Zap,
+      color: 'text-green-600',
+      bgColor: 'bg-green-50',
+      borderColor: 'border-green-200',
+    },
+    {
+      label: 'Overall Efficiency %',
+      value: overallDailyData ? `${overallDailyData.overall_efficiency_percentage.toFixed(1)}%` : 'N/A',
+      icon: Zap,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
+      borderColor: 'border-indigo-200',
     },
   ];
 
@@ -69,16 +77,6 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ machines, overallEfficie
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-gray-700">{stat.label}</p>
-          {stat.label === 'Overall Efficiency' && overallEfficiency && (
-            <div className="mt-1 sm:mt-2">
-              <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
-                <div
-                  className="bg-blue-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(overallEfficiency.overall_efficiency, 100)}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
         </div>
       ))}
     </div>

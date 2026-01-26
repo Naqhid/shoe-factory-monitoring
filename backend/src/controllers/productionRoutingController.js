@@ -122,11 +122,10 @@ class ProductionRoutingController {
       for (const line of lines) {
         await connection.execute(
           `INSERT INTO production_routing_lines 
-          (routing_header_id, work_centre_id, machine_centre_id, observed_time, rating_factor, manpower) 
-          VALUES (?, ?, ?, ?, ?, ?)`,
+          (routing_header_id, machine_centre_id, observed_time, rating_factor, manpower) 
+          VALUES (?, ?, ?, ?, ?)`,
           [
             headerId,
-            line.work_centre_id,
             line.machine_centre_id,
             line.observed_time,
             line.rating_factor,

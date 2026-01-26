@@ -1,6 +1,8 @@
 import React from 'react';
 import { Navigation } from './Navigation';
 import { MasterForm } from './MasterForm';
+import { UsersMasterForm } from './UsersMasterForm';
+import { EmployeeMasterForm } from './EmployeeMasterForm';
 import { Loader2 } from 'lucide-react';
 
 interface MasterRecord {
@@ -13,13 +15,15 @@ interface MasterRecord {
 }
 
 const masterConfigs = {
-  customers: { title: 'Customer', table: 'customers' },
-  groups: { title: 'Group', table: 'groups_master' },
-  leather: { title: 'Leather', table: 'leather' },
-  styles: { title: 'Style', table: 'styles' },
-  colors: { title: 'Color', table: 'colors' },
-  work_centres: { title: 'Work Centre', table: 'work_centres' },
-  machine_centres: { title: 'Machine Centre', table: 'machine_centres' },
+  customers: { key: 'customers', title: 'Customer', table: 'customers' },
+  groups: { key: 'groups', title: 'Group', table: 'groups_master' },
+  leather: { key: 'leather', title: 'Leather', table: 'leather' },
+  styles: { key: 'styles', title: 'Style', table: 'styles' },
+  colors: { key: 'colors', title: 'Color', table: 'colors' },
+  work_centres: { key: 'work_centres', title: 'Work Centre', table: 'work_centres' },
+  machine_centres: { key: 'machine_centres', title: 'Machine Centre', table: 'machine_centres' },
+  users: { key: 'users', title: 'User', table: 'users' },
+  employees: { key: 'employees', title: 'Employee', table: 'employees' },
 };
 
 export const ERPApp: React.FC = () => {
@@ -49,7 +53,7 @@ export const ERPApp: React.FC = () => {
 
   React.useEffect(() => {
     const config = masterConfigs[activeMenu as keyof typeof masterConfigs];
-    if (config) {
+    if (config && config.key !== 'users' && config.key !== 'employees') {
       fetchRecords(config.table);
     }
   }, [activeMenu]);
@@ -60,7 +64,7 @@ export const ERPApp: React.FC = () => {
 
   const handleRefresh = () => {
     const config = masterConfigs[activeMenu as keyof typeof masterConfigs];
-    if (config) {
+    if (config && config.key !== 'users' && config.key !== 'employees') {
       fetchRecords(config.table);
     }
   };
@@ -82,12 +86,18 @@ export const ERPApp: React.FC = () => {
             <span className="ml-2 text-gray-600">Loading...</span>
           </div>
         ) : currentConfig ? (
-          <MasterForm
-            title={currentConfig.title}
-            table={currentConfig.table}
-            records={records}
-            onRefresh={handleRefresh}
-          />
+          currentConfig.key === 'users' ? (
+            <UsersMasterForm />
+          ) : currentConfig.key === 'employees' ? (
+            <EmployeeMasterForm />
+          ) : (
+            <MasterForm
+              title={currentConfig.title}
+              table={currentConfig.table}
+              records={records}
+              onRefresh={handleRefresh}
+            />
+          )
         ) : (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">Select a menu item</p>

@@ -30,6 +30,25 @@ export interface OverallEfficiency {
   overall_efficiency: number;
 }
 
+export interface DailyDashboardData {
+  work_centre_id: number;
+  work_centre_name: string;
+  target: number;
+  output: number;
+  output_percentage: number;
+  efficiency_percentage: number;
+  man_hours: number;
+  smv: number;
+  employees: number;
+}
+
+export interface OverallDailyData {
+  todays_target: number;
+  output: number;
+  output_percentage: number;
+  overall_efficiency_percentage: number;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data: T;

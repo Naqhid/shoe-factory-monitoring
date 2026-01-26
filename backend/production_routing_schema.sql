@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS production_routing_header (
 CREATE TABLE IF NOT EXISTS production_routing_lines (
     id INT AUTO_INCREMENT PRIMARY KEY,
     routing_header_id INT NOT NULL,
-    work_centre_id INT NOT NULL,
     machine_centre_id INT NOT NULL,
     observed_time DECIMAL(10, 2) NOT NULL,
     rating_factor DECIMAL(5, 2) NOT NULL,
@@ -34,6 +33,5 @@ CREATE TABLE IF NOT EXISTS production_routing_lines (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (routing_header_id) REFERENCES production_routing_header(id) ON DELETE CASCADE,
-    FOREIGN KEY (work_centre_id) REFERENCES work_centres(id),
     FOREIGN KEY (machine_centre_id) REFERENCES machine_centres(id)
 );

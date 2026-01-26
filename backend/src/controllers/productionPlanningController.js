@@ -12,13 +12,15 @@ class ProductionPlanningController {
           c.name as customer_name,
           g.name as group_name,
           l.name as leather_name,
-          col.name as color_name
+          col.name as color_name,
+          wc.name as work_centre_name
         FROM production_plan pp
         LEFT JOIN styles s ON pp.style_id = s.id
         LEFT JOIN customers c ON pp.customer_id = c.id
         LEFT JOIN groups_master g ON pp.group_id = g.id
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN colors col ON pp.color_id = col.id
+        LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
         ORDER BY pp.plan_date DESC
       `);
       
@@ -41,13 +43,15 @@ class ProductionPlanningController {
           c.name as customer_name,
           g.name as group_name,
           l.name as leather_name,
-          col.name as color_name
+          col.name as color_name,
+          wc.name as work_centre_name
         FROM production_plan pp
         LEFT JOIN styles s ON pp.style_id = s.id
         LEFT JOIN customers c ON pp.customer_id = c.id
         LEFT JOIN groups_master g ON pp.group_id = g.id
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN colors col ON pp.color_id = col.id
+        LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
         WHERE pp.id = ?
       `, [id]);
       
@@ -72,11 +76,14 @@ class ProductionPlanningController {
         group_id,
         leather_id,
         color_id,
-        work_centre,
-        target_per_day
+        work_centre_id,
+        total_target_per_day,
+        target_pairs_per_day,
+        man_hours_minutes,
+        smv_per_pair
       } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !work_centre || !target_per_day) {
+      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_day || !man_hours_minutes || !smv_per_pair) {
         return res.status(400).json({ 
           success: false, 
           error: 'Required fields are missing' 
@@ -85,9 +92,9 @@ class ProductionPlanningController {
 
       const [result] = await db.execute(
         `INSERT INTO production_plan 
-        (plan_date, style_id, customer_id, group_id, leather_id, color_id, production_line, target_per_day) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre, target_per_day]
+        (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair]
       );
 
       res.status(201).json({ 
@@ -111,11 +118,14 @@ class ProductionPlanningController {
         group_id,
         leather_id,
         color_id,
-        work_centre,
-        target_per_day
+        work_centre_id,
+        total_target_per_day,
+        target_pairs_per_day,
+        man_hours_minutes,
+        smv_per_pair
       } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !work_centre || !target_per_day) {
+      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_day || !man_hours_minutes || !smv_per_pair) {
         return res.status(400).json({ 
           success: false, 
           error: 'Required fields are missing' 
@@ -125,9 +135,9 @@ class ProductionPlanningController {
       const [result] = await db.execute(
         `UPDATE production_plan 
         SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?, 
-            leather_id = ?, color_id = ?, production_line = ?, target_per_day = ?
+            leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?, target_pairs_per_day = ?, man_hours_minutes = ?, smv_per_pair = ?
         WHERE id = ?`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre, target_per_day, id]
+        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair, id]
       );
 
       if (result.affectedRows === 0) {

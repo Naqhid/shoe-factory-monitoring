@@ -9,6 +9,7 @@ const apiController = require('./controllers/apiController');
 const masterController = require('./controllers/masterController');
 const productionRoutingController = require('./controllers/productionRoutingController');
 const productionPlanningController = require('./controllers/productionPlanningController');
+const lineSetupController = require('./controllers/lineSetupController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
@@ -50,6 +51,9 @@ app.get('/api/reports/run-idle', apiController.getRunIdleReport);
 app.get('/api/reports/hourly', apiController.getHourlyReport);
 app.get('/api/reports/efficiency', apiController.getEfficiencyReport);
 app.get('/api/reports/overall-efficiency', apiController.getOverallEfficiency);
+app.get('/api/dashboard/daily', apiController.getDailyDashboardData);
+app.get('/api/dashboard/overall-daily', apiController.getOverallDailyData);
+app.post('/api/manual-event', apiController.createManualEvent);
 
 // Master routes
 app.get('/api/masters/:table', masterController.getAll);
@@ -72,6 +76,16 @@ app.get('/api/production-planning/:id', productionPlanningController.getById);
 app.post('/api/production-planning', productionPlanningController.create);
 app.put('/api/production-planning/:id', productionPlanningController.update);
 app.delete('/api/production-planning/:id', productionPlanningController.delete);
+
+// Line setup routes
+app.get('/api/line-setup', lineSetupController.getAll);
+app.get('/api/line-setup/:id', lineSetupController.getById);
+app.post('/api/line-setup', lineSetupController.create);
+app.put('/api/line-setup/:id', lineSetupController.update);
+app.delete('/api/line-setup/:id', lineSetupController.delete);
+
+// Shift start route
+app.post('/api/shift-start', lineSetupController.createShift);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -15,8 +15,10 @@ interface FormData {
   group_id: string;
   leather_id: string;
   color_id: string;
-  work_centre: string;
-  target_per_day: string;
+  work_centre_id: string;
+  total_target_per_day: string;
+  target_pairs_per_day: string;
+  man_hours_minutes: string;
 }
 
 export const ProductionPlanningForm: React.FC = () => {
@@ -33,8 +35,10 @@ export const ProductionPlanningForm: React.FC = () => {
     group_id: '',
     leather_id: '',
     color_id: '',
-    work_centre: '',
-    target_per_day: '',
+    work_centre_id: '',
+    total_target_per_day: '',
+    target_pairs_per_day: '',
+    man_hours_minutes: '',
   });
 
   const [readOnlyFields, setReadOnlyFields] = React.useState({
@@ -145,7 +149,7 @@ export const ProductionPlanningForm: React.FC = () => {
           obj[header] = values[index]?.trim();
         });
         return obj;
-      }).filter(row => row.plan_date && row.style_code && row.work_centre && row.target_per_day);
+      }).filter(row => row.plan_date && row.style_code && row.work_centre_id && row.total_target_per_day && row.target_pairs_per_day && row.man_hours_minutes);
 
       setBulkData(data);
       setBulkMode(true);
@@ -176,8 +180,10 @@ export const ProductionPlanningForm: React.FC = () => {
           group_id: null,
           leather_id: null,
           color_id: null,
-          work_centre: row.work_centre,
-          target_per_day: parseInt(row.target_per_day),
+          work_centre_id: parseInt(row.work_centre_id),
+          total_target_per_day: parseInt(row.total_target_per_day),
+          target_pairs_per_day: parseInt(row.target_pairs_per_day),
+          man_hours_minutes: parseInt(row.man_hours_minutes),
         };
 
         // Get routing data
@@ -216,7 +222,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.style_id || !formData.customer_id || !formData.work_centre || !formData.target_per_day) {
+    if (!formData.style_id || !formData.customer_id || !formData.work_centre_id || !formData.total_target_per_day || !formData.target_pairs_per_day || !formData.man_hours_minutes) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -231,8 +237,10 @@ export const ProductionPlanningForm: React.FC = () => {
         group_id: parseInt(formData.group_id) || null,
         leather_id: parseInt(formData.leather_id) || null,
         color_id: parseInt(formData.color_id) || null,
-        work_centre: formData.work_centre,
-        target_per_day: parseInt(formData.target_per_day),
+        work_centre_id: parseInt(formData.work_centre_id),
+        total_target_per_day: parseInt(formData.total_target_per_day),
+        target_pairs_per_day: parseInt(formData.target_pairs_per_day),
+        man_hours_minutes: parseInt(formData.man_hours_minutes),
       };
 
       const response = await fetch(`${API_BASE}/api/production-planning`, {
@@ -253,8 +261,10 @@ export const ProductionPlanningForm: React.FC = () => {
           group_id: '',
           leather_id: '',
           color_id: '',
-          work_centre: '',
-          target_per_day: '',
+          work_centre_id: '',
+          total_target_per_day: '',
+          target_pairs_per_day: '',
+          man_hours_minutes: '',
         });
         setReadOnlyFields({
           customer_name: '',
@@ -290,7 +300,7 @@ export const ProductionPlanningForm: React.FC = () => {
             className="border border-gray-300 rounded-md px-3 py-2"
           />
           <span className="text-sm text-gray-600">
-            Upload CSV with columns: plan_date, style_code, work_centre, target_per_day
+            Upload CSV with columns: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes
           </span>
         </div>
         {bulkData.length > 0 && (
@@ -412,8 +422,8 @@ export const ProductionPlanningForm: React.FC = () => {
                 Work Centre <span className="text-red-500">*</span>
               </label>
               <select
-                value={formData.work_centre}
-                onChange={(e) => setFormData({ ...formData, work_centre: e.target.value })}
+                value={formData.work_centre_id}
+                onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
@@ -428,12 +438,38 @@ export const ProductionPlanningForm: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target per Day <span className="text-red-500">*</span>
+                Total Target per Day <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
-                value={formData.target_per_day}
-                onChange={(e) => setFormData({ ...formData, target_per_day: e.target.value })}
+                value={formData.total_target_per_day}
+                onChange={(e) => setFormData({ ...formData, total_target_per_day: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Target Pairs per Day <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                value={formData.target_pairs_per_day}
+                onChange={(e) => setFormData({ ...formData, target_pairs_per_day: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Man Hours (minutes) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                value={formData.man_hours_minutes}
+                onChange={(e) => setFormData({ ...formData, man_hours_minutes: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />

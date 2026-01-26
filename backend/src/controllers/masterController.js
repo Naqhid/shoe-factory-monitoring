@@ -15,6 +15,21 @@ class MasterController {
            LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
            ORDER BY mc.code`
         );
+      } else if (table === 'users') {
+        [rows] = await db.execute(
+          `SELECT u.*, wc.name as work_centre_name 
+           FROM users u 
+           LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
+           ORDER BY u.code`
+        );
+      } else if (table === 'employees') {
+        [rows] = await db.execute(
+          `SELECT e.*, wc.name as work_centre_name, mc.name as machine_centre_name 
+           FROM employees e 
+           LEFT JOIN work_centres wc ON e.work_centre_id = wc.id 
+           LEFT JOIN machine_centres mc ON e.machine_centre_id = mc.id 
+           ORDER BY e.code`
+        );
       } else {
         [rows] = await db.execute(`SELECT * FROM ${table} ORDER BY code`);
       }
@@ -43,7 +58,34 @@ class MasterController {
   async create(req, res) {
     try {
       const { table } = req.params;
-      const { code, name, work_centre_id, machine_id } = req.body;
+      const data = req.body;
+
+      if (table === 'users') {
+        const { code, name, email, password, role, work_centre_id } = data;
+        if (!code || !name || !password) {
+          return res.status(400).json({ success: false, error: 'Code, name and password are required' });
+        }
+        const [result] = await db.execute(
+          `INSERT INTO users (code, name, email, password, role, work_centre_id) VALUES (?, ?, ?, ?, ?, ?)`,
+          [code, name, email || null, password, role || 'user', work_centre_id || null]
+        );
+        return res.status(201).json({ success: true, data: { id: result.insertId } });
+      }
+
+      if (table === 'employees') {
+        const { code, name, work_centre_id, machine_centre_id } = data;
+        if (!code || !name) {
+          return res.status(400).json({ success: false, error: 'Code and name are required' });
+        }
+        const [result] = await db.execute(
+          `INSERT INTO employees (code, name, work_centre_id, machine_centre_id) VALUES (?, ?, ?, ?)`,
+          [code, name, work_centre_id || null, machine_centre_id || null]
+        );
+        return res.status(201).json({ success: true, data: { id: result.insertId } });
+      }
+
+      // Generic create for other tables
+      const { code, name, work_centre_id, machine_id } = data;
 
       if (!code || !name) {
         return res.status(400).json({ success: false, error: 'Code and name are required' });
@@ -78,7 +120,45 @@ class MasterController {
   async update(req, res) {
     try {
       const { table, id } = req.params;
-      const { code, name, work_centre_id, machine_id } = req.body;
+      const data = req.body;
+
+      if (table === 'users') {
+        const { code, name, email, password, role, work_centre_id } = data;
+        if (!code || !name) {
+          return res.status(400).json({ success: false, error: 'Code and name are required' });
+        }
+        let query = `UPDATE users SET code = ?, name = ?, email = ?, role = ?, work_centre_id = ?`;
+        let params = [code, name, email || null, role || 'user', work_centre_id || null];
+        if (password) {
+          query += `, password = ?`;
+          params.push(password);
+        }
+        query += ` WHERE id = ?`;
+        params.push(id);
+        const [result] = await db.execute(query, params);
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, error: 'User not found' });
+        }
+        return res.json({ success: true, data: { id } });
+      }
+
+      if (table === 'employees') {
+        const { code, name, work_centre_id, machine_centre_id } = data;
+        if (!code || !name) {
+          return res.status(400).json({ success: false, error: 'Code and name are required' });
+        }
+        const [result] = await db.execute(
+          `UPDATE employees SET code = ?, name = ?, work_centre_id = ?, machine_centre_id = ? WHERE id = ?`,
+          [code, name, work_centre_id || null, machine_centre_id || null, id]
+        );
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, error: 'Employee not found' });
+        }
+        return res.json({ success: true, data: { id } });
+      }
+
+      // Generic update for other tables
+      const { code, name, work_centre_id, machine_id } = data;
 
       if (!code || !name) {
         return res.status(400).json({ success: false, error: 'Code and name are required' });

@@ -35,6 +35,16 @@ export const apiService = {
     return response.data.data;
   },
 
+  async getDailyDashboardData(date: string): Promise<any[]> {
+    const response = await api.get<ApiResponse<any[]>>(`/dashboard/daily?date=${date}`);
+    return response.data.data;
+  },
+
+  async getOverallDailyData(date: string): Promise<any> {
+    const response = await api.get<ApiResponse<any>>(`/dashboard/overall-daily?date=${date}`);
+    return response.data.data;
+  },
+
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
     const response = await axios.get('https://shoe-factory-monitoring-production-8c06.up.railway.app/health');
     return response.data;

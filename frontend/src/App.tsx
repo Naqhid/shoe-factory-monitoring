@@ -12,7 +12,11 @@ import { MasterForm } from './components/MasterForm';
 import { ProductionPlanningForm } from './components/ProductionPlanningForm';
 import { Reports } from './components/Reports';
 import { ProductionRoutingForm } from './components/ProductionRoutingForm';
-import { useMachineStatus, useEfficiencyReport, useOverallEfficiency } from './hooks/useApi';
+import { LineSetupForm } from './components/LineSetupForm';
+import { MobileLineSetupForm } from './components/MobileLineSetupForm';
+import { MobileLiveDashboard } from './components/MobileLiveDashboard';
+import { TrackerApp } from './components/TrackerApp';
+import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -42,6 +46,8 @@ const masterConfigs = {
   colors: { title: 'Color', table: 'colors' },
   work_centres: { title: 'Work Centre', table: 'work_centres' },
   machine_centres: { title: 'Machine Centre', table: 'machine_centres' },
+  users: { title: 'User', table: 'users' },
+  employees: { title: 'Employee', table: 'employees' },
 };
 
 function App() {
@@ -72,9 +78,9 @@ function App() {
   } = useEfficiencyReport(selectedDate);
   
   const { 
-    data: overallEfficiency, 
+    data: overallDailyData, 
     isLoading: overallLoading 
-  } = useOverallEfficiency(selectedDate);
+  } = useOverallDailyData(selectedDate);
 
   const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:3001'
@@ -142,6 +148,10 @@ function App() {
   const isReports = activeMenu === 'reports';
   const isProductionRouting = activeMenu === 'production_routing';
   const isProductionPlanning = activeMenu === 'production_planning';
+  const isLineSetup = activeMenu === 'line_setup';
+  const isMobileLineSetup = activeMenu === 'mobile_line_setup';
+  const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
+  const isTrackerApp = activeMenu === 'tracker_app';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
@@ -190,7 +200,7 @@ function App() {
                 </div>
               )}
 
-              <StatsPanel machines={machines} overallEfficiency={overallEfficiency} />
+              <StatsPanel machines={machines} overallDailyData={overallDailyData} />
 
               {/* Efficiency Chart First */}
               <div className="mb-6">
@@ -233,6 +243,14 @@ function App() {
           <ProductionRoutingForm />
         ) : isProductionPlanning ? (
           <ProductionPlanningForm />
+        ) : isLineSetup ? (
+          <LineSetupForm />
+        ) : isMobileLineSetup ? (
+          <MobileLineSetupForm />
+        ) : isMobileLiveDashboard ? (
+          <MobileLiveDashboard />
+        ) : isTrackerApp ? (
+          <TrackerApp />
         ) : isMasterView ? (
           loading ? (
             <div className="flex items-center justify-center h-full">

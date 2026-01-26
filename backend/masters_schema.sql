@@ -58,5 +58,27 @@ CREATE TABLE IF NOT EXISTS machine_centres (
     FOREIGN KEY (work_centre_id) REFERENCES work_centres(id)
 );
 
--- Add machine_id column if it doesn't exist
-ALTER TABLE machine_centres ADD COLUMN IF NOT EXISTS machine_id VARCHAR(100);
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    password VARCHAR(255),
+    role VARCHAR(50) DEFAULT 'user',
+    work_centre_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (work_centre_id) REFERENCES work_centres(id)
+);
+
+CREATE TABLE IF NOT EXISTS employees (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    work_centre_id INT,
+    machine_centre_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (work_centre_id) REFERENCES work_centres(id),
+    FOREIGN KEY (machine_centre_id) REFERENCES machine_centres(id)
+);
