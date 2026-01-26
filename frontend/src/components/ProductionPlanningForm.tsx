@@ -19,6 +19,8 @@ interface FormData {
   total_target_per_day: string;
   target_pairs_per_day: string;
   man_hours_minutes: string;
+  smv_per_pair: string;
+  target_per_day?: string;
 }
 
 export const ProductionPlanningForm: React.FC = () => {
@@ -39,6 +41,8 @@ export const ProductionPlanningForm: React.FC = () => {
     total_target_per_day: '',
     target_pairs_per_day: '',
     man_hours_minutes: '',
+    smv_per_pair: '',
+    target_per_day: '',
   });
 
   const [readOnlyFields, setReadOnlyFields] = React.useState({
@@ -112,6 +116,7 @@ export const ProductionPlanningForm: React.FC = () => {
           leather_id: routing.leather_id,
           color_id: routing.color_id,
           target_per_day: routing.target_per_day || '',
+          smv_per_pair: routing.tot_smv || '',
         });
 
         setReadOnlyFields({
@@ -149,7 +154,7 @@ export const ProductionPlanningForm: React.FC = () => {
           obj[header] = values[index]?.trim();
         });
         return obj;
-      }).filter(row => row.plan_date && row.style_code && row.work_centre_id && row.total_target_per_day && row.target_pairs_per_day && row.man_hours_minutes);
+      }).filter(row => row.plan_date && row.style_code && row.work_centre_id && row.total_target_per_day && row.target_pairs_per_day && row.man_hours_minutes && row.smv_per_pair);
 
       setBulkData(data);
       setBulkMode(true);
@@ -184,6 +189,7 @@ export const ProductionPlanningForm: React.FC = () => {
           total_target_per_day: parseInt(row.total_target_per_day),
           target_pairs_per_day: parseInt(row.target_pairs_per_day),
           man_hours_minutes: parseInt(row.man_hours_minutes),
+          smv_per_pair: parseFloat(row.smv_per_pair || '0'),
         };
 
         // Get routing data
@@ -222,7 +228,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.style_id || !formData.customer_id || !formData.work_centre_id || !formData.total_target_per_day || !formData.target_pairs_per_day || !formData.man_hours_minutes) {
+    if (!formData.style_id || !formData.customer_id || !formData.work_centre_id || !formData.total_target_per_day || !formData.target_pairs_per_day || !formData.man_hours_minutes || !formData.smv_per_pair) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -241,6 +247,7 @@ export const ProductionPlanningForm: React.FC = () => {
         total_target_per_day: parseInt(formData.total_target_per_day),
         target_pairs_per_day: parseInt(formData.target_pairs_per_day),
         man_hours_minutes: parseInt(formData.man_hours_minutes),
+        smv_per_pair: parseFloat(formData.smv_per_pair),
       };
 
       const response = await fetch(`${API_BASE}/api/production-planning`, {
@@ -265,6 +272,8 @@ export const ProductionPlanningForm: React.FC = () => {
           total_target_per_day: '',
           target_pairs_per_day: '',
           man_hours_minutes: '',
+          smv_per_pair: '',
+          target_per_day: '',
         });
         setReadOnlyFields({
           customer_name: '',
@@ -300,7 +309,7 @@ export const ProductionPlanningForm: React.FC = () => {
             className="border border-gray-300 rounded-md px-3 py-2"
           />
           <span className="text-sm text-gray-600">
-            Upload CSV with columns: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes
+            Upload CSV with columns: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair
           </span>
         </div>
         {bulkData.length > 0 && (
@@ -476,12 +485,17 @@ export const ProductionPlanningForm: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target per Hour</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                SMV per Pair <span className="text-red-500">*</span>
+              </label>
               <input
-                type="text"
-                value={targetPerHour}
+                type="number"
+                step="0.0001"
+                value={formData.smv_per_pair}
                 readOnly
                 className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
+                placeholder="Auto-populated from routing"
+                required
               />
             </div>
           </div>

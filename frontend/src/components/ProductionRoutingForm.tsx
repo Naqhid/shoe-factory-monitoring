@@ -10,7 +10,6 @@ interface MasterOption {
 
 interface RoutingLine {
   id?: number;
-  work_centre_id: string;
   machine_centre_id: string;
   observed_time: string;
   rating_factor: string;
@@ -58,7 +57,6 @@ export const ProductionRoutingForm: React.FC = () => {
   });
 
   const [lines, setLines] = React.useState<RoutingLine[]>([{
-    work_centre_id: '',
     machine_centre_id: '',
     observed_time: '',
     rating_factor: '',
@@ -135,7 +133,6 @@ export const ProductionRoutingForm: React.FC = () => {
 
   const addLine = () => {
     setLines([...lines, {
-      work_centre_id: '',
       machine_centre_id: '',
       observed_time: '',
       rating_factor: '',
@@ -167,7 +164,7 @@ export const ProductionRoutingForm: React.FC = () => {
     }
 
     const incompleteLine = lines.find(line => 
-      !line.work_centre_id || !line.machine_centre_id || !line.observed_time || 
+      !line.machine_centre_id || !line.observed_time || 
       !line.rating_factor || !line.manpower
     );
 
@@ -182,7 +179,6 @@ export const ProductionRoutingForm: React.FC = () => {
       const payload = {
         header: headerData,
         lines: lines.map(line => ({
-          work_centre_id: parseInt(line.work_centre_id),
           machine_centre_id: parseInt(line.machine_centre_id),
           observed_time: parseFloat(line.observed_time),
           rating_factor: parseFloat(line.rating_factor),
@@ -213,7 +209,6 @@ export const ProductionRoutingForm: React.FC = () => {
           tot_smv: '',
         });
         setLines([{
-          work_centre_id: '',
           machine_centre_id: '',
           observed_time: '',
           rating_factor: '',
@@ -409,7 +404,6 @@ export const ProductionRoutingForm: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Work Centre</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
@@ -427,19 +421,6 @@ export const ProductionRoutingForm: React.FC = () => {
                   const calculated = calculateLineValues(line);
                   return (
                     <tr key={index}>
-                      <td className="px-3 py-2">
-                        <select
-                          value={line.work_centre_id}
-                          onChange={(e) => updateLine(index, 'work_centre_id', e.target.value)}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                          required
-                        >
-                          <option value="">Select</option>
-                          {workCentres.map((wc) => (
-                            <option key={wc.id} value={wc.id}>{wc.name}</option>
-                          ))}
-                        </select>
-                      </td>
                       <td className="px-3 py-2">
                         <select
                           value={line.machine_centre_id}
