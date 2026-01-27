@@ -15,7 +15,7 @@ import { ProductionRoutingForm } from './components/ProductionRoutingForm';
 import { LineSetupForm } from './components/LineSetupForm';
 import { MobileLineSetupForm } from './components/MobileLineSetupForm';
 import { MobileLiveDashboard } from './components/MobileLiveDashboard';
-import { TrackerApp } from './components/TrackerApp';
+import { LoginForm } from './components/LoginForm';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
@@ -55,7 +55,8 @@ function App() {
   const navigate = useNavigate();
   
   // Get active menu from URL path, default to 'overview'
-  const activeMenu = location.pathname.slice(1) || 'overview';
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const activeMenu = location.pathname.slice(1) || (isMobile ? 'login' : 'overview');
   
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [selectedDate] = React.useState(new Date());
@@ -149,10 +150,15 @@ function App() {
   const isProductionRouting = activeMenu === 'production_routing';
   const isProductionPlanning = activeMenu === 'production_planning';
   const isLineSetup = activeMenu === 'line_setup';
+  const isLogin = activeMenu === 'login';
   const isMobileLineSetup = activeMenu === 'mobile_line_setup';
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
   const isTrackerApp = activeMenu === 'tracker_app';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
+
+  // Require login before Mobile Line Setup or Mobile Live Dashboard (all devices)
+  const showMobileLogin = (isMobileLineSetup || isMobileLiveDashboard) &&
+    !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('mobile_authenticated'));
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
   if (machinesError) {
@@ -245,6 +251,8 @@ function App() {
           <ProductionPlanningForm />
         ) : isLineSetup ? (
           <LineSetupForm />
+        ) : (isLogin || showMobileLogin) ? (
+          <LoginForm />
         ) : isMobileLineSetup ? (
           <MobileLineSetupForm />
         ) : isMobileLiveDashboard ? (

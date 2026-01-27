@@ -5,9 +5,14 @@ declare module 'react-qr-scanner' {
     delay?: number;
     style?: React.CSSProperties;
     onError?: (error: any) => void;
-    onScan?: (data: string | null) => void;
+    onScan?: (data: { text: string } | null) => void;
     facingMode?: 'user' | 'environment';
     className?: string;
+    constraints?: {
+      video?: {
+        facingMode?: 'user' | 'environment';
+      };
+    };
   }
 
   const QrReader: React.ComponentType<QrReaderProps>;

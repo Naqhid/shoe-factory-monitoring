@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar, UserCheck, User, Smartphone } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogIn } from 'lucide-react';
 
 interface NavigationProps {
   activeMenu: string;
@@ -8,7 +8,7 @@ interface NavigationProps {
   onToggleSidebar: () => void;
 }
 
-const productionMenus = [
+const processMenus = [
   { key: 'overview', label: 'TV Dashboard', icon: BarChart3 },
   { key: 'reports', label: 'Reports', icon: TrendingUp },
   { key: 'production_routing', label: 'Production Routing', icon: Route },
@@ -16,10 +16,10 @@ const productionMenus = [
   { key: 'line_setup', label: 'Line Setup', icon: UserCheck },
 ];
 
-const mobileMenus = [
-  { key: 'mobile_line_setup', label: 'Line Setup', icon: UserCheck },
-  { key: 'mobile_live_dashboard', label: 'Live Dashboard', icon: BarChart3 },
-  { key: 'tracker_app', label: 'Work Tracker', icon: Factory },
+const mobileAppMenus = [
+  { key: 'login', label: 'Login', icon: LogIn },
+  { key: 'mobile_line_setup', label: 'Mobile Line Setup', icon: UserCheck },
+  { key: 'mobile_live_dashboard', label: 'Mobile Live Dashboard', icon: Smartphone },
 ];
 
 const masterMenus = [
@@ -35,9 +35,8 @@ const masterMenus = [
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {
-  const [productionExpanded, setProductionExpanded] = React.useState(true);
-  const [mobileExpanded, setMobileExpanded] = React.useState(false);
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
+  const [processExpanded, setProcessExpanded] = React.useState(true);
 
   return (
     <>
@@ -72,109 +71,20 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
         </div>
         
         <nav className="p-4 h-full overflow-y-auto">
-          {/* Production Dashboard Menu */}
-          <div className="mb-4">
-            <button
-              onClick={() => setProductionExpanded(!productionExpanded)}
-              className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
-            >
-              <span className="font-medium">Production Dashboard</span>
-              {productionExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </button>
-            
-            {productionExpanded && (
-              <div className="ml-4 mt-2 space-y-1">
-                {productionMenus.map((menu) => {
-                  const Icon = menu.icon;
-                  return (
-                    <Link
-                      key={menu.key}
-                      to={`/${menu.key}`}
-                      onClick={() => {
-                        // Don't close sidebar on desktop
-                        if (window.innerWidth < 1024) {
-                          onToggleSidebar();
-                        }
-                      }}
-                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
-                        activeMenu === menu.key
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {menu.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Mobile App Menu */}
-          <div className="mb-4">
-            <button
-              onClick={() => setMobileExpanded(!mobileExpanded)}
-              className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
-            >
-              <div className="flex items-center">
-                <Smartphone className="h-5 w-5 mr-2" />
-                <span className="font-medium">Mobile App</span>
-              </div>
-              {mobileExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </button>
-            
-            {mobileExpanded && (
-              <div className="ml-4 mt-2 space-y-1">
-                {mobileMenus.map((menu) => {
-                  const Icon = menu.icon;
-                  return (
-                    <Link
-                      key={menu.key}
-                      to={`/${menu.key}`}
-                      onClick={() => {
-                        // Don't close sidebar on desktop
-                        if (window.innerWidth < 1024) {
-                          onToggleSidebar();
-                        }
-                      }}
-                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
-                        activeMenu === menu.key
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {menu.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ERP Masters Menu */}
+          {/* Masters Menu */}
           <div className="mb-4">
             <button
               onClick={() => setMastersExpanded(!mastersExpanded)}
               className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
             >
-              <span className="font-medium">ERP Masters</span>
+              <span className="font-medium">Masters</span>
               {mastersExpanded ? (
                 <ChevronDown className="h-4 w-4" />
               ) : (
                 <ChevronRight className="h-4 w-4" />
               )}
             </button>
-            
+
             {mastersExpanded && (
               <div className="ml-4 mt-2 space-y-1">
                 {masterMenus.map((menu) => {
@@ -203,6 +113,69 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
               </div>
             )}
           </div>
+
+          {/* Process Menu */}
+          <div className="mb-4">
+            <button
+              onClick={() => setProcessExpanded(!processExpanded)}
+              className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              <span className="font-medium">Process</span>
+              {processExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+
+            {processExpanded && (
+              <div className="ml-4 mt-2 space-y-1">
+                {processMenus.map((menu) => {
+                  const Icon = menu.icon;
+                  return (
+                    <Link
+                      key={menu.key}
+                      to={`/${menu.key}`}
+                      onClick={() => {
+                        if (window.innerWidth < 1024) onToggleSidebar();
+                      }}
+                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
+                        activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {menu.label}
+                    </Link>
+                  );
+                })}
+                {/* Mobile App under Process */}
+                <div className="mt-2 pt-2 border-t border-gray-200">
+                  <p className="px-2 py-1 text-xs font-medium text-gray-500 uppercase tracking-wide">Mobile App</p>
+                  {mobileAppMenus.map((menu) => {
+                    const Icon = menu.icon;
+                    return (
+                      <Link
+                        key={menu.key}
+                        to={`/${menu.key}`}
+                        onClick={() => {
+                          if (window.innerWidth < 1024) onToggleSidebar();
+                        }}
+                        className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
+                          activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 mr-2" />
+                        {menu.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+
+
         </nav>
       </div>
     </>

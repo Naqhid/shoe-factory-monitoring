@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Square, Zap, TrendingUp, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Play, Square, Zap, TrendingUp, ArrowLeft, RefreshCw, LogOut } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { useMachineStatus, useDailyDashboardData } from '../hooks/useApi';
@@ -49,13 +49,27 @@ export const MobileLiveDashboard: React.FC = () => {
             </button>
             <h1 className="text-2xl font-bold text-gray-900">Live Dashboard</h1>
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={isLoading}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-6 w-6 text-gray-700 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              <RefreshCw className={`h-6 w-6 text-gray-700 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={() => {
+                if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('mobile_authenticated');
+                navigate('/login');
+                toast.success('Logged out');
+              }}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              title="Logout"
+            >
+              <LogOut className="h-6 w-6 text-gray-700" />
+            </button>
+          </div>
         </div>
 
         {/* Date Display */}
