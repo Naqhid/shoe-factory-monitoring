@@ -16,6 +16,7 @@ import { LineSetupForm } from './components/LineSetupForm';
 import { MobileLineSetupForm } from './components/MobileLineSetupForm';
 import { MobileLiveDashboard } from './components/MobileLiveDashboard';
 import { LoginForm } from './components/LoginForm';
+import { TrackerApp } from './components/TrackerApp';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
