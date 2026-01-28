@@ -1,6 +1,6 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogIn } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut } from 'lucide-react';
 
 interface NavigationProps {
   activeMenu: string;
@@ -13,12 +13,7 @@ const processMenus = [
   { key: 'reports', label: 'Reports', icon: TrendingUp },
   { key: 'production_routing', label: 'Production Routing', icon: Route },
   { key: 'production_planning', label: 'Production Planning', icon: Calendar },
-  { key: 'line_setup', label: 'Line Setup', icon: UserCheck },
-];
-
-const mobileAppMenus = [
-  { key: 'login', label: 'Login', icon: LogIn },
-  { key: 'mobile_line_setup', label: 'Mobile Line Setup', icon: UserCheck },
+  { key: 'line_setup_form', label: 'Line Setup Form', icon: UserCheck },
   { key: 'mobile_live_dashboard', label: 'Mobile Live Dashboard', icon: Smartphone },
 ];
 
@@ -35,8 +30,18 @@ const masterMenus = [
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {
+  const navigate = useNavigate();
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
   const [processExpanded, setProcessExpanded] = React.useState(true);
+
+  const handleLogout = () => {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('app_authenticated');
+      sessionStorage.removeItem('mobile_authenticated');
+    }
+    navigate('/');
+    if (window.innerWidth < 1024) onToggleSidebar();
+  };
 
   return (
     <>
@@ -148,34 +153,21 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
                     </Link>
                   );
                 })}
-                {/* Mobile App under Process */}
-                <div className="mt-2 pt-2 border-t border-gray-200">
-                  <p className="px-2 py-1 text-xs font-medium text-gray-500 uppercase tracking-wide">Mobile App</p>
-                  {mobileAppMenus.map((menu) => {
-                    const Icon = menu.icon;
-                    return (
-                      <Link
-                        key={menu.key}
-                        to={`/${menu.key}`}
-                        onClick={() => {
-                          if (window.innerWidth < 1024) onToggleSidebar();
-                        }}
-                        className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
-                          activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        <Icon className="h-4 w-4 mr-2" />
-                        {menu.label}
-                      </Link>
-                    );
-                  })}
-                </div>
               </div>
             )}
           </div>
 
-
-
+          {/* Logout */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center w-full text-left p-2 rounded-md text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </button>
+          </div>
         </nav>
       </div>
     </>

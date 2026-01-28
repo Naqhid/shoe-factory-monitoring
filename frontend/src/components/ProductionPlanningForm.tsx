@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, Upload } from 'lucide-react';
+import { Save, Upload, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface MasterOption {
@@ -8,20 +8,39 @@ interface MasterOption {
   name: string;
 }
 
-interface FormData {
-  plan_date: string;
+interface LineItem {
   style_id: string;
   customer_id: string;
   group_id: string;
   leather_id: string;
   color_id: string;
+  customer_name: string;
+  group_name: string;
+  leather_name: string;
+  color_name: string;
   work_centre_id: string;
   total_target_per_day: string;
   target_pairs_per_day: string;
   man_hours_minutes: string;
   smv_per_pair: string;
-  target_per_day?: string;
 }
+
+const emptyLine = (): LineItem => ({
+  style_id: '',
+  customer_id: '',
+  group_id: '',
+  leather_id: '',
+  color_id: '',
+  customer_name: '',
+  group_name: '',
+  leather_name: '',
+  color_name: '',
+  work_centre_id: '',
+  total_target_per_day: '',
+  target_pairs_per_day: '',
+  man_hours_minutes: '',
+  smv_per_pair: '',
+});
 
 export const ProductionPlanningForm: React.FC = () => {
   const [styles, setStyles] = React.useState<MasterOption[]>([]);
@@ -30,27 +49,8 @@ export const ProductionPlanningForm: React.FC = () => {
   const [bulkMode, setBulkMode] = React.useState(false);
   const [bulkData, setBulkData] = React.useState<any[]>([]);
 
-  const [formData, setFormData] = React.useState<FormData>({
-    plan_date: new Date().toISOString().split('T')[0],
-    style_id: '',
-    customer_id: '',
-    group_id: '',
-    leather_id: '',
-    color_id: '',
-    work_centre_id: '',
-    total_target_per_day: '',
-    target_pairs_per_day: '',
-    man_hours_minutes: '',
-    smv_per_pair: '',
-    target_per_day: '',
-  });
-
-  const [readOnlyFields, setReadOnlyFields] = React.useState({
-    customer_name: '',
-    group_name: '',
-    leather_name: '',
-    color_name: '',
-  });
+  const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
+  const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
 
   const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:3001'
@@ -62,100 +62,93 @@ export const ProductionPlanningForm: React.FC = () => {
       try {
         const response = await fetch(`${API_BASE}/api/masters/styles`);
         const result = await response.json();
-        if (result.success) {
-          setStyles(result.data);
-        }
+        if (result.success) setStyles(result.data);
       } catch (error) {
         toast.error('Error loading styles');
         console.error(error);
       }
     };
-
     const fetchWorkCentres = async () => {
       try {
         const response = await fetch(`${API_BASE}/api/masters/work_centres`);
         const result = await response.json();
-        if (result.success) {
-          setWorkCentres(result.data);
-        }
+        if (result.success) setWorkCentres(result.data);
       } catch (error) {
         toast.error('Error loading work centres');
         console.error(error);
       }
     };
-
     fetchStyles();
     fetchWorkCentres();
   }, []);
 
-  // Auto-populate when style is selected
-  const handleStyleChange = async (styleId: string) => {
-    setFormData({ ...formData, style_id: styleId });
-
-    if (!styleId) {
-      setReadOnlyFields({
-        customer_name: '',
-        group_name: '',
-        leather_name: '',
-        color_name: '',
-      });
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/api/production-routing/style/${styleId}`);
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        const routing = result.data;
-        setFormData({
-          ...formData,
-          style_id: styleId,
-          customer_id: routing.customer_id,
-          group_id: routing.group_id,
-          leather_id: routing.leather_id,
-          color_id: routing.color_id,
-          target_per_day: routing.target_per_day || '',
-          smv_per_pair: routing.tot_smv || '',
-        });
-
-        setReadOnlyFields({
-          customer_name: routing.customer_name || '',
-          group_name: routing.group_name || '',
-          leather_name: routing.leather_name || '',
-          color_name: routing.color_name || '',
-        });
-      } else {
-        toast.error('No routing found for this style. Please fill manually.');
-      }
-    } catch (error) {
-      toast.error('Error fetching routing data');
-      console.error(error);
-    }
+  const addLine = () => setLines((prev) => [...prev, emptyLine()]);
+  const removeLine = (idx: number) => {
+    if (lines.length <= 1) return;
+    setLines((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Calculate target per hour
-  const targetPerHour = formData.target_per_day ? (parseFloat(formData.target_per_day) / 8).toFixed(2) : '0.00';
+  const updateLine = (idx: number, updates: Partial<LineItem>) => {
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...updates } : l)));
+  };
+
+  const handleStyleChange = async (idx: number, styleId: string) => {
+    updateLine(idx, {
+      style_id: styleId,
+      customer_id: '',
+      group_id: '',
+      leather_id: '',
+      color_id: '',
+      customer_name: '',
+      group_name: '',
+      leather_name: '',
+      color_name: '',
+      smv_per_pair: '',
+    });
+    if (!styleId) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/production-routing/style/${styleId}`);
+      const result = await res.json();
+      if (result.success && result.data) {
+        const r = result.data;
+        updateLine(idx, {
+          style_id: styleId,
+          customer_id: String(r.customer_id ?? ''),
+          group_id: String(r.group_id ?? ''),
+          leather_id: String(r.leather_id ?? ''),
+          color_id: String(r.color_id ?? ''),
+          customer_name: r.customer_name || '',
+          group_name: r.group_name || '',
+          leather_name: r.leather_name || '',
+          color_name: r.color_name || '',
+          smv_per_pair: String(r.tot_smv ?? ''),
+        });
+      } else {
+        toast.error(`No routing found for this style.`);
+      }
+    } catch (e) {
+      toast.error('Error fetching routing');
+      console.error(e);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const csv = event.target?.result as string;
-      const lines = csv.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
-
-      const data = lines.slice(1).map(line => {
-        const values = line.split(',');
-        const obj: any = {};
-        headers.forEach((header, index) => {
-          obj[header] = values[index]?.trim();
-        });
-        return obj;
-      }).filter(row => row.plan_date && row.style_code && row.work_centre_id && row.total_target_per_day && row.target_pairs_per_day && row.man_hours_minutes && row.smv_per_pair);
-
+    reader.onload = (ev) => {
+      const csv = (ev.target?.result as string) || '';
+      const rows = csv.split('\n');
+      const headers = rows[0].split(',').map((h) => h.trim());
+      const data = rows.slice(1)
+        .map((row) => {
+          const v = row.split(',');
+          const o: any = {};
+          headers.forEach((h, i) => { o[h] = v[i]?.trim(); });
+          return o;
+        })
+        .filter((r) => r.plan_date && r.style_code && r.work_centre_id && r.total_target_per_day && r.target_pairs_per_day && r.man_hours_minutes && r.smv_per_pair);
       setBulkData(data);
       setBulkMode(true);
     };
@@ -164,24 +157,16 @@ export const ProductionPlanningForm: React.FC = () => {
 
   const handleBulkSubmit = async () => {
     if (bulkData.length === 0) return;
-
     setLoading(true);
-    let successCount = 0;
-    let errorCount = 0;
-
+    let ok = 0, err = 0;
     for (const row of bulkData) {
       try {
-        // Find IDs from codes
-        const style = styles.find(s => s.code === row.style_code);
-        if (!style) {
-          errorCount++;
-          continue;
-        }
-
-        const payload = {
+        const style = styles.find((s) => s.code === row.style_code);
+        if (!style) { err++; continue; }
+        const payload: any = {
           plan_date: row.plan_date,
           style_id: style.id,
-          customer_id: null, // Will be set from routing
+          customer_id: null,
           group_id: null,
           leather_id: null,
           color_id: null,
@@ -191,104 +176,66 @@ export const ProductionPlanningForm: React.FC = () => {
           man_hours_minutes: parseInt(row.man_hours_minutes),
           smv_per_pair: parseFloat(row.smv_per_pair || '0'),
         };
-
-        // Get routing data
-        const routingResponse = await fetch(`${API_BASE}/api/production-routing/style/${style.id}`);
-        const routingResult = await routingResponse.json();
-        if (routingResult.success && routingResult.data) {
-          payload.customer_id = routingResult.data.customer_id;
-          payload.group_id = routingResult.data.group_id;
-          payload.leather_id = routingResult.data.leather_id;
-          payload.color_id = routingResult.data.color_id;
+        const rr = await fetch(`${API_BASE}/api/production-routing/style/${style.id}`);
+        const rj = await rr.json();
+        if (rj.success && rj.data) {
+          payload.customer_id = rj.data.customer_id;
+          payload.group_id = rj.data.group_id;
+          payload.leather_id = rj.data.leather_id;
+          payload.color_id = rj.data.color_id;
         }
-
-        const response = await fetch(`${API_BASE}/api/production-planning`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          successCount++;
-        } else {
-          errorCount++;
-        }
-      } catch (error) {
-        errorCount++;
-      }
+        const res = await fetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await res.json();
+        if (j.success) ok++; else err++;
+      } catch { err++; }
     }
-
     setLoading(false);
-    toast.success(`Bulk upload completed: ${successCount} success, ${errorCount} errors`);
+    toast.success(`Bulk: ${ok} ok, ${err} errors`);
     setBulkMode(false);
     setBulkData([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.style_id || !formData.customer_id || !formData.work_centre_id || !formData.total_target_per_day || !formData.target_pairs_per_day || !formData.man_hours_minutes || !formData.smv_per_pair) {
-      toast.error('Please fill all required fields');
+    const toSave = lines.filter(
+      (l) =>
+        l.style_id && l.customer_id && l.work_centre_id && l.total_target_per_day &&
+        l.target_pairs_per_day && l.man_hours_minutes && l.smv_per_pair
+    );
+    if (toSave.length === 0) {
+      toast.error('Add at least one line with Style, Work Centre, targets, and SMV. Customer/Group/Leather/Color come from routing when Style is selected.');
       return;
     }
 
     setLoading(true);
-
-    try {
-      const payload = {
-        plan_date: formData.plan_date,
-        style_id: parseInt(formData.style_id),
-        customer_id: parseInt(formData.customer_id),
-        group_id: parseInt(formData.group_id) || null,
-        leather_id: parseInt(formData.leather_id) || null,
-        color_id: parseInt(formData.color_id) || null,
-        work_centre_id: parseInt(formData.work_centre_id),
-        total_target_per_day: parseInt(formData.total_target_per_day),
-        target_pairs_per_day: parseInt(formData.target_pairs_per_day),
-        man_hours_minutes: parseInt(formData.man_hours_minutes),
-        smv_per_pair: parseFloat(formData.smv_per_pair),
-      };
-
-      const response = await fetch(`${API_BASE}/api/production-planning`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success('Production plan created successfully');
-        // Reset form
-        setFormData({
-          plan_date: new Date().toISOString().split('T')[0],
-          style_id: '',
-          customer_id: '',
-          group_id: '',
-          leather_id: '',
-          color_id: '',
-          work_centre_id: '',
-          total_target_per_day: '',
-          target_pairs_per_day: '',
-          man_hours_minutes: '',
-          smv_per_pair: '',
-          target_per_day: '',
-        });
-        setReadOnlyFields({
-          customer_name: '',
-          group_name: '',
-          leather_name: '',
-          color_name: '',
-        });
-      } else {
-        toast.error(result.error || 'Failed to create plan');
+    let ok = 0, err = 0;
+    for (const l of toSave) {
+      try {
+        const payload = {
+          plan_date: planDate,
+          style_id: parseInt(l.style_id),
+          customer_id: parseInt(l.customer_id),
+          group_id: l.group_id ? parseInt(l.group_id) : null,
+          leather_id: l.leather_id ? parseInt(l.leather_id) : null,
+          color_id: l.color_id ? parseInt(l.color_id) : null,
+          work_centre_id: parseInt(l.work_centre_id),
+          total_target_per_day: parseInt(l.total_target_per_day),
+          target_pairs_per_day: parseInt(l.target_pairs_per_day),
+          man_hours_minutes: parseInt(l.man_hours_minutes),
+          smv_per_pair: parseFloat(l.smv_per_pair),
+        };
+        const res = await fetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await res.json();
+        if (j.success) ok++; else { err++; toast.error(j.error || 'Failed to save line'); }
+      } catch (e) {
+        err++;
+        toast.error('Network error');
       }
-    } catch (error) {
-      toast.error('Network error');
-      console.error(error);
-    } finally {
-      setLoading(false);
+    }
+    setLoading(false);
+    if (ok) {
+      toast.success(`Saved ${ok} line(s)${err ? `, ${err} failed` : ''}.`);
+      setLines([emptyLine()]);
     }
   };
 
@@ -298,225 +245,133 @@ export const ProductionPlanningForm: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
       </header>
 
-      {/* Bulk Upload Section */}
+      {/* Bulk Upload */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4 text-gray-800">Bulk Upload</h2>
-        <div className="flex items-center gap-4">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFileUpload}
-            className="border border-gray-300 rounded-md px-3 py-2"
-          />
-          <span className="text-sm text-gray-600">
-            Upload CSV with columns: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair
-          </span>
+        <div className="flex items-center gap-4 flex-wrap">
+          <input type="file" accept=".csv" onChange={handleFileUpload} className="border border-gray-300 rounded-md px-3 py-2" />
+          <span className="text-sm text-gray-600">CSV: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair</span>
         </div>
         {bulkData.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm text-gray-700 mb-2">Preview: {bulkData.length} records</p>
-            <button
-              type="button"
-              onClick={handleBulkSubmit}
-              disabled={loading}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
-            >
-              <Upload className="h-4 w-4" />
-              {loading ? 'Uploading...' : 'Upload Plans'}
+          <div className="mt-4 flex items-center gap-2">
+            <span className="text-sm text-gray-700">{bulkData.length} rows</span>
+            <button type="button" onClick={handleBulkSubmit} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2">
+              <Upload className="h-4 w-4" />{loading ? 'Uploading...' : 'Upload Plans'}
             </button>
           </div>
         )}
       </div>
 
       <form onSubmit={handleSubmit}>
+        {/* Header: Plan Date only */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Plan Information</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Plan Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={formData.plan_date}
-                onChange={(e) => setFormData({ ...formData, plan_date: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Style <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.style_id}
-                onChange={(e) => handleStyleChange(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">Select Style</option>
-                {styles.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-              <input
-                type="text"
-                value={readOnlyFields.customer_name}
-                readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
-                placeholder="Auto-populated from routing"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Group</label>
-              <input
-                type="text"
-                value={readOnlyFields.group_name}
-                readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
-                placeholder="Auto-populated from routing"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Leather</label>
-              <input
-                type="text"
-                value={readOnlyFields.leather_name}
-                readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
-                placeholder="Auto-populated from routing"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-              <input
-                type="text"
-                value={readOnlyFields.color_name}
-                readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
-                placeholder="Auto-populated from routing"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Created On</label>
-              <input
-                type="date"
-                value={new Date().toISOString().split('T')[0]}
-                readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
-              />
-            </div>
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">Plan</h2>
+          <div className="max-w-xs">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Plan Date <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={planDate}
+              onChange={(e) => setPlanDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
           </div>
         </div>
 
-        {/* Work Centre Assignment */}
+        {/* Line items: Customer, Style, Leather, Color, Group + Work Centre, targets, SMV */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Work Centre Assignment</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Line Items</h2>
+            <button type="button" onClick={addLine} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm font-medium">
+              <Plus className="h-4 w-4" /> Add Line
+            </button>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Work Centre <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.work_centre_id}
-                onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">Select Work Centre</option>
-                {workCentres.map((centre) => (
-                  <option key={centre.id} value={centre.id}>
-                    {centre.code} - {centre.name}
-                  </option>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Customer</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Style</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Leather</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Color</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Group</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Work Centre</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Total Target</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Pairs/Day</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Man Hrs (min)</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">SMV</th>
+                  <th className="w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line, idx) => (
+                  <tr key={idx} className="border-b border-gray-100">
+                    <td className="py-1 px-2">
+                      <input readOnly value={line.customer_name} className="w-full min-w-[100px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <select
+                        value={line.style_id}
+                        onChange={(e) => handleStyleChange(idx, e.target.value)}
+                        className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
+                      >
+                        <option value="">Style</option>
+                        {styles.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-1 px-2">
+                      <input readOnly value={line.leather_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <input readOnly value={line.color_name} className="w-full min-w-[80px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <input readOnly value={line.group_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <select
+                        value={line.work_centre_id}
+                        onChange={(e) => updateLine(idx, { work_centre_id: e.target.value })}
+                        className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
+                      >
+                        <option value="">Work Centre</option>
+                        {workCentres.map((c) => (
+                          <option key={c.id} value={c.id}>{c.code} - {c.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-1 px-2">
+                      <input type="number" value={line.total_target_per_day} onChange={(e) => updateLine(idx, { total_target_per_day: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <input type="number" value={line.target_pairs_per_day} onChange={(e) => updateLine(idx, { target_pairs_per_day: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <input type="number" value={line.man_hours_minutes} onChange={(e) => updateLine(idx, { man_hours_minutes: e.target.value })} className="w-24 border border-gray-300 rounded px-2 py-1" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <input readOnly value={line.smv_per_pair} className="w-16 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                    </td>
+                    <td className="py-1 px-1">
+                      <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1} className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-40" title="Remove line">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
                 ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Total Target per Day <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                value={formData.total_target_per_day}
-                onChange={(e) => setFormData({ ...formData, total_target_per_day: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target Pairs per Day <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                value={formData.target_pairs_per_day}
-                onChange={(e) => setFormData({ ...formData, target_pairs_per_day: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Man Hours (minutes) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                value={formData.man_hours_minutes}
-                onChange={(e) => setFormData({ ...formData, man_hours_minutes: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                SMV per Pair <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                step="0.0001"
-                value={formData.smv_per_pair}
-                readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
-                placeholder="Auto-populated from routing"
-                required
-              />
-            </div>
+              </tbody>
+            </table>
           </div>
 
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Customer, Group, Leather, and Color are auto-populated from the latest Production Routing for the selected Style.
-              If no routing exists, you'll need to create one first in the Production Routing form.
-            </p>
-          </div>
+          <p className="mt-4 text-sm text-gray-600">Customer, Group, Leather, and Color are filled from Production Routing when you select a Style.</p>
         </div>
 
-        {/* Submit Button */}
-        <div className="flex justify-end gap-2">
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" />
-            {loading ? 'Saving...' : 'Save Plan'}
+        <div className="flex justify-end">
+          <button type="submit" disabled={loading} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
+            <Save className="h-4 w-4" />{loading ? 'Saving...' : 'Save Plan'}
           </button>
         </div>
       </form>

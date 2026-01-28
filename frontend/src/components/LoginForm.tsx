@@ -21,10 +21,10 @@ export const LoginForm: React.FC = () => {
     setTimeout(() => {
       setLoading(false);
       if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('mobile_authenticated', '1');
+        sessionStorage.setItem('app_authenticated', '1');
       }
       toast.success('Logged in successfully');
-      navigate('/mobile_line_setup'); // Navigate to the line setup form after login
+      navigate('/overview');
     }, 1000);
   };
 

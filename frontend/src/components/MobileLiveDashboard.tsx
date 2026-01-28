@@ -60,8 +60,11 @@ export const MobileLiveDashboard: React.FC = () => {
             </button>
             <button
               onClick={() => {
-                if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('mobile_authenticated');
-                navigate('/login');
+                if (typeof sessionStorage !== 'undefined') {
+                  sessionStorage.removeItem('app_authenticated');
+                  sessionStorage.removeItem('mobile_authenticated');
+                }
+                navigate('/');
                 toast.success('Logged out');
               }}
               className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
