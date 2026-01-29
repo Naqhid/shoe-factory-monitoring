@@ -10,6 +10,7 @@ const masterController = require('./controllers/masterController');
 const productionRoutingController = require('./controllers/productionRoutingController');
 const productionPlanningController = require('./controllers/productionPlanningController');
 const lineSetupController = require('./controllers/lineSetupController');
+const userRightsController = require('./controllers/userRightsController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
@@ -86,6 +87,14 @@ app.delete('/api/line-setup/:id', lineSetupController.delete);
 
 // Shift start route
 app.post('/api/shift-start', lineSetupController.createShift);
+
+// User rights routes
+app.get('/api/user-rights', userRightsController.getAll);
+app.get('/api/user-rights/user/:userId', userRightsController.getByUserId);
+app.post('/api/user-rights', userRightsController.create);
+app.put('/api/user-rights/:id', userRightsController.update);
+app.delete('/api/user-rights/:id', userRightsController.delete);
+app.delete('/api/user-rights/user/:userId', userRightsController.deleteByUserId);
 
 // Health check
 app.get('/health', (req, res) => {

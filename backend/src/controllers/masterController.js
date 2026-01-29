@@ -157,6 +157,22 @@ class MasterController {
         return res.json({ success: true, data: { id } });
       }
 
+      // Forms Master - only update name (code is auto-generated and read-only)
+      if (table === 'forms_master') {
+        const { name } = data;
+        if (!name) {
+          return res.status(400).json({ success: false, error: 'Name is required' });
+        }
+        const [result] = await db.execute(
+          `UPDATE forms_master SET name = ? WHERE id = ?`,
+          [name, id]
+        );
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, error: 'Form not found' });
+        }
+        return res.json({ success: true, data: { id } });
+      }
+
       // Generic update for other tables
       const { code, name, work_centre_id, machine_id } = data;
 

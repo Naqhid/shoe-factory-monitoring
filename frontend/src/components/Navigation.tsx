@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, Factory, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield } from 'lucide-react';
 
 interface NavigationProps {
   activeMenu: string;
@@ -25,14 +25,20 @@ const masterMenus = [
   { key: 'colors', label: 'Color', icon: Palette, table: 'colors' },
   { key: 'work_centres', label: 'Work Centre', icon: Settings, table: 'work_centres' },
   { key: 'machine_centres', label: 'Machine Centre', icon: Cpu, table: 'machine_centres' },
-  { key: 'users', label: 'User', icon: User, table: 'users' },
   { key: 'employees', label: 'Employee', icon: UserCheck, table: 'employees' },
+];
+
+const setupMenus = [
+  { key: 'users', label: 'Users', icon: User },
+  { key: 'forms_master', label: 'Forms Master', icon: FileText },
+  { key: 'user_rights', label: 'User Rights', icon: Shield },
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {
   const navigate = useNavigate();
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
   const [processExpanded, setProcessExpanded] = React.useState(true);
+  const [setupExpanded, setSetupExpanded] = React.useState(false);
 
   const handleLogout = () => {
     if (typeof sessionStorage !== 'undefined') {
@@ -136,6 +142,44 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
             {processExpanded && (
               <div className="ml-4 mt-2 space-y-1">
                 {processMenus.map((menu) => {
+                  const Icon = menu.icon;
+                  return (
+                    <Link
+                      key={menu.key}
+                      to={`/${menu.key}`}
+                      onClick={() => {
+                        if (window.innerWidth < 1024) onToggleSidebar();
+                      }}
+                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
+                        activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {menu.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Setup Menu */}
+          <div className="mb-4">
+            <button
+              onClick={() => setSetupExpanded(!setupExpanded)}
+              className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              <span className="font-medium">Setup</span>
+              {setupExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+
+            {setupExpanded && (
+              <div className="ml-4 mt-2 space-y-1">
+                {setupMenus.map((menu) => {
                   const Icon = menu.icon;
                   return (
                     <Link

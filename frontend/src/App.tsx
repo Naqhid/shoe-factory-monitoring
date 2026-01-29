@@ -16,6 +16,9 @@ import { MobileLineSetupForm } from './components/MobileLineSetupForm';
 import { MobileLiveDashboard } from './components/MobileLiveDashboard';
 import { LoginForm } from './components/LoginForm';
 import { TrackerApp } from './components/TrackerApp';
+import { UsersMasterForm } from './components/UsersMasterForm';
+import { FormsMasterForm } from './components/FormsMasterForm';
+import { UserRightsForm } from './components/UserRightsForm';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
@@ -46,7 +49,6 @@ const masterConfigs = {
   colors: { title: 'Color', table: 'colors' },
   work_centres: { title: 'Work Centre', table: 'work_centres' },
   machine_centres: { title: 'Machine Centre', table: 'machine_centres' },
-  users: { title: 'User', table: 'users' },
   employees: { title: 'Employee', table: 'employees' },
 };
 
@@ -161,6 +163,9 @@ function App() {
   const isLineSetupForm = activeMenu === 'line_setup_form';
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
   const isTrackerApp = activeMenu === 'tracker_app';
+  const isUsers = activeMenu === 'users';
+  const isFormsMaster = activeMenu === 'forms_master';
+  const isUserRights = activeMenu === 'user_rights';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
@@ -263,6 +268,12 @@ function App() {
           <MobileLiveDashboard />
         ) : isTrackerApp ? (
           <TrackerApp />
+        ) : isUsers ? (
+          <UsersMasterForm />
+        ) : isFormsMaster ? (
+          <FormsMasterForm />
+        ) : isUserRights ? (
+          <UserRightsForm />
         ) : isMasterView ? (
           loading ? (
             <div className="flex items-center justify-center h-full">
