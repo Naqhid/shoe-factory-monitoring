@@ -65,6 +65,22 @@ async function setupMobileProductionTables() {
     `);
         console.log('✓ pivot_data table created successfully');
 
+        // Create mobile_sessions table
+        console.log('Creating mobile_sessions table...');
+        await connection.query(`
+      CREATE TABLE IF NOT EXISTS mobile_sessions (
+        session_id VARCHAR(36) PRIMARY KEY,
+        machine_id VARCHAR(100),
+        status ENUM('waiting', 'active', 'expired') DEFAULT 'waiting',
+        work_centre_id INT,
+        emp_id INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        activated_at TIMESTAMP NULL,
+        INDEX idx_session_status (status)
+      )
+    `);
+        console.log('✓ mobile_sessions table created successfully');
+
         console.log('\n✅ All mobile production tables created successfully!');
 
     } catch (error) {

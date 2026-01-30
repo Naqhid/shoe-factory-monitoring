@@ -16,16 +16,36 @@ export const LoginForm: React.FC = () => {
       return;
     }
     setLoading(true);
-    // Mock authentication
-    // In a real app, you would call your login API here
-    setTimeout(() => {
-      setLoading(false);
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('app_authenticated', '1');
+    setLoading(true);
+    try {
+      const API_BASE = window.location.hostname === 'localhost'
+        ? 'http://localhost:3001'
+        : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
+
+      const response = await fetch(`${API_BASE}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, password })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('app_authenticated', '1');
+          sessionStorage.setItem('user_info', JSON.stringify(data.data));
+        }
+        toast.success(`Welcome, ${data.data.name}`);
+        navigate('/overview');
+      } else {
+        toast.error(data.message || 'Login failed');
       }
-      toast.success('Logged in successfully');
-      navigate('/overview');
-    }, 1000);
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Network error during login');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

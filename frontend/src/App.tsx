@@ -15,6 +15,7 @@ import { ProductionRoutingForm } from './components/ProductionRoutingForm';
 import { MobileLineSetupForm } from './components/MobileLineSetupForm';
 import { MobileLiveDashboard } from './components/MobileLiveDashboard';
 import { MobileProduction } from './components/MobileProduction';
+import { MobileRemoteSetup } from './components/MobileRemoteSetup';
 import { LoginForm } from './components/LoginForm';
 import { TrackerApp } from './components/TrackerApp';
 import { UsersMasterForm } from './components/UsersMasterForm';
@@ -270,6 +271,8 @@ function App() {
           <MobileLiveDashboard />
         ) : isMobile ? (
           <MobileProduction />
+        ) : activeMenu === 'mobile-remote-setup' ? (
+          <MobileRemoteSetup />
         ) : isTrackerApp ? (
           <TrackerApp />
         ) : isUsers ? (

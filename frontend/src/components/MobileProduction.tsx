@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { QrCode, Play, Square, CheckCircle, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import QrReader from 'react-qr-scanner';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface ProductionData {
     id?: number;
@@ -20,6 +21,11 @@ interface ProductionData {
 }
 
 export const MobileProduction: React.FC = () => {
+    // Session State
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [sessionStatus, setSessionStatus] = useState<'waiting' | 'active'>('waiting');
+
+    // Production State
     const [loading, setLoading] = useState(false);
     const [productionData, setProductionData] = useState<ProductionData | null>(null);
     const [qrData, setQrData] = useState('');
@@ -39,131 +45,52 @@ export const MobileProduction: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Load production data for today or from setup
+    // Session Initialization and Polling
     useEffect(() => {
-        // Check if we have setup data from the line setup form
-        const setupDataStr = sessionStorage.getItem('mobile_setup_data');
-        if (setupDataStr) {
+        // Create session on mount
+        const initSession = async () => {
             try {
-                const setupData = JSON.parse(setupDataStr);
-                // Auto-initialize with the scanned data
-                const qrString = `${setupData.machine_id}-${setupData.employee_name}`;
-                setQrData(qrString);
-
-                // Initialize production with the setup data
-                initializeProductionFromSetup(setupData);
-
-                // Clear the setup data after using it
-                sessionStorage.removeItem('mobile_setup_data');
-            } catch (error) {
-                console.error('Error parsing setup data:', error);
-            }
-        } else {
-            // Otherwise, try to load today's production
-            loadTodayProduction();
-            // WhatsApp-style: If no production data, auto-open scanner to prompt user
-            setShowQRScanner(true);
-        }
+                const res = await fetch(`${API_BASE}/api/mobile-session/init`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    setSessionId(data.data.session_id);
+                }
+            } catch (e) { console.error('Session init failed', e); }
+        };
+        initSession();
     }, []);
 
-    const initializeProductionFromSetup = async (setupData: any) => {
-        setLoading(true);
-        try {
-            const newData: ProductionData = {
-                prod_date: new Date().toISOString().split('T')[0],
-                work_centre_id: 1, // Should be fetched from work_centres table
-                machine_id: setupData.machine_id,
-                emp_id: parseInt(setupData.employee_id) || 1,
-                output_pairs: 0,
-                target_mins: 10,
-                start_time: null,
-                finish_time: null,
-                actual_time: 10,
-                button_status: 1,
-                target_pairs: 12,
-                smv_per_pair: 100
-            };
+    useEffect(() => {
+        if (!sessionId || sessionStatus === 'active') return;
 
-            const response = await fetch(`${API_BASE}/api/mobile-production`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newData)
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                setProductionData({ ...newData, id: result.data.id });
-                toast.success(`Production initialized for ${setupData.employee_name} on ${setupData.machine_id}`);
-            }
-        } catch (error) {
-            console.error('Error initializing production:', error);
-            toast.error('Failed to initialize production');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const loadTodayProduction = async () => {
-        try {
-            const today = new Date().toISOString().split('T')[0];
-            const response = await fetch(`${API_BASE}/api/mobile-production`);
-            const result = await response.json();
-
-            if (result.success && result.data.length > 0) {
-                // Get today's production for current machine
-                const todayData = result.data.find((d: ProductionData) => d.prod_date === today);
-                if (todayData) {
-                    setProductionData(todayData);
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`${API_BASE}/api/mobile-session/${sessionId}`);
+                const json = await res.json();
+                if (json.success && json.data.status === 'active') {
+                    setSessionStatus('active');
+                    // Initialize Dashboard with session data
+                    const { machine_id, emp_id, work_centre_id } = json.data;
+                    if (machine_id) {
+                        initializeProduction(machine_id, emp_id);
+                        setQrData(machine_id);
+                        toast.success(`Connected: ${machine_id}`);
+                    }
                 }
-            }
-        } catch (error) {
-            console.error('Error loading production data:', error);
-        }
-    };
+            } catch (e) { console.error('Polling error', e); }
+        }, 2000);
+        return () => clearInterval(interval);
+    }, [sessionId, sessionStatus]);
 
-    const handleQRScan = (data: { text: string } | null) => {
-        if (!data) return;
 
-        const scannedText = data.text;
-        setQrData(scannedText);
-        setShowQRScanner(false);
-
-        // Parse QR code data (format: Line1-OP1-Jeevan P)
-        const parts = scannedText.split('-');
-        if (parts.length >= 3) {
-            const workCentre = parts[0];
-            const machineId = parts[1];
-            const empName = parts[2];
-
-            if (navigator.vibrate) navigator.vibrate(100);
-            toast.success(`Scanned: ${workCentre} - ${machineId} - ${empName}`);
-
-            // Initialize production data
-            initializeProduction(workCentre, machineId, empName);
-        } else {
-            // Fallback for testing: use any text as machine ID
-            if (navigator.vibrate) navigator.vibrate(100);
-            toast.success(`Detected: ${scannedText}`);
-            initializeProduction('Test Line', scannedText, 'Test Operator');
-        }
-    };
-
-    const handleScanError = (err: any) => {
-        console.error(err);
-        toast.error('Camera error. Please ensure permissions are granted.');
-        setShowQRScanner(false);
-    };
-
-    const initializeProduction = async (workCentre: string, machineId: string, empName: string) => {
+    const initializeProduction = async (machineId: string, empId: number) => {
         setLoading(true);
         try {
-            // Get work centre and employee IDs from masters
-            // For now, using dummy data - you should fetch from API
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
                 work_centre_id: 1, // Should be fetched from work_centres table
                 machine_id: machineId,
-                emp_id: 1, // Should be fetched from employees table
+                emp_id: empId || 1,
                 output_pairs: 0,
                 target_mins: 10,
                 start_time: null,
@@ -291,6 +218,82 @@ export const MobileProduction: React.FC = () => {
         return 'text-red-600';
     };
 
+    // --- RENDER ---
+
+    // WAITING STATE
+    if (sessionStatus === 'waiting' && !productionData) {
+        const activationUrl = sessionId
+            ? `${window.location.protocol}//${window.location.host}/mobile-remote-setup?session=${sessionId}`
+            : '';
+
+        // Demo Mode Handler
+        const handleDemoConnect = () => {
+            setSessionStatus('active');
+            setQrData('DEMO-MACHINE-01');
+            const demoData: ProductionData = {
+                id: 999,
+                prod_date: new Date().toISOString().split('T')[0],
+                work_centre_id: 1,
+                machine_id: 'DEMO-MACHINE-01',
+                emp_id: 1,
+                output_pairs: 45,
+                target_mins: 60,
+                start_time: '09:00:00',
+                finish_time: null,
+                actual_time: 55,
+                button_status: 1,
+                target_pairs: 100,
+                smv_per_pair: 12
+            };
+            setProductionData(demoData);
+            toast.success('Connected to Demo Machine');
+        };
+
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Connect Display</h1>
+                    <p className="text-gray-500 mb-8">Scan this QR code with your mobile device to control this display.</p>
+
+                    <div className="bg-gray-100 p-6 rounded-xl inline-block mb-6 relative">
+                        {sessionId ? (
+                            <QRCodeSVG value={activationUrl} size={200} level="H" />
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-[200px] w-[200px]">
+                                <Loader2 className="h-12 w-12 animate-spin text-gray-400 mb-4" />
+                                <p className="text-sm text-gray-400">Connecting to server...</p>
+                                <button
+                                    onClick={() => setSessionId('DEMO-SESSION')}
+                                    className="mt-4 text-xs text-blue-500 hover:underline"
+                                >
+                                    Use Demo Session
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="text-sm text-gray-400 mb-4">
+                        Session ID: {sessionId ? sessionId.slice(0, 8) + '...' : 'Initializing...'}
+                    </div>
+
+                    {/* Simulation / Debug Button */}
+                    {(sessionId === 'DEMO-SESSION' || import.meta.env.DEV) && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <p className="text-xs text-blue-800 mb-2">Debug / Simulation Mode</p>
+                            <button
+                                onClick={handleDemoConnect}
+                                className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                            >
+                                Simulate Scan & Connect
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // DASHBOARD STATE
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
             {/* Loading Screen */}
@@ -316,23 +319,18 @@ export const MobileProduction: React.FC = () => {
                                     {currentTime.toLocaleDateString()} - {currentTime.toLocaleTimeString()}
                                 </p>
                             </div>
-                            <button
-                                onClick={() => setShowQRScanner(true)}
-                                className="bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                                <QrCode className="h-6 w-6" />
-                            </button>
+                            {/* QR Button removed as we are in Display Mode */}
                         </div>
 
                         {qrData && (
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                                <p className="text-sm text-blue-800 font-medium">Scanned: {qrData}</p>
+                                <p className="text-sm text-blue-800 font-medium">Machine: {qrData}</p>
                             </div>
                         )}
                     </div>
 
                     {/* Production Metrics */}
-                    {productionData ? (
+                    {productionData && (
                         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                             <div className="grid grid-cols-2 gap-4 mb-6">
                                 {/* Target Time */}
@@ -416,47 +414,6 @@ export const MobileProduction: React.FC = () => {
                                     {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
                                     FINISH
                                 </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-                            <QrCode className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                            <h2 className="text-xl font-semibold text-gray-700 mb-2">Scan QR Code to Start</h2>
-                            <p className="text-gray-500">Scan the QR code on your machine to begin production tracking</p>
-                        </div>
-                    )}
-
-                    {/* QR Scanner Modal */}
-                    {showQRScanner && (
-                        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-2xl overflow-hidden max-w-sm w-full shadow-2xl">
-                                <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-                                    <h3 className="text-lg font-bold text-gray-800">Scan Machine QR</h3>
-                                    <button
-                                        onClick={() => setShowQRScanner(false)}
-                                        className="p-1 hover:bg-gray-200 rounded-full transition-colors"
-                                    >
-                                        <X className="h-6 w-6 text-gray-500" />
-                                    </button>
-                                </div>
-                                <div className="aspect-square bg-black relative">
-                                    <QrReader
-                                        delay={300}
-                                        onError={handleScanError}
-                                        onScan={handleQRScan}
-                                        style={{ width: '100%' }}
-                                        constraints={{ video: { facingMode: 'environment' } }}
-                                    />
-                                    {/* Scanner overlay frame */}
-                                    <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none flex items-center justify-center">
-                                        <div className="w-full h-full border-2 border-green-500 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.5)]"></div>
-                                    </div>
-                                </div>
-                                <div className="p-6 text-center">
-                                    <p className="text-sm text-gray-600">
-                                        Point your camera at the machine's QR code to begin production tracking.
-                                    </p>
-                                </div>
                             </div>
                         </div>
                     )}

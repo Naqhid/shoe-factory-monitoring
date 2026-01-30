@@ -11,7 +11,9 @@ const productionRoutingController = require('./controllers/productionRoutingCont
 const productionPlanningController = require('./controllers/productionPlanningController');
 const lineSetupController = require('./controllers/lineSetupController');
 const userRightsController = require('./controllers/userRightsController');
+const authController = require('./controllers/authController');
 const mobileProductionController = require('./controllers/mobileProductionController');
+const mobileSessionController = require('./controllers/mobileSessionController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
@@ -56,6 +58,7 @@ app.get('/api/reports/overall-efficiency', apiController.getOverallEfficiency);
 app.get('/api/dashboard/daily', apiController.getDailyDashboardData);
 app.get('/api/dashboard/overall-daily', apiController.getOverallDailyData);
 app.post('/api/manual-event', apiController.createManualEvent);
+app.post('/api/login', authController.login);
 
 // Master routes
 app.get('/api/masters/:table', masterController.getAll);
@@ -96,6 +99,11 @@ app.post('/api/user-rights', userRightsController.create);
 app.put('/api/user-rights/:id', userRightsController.update);
 app.delete('/api/user-rights/:id', userRightsController.delete);
 app.delete('/api/user-rights/user/:userId', userRightsController.deleteByUserId);
+
+// Mobile session routes
+app.post('/api/mobile-session/init', mobileSessionController.createSession);
+app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionStatus);
+app.post('/api/mobile-session/activate', mobileSessionController.activateSession);
 
 // Mobile production routes
 app.get('/api/mobile-production', mobileProductionController.getAll);

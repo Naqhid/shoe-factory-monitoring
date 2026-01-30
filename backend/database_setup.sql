@@ -1,6 +1,6 @@
--- Create database
-CREATE DATABASE IF NOT EXISTS shoe_factory;
-USE shoe_factory;
+-- Create database (Commented out to use env DB)
+-- CREATE DATABASE IF NOT EXISTS shoe_factory;
+-- USE shoe_factory;
 
 -- Create stitching_events table
 CREATE TABLE IF NOT EXISTS stitching_events (
