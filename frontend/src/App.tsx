@@ -14,6 +14,7 @@ import { Reports } from './components/Reports';
 import { ProductionRoutingForm } from './components/ProductionRoutingForm';
 import { MobileLineSetupForm } from './components/MobileLineSetupForm';
 import { MobileLiveDashboard } from './components/MobileLiveDashboard';
+import { MobileProduction } from './components/MobileProduction';
 import { LoginForm } from './components/LoginForm';
 import { TrackerApp } from './components/TrackerApp';
 import { UsersMasterForm } from './components/UsersMasterForm';
@@ -55,7 +56,7 @@ const masterConfigs = {
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   // Get active menu from URL path, default to 'overview'
   const activeMenu = location.pathname.slice(1) || 'overview';
 
@@ -75,23 +76,23 @@ function App() {
   const [lastRefresh, setLastRefresh] = React.useState<Date>(new Date());
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
-  
-  const { 
-    data: machines = [], 
-    isLoading: machinesLoading, 
+
+  const {
+    data: machines = [],
+    isLoading: machinesLoading,
     error: machinesError,
     refetch: refetchMachines,
     dataUpdatedAt
   } = useMachineStatus();
-  
-  const { 
-    data: efficiencyData = [], 
-    isLoading: efficiencyLoading 
+
+  const {
+    data: efficiencyData = [],
+    isLoading: efficiencyLoading
   } = useEfficiencyReport(selectedDate);
-  
-  const { 
-    data: overallDailyData, 
-    isLoading: overallLoading 
+
+  const {
+    data: overallDailyData,
+    isLoading: overallLoading
   } = useOverallDailyData(selectedDate);
 
   const API_BASE = window.location.hostname === 'localhost'
@@ -162,6 +163,7 @@ function App() {
   const isProductionPlanning = activeMenu === 'production_planning';
   const isLineSetupForm = activeMenu === 'line_setup_form';
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
+  const isMobile = activeMenu === 'mobile';
   const isTrackerApp = activeMenu === 'tracker_app';
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';
@@ -200,17 +202,17 @@ function App() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <Navigation 
-        activeMenu={activeMenu} 
-        sidebarOpen={sidebarOpen} 
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
+      <Navigation
+        activeMenu={activeMenu}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
-      
+
       <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
         {isProductionDashboard ? (
           <>
             <Header isConnected={isConnected} lastRefresh={lastRefresh} />
-            
+
             <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-full overflow-x-hidden">
               {isLoading && (
                 <div className="flex items-center justify-center py-8">
@@ -246,7 +248,7 @@ function App() {
                     />
                   ))}
                 </div>
-                
+
                 {machines.length === 0 && !isLoading && (
                   <div className="text-center py-8 text-gray-500">
                     <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
@@ -266,6 +268,8 @@ function App() {
           <MobileLineSetupForm />
         ) : isMobileLiveDashboard ? (
           <MobileLiveDashboard />
+        ) : isMobile ? (
+          <MobileProduction />
         ) : isTrackerApp ? (
           <TrackerApp />
         ) : isUsers ? (

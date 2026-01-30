@@ -11,6 +11,7 @@ const productionRoutingController = require('./controllers/productionRoutingCont
 const productionPlanningController = require('./controllers/productionPlanningController');
 const lineSetupController = require('./controllers/lineSetupController');
 const userRightsController = require('./controllers/userRightsController');
+const mobileProductionController = require('./controllers/mobileProductionController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
@@ -21,7 +22,7 @@ const createDirectories = () => {
     process.env.FAILURE_DIR,
     process.env.LOGS_DIR
   ];
-  
+
   dirs.forEach(dir => {
     if (dir && !fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -96,6 +97,19 @@ app.put('/api/user-rights/:id', userRightsController.update);
 app.delete('/api/user-rights/:id', userRightsController.delete);
 app.delete('/api/user-rights/user/:userId', userRightsController.deleteByUserId);
 
+// Mobile production routes
+app.get('/api/mobile-production', mobileProductionController.getAll);
+app.get('/api/mobile-production/:id', mobileProductionController.getById);
+app.get('/api/mobile-production/machine/:machineId/date/:date', mobileProductionController.getByMachineAndDate);
+app.post('/api/mobile-production', mobileProductionController.create);
+app.put('/api/mobile-production/:id', mobileProductionController.update);
+app.patch('/api/mobile-production/:id/status', mobileProductionController.updateStatus);
+app.delete('/api/mobile-production/:id', mobileProductionController.delete);
+
+// Pivot data routes
+app.get('/api/pivot-data', mobileProductionController.getPivotData);
+app.post('/api/pivot-data/refresh', mobileProductionController.refreshPivotData);
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
@@ -107,7 +121,7 @@ app.use(errorHandler);
 // Start server
 const server = app.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
-  
+
   // Start file watcher
   fileWatcherService.start();
 });
@@ -115,14 +129,14 @@ const server = app.listen(PORT, () => {
 // Graceful shutdown
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
-  
+
   fileWatcherService.stop();
-  
+
   server.close(() => {
     logger.info('HTTP server closed');
     process.exit(0);
   });
-  
+
   // Force close after 10 seconds
   setTimeout(() => {
     logger.error('Could not close connections in time, forcefully shutting down');

@@ -15,6 +15,7 @@ const processMenus = [
   { key: 'production_planning', label: 'Production Planning', icon: Calendar },
   { key: 'line_setup_form', label: 'Line Setup Form', icon: UserCheck },
   { key: 'mobile_live_dashboard', label: 'Mobile Live Dashboard', icon: Smartphone },
+  { key: 'mobile', label: 'Mobile', icon: Smartphone },
 ];
 
 const masterMenus = [
@@ -61,16 +62,15 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
 
       {/* Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={onToggleSidebar}
         />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold text-gray-800">ERP System</h2>
           <button
@@ -80,7 +80,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
             <X className="h-5 w-5" />
           </button>
         </div>
-        
+
         <nav className="p-4 h-full overflow-y-auto">
           {/* Masters Menu */}
           <div className="mb-4">
@@ -110,11 +110,10 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
                           onToggleSidebar();
                         }
                       }}
-                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
-                        activeMenu === menu.key
+                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${activeMenu === menu.key
                           ? 'bg-blue-100 text-blue-700'
                           : 'text-gray-600 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {menu.label}
@@ -150,9 +149,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
                       onClick={() => {
                         if (window.innerWidth < 1024) onToggleSidebar();
                       }}
-                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
-                        activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-                      }`}
+                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                        }`}
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {menu.label}
@@ -188,9 +186,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
                       onClick={() => {
                         if (window.innerWidth < 1024) onToggleSidebar();
                       }}
-                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${
-                        activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-                      }`}
+                      className={`flex items-center w-full text-left p-2 rounded-md transition-colors ${activeMenu === menu.key ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                        }`}
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {menu.label}

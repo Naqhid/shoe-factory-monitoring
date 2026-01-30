@@ -24,20 +24,38 @@ export const MobileLineSetupForm: React.FC = () => {
     login_date_time: new Date().toISOString().slice(0, 16),
   });
 
+  // Auto-submit when both fields are filled via scanning
+  React.useEffect(() => {
+    if (formData.employee_id && formData.machine_id && !loading) {
+      const autoSubmit = async () => {
+        // Give a tiny delay for the user to see the second scan success toast
+        await new Promise(resolve => setTimeout(resolve, 500));
+        handleSubmit({ preventDefault: () => { } } as React.FormEvent);
+      };
+      autoSubmit();
+    }
+  }, [formData.employee_id, formData.machine_id]);
+
   const handleEmployeeScan = (data: { text: string } | null) => {
     if (data) {
       try {
         const parsed = JSON.parse(data.text);
         setFormData(prev => ({
           ...prev,
-          employee_id: parsed.id,
-          employee_name: parsed.name,
+          employee_id: parsed.id || parsed.employee_id || data.text,
+          employee_name: parsed.name || parsed.employee_name || 'Test Employee',
         }));
-        setScanningEmployee(false);
-        toast.success('Employee scanned successfully');
       } catch (error) {
-        toast.error('Invalid QR code format');
+        // Fallback for testing: use raw text if not JSON
+        setFormData(prev => ({
+          ...prev,
+          employee_id: data.text,
+          employee_name: 'Test Employee (' + data.text + ')',
+        }));
       }
+      setScanningEmployee(false);
+      if (navigator.vibrate) navigator.vibrate(100);
+      toast.success('Employee detected');
     }
   };
 
@@ -45,6 +63,7 @@ export const MobileLineSetupForm: React.FC = () => {
     if (data) {
       setFormData(prev => ({ ...prev, machine_id: data.text }));
       setScanningMachine(false);
+      if (navigator.vibrate) navigator.vibrate(100);
       toast.success('Machine scanned successfully');
     }
   };
@@ -58,12 +77,28 @@ export const MobileLineSetupForm: React.FC = () => {
     }
 
     setLoading(true);
-    // TODO: Implement what should happen after scanning employee and machine.
-    // For now, just show a success message and navigate to the dashboard.
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-    toast.success('Line setup complete!');
-    navigate('/mobile_live_dashboard');
-    setLoading(false);
+    try {
+      // Store the setup data in sessionStorage for the mobile production screen
+      sessionStorage.setItem('mobile_setup_data', JSON.stringify({
+        employee_id: formData.employee_id,
+        employee_name: formData.employee_name,
+        machine_id: formData.machine_id,
+        login_date_time: formData.login_date_time
+      }));
+
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      toast.success('Line setup complete! Opening production screen...');
+
+      // Navigate to mobile production screen (like WhatsApp Web opening after QR scan)
+      navigate('/mobile');
+    } catch (error) {
+      console.error('Error during setup:', error);
+      toast.error('Setup failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleScanError = (err: any) => {
