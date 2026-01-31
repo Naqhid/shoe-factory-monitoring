@@ -128,33 +128,49 @@ export const MobileLineSetupForm: React.FC = () => {
           finalMachineId = urlParams.get('machine') || finalMachineId;
         }
 
+        // Use robust payload mapping for both snake_case and camelCase backends
+        const activationId = sessionId.trim().toLowerCase();
+        const numericEmpId = formData.employee_db_id ? parseInt(formData.employee_db_id.toString(), 10) : null;
+
         const payload = {
-          session_id: sessionId,
+          session_id: activationId,
+          sessionId: activationId,
           machine_id: finalMachineId,
-          emp_id: parseInt(formData.employee_db_id?.toString() || "0"),
+          machineId: finalMachineId,
+          emp_id: numericEmpId,
+          employeeId: numericEmpId,
+          emp_code: formData.employee_id,
+          employeeCode: formData.employee_id,
           work_centre_id: 1,
           status: 'active'
         };
 
-        console.log('REMOTE ACTIVATE (Matching DDL):', payload);
+        console.log('ACTIVATE ATTEMPT:', payload);
         const loadingToast = toast.loading('Connecting display...');
 
-        const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        try {
+          const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
 
-        const result = await response.json();
-        console.log('REMOTE RESULT:', result);
+          const result = await response.json();
+          console.log('ACTIVATE RESPONSE:', result);
 
-        if (result.success || sessionId === 'DEMO-SESSION') {
-          toast.success(`Display Connected: ${finalMachineId}`, { id: loadingToast });
-          const targetPath = `/mobile/${encodeURIComponent(finalMachineId)}/${encodeURIComponent(formData.employee_id)}`;
-          setTimeout(() => navigate(targetPath), 800);
-          return;
-        } else {
-          toast.error(result.message || 'Activation failed', { id: loadingToast });
+          if (result.success || sessionId === 'DEMO-SESSION') {
+            toast.success(`Display Connected: ${finalMachineId}`, { id: loadingToast });
+            const targetPath = `/mobile/${encodeURIComponent(finalMachineId)}/${encodeURIComponent(formData.employee_id)}`;
+            setTimeout(() => navigate(targetPath), 800);
+            return;
+          } else {
+            toast.error(result.message || 'Server rejected activation', { id: loadingToast });
+            console.error('Server error details:', result);
+            return;
+          }
+        } catch (fetchErr) {
+          toast.error('Network error during activation', { id: loadingToast });
+          console.error('Fetch error:', fetchErr);
           return;
         }
       }
