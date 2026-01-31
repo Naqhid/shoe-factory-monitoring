@@ -158,7 +158,11 @@ export const MobileLineSetupForm: React.FC = () => {
 
           const result = await response.json();
           console.log('Activation Response:', result);
-          setDebugLog(prev => prev ? { ...prev, response: result } : null);
+
+          // Persist debug info for the next page
+          const debugData = { url: fetchUrl, payload, response: result };
+          setDebugLog(debugData);
+          sessionStorage.setItem('last_activation_debug', JSON.stringify(debugData));
 
           if (result.success || activeSessionId === 'demo-session') {
             toast.success(`Connected! Laptop will update in 5s.`, { id: loadingToast, duration: 3000 });
