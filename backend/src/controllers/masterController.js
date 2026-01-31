@@ -7,7 +7,7 @@ class MasterController {
     try {
       const { table } = req.params;
       let rows;
-      
+
       if (table === 'machine_centres') {
         [rows] = await db.execute(
           `SELECT mc.*, wc.name as work_centre_name 
@@ -33,7 +33,7 @@ class MasterController {
       } else {
         [rows] = await db.execute(`SELECT * FROM ${table} ORDER BY code`);
       }
-      
+
       res.json({ success: true, data: rows });
     } catch (error) {
       logger.error(`Error getting ${req.params.table}:`, error);
@@ -51,6 +51,20 @@ class MasterController {
       res.json({ success: true, data: rows[0] });
     } catch (error) {
       logger.error(`Error getting ${req.params.table} by id:`, error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getByCode(req, res) {
+    try {
+      const { table, code } = req.params;
+      const [rows] = await db.execute(`SELECT * FROM ${table} WHERE code = ?`, [code]);
+      if (rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Record not found' });
+      }
+      res.json({ success: true, data: rows[0] });
+    } catch (error) {
+      logger.error(`Error getting ${req.params.table} by code:`, error);
       res.status(500).json({ success: false, error: error.message });
     }
   }
@@ -104,9 +118,9 @@ class MasterController {
         );
       }
 
-      res.status(201).json({ 
-        success: true, 
-        data: { id: result.insertId, code, name, work_centre_id, machine_id } 
+      res.status(201).json({
+        success: true,
+        data: { id: result.insertId, code, name, work_centre_id, machine_id }
       });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {

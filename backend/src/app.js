@@ -63,6 +63,7 @@ app.post('/api/login', authController.login);
 // Master routes
 app.get('/api/masters/:table', masterController.getAll);
 app.get('/api/masters/:table/:id', masterController.getById);
+app.get('/api/masters/:table/code/:code', masterController.getByCode);
 app.post('/api/masters/:table', masterController.create);
 app.put('/api/masters/:table/:id', masterController.update);
 app.delete('/api/masters/:table/:id', masterController.delete);

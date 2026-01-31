@@ -39,21 +39,48 @@ export const MobileLineSetupForm: React.FC = () => {
     }
   }, [formData.employee_id, formData.machine_id]);
 
-  const handleEmployeeScan = (data: { text: string } | null) => {
+  const handleEmployeeScan = async (data: { text: string } | null) => {
     if (data && data.text) {
       console.log('SCAN SUCCESS (Employee):', data.text);
-      let empId = data.text.trim(); // Trim whitespace
-      let empName = 'Test Employee';
-
-      setFormData(prev => ({
-        ...prev,
-        employee_id: empId,
-        employee_name: empName,
-      }));
+      const empId = data.text.trim();
 
       setScanningEmployee(false);
-      if (navigator.vibrate) navigator.vibrate(100);
-      toast.success(`Employee detected: ${empId}`);
+      const loadingToast = toast.loading('Fetching employee details...');
+
+      try {
+        const API_BASE = window.location.hostname === 'localhost'
+          ? 'http://localhost:3001'
+          : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
+
+        const response = await fetch(`${API_BASE}/api/masters/employees/code/${empId}`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          const empName = result.data.name;
+          setFormData(prev => ({
+            ...prev,
+            employee_id: empId,
+            employee_name: empName,
+          }));
+          toast.success(`Employee detected: ${empName}`, { id: loadingToast });
+          if (navigator.vibrate) navigator.vibrate(100);
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            employee_id: empId,
+            employee_name: 'Unknown Employee',
+          }));
+          toast.error(`Employee ${empId} not found`, { id: loadingToast });
+        }
+      } catch (error) {
+        console.error('Error fetching employee:', error);
+        setFormData(prev => ({
+          ...prev,
+          employee_id: empId,
+          employee_name: 'Scan Error',
+        }));
+        toast.error('Connection error while fetching employee', { id: loadingToast });
+      }
     }
   };
 
