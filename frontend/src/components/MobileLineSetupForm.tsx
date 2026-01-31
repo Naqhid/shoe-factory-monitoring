@@ -6,7 +6,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { ModernScanner } from './ModernScanner';
 
 interface FormData {
-  employee_id: string;
+  employee_id: string; // The code (e.g. EMP-1001)
+  employee_db_id?: number | string; // The numeric PK
   employee_name: string;
   machine_id: string;
   login_date_time: string;
@@ -27,7 +28,7 @@ export const MobileLineSetupForm: React.FC = () => {
   const [formData, setFormData] = React.useState<FormData>({
     employee_id: '',
     employee_name: '',
-    machine_id: '',
+    machine_id: searchParams.get('machine') || '',
     login_date_time: new Date().toISOString().slice(0, 16),
   });
 
@@ -62,9 +63,11 @@ export const MobileLineSetupForm: React.FC = () => {
 
         if (result.success && result.data) {
           const empName = result.data.name;
+          const empDbId = result.data.id;
           setFormData(prev => ({
             ...prev,
             employee_id: empId,
+            employee_db_id: empDbId,
             employee_name: empName,
           }));
           toast.success(`Employee detected: ${empName}`, { id: loadingToast });
@@ -131,9 +134,20 @@ export const MobileLineSetupForm: React.FC = () => {
 
       // REMOTE ACTIVATION FLOW
       if (sessionId) {
-        const urlParams = new URLSearchParams(formData.machine_id.split('?')[1]);
-        const machineFromUrl = urlParams.get('machine');
-        const finalMachineId = machineFromUrl || (sessionId === 'DEMO-SESSION' ? 'DEMO-MACHINE-01' : 'MAC-001');
+        let finalMachineId = formData.machine_id;
+
+        // If machine_id is a URL (fallback), try to extract machine param
+        if (finalMachineId.includes('session=')) {
+          const urlParams = new URLSearchParams(finalMachineId.split('?')[1]);
+          finalMachineId = urlParams.get('machine') || finalMachineId;
+        }
+
+        console.log('Activating Session:', {
+          session_id: sessionId,
+          machine_id: finalMachineId,
+          emp_code: formData.employee_id,
+          emp_id: formData.employee_db_id
+        });
 
         const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
           method: 'POST',
@@ -142,11 +156,13 @@ export const MobileLineSetupForm: React.FC = () => {
             session_id: sessionId,
             machine_id: finalMachineId,
             work_centre_id: 1,
-            emp_code: formData.employee_id
+            emp_code: formData.employee_id,
+            emp_id: formData.employee_db_id
           })
         });
 
         const result = await response.json();
+        console.log('Activation Result:', result);
 
         if (result.success || sessionId === 'DEMO-SESSION') {
           toast.success(`Session Activated: ${finalMachineId}`);
