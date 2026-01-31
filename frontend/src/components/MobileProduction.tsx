@@ -363,39 +363,43 @@ export const MobileProduction: React.FC = () => {
                                     Scan these with your Phone from this screen
                                 </p>
 
-                                <div className="space-y-6">
+                                <div className="space-y-12">
                                     <div>
-                                        <h4 className="text-xs font-bold text-gray-500 mb-3 text-left">1. Employee Badges</h4>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <h4 className="text-sm font-bold text-gray-600 mb-6 text-center border-b pb-2">1. Employee Badges</h4>
+                                        <div className="flex flex-col gap-12">
                                             <div className="flex flex-col items-center">
-                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1001.jpeg`} alt="EMP-1001" className="w-20 h-20 object-contain" />
+                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1001.jpeg`} alt="EMP-1001" className="w-64 h-64 object-contain" />
                                                 </div>
-                                                <span className="mt-1 text-[9px] font-mono text-gray-500">John Doe</span>
+                                                <span className="mt-3 text-lg font-bold text-gray-700">John Doe</span>
+                                                <span className="text-xs text-gray-400 font-mono">ID: EMP-1001</span>
                                             </div>
                                             <div className="flex flex-col items-center">
-                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1002.jpeg`} alt="EMP-1002" className="w-20 h-20 object-contain" />
+                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1002.jpeg`} alt="EMP-1002" className="w-64 h-64 object-contain" />
                                                 </div>
-                                                <span className="mt-1 text-[9px] font-mono text-gray-500">Jane Smith</span>
+                                                <span className="mt-3 text-lg font-bold text-gray-700">Jane Smith</span>
+                                                <span className="text-xs text-gray-400 font-mono">ID: EMP-1002</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div>
-                                        <h4 className="text-xs font-bold text-gray-500 mb-3 text-left">2. Machine Stickers</h4>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <h4 className="text-sm font-bold text-gray-600 mb-6 text-center border-b pb-2">2. Machine Stickers</h4>
+                                        <div className="flex flex-col gap-12">
                                             <div className="flex flex-col items-center">
-                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-001.jpeg`} alt="MAC-001" className="w-20 h-20 object-contain" />
+                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-001.jpeg`} alt="MAC-001" className="w-64 h-64 object-contain" />
                                                 </div>
-                                                <span className="mt-1 text-[9px] font-mono text-gray-500">Machine 1</span>
+                                                <span className="mt-3 text-lg font-bold text-gray-700">Machine 1</span>
+                                                <span className="text-xs text-gray-400 font-mono">ID: MAC-001</span>
                                             </div>
                                             <div className="flex flex-col items-center">
-                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-002.jpeg`} alt="MAC-002" className="w-20 h-20 object-contain" />
+                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-002.jpeg`} alt="MAC-002" className="w-64 h-64 object-contain" />
                                                 </div>
-                                                <span className="mt-1 text-[9px] font-mono text-gray-500">Machine 2</span>
+                                                <span className="mt-3 text-lg font-bold text-gray-700">Machine 2</span>
+                                                <span className="text-xs text-gray-400 font-mono">ID: MAC-002</span>
                                             </div>
                                         </div>
                                     </div>
