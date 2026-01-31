@@ -78,23 +78,25 @@ function App() {
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
+  const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
+
   const {
     data: machines = [],
     isLoading: machinesLoading,
     error: machinesError,
     refetch: refetchMachines,
     dataUpdatedAt
-  } = useMachineStatus();
+  } = useMachineStatus(!isMobile);
 
   const {
     data: efficiencyData = [],
     isLoading: efficiencyLoading
-  } = useEfficiencyReport(selectedDate);
+  } = useEfficiencyReport(selectedDate, !isMobile);
 
   const {
     data: overallDailyData,
     isLoading: overallLoading
-  } = useOverallDailyData(selectedDate);
+  } = useOverallDailyData(selectedDate, !isMobile);
 
   const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:3001'
@@ -164,7 +166,6 @@ function App() {
   const isProductionPlanning = activeMenu === 'production_planning';
   const isLineSetupForm = activeMenu === 'line_setup_form';
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
-  const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
   const isTrackerApp = activeMenu === 'tracker_app';
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';

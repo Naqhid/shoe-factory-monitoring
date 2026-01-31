@@ -2,13 +2,14 @@ import { useQuery } from 'react-query';
 import { apiService } from '../services/api';
 import { format } from 'date-fns';
 
-export const useMachineStatus = () => {
+export const useMachineStatus = (enabled: boolean = true) => {
   return useQuery(
     'machineStatus',
     apiService.getMachineStatus,
     {
       refetchInterval: 5000, // Refresh every 5 seconds
       refetchOnWindowFocus: true,
+      enabled,
     }
   );
 };
@@ -35,13 +36,14 @@ export const useHourlyReport = (date: Date) => {
   );
 };
 
-export const useEfficiencyReport = (date: Date) => {
+export const useEfficiencyReport = (date: Date, enabled: boolean = true) => {
   const dateStr = format(date, 'yyyy-MM-dd');
   return useQuery(
     ['efficiencyReport', dateStr],
     () => apiService.getEfficiencyReport(dateStr),
     {
       refetchInterval: 30000,
+      enabled,
     }
   );
 };
@@ -68,13 +70,14 @@ export const useDailyDashboardData = (date: Date) => {
   );
 };
 
-export const useOverallDailyData = (date: Date) => {
+export const useOverallDailyData = (date: Date, enabled: boolean = true) => {
   const dateStr = format(date, 'yyyy-MM-dd');
   return useQuery(
     ['overallDailyData', dateStr],
     () => apiService.getOverallDailyData(dateStr),
     {
       refetchInterval: 30000,
+      enabled,
     }
   );
 };

@@ -112,7 +112,7 @@ export const MobileProduction: React.FC = () => {
                         navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(json.data.emp_code)}`);
                     }
                 } catch (e) { }
-            }, 1000); // 1 second polling
+            }, 5000); // 5 second polling
             return () => clearInterval(syncInterval);
         }
 
@@ -140,17 +140,19 @@ export const MobileProduction: React.FC = () => {
                 const json = await res.json();
 
                 if (json.success && json.data.status === 'active') {
-                    setSessionStatus('active');
-                    const { machine_id, emp_code } = json.data;
-                    if (machine_id && emp_code) {
+                    const { machine_id, emp_code, emp_id } = json.data;
+                    const finalEmpCode = emp_code || emp_id;
+
+                    if (machine_id && finalEmpCode) {
+                        setSessionStatus('active');
                         toast.success('Device Connected!', { duration: 1500 });
                         setTimeout(() => {
-                            navigate(`/mobile/${encodeURIComponent(machine_id)}/${encodeURIComponent(emp_code)}`);
+                            navigate(`/mobile/${encodeURIComponent(machine_id)}/${encodeURIComponent(finalEmpCode)}`);
                         }, 500);
                     }
                 }
             } catch (e) { }
-        }, 1000); // 1 second polling
+        }, 5000); // 5 second polling
         return () => clearInterval(interval);
     }, [sessionId, sessionStatus, navigate, API_BASE]);
 
