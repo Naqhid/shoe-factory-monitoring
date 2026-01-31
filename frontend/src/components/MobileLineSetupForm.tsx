@@ -131,12 +131,12 @@ export const MobileLineSetupForm: React.FC = () => {
         const payload = {
           session_id: sessionId,
           machine_id: finalMachineId,
+          emp_id: parseInt(formData.employee_db_id?.toString() || "0"),
           work_centre_id: 1,
-          emp_code: formData.employee_id,
-          emp_id: formData.employee_db_id
+          status: 'active'
         };
 
-        console.log('REMOTE ACTIVATE:', payload);
+        console.log('REMOTE ACTIVATE (Matching DDL):', payload);
         const loadingToast = toast.loading('Connecting display...');
 
         const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
