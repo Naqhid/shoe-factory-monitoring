@@ -1,7 +1,7 @@
 import React from 'react';
 import { Save, ArrowLeft, QrCode, LogOut, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { ModernScanner } from './ModernScanner';
 
@@ -14,6 +14,8 @@ interface FormData {
 
 export const MobileLineSetupForm: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlSessionId = searchParams.get('session');
   const [loading, setLoading] = React.useState(false);
   const [scanningEmployee, setScanningEmployee] = React.useState(false);
   const [scanningMachine, setScanningMachine] = React.useState(false);
@@ -112,12 +114,14 @@ export const MobileLineSetupForm: React.FC = () => {
 
     setLoading(true);
     try {
-      // Check for Remote Session QR (URL or DEMO-SESSION)
-      let sessionId = null;
-      if (formData.machine_id.includes('session=')) {
-        const urlParams = new URLSearchParams(formData.machine_id.split('?')[1]);
-        sessionId = urlParams.get('session');
-      } else if (formData.machine_id === 'DEMO-SESSION') {
+      // Check for Remote Session ID from URL or Scanned QR
+      let sessionId = urlSessionId;
+
+      // Fallback: Check if machine_id itself is a session URL
+      if (!sessionId && formData.machine_id.includes('session=')) {
+        const params = new URLSearchParams(formData.machine_id.split('?')[1]);
+        sessionId = params.get('session');
+      } else if (!sessionId && formData.machine_id === 'DEMO-SESSION') {
         sessionId = 'DEMO-SESSION';
       }
 

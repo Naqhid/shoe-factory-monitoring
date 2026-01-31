@@ -57,8 +57,13 @@ export const MobileRemoteSetup: React.FC = () => {
             if (parts.length >= 3) {
                 // Determine logic. For now just passing text as machine_id if simple
                 mId = parts[1] || parts[0];
-                // In real app, we'd lookup IDs. For now, sending dummy INTs for IDs
             }
+
+            // Note: MobileRemoteSetup currently only handles a single scan.
+            // For the full workflow ([1] Scan Machine + [2] Scan Emp), 
+            // the system now uses MobileLineSetupForm via the updated QR URL.
+            // We'll proceed with a default employee for this basic connector.
+            const empCodeForRemote = 'EMP-1001';
 
             // Call activate
             const res = await fetch(`${API_BASE}/api/mobile-session/activate`, {
@@ -66,18 +71,9 @@ export const MobileRemoteSetup: React.FC = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     session_id: sessionId,
-                    machine_id: scannedText, // Send full string or parts? MobileProduction logic uses "Line-Machine-Emp" string to init.
-                    // The backend `activateSession` expects machine_id, work_centre_id, emp_id.
-                    // But `MobileProduction` needs to reconstruct it.
-                    // Let's send the FULL string as `machine_id` for now to simplify passing data back to Display.
-                    // Or I should parse it better.
-                    // Actually, MobileProduction "initializeProduction" takes (workCentre, machineId, empName).
-                    // I will store the RAW SCAN in `machine_id` column for simplicity?
-                    // No, `machine_id` column in DB is VARCHAR(100).
-                    // `emp_id` is INT.
-                    // I'll send defaults for INTs and full string for machine_id.
+                    machine_id: scannedText,
                     work_centre_id: 1,
-                    emp_id: 1
+                    emp_code: empCodeForRemote
                 })
             });
 
@@ -87,16 +83,12 @@ export const MobileRemoteSetup: React.FC = () => {
                 toast.success('Setup Connected!');
 
                 // If we have machine and employee, redirect to production dashboard
+                // Redirect the mobile scanner to the production page as well
                 if (scannedText) {
-                    // Note: In this flow, we might not have the employee ID easily, 
-                    // but we can default to EMP-1002 for demo or try to get it.
-                    // Actually, the activation might have returned it? No.
-                    // For now, let's redirect to dynamic machine, and default employee to 'TEMP' 
-                    // or something recognizable if not scanned.
-                    const targetPath = `/mobile/${encodeURIComponent(scannedText)}/EMP-1001`;
+                    const targetPath = `/mobile/${encodeURIComponent(scannedText)}/${encodeURIComponent(empCodeForRemote)}`;
                     setTimeout(() => {
                         navigate(targetPath);
-                    }, 1500);
+                    }, 1000);
                 }
             } else {
                 toast.error(json.message || 'Connection failed');

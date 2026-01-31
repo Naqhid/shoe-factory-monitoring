@@ -102,19 +102,21 @@ export const MobileProduction: React.FC = () => {
         }
 
         // AUTO-DETECTION MODE: If machine_id is defined (e.g. assigned to this screen) 
-        // but no employee yet, poll the server to see if someone activated it remotely
+        // but no employee yet, poll the server every 1s (as requested)
         if (urlMachineId && !urlEmpId) {
+            setQrData(urlMachineId);
             const syncInterval = setInterval(async () => {
                 try {
-                    const res = await fetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
+                    const res = await fetch(`${API_BASE}/api/mobile-production/live-status/${urlMachineId}`);
                     const json = await res.json();
-                    if (json.success && json.data.emp_code) {
+
+                    if (json.success && json.data && json.data.emp_code) {
                         clearInterval(syncInterval);
-                        toast.success(`Sync: ${json.data.emp_name} joined`);
+                        toast.success(`Production Started: ${json.data.emp_name}`);
                         navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(json.data.emp_code)}`);
                     }
                 } catch (e) { }
-            }, 3000);
+            }, 1000); // 1 second polling
             return () => clearInterval(syncInterval);
         }
 
@@ -142,21 +144,17 @@ export const MobileProduction: React.FC = () => {
                 const json = await res.json();
 
                 if (json.success && json.data.status === 'active') {
-                    // STOP POLLING
                     setSessionStatus('active');
-
                     const { machine_id, emp_code } = json.data;
                     if (machine_id && emp_code) {
-                        toast.success('Login Successful! Redirecting...', { duration: 2000 });
-
+                        toast.success('Device Connected!', { duration: 1500 });
                         setTimeout(() => {
-                            // Navigate the laptop view itself
                             navigate(`/mobile/${encodeURIComponent(machine_id)}/${encodeURIComponent(emp_code)}`);
                         }, 500);
                     }
                 }
-            } catch (e) { console.error('Polling error', e); }
-        }, 1500);
+            } catch (e) { }
+        }, 1000); // 1 second polling
         return () => clearInterval(interval);
     }, [sessionId, sessionStatus, navigate, API_BASE]);
 
@@ -305,7 +303,7 @@ export const MobileProduction: React.FC = () => {
         // Build correct base URL with subfolder for GitHub Pages
         const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
         const activationUrl = sessionId
-            ? `${baseUrl}/mobile-remote-setup?session=${sessionId}${qrData ? `&machine=${qrData}` : ''}`
+            ? `${baseUrl}/line_setup_form?session=${sessionId}${qrData ? `&machine=${qrData}` : ''}`
             : '';
 
         // Demo Mode Handler
@@ -354,8 +352,9 @@ export const MobileProduction: React.FC = () => {
                         )}
                     </div>
 
-                    <div className="text-sm text-gray-400 mb-8">
-                        Session ID: {sessionId ? sessionId.slice(0, 8) + '...' : 'Initializing...'}
+                    <div className="text-sm text-gray-400 mb-8 flex items-center justify-center gap-2">
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        {urlMachineId && !urlEmpId ? `Waiting for supervisor scan on ${urlMachineId}...` : 'Waiting for connection...'}
                     </div>
 
                     {/* Simulation / Debug Button */}
