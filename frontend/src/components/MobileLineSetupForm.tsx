@@ -24,6 +24,7 @@ export const MobileLineSetupForm: React.FC = () => {
   const [lastScanned, setLastScanned] = React.useState<string | null>(null);
   const [showTestHelpers, setShowTestHelpers] = React.useState(false);
   const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
+  const [debugLog, setDebugLog] = React.useState<{ url: string; payload: any; response: any } | null>(null);
 
   const [formData, setFormData] = React.useState<FormData>({
     employee_id: '',
@@ -145,8 +146,11 @@ export const MobileLineSetupForm: React.FC = () => {
         console.log('Final Activation Payload:', payload);
         const loadingToast = toast.loading('Synchronizing with display...');
 
+        const fetchUrl = `${API_BASE}/api/mobile-session/activate`;
+        setDebugLog({ url: fetchUrl, payload, response: 'Sending...' });
+
         try {
-          const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
+          const response = await fetch(fetchUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -154,6 +158,7 @@ export const MobileLineSetupForm: React.FC = () => {
 
           const result = await response.json();
           console.log('Activation Response:', result);
+          setDebugLog(prev => prev ? { ...prev, response: result } : null);
 
           if (result.success || activeSessionId === 'demo-session') {
             toast.success(`Connected! Laptop will update in 5s.`, { id: loadingToast, duration: 3000 });
@@ -324,6 +329,37 @@ export const MobileLineSetupForm: React.FC = () => {
             </button>
           </form>
         </div>
+
+        {/* Debug UI for User to verify API calls on Mobile */}
+        {debugLog && (
+          <div className="mt-8 p-4 bg-gray-900 rounded-lg overflow-hidden border border-gray-700 shadow-2xl">
+            <div className="flex items-center justify-between mb-4 border-b border-gray-800 pb-2">
+              <h3 className="text-blue-400 font-mono text-xs font-bold uppercase tracking-wider">Mobile Debug Inspector</h3>
+              <button onClick={() => setDebugLog(null)} className="text-gray-500 hover:text-white">✕</button>
+            </div>
+
+            <div className="space-y-4 font-mono text-[10px]">
+              <div>
+                <p className="text-gray-500 mb-1 font-bold uppercase">Endpoint:</p>
+                <div className="bg-gray-800 p-2 rounded text-blue-300 break-all border border-gray-700">{debugLog.url}</div>
+              </div>
+
+              <div>
+                <p className="text-gray-500 mb-1 font-bold uppercase">Request Payload:</p>
+                <pre className="bg-gray-800 p-2 rounded text-green-400 overflow-x-auto border border-gray-700">
+                  {JSON.stringify(debugLog.payload, null, 2)}
+                </pre>
+              </div>
+
+              <div>
+                <p className="text-gray-500 mb-1 font-bold uppercase">Server Response:</p>
+                <pre className={`bg-gray-800 p-2 rounded overflow-x-auto border border-gray-700 ${debugLog.response?.success ? 'text-green-400' : 'text-red-400'}`}>
+                  {JSON.stringify(debugLog.response, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
 
         {(scanningEmployee || scanningMachine) && (
           <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
