@@ -139,20 +139,25 @@ export const MobileProduction: React.FC = () => {
                 const res = await fetch(`${API_BASE}/api/mobile-session/${sessionId}`);
                 const json = await res.json();
 
-                if (json.success && json.data.status === 'active') {
+                // Redirect if machine_id and employee are now assigned
+                if (json.success && json.data.machine_id && (json.data.emp_code || json.data.emp_id)) {
                     const { machine_id, emp_code, emp_id } = json.data;
                     const finalEmpCode = emp_code || emp_id;
 
                     if (machine_id && finalEmpCode) {
                         setSessionStatus('active');
-                        toast.success('Device Connected!', { duration: 1500 });
+                        toast.success('Device Connected!', { duration: 2000 });
+
+                        // Small delay to let the user see the success toast before navigation
                         setTimeout(() => {
                             navigate(`/mobile/${encodeURIComponent(machine_id)}/${encodeURIComponent(finalEmpCode)}`);
                         }, 500);
                     }
                 }
-            } catch (e) { }
-        }, 5000); // 5 second polling
+            } catch (e) {
+                console.error('Session poll error:', e);
+            }
+        }, 5000); // 5 second polling as requested
         return () => clearInterval(interval);
     }, [sessionId, sessionStatus, navigate, API_BASE]);
 
