@@ -32,17 +32,17 @@ export const MobileLineSetupForm: React.FC = () => {
     login_date_time: new Date().toISOString().slice(0, 16),
   });
 
-  // Auto-submit when both fields are filled via scanning
+  // Auto-submit when everything is ready
   React.useEffect(() => {
-    if (formData.employee_id && formData.machine_id && !loading) {
+    const isDataReady = formData.employee_id && formData.machine_id && formData.employee_db_id;
+    if (isDataReady && !loading && !scanningEmployee && !scanningMachine) {
       const autoSubmit = async () => {
-        // Fast auto-submit
-        await new Promise(resolve => setTimeout(resolve, 300));
+        console.log('AUTO-SUBMIT: Data complete, triggering activation...');
         handleSubmit({ preventDefault: () => { } } as React.FormEvent);
       };
       autoSubmit();
     }
-  }, [formData.employee_id, formData.machine_id]);
+  }, [formData.employee_id, formData.machine_id, formData.employee_db_id, loading, scanningEmployee, scanningMachine]);
 
   const handleEmployeeScan = async (data: { text: string } | null) => {
     if (data && data.text && !isProcessing) {
@@ -117,10 +117,8 @@ export const MobileLineSetupForm: React.FC = () => {
 
     setLoading(true);
     try {
-      // Check for Remote Session ID from URL or Scanned QR
       let sessionId = urlSessionId;
 
-      // Fallback: Check if machine_id itself is a session URL
       if (!sessionId && formData.machine_id.includes('session=')) {
         const params = new URLSearchParams(formData.machine_id.split('?')[1]);
         sessionId = params.get('session');
@@ -132,56 +130,45 @@ export const MobileLineSetupForm: React.FC = () => {
         ? 'http://localhost:3001'
         : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
-      // REMOTE ACTIVATION FLOW
       if (sessionId) {
         let finalMachineId = formData.machine_id;
 
-        // If machine_id is a URL (fallback), try to extract machine param
         if (finalMachineId.includes('session=')) {
           const urlParams = new URLSearchParams(finalMachineId.split('?')[1]);
           finalMachineId = urlParams.get('machine') || finalMachineId;
         }
 
-        console.log('Activating Session:', {
+        const payload = {
           session_id: sessionId,
           machine_id: finalMachineId,
+          work_centre_id: 1,
           emp_code: formData.employee_id,
           emp_id: formData.employee_db_id
-        });
+        };
+
+        console.log('REMOTE ACTIVATE:', payload);
+        const loadingToast = toast.loading('Connecting display...');
 
         const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            machine_id: finalMachineId,
-            work_centre_id: 1,
-            emp_code: formData.employee_id,
-            emp_id: formData.employee_db_id
-          })
+          body: JSON.stringify(payload)
         });
 
         const result = await response.json();
-        console.log('Activation Result:', result);
+        console.log('REMOTE RESULT:', result);
 
         if (result.success || sessionId === 'DEMO-SESSION') {
-          toast.success(`Session Activated: ${finalMachineId}`);
-
-          // Redirect the mobile scanner to the production page as well
+          toast.success(`Display Connected: ${finalMachineId}`, { id: loadingToast });
           const targetPath = `/mobile/${encodeURIComponent(finalMachineId)}/${encodeURIComponent(formData.employee_id)}`;
-          toast.success('Redirecting to dashboard...', { duration: 1000 });
-
-          setTimeout(() => {
-            navigate(targetPath);
-          }, 800);
+          setTimeout(() => navigate(targetPath), 800);
           return;
         } else {
-          throw new Error(result.message || 'Activation failed');
+          toast.error(result.message || 'Activation failed', { id: loadingToast });
+          return;
         }
       }
 
-      // LOCAL SETUP FLOW (Legacy/Self-Setup)
-      // Store the setup data in sessionStorage
       sessionStorage.setItem('mobile_setup_data', JSON.stringify({
         employee_id: formData.employee_id,
         employee_name: formData.employee_name,
@@ -189,11 +176,8 @@ export const MobileLineSetupForm: React.FC = () => {
         login_date_time: formData.login_date_time
       }));
 
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-
       toast.success('Line setup complete! Opening production screen...');
-      // Navigate to the mobile production route with parameters
       navigate(`/mobile/${encodeURIComponent(formData.machine_id)}/${encodeURIComponent(formData.employee_id)}`);
 
     } catch (error) {
@@ -215,7 +199,6 @@ export const MobileLineSetupForm: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-lg mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <button
@@ -226,26 +209,32 @@ export const MobileLineSetupForm: React.FC = () => {
             </button>
             <h1 className="text-2xl font-bold text-gray-900">Line Setup</h1>
           </div>
-          <button
-            onClick={() => {
-              if (typeof sessionStorage !== 'undefined') {
-                sessionStorage.removeItem('app_authenticated');
-                sessionStorage.removeItem('mobile_authenticated');
-              }
-              navigate('/');
-              toast.success('Logged out');
-            }}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-            title="Logout"
-          >
-            <LogOut className="h-6 w-6 text-gray-700" />
-          </button>
+          <div className="flex items-center gap-2">
+            {urlSessionId && (
+              <div className="bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                REMOTE
+              </div>
+            )}
+            <button
+              onClick={() => {
+                if (typeof sessionStorage !== 'undefined') {
+                  sessionStorage.removeItem('app_authenticated');
+                  sessionStorage.removeItem('mobile_authenticated');
+                }
+                navigate('/');
+                toast.success('Logged out');
+              }}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              title="Logout"
+            >
+              <LogOut className="h-6 w-6 text-gray-700" />
+            </button>
+          </div>
         </div>
 
-        {/* Form Card */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Scan Employee ID */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Scan Employee ID <span className="text-red-500">*</span>
@@ -266,7 +255,6 @@ export const MobileLineSetupForm: React.FC = () => {
               </button>
             </div>
 
-            {/* Employee Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Employee Name
@@ -279,7 +267,6 @@ export const MobileLineSetupForm: React.FC = () => {
               />
             </div>
 
-            {/* Scan Machine ID */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Scan Machine ID <span className="text-red-500">*</span>
@@ -300,7 +287,6 @@ export const MobileLineSetupForm: React.FC = () => {
               </button>
             </div>
 
-            {/* Machine ID */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Machine ID
@@ -313,7 +299,6 @@ export const MobileLineSetupForm: React.FC = () => {
               />
             </div>
 
-            {/* Login Date & Time */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Setup Date & Time
@@ -326,7 +311,6 @@ export const MobileLineSetupForm: React.FC = () => {
               />
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
@@ -338,7 +322,6 @@ export const MobileLineSetupForm: React.FC = () => {
           </form>
         </div>
 
-        {/* QR Scanner Modal */}
         {(scanningEmployee || scanningMachine) && (
           <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
             <div className="bg-white p-4 rounded-lg max-w-sm w-full mx-4">
