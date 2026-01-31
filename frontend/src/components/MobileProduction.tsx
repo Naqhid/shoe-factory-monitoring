@@ -484,6 +484,36 @@ export const MobileProduction: React.FC = () => {
                         )}
                     </div>
 
+                    {/* RED DEBUG TEXT FOR USER INSPECTION */}
+                    {activationDebug && (
+                        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6 relative">
+                            <button
+                                onClick={() => {
+                                    setActivationDebug(null);
+                                    sessionStorage.removeItem('last_activation_debug');
+                                }}
+                                className="absolute top-2 right-2 text-red-500 font-bold"
+                            >
+                                ✕
+                            </button>
+                            <h3 className="text-red-600 font-bold text-sm underline mb-3">API DATA (RED DEBUG MODE)</h3>
+                            <div className="text-red-700 font-mono text-[11px] leading-relaxed break-all space-y-3">
+                                <div>
+                                    <span className="font-bold underline text-red-800">1. SENDING TO:</span><br />
+                                    {activationDebug.url}
+                                </div>
+                                <div>
+                                    <span className="font-bold underline text-red-800">2. PAYLOAD SENT:</span><br />
+                                    {JSON.stringify(activationDebug.payload)}
+                                </div>
+                                <div>
+                                    <span className="font-bold underline text-red-800">3. SERVER SAID:</span><br />
+                                    {JSON.stringify(activationDebug.response)}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Production Metrics */}
                     {productionData && (
                         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
