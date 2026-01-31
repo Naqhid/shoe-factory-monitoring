@@ -32,17 +32,7 @@ export const MobileLineSetupForm: React.FC = () => {
     login_date_time: new Date().toISOString().slice(0, 16),
   });
 
-  // Auto-submit when everything is ready
-  React.useEffect(() => {
-    const isDataReady = formData.employee_id && formData.machine_id && formData.employee_db_id;
-    if (isDataReady && !loading && !scanningEmployee && !scanningMachine) {
-      const autoSubmit = async () => {
-        console.log('AUTO-SUBMIT: Data complete, triggering activation...');
-        handleSubmit({ preventDefault: () => { } } as React.FormEvent);
-      };
-      autoSubmit();
-    }
-  }, [formData.employee_id, formData.machine_id, formData.employee_db_id, loading, scanningEmployee, scanningMachine]);
+  // Auto-submit removed - manual click required as per request
 
   const handleEmployeeScan = async (data: { text: string } | null) => {
     if (data && data.text && !isProcessing) {

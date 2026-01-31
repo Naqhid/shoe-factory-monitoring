@@ -157,7 +157,7 @@ export const MobileProduction: React.FC = () => {
             } catch (e) {
                 console.error('Session poll error:', e);
             }
-        }, 3000); // 3 second polling for a balance of server load and responsiveness
+        }, 5000); // 5 second polling as requested
         return () => clearInterval(interval);
     }, [sessionId, sessionStatus, navigate, API_BASE]);
 
