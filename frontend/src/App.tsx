@@ -164,7 +164,7 @@ function App() {
   const isProductionPlanning = activeMenu === 'production_planning';
   const isLineSetupForm = activeMenu === 'line_setup_form';
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
-  const isMobile = activeMenu === 'mobile';
+  const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
   const isTrackerApp = activeMenu === 'tracker_app';
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';

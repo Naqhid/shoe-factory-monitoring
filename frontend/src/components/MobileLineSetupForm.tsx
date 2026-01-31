@@ -3,6 +3,7 @@ import { Save, ArrowLeft, QrCode, LogOut } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import QrReader from 'react-qr-scanner';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface FormData {
   employee_id: string;
@@ -16,6 +17,7 @@ export const MobileLineSetupForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [scanningEmployee, setScanningEmployee] = React.useState(false);
   const [scanningMachine, setScanningMachine] = React.useState(false);
+  const [showTestHelpers, setShowTestHelpers] = React.useState(false);
 
   const [formData, setFormData] = React.useState<FormData>({
     employee_id: '',
@@ -37,22 +39,17 @@ export const MobileLineSetupForm: React.FC = () => {
   }, [formData.employee_id, formData.machine_id]);
 
   const handleEmployeeScan = (data: { text: string } | null) => {
-    if (data) {
-      try {
-        const parsed = JSON.parse(data.text);
-        setFormData(prev => ({
-          ...prev,
-          employee_id: parsed.id || parsed.employee_id || data.text,
-          employee_name: parsed.name || parsed.employee_name || 'Test Employee',
-        }));
-      } catch (error) {
-        // Fallback for testing: use raw text if not JSON
-        setFormData(prev => ({
-          ...prev,
-          employee_id: data.text,
-          employee_name: 'Test Employee (' + data.text + ')',
-        }));
-      }
+    if (data && data.text) {
+      console.log('Scanned Employee RAW:', data.text);
+      let empId = data.text;
+      let empName = 'Test Employee';
+
+      setFormData(prev => ({
+        ...prev,
+        employee_id: empId,
+        employee_name: empName,
+      }));
+
       setScanningEmployee(false);
       if (navigator.vibrate) navigator.vibrate(100);
       toast.success('Employee detected');
@@ -136,7 +133,8 @@ export const MobileLineSetupForm: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       toast.success('Line setup complete! Opening production screen...');
-      navigate('/mobile');
+      // Navigate to the mobile production route with parameters
+      navigate(`/mobile/${encodeURIComponent(formData.machine_id)}/${encodeURIComponent(formData.employee_id)}`);
 
     } catch (error) {
       console.error('Error during setup:', error);
@@ -297,6 +295,62 @@ export const MobileLineSetupForm: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Testing Helper Section */}
+        <div className="mt-8 text-center">
+          <button
+            onClick={() => setShowTestHelpers(!showTestHelpers)}
+            className="text-sm text-gray-500 hover:text-blue-600 underline"
+          >
+            {showTestHelpers ? 'Hide Test QR Codes' : 'Show Test QR Codes (for Laptop Screen)'}
+          </button>
+
+          {showTestHelpers && (
+            <div className="mt-4 p-4 bg-white rounded-lg shadow-inner border border-dashed border-gray-300">
+              <p className="text-xs text-gray-500 mb-4 font-semibold uppercase tracking-wider">
+                Scan these from your Laptop screen using your Phone
+              </p>
+
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-sm font-bold text-gray-700 mb-2">Employee Badges</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className="p-1 bg-white border rounded">
+                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1001.jpeg`} alt="EMP-1001" className="w-24 h-24 object-contain" />
+                      </div>
+                      <span className="mt-1 text-[10px] font-mono text-gray-600">John Doe (1001)</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className="p-1 bg-white border rounded">
+                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1002.jpeg`} alt="EMP-1002" className="w-24 h-24 object-contain" />
+                      </div>
+                      <span className="mt-1 text-[10px] font-mono text-gray-600">Jane Smith (1002)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-gray-700 mb-2">Machine Stickers</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className="p-1 bg-white border rounded">
+                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-001.jpeg`} alt="MAC-001" className="w-24 h-24 object-contain" />
+                      </div>
+                      <span className="mt-1 text-[10px] font-mono text-gray-600">Stitching M-1</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className="p-1 bg-white border rounded">
+                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-002.jpeg`} alt="MAC-002" className="w-24 h-24 object-contain" />
+                      </div>
+                      <span className="mt-1 text-[10px] font-mono text-gray-600">Stitching M-2</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

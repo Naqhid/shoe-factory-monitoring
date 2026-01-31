@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { QrCode, Play, Square, CheckCircle, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import QrReader from 'react-qr-scanner';
@@ -32,6 +33,8 @@ export const MobileProduction: React.FC = () => {
     const [showQRScanner, setShowQRScanner] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [outputIncrement, setOutputIncrement] = useState(0);
+    const [employeeName, setEmployeeName] = useState('');
+    const [machineName, setMachineName] = useState('');
 
     const API_BASE = window.location.hostname === 'localhost'
         ? 'http://localhost:3001'
@@ -45,9 +48,62 @@ export const MobileProduction: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
+    const location = useLocation();
+
     // Session Initialization and Polling
     useEffect(() => {
-        // Create session on mount
+        // Check if we have URL params (Direct Setup)
+        const pathParts = location.pathname.split('/');
+        const queryParams = new URLSearchParams(location.search);
+
+        // Try URL Path: /mobile/MAC-01/EMP-01
+        let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[2]) : null;
+        let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[3]) : null;
+
+        // Try Query Params: ?machine=MAC-01&employee=EMP-01
+        if (!urlMachineId) urlMachineId = queryParams.get('machine');
+        if (!urlEmpId) urlEmpId = queryParams.get('employee');
+
+        if (urlMachineId && urlEmpId) {
+            const resolveAndInitialize = async () => {
+                setLoading(true);
+                try {
+                    // Fetch Master Data to Resolve Codes
+                    const [empRes, macRes] = await Promise.all([
+                        fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
+                        fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
+                    ]);
+
+                    const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
+                    const machine = macRes.data?.find((m: any) => m.machine_id === urlMachineId || m.code === urlMachineId);
+
+                    if (!employee) {
+                        toast.error(`Employee ${urlEmpId} not found in database`);
+                        return;
+                    }
+
+                    setSessionStatus('active');
+                    setQrData(urlMachineId);
+                    setEmployeeName(employee.name);
+                    setMachineName(machine?.name || urlMachineId);
+
+                    initializeProduction(
+                        urlMachineId,
+                        employee.id,
+                        machine?.work_centre_id || 1
+                    );
+                } catch (e) {
+                    console.error('Resolution failed', e);
+                    toast.error('Failed to load setup data');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            resolveAndInitialize();
+            return;
+        }
+
+        // Create session on mount (Legacy / QR Connect flow)
         const initSession = async () => {
             try {
                 const res = await fetch(`${API_BASE}/api/mobile-session/init`, { method: 'POST' });
@@ -55,10 +111,12 @@ export const MobileProduction: React.FC = () => {
                 if (data.success) {
                     setSessionId(data.data.session_id);
                 }
-            } catch (e) { console.error('Session init failed', e); }
+            } catch (e) {
+                console.error('Session init failed', e);
+            }
         };
         initSession();
-    }, []);
+    }, [location.pathname, API_BASE]);
 
     useEffect(() => {
         if (!sessionId || sessionStatus === 'active') return;
@@ -83,14 +141,14 @@ export const MobileProduction: React.FC = () => {
     }, [sessionId, sessionStatus]);
 
 
-    const initializeProduction = async (machineId: string, empId: number) => {
+    const initializeProduction = async (machineId: string, empId: number, workCentreId: number = 1) => {
         setLoading(true);
         try {
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
-                work_centre_id: 1, // Should be fetched from work_centres table
+                work_centre_id: workCentreId,
                 machine_id: machineId,
-                emp_id: empId || 1,
+                emp_id: empId,
                 output_pairs: 0,
                 target_mins: 10,
                 start_time: null,
@@ -323,8 +381,9 @@ export const MobileProduction: React.FC = () => {
                         </div>
 
                         {qrData && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                                <p className="text-sm text-blue-800 font-medium">Machine: {qrData}</p>
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 space-y-1">
+                                <p className="text-sm text-blue-800 font-bold">Machine: {machineName || qrData}</p>
+                                {employeeName && <p className="text-xs text-blue-600 font-medium">Operator: {employeeName}</p>}
                             </div>
                         )}
                     </div>
