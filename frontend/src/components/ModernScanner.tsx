@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { BrowserMultiFormatReader, Result } from '@zxing/library';
+import { BrowserQRCodeReader, Result, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 interface ModernScannerProps {
     onScan: (text: string) => void;
@@ -13,15 +13,22 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
     facingMode = 'environment'
 }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const codeReader = useRef(new BrowserMultiFormatReader());
+    const codeReader = useRef(new BrowserQRCodeReader());
 
     useEffect(() => {
+        // Add hints for faster scanning (TRY_HARDER)
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        // @ts-ignore - Accessing internal hints map if needed, but usually constructor is enough
+        codeReader.current.hints = hints;
+
         let isMounted = true;
 
         const startScanner = async () => {
             console.log('Scanner: Starting...');
-            // Small delay to allow previous instances to clean up hardware
-            await new Promise(resolve => setTimeout(resolve, 200));
+            // Minimal delay to allow browser to yield
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             if (!isMounted) return;
 
@@ -36,17 +43,18 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
                 // Try to find the best back camera
                 let selectedDeviceId = videoInputDevices[0].deviceId;
                 if (facingMode === 'environment') {
+                    // Look for labels that usually indicate the primary back camera
                     const backCameras = videoInputDevices.filter(device =>
                         device.label.toLowerCase().includes('back') ||
                         device.label.toLowerCase().includes('rear') ||
                         device.label.toLowerCase().includes('environment') ||
-                        device.label.toLowerCase().includes('0') // Often the main camera
+                        device.label.toLowerCase().includes('camera 0') // Common primary sensor label
                     );
 
                     if (backCameras.length > 0) {
-                        // Pick the first or last depending on common patterns
-                        selectedDeviceId = backCameras[backCameras.length - 1].deviceId;
-                        console.log('Scanner: Selected camera:', backCameras[backCameras.length - 1].label);
+                        // Pick the first one in the list for back cameras, often the primary
+                        selectedDeviceId = backCameras[0].deviceId;
+                        console.log('Scanner: Selected camera:', backCameras[0].label);
                     } else if (videoInputDevices.length > 1) {
                         selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
                     }

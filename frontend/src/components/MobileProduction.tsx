@@ -506,11 +506,11 @@ export const MobileProduction: React.FC = () => {
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <button
                                     onClick={handleStart}
                                     disabled={loading || productionData.button_status === 2}
-                                    className="bg-green-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="bg-green-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md active:scale-95"
                                 >
                                     {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
                                     START
@@ -519,7 +519,7 @@ export const MobileProduction: React.FC = () => {
                                 <button
                                     onClick={handleStop}
                                     disabled={loading || productionData.button_status === 2}
-                                    className="bg-red-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="bg-red-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md active:scale-95"
                                 >
                                     {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Square className="h-5 w-5" />}
                                     STOP
@@ -528,7 +528,7 @@ export const MobileProduction: React.FC = () => {
                                 <button
                                     onClick={handleFinish}
                                     disabled={loading || productionData.button_status === 2}
-                                    className="bg-blue-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="bg-blue-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md active:scale-95"
                                 >
                                     {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
                                     FINISH
