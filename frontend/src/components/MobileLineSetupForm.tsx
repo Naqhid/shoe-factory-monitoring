@@ -17,6 +17,7 @@ export const MobileLineSetupForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [scanningEmployee, setScanningEmployee] = React.useState(false);
   const [scanningMachine, setScanningMachine] = React.useState(false);
+  const [isProcessing, setIsProcessing] = React.useState(false);
   const [lastScanned, setLastScanned] = React.useState<string | null>(null);
   const [showTestHelpers, setShowTestHelpers] = React.useState(false);
 
@@ -40,7 +41,8 @@ export const MobileLineSetupForm: React.FC = () => {
   }, [formData.employee_id, formData.machine_id]);
 
   const handleEmployeeScan = async (data: { text: string } | null) => {
-    if (data && data.text) {
+    if (data && data.text && !isProcessing) {
+      setIsProcessing(true);
       console.log('SCAN SUCCESS (Employee):', data.text);
       const empId = data.text.trim();
 
@@ -80,18 +82,22 @@ export const MobileLineSetupForm: React.FC = () => {
           employee_name: 'Scan Error',
         }));
         toast.error('Connection error while fetching employee', { id: loadingToast });
+      } finally {
+        setIsProcessing(false);
       }
     }
   };
 
   const handleMachineScan = (data: { text: string } | null) => {
-    if (data && data.text) {
+    if (data && data.text && !isProcessing) {
+      setIsProcessing(true);
       console.log('SCAN SUCCESS (Machine):', data.text);
       const machId = data.text.trim();
       setFormData(prev => ({ ...prev, machine_id: machId }));
       setScanningMachine(false);
       if (navigator.vibrate) navigator.vibrate(100);
       toast.success(`Machine detected: ${machId}`);
+      setTimeout(() => setIsProcessing(false), 500);
     }
   };
 
@@ -308,6 +314,7 @@ export const MobileLineSetupForm: React.FC = () => {
                     setScanningEmployee(false);
                     setScanningMachine(false);
                     setLastScanned(null);
+                    setIsProcessing(false);
                   }}
                   className="text-gray-500 hover:text-gray-700"
                 >
@@ -316,23 +323,20 @@ export const MobileLineSetupForm: React.FC = () => {
               </div>
               <div className="w-full relative overflow-hidden rounded-lg bg-black flex items-center justify-center" style={{ minHeight: '300px' }}>
                 <QrReader
-                  delay={300}
+                  delay={500}
                   onError={handleScanError}
                   onScan={(data: any) => {
-                    if (data && data.text) {
+                    if (data && data.text && !isProcessing) {
                       const scannedText = data.text.trim();
                       setLastScanned(scannedText);
                       if (scanningEmployee) handleEmployeeScan({ text: scannedText });
                       else handleMachineScan({ text: scannedText });
                     }
                   }}
-                  style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'contain' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   constraints={{
                     video: {
-                      facingMode: 'environment',
-                      width: { ideal: 1280 },
-                      height: { ideal: 720 },
-                      aspectRatio: { ideal: 1 }
+                      facingMode: 'environment'
                     }
                   }}
                 />
