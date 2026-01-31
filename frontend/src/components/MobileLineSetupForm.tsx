@@ -128,25 +128,22 @@ export const MobileLineSetupForm: React.FC = () => {
           finalMachineId = urlParams.get('machine') || finalMachineId;
         }
 
-        // Use robust payload mapping for both snake_case and camelCase backends
-        const activationId = sessionId.trim().toLowerCase();
-        const numericEmpId = formData.employee_db_id ? parseInt(formData.employee_db_id.toString(), 10) : null;
+        // Clean ID
+        const activeSessionId = sessionId.trim().toLowerCase();
 
+        // The DDL says emp_id is an Int, but legacy logic used emp_code. 
+        // We'll send both to ensure the backend controller finds what it needs.
         const payload = {
-          session_id: activationId,
-          sessionId: activationId,
+          session_id: activeSessionId,
           machine_id: finalMachineId,
-          machineId: finalMachineId,
-          emp_id: numericEmpId,
-          employeeId: numericEmpId,
-          emp_code: formData.employee_id,
-          employeeCode: formData.employee_id,
+          emp_id: formData.employee_db_id ? Number(formData.employee_db_id) : null,
+          emp_code: formData.employee_id, // e.g. "EMP-1001"
           work_centre_id: 1,
           status: 'active'
         };
 
-        console.log('ACTIVATE ATTEMPT:', payload);
-        const loadingToast = toast.loading('Connecting display...');
+        console.log('Final Activation Payload:', payload);
+        const loadingToast = toast.loading('Synchronizing with display...');
 
         try {
           const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
@@ -156,23 +153,23 @@ export const MobileLineSetupForm: React.FC = () => {
           });
 
           const result = await response.json();
-          console.log('ACTIVATE RESPONSE:', result);
+          console.log('Activation Response:', result);
 
-          if (result.success || sessionId === 'DEMO-SESSION') {
-            toast.success(`Display Connected: ${finalMachineId}`, { id: loadingToast });
+          if (result.success || activeSessionId === 'demo-session') {
+            toast.success(`Connected! Laptop will update in 5s.`, { id: loadingToast, duration: 3000 });
+
+            // Navigate the phone to its dashboard
             const targetPath = `/mobile/${encodeURIComponent(finalMachineId)}/${encodeURIComponent(formData.employee_id)}`;
-            setTimeout(() => navigate(targetPath), 800);
-            return;
+            setTimeout(() => navigate(targetPath), 1000);
           } else {
-            toast.error(result.message || 'Server rejected activation', { id: loadingToast });
-            console.error('Server error details:', result);
-            return;
+            // Show the actual error from the server (e.g. "Session not found")
+            toast.error(result.message || 'Server rejected activation.', { id: loadingToast });
           }
-        } catch (fetchErr) {
-          toast.error('Network error during activation', { id: loadingToast });
-          console.error('Fetch error:', fetchErr);
-          return;
+        } catch (err) {
+          console.error('Activation Error:', err);
+          toast.error('Network error. Is the backend online?', { id: loadingToast });
         }
+        return;
       }
 
       sessionStorage.setItem('mobile_setup_data', JSON.stringify({
