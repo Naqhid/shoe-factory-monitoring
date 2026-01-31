@@ -35,6 +35,7 @@ export const MobileProduction: React.FC = () => {
     const [outputIncrement, setOutputIncrement] = useState(0);
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
+    const [showTestHelpers, setShowTestHelpers] = useState(false);
 
     const API_BASE = window.location.hostname === 'localhost'
         ? 'http://localhost:3001'
@@ -330,13 +331,13 @@ export const MobileProduction: React.FC = () => {
                         )}
                     </div>
 
-                    <div className="text-sm text-gray-400 mb-4">
+                    <div className="text-sm text-gray-400 mb-8">
                         Session ID: {sessionId ? sessionId.slice(0, 8) + '...' : 'Initializing...'}
                     </div>
 
                     {/* Simulation / Debug Button */}
                     {(sessionId === 'DEMO-SESSION' || import.meta.env.DEV) && (
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
                             <p className="text-xs text-blue-800 mb-2">Debug / Simulation Mode</p>
                             <button
                                 onClick={handleDemoConnect}
@@ -346,6 +347,62 @@ export const MobileProduction: React.FC = () => {
                             </button>
                         </div>
                     )}
+
+                    {/* Testing Helper Section */}
+                    <div className="mt-8 border-t pt-8">
+                        <button
+                            onClick={() => setShowTestHelpers(!showTestHelpers)}
+                            className="text-sm text-gray-500 hover:text-blue-600 underline"
+                        >
+                            {showTestHelpers ? 'Hide Test QR Codes' : 'Show Demo QR Codes (for Laptop Screen)'}
+                        </button>
+
+                        {showTestHelpers && (
+                            <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                                <p className="text-[10px] text-gray-400 mb-4 font-semibold uppercase tracking-wider">
+                                    Scan these with your Phone from this screen
+                                </p>
+
+                                <div className="space-y-6">
+                                    <div>
+                                        <h4 className="text-xs font-bold text-gray-500 mb-3 text-left">1. Employee Badges</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="flex flex-col items-center">
+                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1001.jpeg`} alt="EMP-1001" className="w-20 h-20 object-contain" />
+                                                </div>
+                                                <span className="mt-1 text-[9px] font-mono text-gray-500">John Doe</span>
+                                            </div>
+                                            <div className="flex flex-col items-center">
+                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1002.jpeg`} alt="EMP-1002" className="w-20 h-20 object-contain" />
+                                                </div>
+                                                <span className="mt-1 text-[9px] font-mono text-gray-500">Jane Smith</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="text-xs font-bold text-gray-500 mb-3 text-left">2. Machine Stickers</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="flex flex-col items-center">
+                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-001.jpeg`} alt="MAC-001" className="w-20 h-20 object-contain" />
+                                                </div>
+                                                <span className="mt-1 text-[9px] font-mono text-gray-500">Machine 1</span>
+                                            </div>
+                                            <div className="flex flex-col items-center">
+                                                <div className="p-1 bg-white border rounded-lg shadow-sm">
+                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-002.jpeg`} alt="MAC-002" className="w-20 h-20 object-contain" />
+                                                </div>
+                                                <span className="mt-1 text-[9px] font-mono text-gray-500">Machine 2</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         );

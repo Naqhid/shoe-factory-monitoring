@@ -17,6 +17,7 @@ export const MobileLineSetupForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [scanningEmployee, setScanningEmployee] = React.useState(false);
   const [scanningMachine, setScanningMachine] = React.useState(false);
+  const [lastScanned, setLastScanned] = React.useState<string | null>(null);
   const [showTestHelpers, setShowTestHelpers] = React.useState(false);
 
   const [formData, setFormData] = React.useState<FormData>({
@@ -40,8 +41,8 @@ export const MobileLineSetupForm: React.FC = () => {
 
   const handleEmployeeScan = (data: { text: string } | null) => {
     if (data && data.text) {
-      console.log('Scanned Employee RAW:', data.text);
-      let empId = data.text;
+      console.log('SCAN SUCCESS (Employee):', data.text);
+      let empId = data.text.trim(); // Trim whitespace
       let empName = 'Test Employee';
 
       setFormData(prev => ({
@@ -52,16 +53,18 @@ export const MobileLineSetupForm: React.FC = () => {
 
       setScanningEmployee(false);
       if (navigator.vibrate) navigator.vibrate(100);
-      toast.success('Employee detected');
+      toast.success(`Employee detected: ${empId}`);
     }
   };
 
   const handleMachineScan = (data: { text: string } | null) => {
-    if (data) {
-      setFormData(prev => ({ ...prev, machine_id: data.text }));
+    if (data && data.text) {
+      console.log('SCAN SUCCESS (Machine):', data.text);
+      const machId = data.text.trim();
+      setFormData(prev => ({ ...prev, machine_id: machId }));
       setScanningMachine(false);
       if (navigator.vibrate) navigator.vibrate(100);
-      toast.success('Machine scanned successfully');
+      toast.success(`Machine detected: ${machId}`);
     }
   };
 
@@ -277,80 +280,41 @@ export const MobileLineSetupForm: React.FC = () => {
                   onClick={() => {
                     setScanningEmployee(false);
                     setScanningMachine(false);
+                    setLastScanned(null);
                   }}
                   className="text-gray-500 hover:text-gray-700"
                 >
                   ✕
                 </button>
               </div>
-              <div className="w-full aspect-square">
+              <div className="w-full aspect-square relative overflow-hidden rounded-lg bg-gray-100">
                 <QrReader
-                  delay={300}
+                  delay={100}
                   onError={handleScanError}
-                  onScan={scanningEmployee ? handleEmployeeScan : handleMachineScan}
-                  style={{ width: '100%' }}
+                  onScan={(data: any) => {
+                    if (data && data.text) {
+                      setLastScanned(data.text);
+                      if (scanningEmployee) handleEmployeeScan(data);
+                      else handleMachineScan(data);
+                    }
+                  }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   constraints={{ video: { facingMode: 'environment' } }}
                 />
+                {lastScanned && (
+                  <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 text-white text-[10px] p-1 rounded text-center truncate">
+                    Detected: {lastScanned}
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 text-center">
+                <p className="text-xs text-gray-500">
+                  Hold the QR code steady in the center of the frame.
+                </p>
               </div>
             </div>
           </div>
         )}
-
-        {/* Testing Helper Section */}
-        <div className="mt-8 text-center">
-          <button
-            onClick={() => setShowTestHelpers(!showTestHelpers)}
-            className="text-sm text-gray-500 hover:text-blue-600 underline"
-          >
-            {showTestHelpers ? 'Hide Test QR Codes' : 'Show Test QR Codes (for Laptop Screen)'}
-          </button>
-
-          {showTestHelpers && (
-            <div className="mt-4 p-4 bg-white rounded-lg shadow-inner border border-dashed border-gray-300">
-              <p className="text-xs text-gray-500 mb-4 font-semibold uppercase tracking-wider">
-                Scan these from your Laptop screen using your Phone
-              </p>
-
-              <div className="space-y-6">
-                <div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-2">Employee Badges</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="p-1 bg-white border rounded">
-                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1001.jpeg`} alt="EMP-1001" className="w-24 h-24 object-contain" />
-                      </div>
-                      <span className="mt-1 text-[10px] font-mono text-gray-600">John Doe (1001)</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <div className="p-1 bg-white border rounded">
-                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1002.jpeg`} alt="EMP-1002" className="w-24 h-24 object-contain" />
-                      </div>
-                      <span className="mt-1 text-[10px] font-mono text-gray-600">Jane Smith (1002)</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-2">Machine Stickers</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="p-1 bg-white border rounded">
-                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-001.jpeg`} alt="MAC-001" className="w-24 h-24 object-contain" />
-                      </div>
-                      <span className="mt-1 text-[10px] font-mono text-gray-600">Stitching M-1</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <div className="p-1 bg-white border rounded">
-                        <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-002.jpeg`} alt="MAC-002" className="w-24 h-24 object-contain" />
-                      </div>
-                      <span className="mt-1 text-[10px] font-mono text-gray-600">Stitching M-2</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
