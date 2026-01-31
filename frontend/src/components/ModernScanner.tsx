@@ -19,39 +19,55 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
         let isMounted = true;
 
         const startScanner = async () => {
+            console.log('Scanner: Starting...');
+            // Small delay to allow previous instances to clean up hardware
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            if (!isMounted) return;
+
             try {
                 const videoInputDevices = await codeReader.current.listVideoInputDevices();
+                console.log('Scanner: Devices found:', videoInputDevices.length);
 
-                // Try to find the back camera if requested
+                if (videoInputDevices.length === 0) {
+                    throw new Error('No camera devices found');
+                }
+
+                // Try to find the best back camera
                 let selectedDeviceId = videoInputDevices[0].deviceId;
                 if (facingMode === 'environment') {
-                    const backCamera = videoInputDevices.find(device =>
+                    const backCameras = videoInputDevices.filter(device =>
                         device.label.toLowerCase().includes('back') ||
                         device.label.toLowerCase().includes('rear') ||
-                        device.label.toLowerCase().includes('environment')
+                        device.label.toLowerCase().includes('environment') ||
+                        device.label.toLowerCase().includes('0') // Often the main camera
                     );
-                    if (backCamera) {
-                        selectedDeviceId = backCamera.deviceId;
+
+                    if (backCameras.length > 0) {
+                        // Pick the first or last depending on common patterns
+                        selectedDeviceId = backCameras[backCameras.length - 1].deviceId;
+                        console.log('Scanner: Selected camera:', backCameras[backCameras.length - 1].label);
                     } else if (videoInputDevices.length > 1) {
-                        // Usually the last one is the better back camera on many Androids
                         selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
                     }
                 }
 
                 if (isMounted && videoRef.current) {
-                    codeReader.current.decodeFromVideoDevice(
+                    console.log('Scanner: Decoding from:', selectedDeviceId);
+                    await codeReader.current.decodeFromVideoDevice(
                         selectedDeviceId,
                         videoRef.current,
-                        (result: Result | null, err: any) => {
+                        (result: Result | null) => {
                             if (result && isMounted) {
-                                onScan(result.getText());
+                                const text = result.getText();
+                                console.log('Scanner: TEXT DETECTED:', text);
+                                onScan(text);
                             }
-                            // We ignore err here as it throws on every frame it doesn't find a code
                         }
                     );
                 }
             } catch (err) {
-                console.error('Scanner start error:', err);
+                console.error('Scanner: Error:', err);
                 if (isMounted) onError(err);
             }
         };
@@ -59,8 +75,23 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
         startScanner();
 
         return () => {
+            console.log('Scanner: Unmounting...');
             isMounted = false;
-            codeReader.current.reset();
+            try {
+                codeReader.current.reset();
+                // Explicitly stop all tracks
+                const videoEl = videoRef.current;
+                if (videoEl && videoEl.srcObject) {
+                    const stream = videoEl.srcObject as MediaStream;
+                    stream.getTracks().forEach(track => {
+                        track.stop();
+                        console.log('Scanner: Track stopped:', track.label);
+                    });
+                    videoEl.srcObject = null;
+                }
+            } catch (e) {
+                console.error('Scanner: Cleanup error:', e);
+            }
         };
     }, [facingMode, onScan, onError]);
 

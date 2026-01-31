@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, ArrowLeft, QrCode, LogOut } from 'lucide-react';
+import { Save, ArrowLeft, QrCode, LogOut, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
@@ -186,6 +186,7 @@ export const MobileLineSetupForm: React.FC = () => {
     toast.error('Could not start scanner. Please grant camera permission and try again.');
     setScanningEmployee(false);
     setScanningMachine(false);
+    setIsProcessing(false);
   };
 
   return (
@@ -228,11 +229,14 @@ export const MobileLineSetupForm: React.FC = () => {
               </label>
               <button
                 type="button"
+                disabled={isProcessing}
                 onClick={() => {
+                  setLastScanned(null);
+                  setIsProcessing(false);
                   setScannerKey(prev => prev + 1);
                   setScanningEmployee(true);
                 }}
-                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium text-base flex items-center justify-center gap-2 transition-colors"
+                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium text-base flex items-center justify-center gap-2 transition-colors"
               >
                 <QrCode className="h-5 w-5" />
                 Scan QR Code
@@ -259,11 +263,14 @@ export const MobileLineSetupForm: React.FC = () => {
               </label>
               <button
                 type="button"
+                disabled={isProcessing}
                 onClick={() => {
+                  setLastScanned(null);
+                  setIsProcessing(false);
                   setScannerKey(prev => prev + 1);
                   setScanningMachine(true);
                 }}
-                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium text-base flex items-center justify-center gap-2 transition-colors"
+                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium text-base flex items-center justify-center gap-2 transition-colors"
               >
                 <QrCode className="h-5 w-5" />
                 Scan QR Code
@@ -316,17 +323,26 @@ export const MobileLineSetupForm: React.FC = () => {
                 <h3 className="text-lg font-semibold">
                   {scanningEmployee ? 'Scan Employee QR' : 'Scan Machine QR'}
                 </h3>
-                <button
-                  onClick={() => {
-                    setScanningEmployee(false);
-                    setScanningMachine(false);
-                    setLastScanned(null);
-                    setIsProcessing(false);
-                  }}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setScannerKey(prev => prev + 1)}
+                    className="p-1 hover:bg-gray-100 rounded-full transition-colors text-blue-600"
+                    title="Refresh Camera"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setScanningEmployee(false);
+                      setScanningMachine(false);
+                      setLastScanned(null);
+                      setIsProcessing(false);
+                    }}
+                    className="text-gray-500 hover:text-gray-700 p-1"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               <div className="w-full relative overflow-hidden rounded-lg bg-black flex items-center justify-center" style={{ minHeight: '300px' }}>
                 <ModernScanner
