@@ -280,8 +280,10 @@ export const MobileProduction: React.FC = () => {
 
     // WAITING STATE
     if (sessionStatus === 'waiting' && !productionData) {
+        // Build correct base URL with subfolder for GitHub Pages
+        const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
         const activationUrl = sessionId
-            ? `${window.location.protocol}//${window.location.host}/mobile-remote-setup?session=${sessionId}`
+            ? `${baseUrl}#/mobile-remote-setup?session=${sessionId}${qrData ? `&machine=${qrData}` : ''}`
             : '';
 
         // Demo Mode Handler

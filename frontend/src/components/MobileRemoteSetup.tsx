@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import { ModernScanner } from './ModernScanner';
 import { Loader2, Camera, CheckCircle, X } from 'lucide-react';
 
 export const MobileRemoteSetup: React.FC = () => {
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const sessionId = searchParams.get('session');
 
@@ -83,6 +85,19 @@ export const MobileRemoteSetup: React.FC = () => {
             if (json.success) {
                 setCompleted(true);
                 toast.success('Setup Connected!');
+
+                // If we have machine and employee, redirect to production dashboard
+                if (scannedText) {
+                    // Note: In this flow, we might not have the employee ID easily, 
+                    // but we can default to EMP-1002 for demo or try to get it.
+                    // Actually, the activation might have returned it? No.
+                    // For now, let's redirect to dynamic machine, and default employee to 'TEMP' 
+                    // or something recognizable if not scanned.
+                    const targetPath = `/mobile/${encodeURIComponent(scannedText)}/EMP-1001`;
+                    setTimeout(() => {
+                        navigate(targetPath);
+                    }, 1500);
+                }
             } else {
                 toast.error(json.message || 'Connection failed');
             }

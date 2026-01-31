@@ -33,8 +33,8 @@ export const MobileLineSetupForm: React.FC = () => {
   React.useEffect(() => {
     if (formData.employee_id && formData.machine_id && !loading) {
       const autoSubmit = async () => {
-        // Give a tiny delay for the user to see the second scan success toast
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Fast auto-submit
+        await new Promise(resolve => setTimeout(resolve, 300));
         handleSubmit({ preventDefault: () => { } } as React.FormEvent);
       };
       autoSubmit();
@@ -127,13 +127,10 @@ export const MobileLineSetupForm: React.FC = () => {
 
       // REMOTE ACTIVATION FLOW
       if (sessionId) {
-        // For Demo/Validation: We need to map the session to a VALID Machine ID in the database.
-        // For this demo, we will map all "Real" sessions to 'MAC-001' (Stitching Line 1)
-        // so that the backend validation passes.
-        const finalMachineId = sessionId === 'DEMO-SESSION' ? 'DEMO-MACHINE-01' : 'MAC-001';
+        const urlParams = new URLSearchParams(formData.machine_id.split('?')[1]);
+        const machineFromUrl = urlParams.get('machine');
+        const finalMachineId = machineFromUrl || (sessionId === 'DEMO-SESSION' ? 'DEMO-MACHINE-01' : 'MAC-001');
 
-        // If it's pure Demo (no backend), we can't really do much unless we are on the same device.
-        // But assuming backend IS up or will be up:
         const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -141,16 +138,22 @@ export const MobileLineSetupForm: React.FC = () => {
             session_id: sessionId,
             machine_id: finalMachineId,
             work_centre_id: 1,
-            emp_code: formData.employee_id // Send the scanned format (e.g., EMP-1001)
+            emp_code: formData.employee_id
           })
         });
 
         const result = await response.json();
 
-        if (result.success || sessionId === 'DEMO-SESSION') { // Allow demo to "succeed" even if backend fails 404
+        if (result.success || sessionId === 'DEMO-SESSION') {
           toast.success(`Session Activated: ${finalMachineId}`);
-          // Stay on Setup Form or Clear? Usually clear for next setup.
-          setFormData(prev => ({ ...prev, machine_id: '', employee_id: '', employee_name: '' }));
+
+          // Redirect the mobile scanner to the production page as well
+          const targetPath = `/mobile/${encodeURIComponent(finalMachineId)}/${encodeURIComponent(formData.employee_id)}`;
+          toast.success('Redirecting to dashboard...', { duration: 1000 });
+
+          setTimeout(() => {
+            navigate(targetPath);
+          }, 800);
           return;
         } else {
           throw new Error(result.message || 'Activation failed');
