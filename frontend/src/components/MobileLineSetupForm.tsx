@@ -287,29 +287,38 @@ export const MobileLineSetupForm: React.FC = () => {
                   ✕
                 </button>
               </div>
-              <div className="w-full aspect-square relative overflow-hidden rounded-lg bg-gray-100">
+              <div className="w-full relative overflow-hidden rounded-lg bg-black flex items-center justify-center" style={{ minHeight: '300px' }}>
                 <QrReader
-                  delay={100}
+                  delay={300}
                   onError={handleScanError}
                   onScan={(data: any) => {
                     if (data && data.text) {
-                      setLastScanned(data.text);
-                      if (scanningEmployee) handleEmployeeScan(data);
-                      else handleMachineScan(data);
+                      const scannedText = data.text.trim();
+                      setLastScanned(scannedText);
+                      if (scanningEmployee) handleEmployeeScan({ text: scannedText });
+                      else handleMachineScan({ text: scannedText });
                     }
                   }}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  constraints={{ video: { facingMode: 'environment' } }}
+                  style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'contain' }}
+                  constraints={{
+                    video: {
+                      facingMode: 'environment',
+                      width: { ideal: 1280 },
+                      height: { ideal: 720 },
+                      aspectRatio: { ideal: 1 }
+                    }
+                  }}
                 />
                 {lastScanned && (
-                  <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 text-white text-[10px] p-1 rounded text-center truncate">
-                    Detected: {lastScanned}
+                  <div className="absolute top-2 left-2 right-2 bg-green-600 bg-opacity-90 text-white text-[10px] p-2 rounded-md text-center font-bold shadow-lg">
+                    LOCKED: {lastScanned}
                   </div>
                 )}
               </div>
               <div className="mt-4 text-center">
-                <p className="text-xs text-gray-500">
-                  Hold the QR code steady in the center of the frame.
+                <p className="text-[11px] text-gray-500 font-medium">
+                  Tip: If it doesn't scan, move your phone slowly <br />
+                  closer or further from the laptop screen.
                 </p>
               </div>
             </div>

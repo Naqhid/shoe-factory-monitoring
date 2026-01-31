@@ -11,7 +11,12 @@ declare module 'react-qr-scanner' {
     constraints?: {
       video?: {
         facingMode?: 'user' | 'environment';
+        width?: number | { ideal?: number; min?: number; max?: number };
+        height?: number | { ideal?: number; min?: number; max?: number };
+        aspectRatio?: number | { ideal?: number; min?: number; max?: number };
+        [key: string]: any;
       };
+      audio?: boolean;
     };
   }
 
