@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { QrCode, Play, Square, CheckCircle, Loader2, X } from 'lucide-react';
+import { QrCode, Play, Square, CheckCircle, Loader2, X, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -45,6 +45,14 @@ export const MobileProduction: React.FC = () => {
         ? 'http://localhost:3001'
         : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
+    // Parse URL params at component level for rendering access
+    const pathParts = location.pathname.split('/');
+    const queryParams = new URLSearchParams(location.search);
+    let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[2]) : null;
+    let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[3]) : null;
+    if (!urlMachineId) urlMachineId = queryParams.get('machine');
+    if (!urlEmpId) urlEmpId = queryParams.get('employee');
+
     // Update current time every second
     useEffect(() => {
         const timer = setInterval(() => {
@@ -55,18 +63,6 @@ export const MobileProduction: React.FC = () => {
 
     // Session Initialization and Polling
     useEffect(() => {
-        // Check if we have URL params (Direct Setup)
-        const pathParts = location.pathname.split('/');
-        const queryParams = new URLSearchParams(location.search);
-
-        // Try URL Path: /mobile/MAC-01/EMP-01
-        let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[2]) : null;
-        let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[3]) : null;
-
-        // Try Query Params: ?machine=MAC-01&employee=EMP-01
-        if (!urlMachineId) urlMachineId = queryParams.get('machine');
-        if (!urlEmpId) urlEmpId = queryParams.get('employee');
-
         if (urlMachineId && urlEmpId) {
             // ... (keep existing implementation)
             const resolveAndInitialize = async () => {
