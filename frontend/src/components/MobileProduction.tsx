@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { QrCode, Play, Square, CheckCircle, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
@@ -18,9 +18,14 @@ interface ProductionData {
     button_status: number; // 1=Start, 2=Finish, 3=Stop
     target_pairs?: number;
     smv_per_pair?: number;
+    target_pairs_per_tray?: number;
+    tray_count?: number;
 }
 
 export const MobileProduction: React.FC = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
     // Session State
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [sessionStatus, setSessionStatus] = useState<'waiting' | 'active'>('waiting');
@@ -48,8 +53,6 @@ export const MobileProduction: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    const location = useLocation();
-
     // Session Initialization and Polling
     useEffect(() => {
         // Check if we have URL params (Direct Setup)
@@ -65,20 +68,20 @@ export const MobileProduction: React.FC = () => {
         if (!urlEmpId) urlEmpId = queryParams.get('employee');
 
         if (urlMachineId && urlEmpId) {
+            // ... (keep existing implementation)
             const resolveAndInitialize = async () => {
                 setLoading(true);
                 try {
-                    // Fetch Master Data to Resolve Codes
                     const [empRes, macRes] = await Promise.all([
                         fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
                         fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
                     ]);
 
                     const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
-                    const machine = macRes.data?.find((m: any) => m.machine_id === urlMachineId || m.code === urlMachineId);
+                    const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
 
                     if (!employee) {
-                        toast.error(`Employee ${urlEmpId} not found in database`);
+                        toast.error(`Employee ${urlEmpId} not found`);
                         return;
                     }
 
@@ -87,13 +90,8 @@ export const MobileProduction: React.FC = () => {
                     setEmployeeName(employee.name);
                     setMachineName(machine?.name || urlMachineId);
 
-                    initializeProduction(
-                        urlMachineId,
-                        employee.id,
-                        machine?.work_centre_id || 1
-                    );
+                    initializeProduction(urlMachineId, employee.id, machine?.work_centre_id || 1);
                 } catch (e) {
-                    console.error('Resolution failed', e);
                     toast.error('Failed to load setup data');
                 } finally {
                     setLoading(false);
@@ -101,6 +99,23 @@ export const MobileProduction: React.FC = () => {
             };
             resolveAndInitialize();
             return;
+        }
+
+        // AUTO-DETECTION MODE: If machine_id is defined (e.g. assigned to this screen) 
+        // but no employee yet, poll the server to see if someone activated it remotely
+        if (urlMachineId && !urlEmpId) {
+            const syncInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
+                    const json = await res.json();
+                    if (json.success && json.data.emp_code) {
+                        clearInterval(syncInterval);
+                        toast.success(`Sync: ${json.data.emp_name} joined`);
+                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(json.data.emp_code)}`);
+                    }
+                } catch (e) { }
+            }, 3000);
+            return () => clearInterval(syncInterval);
         }
 
         // Create session on mount (Legacy / QR Connect flow)
@@ -116,7 +131,7 @@ export const MobileProduction: React.FC = () => {
             }
         };
         initSession();
-    }, [location.pathname, API_BASE]);
+    }, [location.pathname, API_BASE, navigate]);
 
     useEffect(() => {
         if (!sessionId || sessionStatus === 'active') return;
@@ -125,20 +140,25 @@ export const MobileProduction: React.FC = () => {
             try {
                 const res = await fetch(`${API_BASE}/api/mobile-session/${sessionId}`);
                 const json = await res.json();
+
                 if (json.success && json.data.status === 'active') {
+                    // STOP POLLING
                     setSessionStatus('active');
-                    // Initialize Dashboard with session data
-                    const { machine_id, emp_id, work_centre_id } = json.data;
-                    if (machine_id) {
-                        initializeProduction(machine_id, emp_id);
-                        setQrData(machine_id);
-                        toast.success(`Connected: ${machine_id}`);
+
+                    const { machine_id, emp_code } = json.data;
+                    if (machine_id && emp_code) {
+                        toast.success('Login Successful! Redirecting...', { duration: 2000 });
+
+                        setTimeout(() => {
+                            // Navigate the laptop view itself
+                            navigate(`/mobile/${encodeURIComponent(machine_id)}/${encodeURIComponent(emp_code)}`);
+                        }, 500);
                     }
                 }
             } catch (e) { console.error('Polling error', e); }
-        }, 2000);
+        }, 1500);
         return () => clearInterval(interval);
-    }, [sessionId, sessionStatus]);
+    }, [sessionId, sessionStatus, navigate, API_BASE]);
 
 
     const initializeProduction = async (machineId: string, empId: number, workCentreId: number = 1) => {
@@ -156,7 +176,9 @@ export const MobileProduction: React.FC = () => {
                 actual_time: 10,
                 button_status: 1,
                 target_pairs: 12,
-                smv_per_pair: 100
+                smv_per_pair: 100,
+                target_pairs_per_tray: 0,
+                tray_count: 0
             };
 
             const response = await fetch(`${API_BASE}/api/mobile-production`, {
@@ -281,9 +303,9 @@ export const MobileProduction: React.FC = () => {
     // WAITING STATE
     if (sessionStatus === 'waiting' && !productionData) {
         // Build correct base URL with subfolder for GitHub Pages
-        const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
+        const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
         const activationUrl = sessionId
-            ? `${baseUrl}#/mobile-remote-setup?session=${sessionId}${qrData ? `&machine=${qrData}` : ''}`
+            ? `${baseUrl}/mobile-remote-setup?session=${sessionId}${qrData ? `&machine=${qrData}` : ''}`
             : '';
 
         // Demo Mode Handler
@@ -466,15 +488,21 @@ export const MobileProduction: React.FC = () => {
                                     <p className="text-3xl font-bold text-green-600">{productionData.actual_time}</p>
                                 </div>
 
-                                {/* Target Pairs */}
+                                {/* Target Pairs Per Tray */}
                                 <div className="bg-purple-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Target Pairs</p>
-                                    <p className="text-3xl font-bold text-purple-600">{productionData.target_pairs || 12}</p>
+                                    <p className="text-sm text-gray-600 mb-1">Pairs/Tray</p>
+                                    <p className="text-3xl font-bold text-purple-600">{productionData.target_pairs_per_tray || 0}</p>
+                                </div>
+
+                                {/* Tray Count */}
+                                <div className="bg-pink-50 rounded-lg p-4 text-center">
+                                    <p className="text-sm text-gray-600 mb-1">Total Trays</p>
+                                    <p className="text-3xl font-bold text-pink-600">{productionData.tray_count || Math.floor(productionData.output_pairs / (productionData.target_pairs_per_tray || 1))}</p>
                                 </div>
 
                                 {/* Total Output */}
-                                <div className="bg-orange-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Total Output</p>
+                                <div className="bg-orange-50 rounded-lg p-4 text-center col-span-2">
+                                    <p className="text-sm text-gray-600 mb-1">Total Output (Pairs)</p>
                                     <p className="text-3xl font-bold text-orange-600">{productionData.output_pairs}</p>
                                 </div>
                             </div>

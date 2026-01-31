@@ -105,11 +105,13 @@ app.delete('/api/user-rights/user/:userId', userRightsController.deleteByUserId)
 app.post('/api/mobile-session/init', mobileSessionController.createSession);
 app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionStatus);
 app.post('/api/mobile-session/activate', mobileSessionController.activateSession);
+app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.findActiveSession);
 
 // Mobile production routes
 app.get('/api/mobile-production', mobileProductionController.getAll);
 app.get('/api/mobile-production/:id', mobileProductionController.getById);
 app.get('/api/mobile-production/machine/:machineId/date/:date', mobileProductionController.getByMachineAndDate);
+app.get('/api/mobile-production/live-status/:machineId', mobileProductionController.getLiveMachineStatus);
 app.post('/api/mobile-production', mobileProductionController.create);
 app.put('/api/mobile-production/:id', mobileProductionController.update);
 app.patch('/api/mobile-production/:id/status', mobileProductionController.updateStatus);

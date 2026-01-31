@@ -82,16 +82,18 @@ exports.create = async (req, res, next) => {
       idle_stop_time,
       idle_start_time,
       actual_time,
-      button_status
+      button_status,
+      target_pairs_per_tray,
+      tray_count
     } = req.body;
 
     const [result] = await db.query(
       `INSERT INTO prod_data 
        (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins, 
-        start_time, finish_time, idle_stop_time, idle_start_time, actual_time, button_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        start_time, finish_time, idle_stop_time, idle_start_time, actual_time, button_status, target_pairs_per_tray, tray_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [prod_date, work_centre_id, machine_id, emp_id, output_pairs || 0, target_mins || 0,
-        start_time, finish_time, idle_stop_time || 0, idle_start_time || 0, actual_time || 0, button_status || 1]
+        start_time, finish_time, idle_stop_time || 0, idle_start_time || 0, actual_time || 0, button_status || 1, target_pairs_per_tray || 0, tray_count || 0]
     );
 
     res.status(201).json({
@@ -226,10 +228,10 @@ exports.refreshPivotData = async (req, res, next) => {
     // Clear existing pivot data
     await db.query('TRUNCATE TABLE pivot_data');
 
-    // Aggregate data from prod_data
+    // Aggregate data from prod_data including tray counts
     await db.query(`
       INSERT INTO pivot_data 
-        (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins, actual_time, cum_avg_time, button_status)
+        (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins, actual_time, cum_avg_time, button_status, target_pairs_per_tray)
       SELECT 
         prod_date,
         work_centre_id,
@@ -238,8 +240,9 @@ exports.refreshPivotData = async (req, res, next) => {
         SUM(output_pairs) as output_pairs,
         SUM(target_mins) as target_mins,
         SUM(actual_time) as actual_time,
-        FLOOR(SUM(actual_time) / 12) as cum_avg_time,
-        MAX(button_status) as button_status
+        IF(SUM(output_pairs) > 0, FLOOR(SUM(actual_time) / SUM(output_pairs)), 0) as cum_avg_time,
+        MAX(button_status) as button_status,
+        MAX(target_pairs_per_tray) as target_pairs_per_tray
       FROM prod_data
       GROUP BY prod_date, work_centre_id, machine_id, emp_id
     `);
@@ -247,6 +250,31 @@ exports.refreshPivotData = async (req, res, next) => {
     res.json({ success: true, message: 'Pivot data refreshed successfully' });
   } catch (error) {
     logger.error('Error refreshing pivot data:', error);
+    next(error);
+  }
+};
+
+// Get current live status for a specific machine (Sync every 5s)
+exports.getLiveMachineStatus = async (req, res, next) => {
+  try {
+    const { machineId } = req.params;
+    const today = new Date().toISOString().split('T')[0];
+
+    const [rows] = await db.query(`
+      SELECT pd.*, e.name as emp_name, e.code as emp_code
+      FROM prod_data pd
+      JOIN employees e ON pd.emp_id = e.id
+      WHERE pd.machine_id = ? AND pd.prod_date = ?
+      ORDER BY pd.created_at DESC LIMIT 1
+    `, [machineId, today]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'No live data for this machine today' });
+    }
+
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    logger.error('Error fetching live machine status:', error);
     next(error);
   }
 };

@@ -20,7 +20,8 @@ interface LineItem {
   color_name: string;
   work_centre_id: string;
   total_target_per_day: string;
-  target_pairs_per_day: string;
+  target_pairs_per_tray: string;
+  tray_count: string;
   man_hours_minutes: string;
   smv_per_pair: string;
 }
@@ -37,7 +38,8 @@ const emptyLine = (): LineItem => ({
   color_name: '',
   work_centre_id: '',
   total_target_per_day: '',
-  target_pairs_per_day: '',
+  target_pairs_per_tray: '',
+  tray_count: '',
   man_hours_minutes: '',
   smv_per_pair: '',
 });
@@ -148,7 +150,7 @@ export const ProductionPlanningForm: React.FC = () => {
           headers.forEach((h, i) => { o[h] = v[i]?.trim(); });
           return o;
         })
-        .filter((r) => r.plan_date && r.style_code && r.work_centre_id && r.total_target_per_day && r.target_pairs_per_day && r.man_hours_minutes && r.smv_per_pair);
+        .filter((r) => r.plan_date && r.style_code && r.work_centre_id && r.total_target_per_day && r.target_pairs_per_tray && r.man_hours_minutes && r.smv_per_pair);
       setBulkData(data);
       setBulkMode(true);
     };
@@ -172,7 +174,8 @@ export const ProductionPlanningForm: React.FC = () => {
           color_id: null,
           work_centre_id: parseInt(row.work_centre_id),
           total_target_per_day: parseInt(row.total_target_per_day),
-          target_pairs_per_day: parseInt(row.target_pairs_per_day),
+          target_pairs_per_tray: parseInt(row.target_pairs_per_tray),
+          tray_count: parseInt(row.tray_count || '0'),
           man_hours_minutes: parseInt(row.man_hours_minutes),
           smv_per_pair: parseFloat(row.smv_per_pair || '0'),
         };
@@ -200,7 +203,7 @@ export const ProductionPlanningForm: React.FC = () => {
     const toSave = lines.filter(
       (l) =>
         l.style_id && l.customer_id && l.work_centre_id && l.total_target_per_day &&
-        l.target_pairs_per_day && l.man_hours_minutes && l.smv_per_pair
+        l.target_pairs_per_tray && l.man_hours_minutes && l.smv_per_pair
     );
     if (toSave.length === 0) {
       toast.error('Add at least one line with Style, Work Centre, targets, and SMV. Customer/Group/Leather/Color come from routing when Style is selected.');
@@ -220,7 +223,8 @@ export const ProductionPlanningForm: React.FC = () => {
           color_id: l.color_id ? parseInt(l.color_id) : null,
           work_centre_id: parseInt(l.work_centre_id),
           total_target_per_day: parseInt(l.total_target_per_day),
-          target_pairs_per_day: parseInt(l.target_pairs_per_day),
+          target_pairs_per_tray: parseInt(l.target_pairs_per_tray),
+          tray_count: parseInt(l.tray_count || '0'),
           man_hours_minutes: parseInt(l.man_hours_minutes),
           smv_per_pair: parseFloat(l.smv_per_pair),
         };
@@ -250,7 +254,7 @@ export const ProductionPlanningForm: React.FC = () => {
         <h2 className="text-lg font-semibold mb-4 text-gray-800">Bulk Upload</h2>
         <div className="flex items-center gap-4 flex-wrap">
           <input type="file" accept=".csv" onChange={handleFileUpload} className="border border-gray-300 rounded-md px-3 py-2" />
-          <span className="text-sm text-gray-600">CSV: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair</span>
+          <span className="text-sm text-gray-600">CSV: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_tray, man_hours_minutes, smv_per_pair</span>
         </div>
         {bulkData.length > 0 && (
           <div className="mt-4 flex items-center gap-2">
@@ -296,9 +300,9 @@ export const ProductionPlanningForm: React.FC = () => {
                   <th className="text-left py-2 px-2 font-medium text-gray-700">Leather</th>
                   <th className="text-left py-2 px-2 font-medium text-gray-700">Color</th>
                   <th className="text-left py-2 px-2 font-medium text-gray-700">Group</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Work Centre</th>
                   <th className="text-left py-2 px-2 font-medium text-gray-700">Total Target</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Pairs/Day</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Pairs/Tray</th>
+                  <th className="text-left py-2 px-2 font-medium text-gray-700">Tray Count</th>
                   <th className="text-left py-2 px-2 font-medium text-gray-700">Man Hrs (min)</th>
                   <th className="text-left py-2 px-2 font-medium text-gray-700">SMV</th>
                   <th className="w-10" />
@@ -347,7 +351,10 @@ export const ProductionPlanningForm: React.FC = () => {
                       <input type="number" value={line.total_target_per_day} onChange={(e) => updateLine(idx, { total_target_per_day: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
                     </td>
                     <td className="py-1 px-2">
-                      <input type="number" value={line.target_pairs_per_day} onChange={(e) => updateLine(idx, { target_pairs_per_day: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                      <input type="number" value={line.target_pairs_per_tray} onChange={(e) => updateLine(idx, { target_pairs_per_tray: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                    </td>
+                    <td className="py-1 px-2">
+                      <input type="number" value={line.tray_count} onChange={(e) => updateLine(idx, { tray_count: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
                     </td>
                     <td className="py-1 px-2">
                       <input type="number" value={line.man_hours_minutes} onChange={(e) => updateLine(idx, { man_hours_minutes: e.target.value })} className="w-24 border border-gray-300 rounded px-2 py-1" />

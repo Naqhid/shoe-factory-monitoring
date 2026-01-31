@@ -52,6 +52,26 @@ const mobileSessionController = {
             }
 
             const session = rows[0];
+
+            // If active, resolve names for the mobile app
+            if (session.status === 'active') {
+                const [empRows] = await connection.execute(
+                    'SELECT code, name FROM employees WHERE id = ?',
+                    [session.emp_id]
+                );
+                if (empRows.length > 0) {
+                    session.emp_code = empRows[0].code;
+                    session.emp_name = empRows[0].name;
+                }
+                const [macRows] = await connection.execute(
+                    'SELECT name FROM machine_centres WHERE machine_id = ? OR code = ?',
+                    [session.machine_id, session.machine_id]
+                );
+                if (macRows.length > 0) {
+                    session.machine_name = macRows[0].name;
+                }
+            }
+
             res.json({
                 success: true,
                 data: session
@@ -120,6 +140,39 @@ const mobileSessionController = {
             res.json({
                 success: true,
                 message: 'Session activated successfully'
+            });
+        } catch (error) {
+            next(error);
+        } finally {
+            if (connection) await connection.end();
+        }
+    },
+
+    // 4. Find active session for machine (called by Mobile Display to autodetect its own URL)
+    findActiveSession: async (req, res, next) => {
+        let connection;
+        try {
+            connection = await mysql.createConnection(dbConfig);
+            const { machine_id } = req.params;
+
+            // Only find sessions activated in the last 2 hours for security/relevance
+            const [rows] = await connection.execute(
+                `SELECT ms.*, e.code as emp_code, e.name as emp_name 
+                 FROM mobile_sessions ms
+                 JOIN employees e ON ms.emp_id = e.id
+                 WHERE ms.machine_id = ? AND ms.status = 'active'
+                 AND ms.activated_at >= NOW() - INTERVAL 2 HOUR
+                 ORDER BY ms.activated_at DESC LIMIT 1`,
+                [machine_id]
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({ success: false, message: 'No active session for this machine' });
+            }
+
+            res.json({
+                success: true,
+                data: rows[0]
             });
         } catch (error) {
             next(error);
