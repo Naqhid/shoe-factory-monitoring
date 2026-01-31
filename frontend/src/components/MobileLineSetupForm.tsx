@@ -20,6 +20,7 @@ export const MobileLineSetupForm: React.FC = () => {
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [lastScanned, setLastScanned] = React.useState<string | null>(null);
   const [showTestHelpers, setShowTestHelpers] = React.useState(false);
+  const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
 
   const [formData, setFormData] = React.useState<FormData>({
     employee_id: '',
@@ -227,7 +228,10 @@ export const MobileLineSetupForm: React.FC = () => {
               </label>
               <button
                 type="button"
-                onClick={() => setScanningEmployee(true)}
+                onClick={() => {
+                  setScannerKey(prev => prev + 1);
+                  setScanningEmployee(true);
+                }}
                 className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium text-base flex items-center justify-center gap-2 transition-colors"
               >
                 <QrCode className="h-5 w-5" />
@@ -255,7 +259,10 @@ export const MobileLineSetupForm: React.FC = () => {
               </label>
               <button
                 type="button"
-                onClick={() => setScanningMachine(true)}
+                onClick={() => {
+                  setScannerKey(prev => prev + 1);
+                  setScanningMachine(true);
+                }}
                 className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium text-base flex items-center justify-center gap-2 transition-colors"
               >
                 <QrCode className="h-5 w-5" />
@@ -323,20 +330,27 @@ export const MobileLineSetupForm: React.FC = () => {
               </div>
               <div className="w-full relative overflow-hidden rounded-lg bg-black flex items-center justify-center" style={{ minHeight: '300px' }}>
                 <QrReader
-                  delay={500}
+                  key={scannerKey}
+                  delay={100}
                   onError={handleScanError}
                   onScan={(data: any) => {
-                    if (data && data.text && !isProcessing) {
-                      const scannedText = data.text.trim();
-                      setLastScanned(scannedText);
-                      if (scanningEmployee) handleEmployeeScan({ text: scannedText });
-                      else handleMachineScan({ text: scannedText });
+                    if (data && !isProcessing) {
+                      const scannedText = typeof data === 'object' ? data.text : data;
+                      if (scannedText) {
+                        const trimmed = scannedText.trim();
+                        setLastScanned(trimmed);
+                        if (scanningEmployee) handleEmployeeScan({ text: trimmed });
+                        else handleMachineScan({ text: trimmed });
+                      }
                     }
                   }}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  facingMode="environment"
                   constraints={{
                     video: {
-                      facingMode: 'environment'
+                      facingMode: 'environment',
+                      width: { ideal: 1280 },
+                      height: { ideal: 720 }
                     }
                   }}
                 />
