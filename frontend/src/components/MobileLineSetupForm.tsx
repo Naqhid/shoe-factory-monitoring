@@ -2,8 +2,8 @@ import React from 'react';
 import { Save, ArrowLeft, QrCode, LogOut } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import QrReader from 'react-qr-scanner';
 import { QRCodeSVG } from 'qrcode.react';
+import { ModernScanner } from './ModernScanner';
 
 interface FormData {
   employee_id: string;
@@ -329,30 +329,17 @@ export const MobileLineSetupForm: React.FC = () => {
                 </button>
               </div>
               <div className="w-full relative overflow-hidden rounded-lg bg-black flex items-center justify-center" style={{ minHeight: '300px' }}>
-                <QrReader
-                  key={scannerKey}
-                  delay={100}
+                <ModernScanner
+                  onScan={(text: string) => {
+                    if (text && !isProcessing) {
+                      const trimmed = text.trim();
+                      setLastScanned(trimmed);
+                      if (scanningEmployee) handleEmployeeScan({ text: trimmed });
+                      else handleMachineScan({ text: trimmed });
+                    }
+                  }}
                   onError={handleScanError}
-                  onScan={(data: any) => {
-                    if (data && !isProcessing) {
-                      const scannedText = typeof data === 'object' ? data.text : data;
-                      if (scannedText) {
-                        const trimmed = scannedText.trim();
-                        setLastScanned(trimmed);
-                        if (scanningEmployee) handleEmployeeScan({ text: trimmed });
-                        else handleMachineScan({ text: trimmed });
-                      }
-                    }
-                  }}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                   facingMode="environment"
-                  constraints={{
-                    video: {
-                      facingMode: 'environment',
-                      width: { ideal: 1280 },
-                      height: { ideal: 720 }
-                    }
-                  }}
                 />
                 {lastScanned && (
                   <div className="absolute top-2 left-2 right-2 bg-green-600 bg-opacity-90 text-white text-[10px] p-2 rounded-md text-center font-bold shadow-lg">

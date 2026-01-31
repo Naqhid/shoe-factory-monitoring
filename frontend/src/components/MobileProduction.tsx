@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { QrCode, Play, Square, CheckCircle, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import QrReader from 'react-qr-scanner';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface ProductionData {

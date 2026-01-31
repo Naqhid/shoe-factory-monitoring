@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import QrReader from 'react-qr-scanner';
 import toast from 'react-hot-toast';
+import { ModernScanner } from './ModernScanner';
 import { Loader2, Camera, CheckCircle, X } from 'lucide-react';
 
 export const MobileRemoteSetup: React.FC = () => {
@@ -145,14 +145,15 @@ export const MobileRemoteSetup: React.FC = () => {
                     ) : (
                         <div className="space-y-4">
                             <div className="aspect-square bg-black overflow-hidden relative rounded-lg">
-                                <QrReader
-                                    delay={300}
+                                <ModernScanner
+                                    onScan={(text) => {
+                                        if (text) {
+                                            handleScan({ text });
+                                        }
+                                    }}
                                     onError={handleScanError}
-                                    onScan={handleScan}
-                                    style={{ width: '100%' }}
-                                    constraints={{ video: { facingMode: 'environment' } }}
+                                    facingMode="environment"
                                 />
-                                <div className="absolute inset-0 border-2 border-green-500 opacity-50 pointer-events-none"></div>
                             </div>
                             <button
                                 onClick={() => setScanning(false)}
