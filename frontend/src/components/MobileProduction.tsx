@@ -95,7 +95,7 @@ export const MobileProduction: React.FC = () => {
                     setEmployeeName(employee.name);
                     setMachineName(machine?.name || urlMachineId);
 
-                    initializeProduction(urlMachineId, employee.id, machine?.work_centre_id || 1);
+                    initializeProduction(urlMachineId, urlEmpId, machine?.work_centre_id || 1);
                 } catch (e) {
                     toast.error('Failed to load setup data');
                 } finally {
@@ -114,10 +114,10 @@ export const MobileProduction: React.FC = () => {
                     const sessionRes = await fetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
                     const sessionJson = await sessionRes.json();
 
-                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_code) {
+                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_id) {
                         clearInterval(syncInterval);
                         toast.success(`Session Active: ${sessionJson.data.emp_name}`);
-                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_code)}`);
+                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_id)}`);
                     }
                 } catch (e) { }
             }, 1000); // 1 second polling
@@ -126,9 +126,19 @@ export const MobileProduction: React.FC = () => {
     }, [location.pathname, API_BASE, navigate, urlMachineId, urlEmpId]);
 
 
-    const initializeProduction = async (machineId: string, empId: number, workCentreId: number = 1) => {
+    const initializeProduction = async (machineId: string, empCode: string, workCentreId: number = 1) => {
         setLoading(true);
         try {
+            // Look up the employee ID from the emp_id
+            const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empId}`);
+            const empResult = await empRes.json();
+            
+            if (!empResult.success || !empResult.data) {
+                toast.error(`Employee ${empCode} not found`);
+                return;
+            }
+            
+            const empId = empResult.data.id;
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
                 work_centre_id: workCentreId,

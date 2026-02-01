@@ -63,7 +63,7 @@ export const MobileRemoteSetup: React.FC = () => {
             // For the full workflow ([1] Scan Machine + [2] Scan Emp), 
             // the system now uses MobileLineSetupForm via the updated QR URL.
             // We'll proceed with a default employee for this basic connector.
-            const empCodeForRemote = 'EMP-1001';
+            const empIdForRemote = 'EMP-1001';
 
             // Call activate
             const res = await fetch(`${API_BASE}/api/mobile-session/activate`, {
@@ -73,7 +73,7 @@ export const MobileRemoteSetup: React.FC = () => {
                     session_id: sessionId,
                     machine_id: scannedText,
                     work_centre_id: 1,
-                    emp_id: empCodeForRemote
+                    emp_id: empIdForRemote
                 })
             });
 
@@ -85,7 +85,7 @@ export const MobileRemoteSetup: React.FC = () => {
                 // If we have machine and employee, redirect to production dashboard
                 // Redirect the mobile scanner to the production page as well
                 if (scannedText) {
-                    const targetPath = `/mobile/${encodeURIComponent(scannedText)}/${encodeURIComponent(empCodeForRemote)}`;
+                    const targetPath = `/mobile/${encodeURIComponent(scannedText)}/${encodeURIComponent(empIdForRemote)}`;
                     setTimeout(() => {
                         navigate(targetPath);
                     }, 1000);
