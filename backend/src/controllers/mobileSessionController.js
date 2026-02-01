@@ -69,25 +69,23 @@ const mobileSessionController = {
     // 3. Activate session (Now machine-focused, session_id is secondary)
     activateSession: async (req, res, next) => {
         try {
-            const { machine_id, work_centre_id, emp_id, emp_code } = req.body;
+            const { machine_id, work_centre_id, emp_id } = req.body;
 
-            if (!machine_id || (!emp_id && !emp_code)) {
+            if (!machine_id || !emp_id) {
                 return res.status(400).json({ success: false, message: 'Missing machine or employee info' });
             }
 
-            // 1. Resolve Employee
-            let finalEmpId = emp_id;
-            if (emp_code) {
-                const [empRows] = await pool.execute(
-                    'SELECT id FROM employees WHERE code = ?',
-                    [emp_code]
-                );
-                if (empRows.length > 0) {
-                    finalEmpId = empRows[0].id;
-                } else if (!finalEmpId) {
-                    return res.status(400).json({ success: false, message: `Employee code ${emp_code} not found` });
-                }
+            // 1. Resolve Employee - treat emp_id as employee code
+            const [empRows] = await pool.execute(
+                'SELECT id FROM employees WHERE code = ?',
+                [emp_id]
+            );
+            
+            if (empRows.length === 0) {
+                return res.status(400).json({ success: false, message: `Employee code ${emp_id} not found` });
             }
+            
+            const finalEmpId = empRows[0].id;
 
             // 2. Resolve Machine
             let finalWorkCentreId = work_centre_id;
@@ -114,7 +112,7 @@ const mobileSessionController = {
                  emp_id = VALUES(emp_id), 
                  status = 'active', 
                  activated_at = NOW()`,
-                [finalSessionId, machine_id, finalWorkCentreId || 1, finalEmpId || 1]
+                [finalSessionId, machine_id, finalWorkCentreId || 1, finalEmpId]
             );
 
             res.json({
