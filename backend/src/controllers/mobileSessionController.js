@@ -155,6 +155,31 @@ const mobileSessionController = {
         } catch (error) {
             next(error);
         }
+    },
+
+    // 5. Find waiting session for machine (called by Mobile Phone if it scanned a machine but has no session ID)
+    findWaitingSession: async (req, res, next) => {
+        try {
+            const { machine_id } = req.params;
+
+            const [rows] = await pool.execute(
+                `SELECT * FROM mobile_sessions 
+                 WHERE machine_id = ? AND status = 'waiting'
+                 ORDER BY created_at DESC LIMIT 1`,
+                [machine_id]
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({ success: false, message: 'No waiting session for this machine' });
+            }
+
+            res.json({
+                success: true,
+                data: rows[0]
+            });
+        } catch (error) {
+            next(error);
+        }
     }
 };
 

@@ -129,7 +129,11 @@ export const MobileProduction: React.FC = () => {
         // Create session on mount (Legacy / QR Connect flow)
         const initSession = async () => {
             try {
-                const res = await fetch(`${API_BASE}/api/mobile-session/init`, { method: 'POST' });
+                const res = await fetch(`${API_BASE}/api/mobile-session/init`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ machine_id: urlMachineId })
+                });
                 const data = await res.json();
                 if (data.success) {
                     setSessionId(data.data.session_id);
@@ -139,7 +143,7 @@ export const MobileProduction: React.FC = () => {
             }
         };
         initSession();
-    }, [location.pathname, API_BASE, navigate]);
+    }, [location.pathname, API_BASE, navigate, urlMachineId]);
 
     useEffect(() => {
         if (!sessionId || sessionStatus === 'active') return;

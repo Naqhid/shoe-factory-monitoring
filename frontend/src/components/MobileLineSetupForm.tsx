@@ -175,7 +175,28 @@ export const MobileLineSetupForm: React.FC = () => {
         const params = new URLSearchParams(formData.machine_id.split('?')[1]);
         currentSessionId = params.get('session') || '';
       } catch (e) { }
-    } else if (!currentSessionId && formData.machine_id === 'DEMO-SESSION') {
+    }
+
+    const API_BASE = window.location.hostname === 'localhost'
+      ? 'http://localhost:3001'
+      : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
+
+    // AUTO-DETECTION: If still no session ID, search for any waiting session for this machine
+    if (!currentSessionId && formData.machine_id) {
+      try {
+        console.log('Searching for waiting session for machine:', formData.machine_id);
+        const res = await fetch(`${API_BASE}/api/mobile-session/waiting-for/${formData.machine_id}`);
+        const data = await res.json();
+        if (data.success && data.data.session_id) {
+          currentSessionId = data.data.session_id;
+          console.log('Found waiting session:', currentSessionId);
+        }
+      } catch (e) {
+        console.warn('Auto-detection of session failed', e);
+      }
+    }
+
+    if (!currentSessionId && formData.machine_id === 'DEMO-SESSION') {
       currentSessionId = 'DEMO-SESSION';
     }
 
