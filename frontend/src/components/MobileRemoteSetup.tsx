@@ -73,7 +73,7 @@ export const MobileRemoteSetup: React.FC = () => {
                     session_id: sessionId,
                     machine_id: scannedText,
                     work_centre_id: 1,
-                    emp_code: empCodeForRemote
+                    emp_id: empCodeForRemote
                 })
             });
 
