@@ -78,7 +78,7 @@ function App() {
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
-  const isDashboard = activeMenu === 'overview';
+  const isDashboard = isAuthenticated && activeMenu === 'overview';
   const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
 
   const {
