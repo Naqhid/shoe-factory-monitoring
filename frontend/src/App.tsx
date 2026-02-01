@@ -78,6 +78,7 @@ function App() {
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
+  const isDashboard = activeMenu === 'overview';
   const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
 
   const {
@@ -86,17 +87,17 @@ function App() {
     error: machinesError,
     refetch: refetchMachines,
     dataUpdatedAt
-  } = useMachineStatus(!isMobile);
+  } = useMachineStatus(isDashboard);
 
   const {
     data: efficiencyData = [],
     isLoading: efficiencyLoading
-  } = useEfficiencyReport(selectedDate, !isMobile);
+  } = useEfficiencyReport(selectedDate, isDashboard);
 
   const {
     data: overallDailyData,
     isLoading: overallLoading
-  } = useOverallDailyData(selectedDate, !isMobile);
+  } = useOverallDailyData(selectedDate, isDashboard);
 
   const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:3001'
