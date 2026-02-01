@@ -10,6 +10,8 @@ interface FormData {
   employee_db_id?: number | string; // The numeric PK
   employee_name: string;
   machine_id: string;
+  machine_name?: string;
+  work_centre_id?: number;
   login_date_time: string;
 }
 
@@ -90,6 +92,7 @@ export const MobileLineSetupForm: React.FC = () => {
             employee_id: empId,
             employee_db_id: empDbId,
             employee_name: empName,
+            work_centre_id: result.data.work_centre_id
           }));
           toast.success(`Employee detected: ${empName}`, { id: loadingToast });
           if (navigator.vibrate) navigator.vibrate(100);
@@ -137,7 +140,8 @@ export const MobileLineSetupForm: React.FC = () => {
           setFormData(prev => ({
             ...prev,
             machine_id: machId,
-            // We can temporarily store the name in the component state if we want to show it
+            machine_name: result.data.name,
+            work_centre_id: result.data.work_centre_id || prev.work_centre_id
           }));
           toast.success(`Machine detected: ${result.data.name || machId}`, { id: loadingToast });
         } else {
@@ -201,7 +205,7 @@ export const MobileLineSetupForm: React.FC = () => {
           machine_id: finalMachineId,
           emp_id: formData.employee_db_id ? Number(formData.employee_db_id) : null,
           emp_code: formData.employee_id,
-          work_centre_id: 1,
+          work_centre_id: formData.work_centre_id || 1,
           status: 'active'
         };
 
@@ -366,7 +370,7 @@ export const MobileLineSetupForm: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formData.machine_id}
+                value={formData.machine_name || formData.machine_id}
                 readOnly
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base bg-gray-100"
               />

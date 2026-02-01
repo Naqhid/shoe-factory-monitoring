@@ -44,7 +44,29 @@ class MasterController {
   async getById(req, res) {
     try {
       const { table, id } = req.params;
-      const [rows] = await db.execute(`SELECT * FROM ${table} WHERE id = ?`, [id]);
+      let query;
+
+      if (table === 'machine_centres') {
+        query = `SELECT mc.*, wc.name as work_centre_name 
+                 FROM machine_centres mc 
+                 LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
+                 WHERE mc.id = ?`;
+      } else if (table === 'users') {
+        query = `SELECT u.*, wc.name as work_centre_name 
+                 FROM users u 
+                 LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
+                 WHERE u.id = ?`;
+      } else if (table === 'employees') {
+        query = `SELECT e.*, wc.name as work_centre_name, mc.name as machine_centre_name 
+                 FROM employees e 
+                 LEFT JOIN work_centres wc ON e.work_centre_id = wc.id 
+                 LEFT JOIN machine_centres mc ON e.machine_centre_id = mc.id 
+                 WHERE e.id = ?`;
+      } else {
+        query = `SELECT * FROM ${table} WHERE id = ?`;
+      }
+
+      const [rows] = await db.execute(query, [id]);
       if (rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Record not found' });
       }
@@ -58,7 +80,31 @@ class MasterController {
   async getByCode(req, res) {
     try {
       const { table, code } = req.params;
-      const [rows] = await db.execute(`SELECT * FROM ${table} WHERE code = ?`, [code]);
+      let query;
+      let params = [code];
+
+      if (table === 'machine_centres') {
+        query = `SELECT mc.*, wc.name as work_centre_name 
+                 FROM machine_centres mc 
+                 LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
+                 WHERE mc.code = ? OR mc.machine_id = ?`;
+        params = [code, code];
+      } else if (table === 'users') {
+        query = `SELECT u.*, wc.name as work_centre_name 
+                 FROM users u 
+                 LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
+                 WHERE u.code = ?`;
+      } else if (table === 'employees') {
+        query = `SELECT e.*, wc.name as work_centre_name, mc.name as machine_centre_name 
+                 FROM employees e 
+                 LEFT JOIN work_centres wc ON e.work_centre_id = wc.id 
+                 LEFT JOIN machine_centres mc ON e.machine_centre_id = mc.id 
+                 WHERE e.code = ?`;
+      } else {
+        query = `SELECT * FROM ${table} WHERE code = ?`;
+      }
+
+      const [rows] = await db.execute(query, params);
       if (rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Record not found' });
       }
