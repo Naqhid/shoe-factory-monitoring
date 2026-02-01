@@ -74,7 +74,6 @@ export const MobileProduction: React.FC = () => {
     // Session Initialization and Polling
     useEffect(() => {
         if (urlMachineId && urlEmpId) {
-            // ... (keep existing implementation)
             const resolveAndInitialize = async () => {
                 setLoading(true);
                 try {
@@ -107,73 +106,24 @@ export const MobileProduction: React.FC = () => {
             return;
         }
 
-        // AUTO-DETECTION MODE: If machine_id is defined (e.g. assigned to this screen) 
-        // but no employee yet, poll the server every 1s (as requested)
+        // AUTO-DETECTION / POLLING MODE
         if (urlMachineId && !urlEmpId) {
             setQrData(urlMachineId);
             const syncInterval = setInterval(async () => {
                 try {
-                    const res = await fetch(`${API_BASE}/api/mobile-production/live-status/${urlMachineId}`);
-                    const json = await res.json();
+                    const sessionRes = await fetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
+                    const sessionJson = await sessionRes.json();
 
-                    if (json.success && json.data && json.data.emp_code) {
+                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_code) {
                         clearInterval(syncInterval);
-                        toast.success(`Production Started: ${json.data.emp_name}`);
-                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(json.data.emp_code)}`);
+                        toast.success(`Session Active: ${sessionJson.data.emp_name}`);
+                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_code)}`);
                     }
                 } catch (e) { }
-            }, 5000); // 5 second polling
+            }, 1000); // 1 second polling
             return () => clearInterval(syncInterval);
         }
-
-        // Create session on mount (Legacy / QR Connect flow)
-        const initSession = async () => {
-            try {
-                const res = await fetch(`${API_BASE}/api/mobile-session/init`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ machine_id: urlMachineId })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    setSessionId(data.data.session_id);
-                }
-            } catch (e) {
-                console.error('Session init failed', e);
-            }
-        };
-        initSession();
-    }, [location.pathname, API_BASE, navigate, urlMachineId]);
-
-    useEffect(() => {
-        if (!sessionId || sessionStatus === 'active') return;
-
-        const interval = setInterval(async () => {
-            try {
-                const res = await fetch(`${API_BASE}/api/mobile-session/${sessionId}`);
-                const json = await res.json();
-
-                // Redirect if machine_id and employee are now assigned
-                if (json.success && json.data.machine_id && (json.data.emp_code || json.data.emp_id)) {
-                    const { machine_id, emp_code, emp_id } = json.data;
-                    const finalEmpCode = emp_code || emp_id;
-
-                    if (machine_id && finalEmpCode) {
-                        setSessionStatus('active');
-                        toast.success('Device Connected!', { duration: 2000 });
-
-                        // Small delay to let the user see the success toast before navigation
-                        setTimeout(() => {
-                            navigate(`/mobile/${encodeURIComponent(machine_id)}/${encodeURIComponent(finalEmpCode)}`);
-                        }, 500);
-                    }
-                }
-            } catch (e) {
-                console.error('Session poll error:', e);
-            }
-        }, 5000); // 5 second polling as requested
-        return () => clearInterval(interval);
-    }, [sessionId, sessionStatus, navigate, API_BASE]);
+    }, [location.pathname, API_BASE, navigate, urlMachineId, urlEmpId]);
 
 
     const initializeProduction = async (machineId: string, empId: number, workCentreId: number = 1) => {

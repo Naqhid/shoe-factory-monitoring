@@ -66,13 +66,13 @@ const mobileSessionController = {
         }
     },
 
-    // 3. Activate session (called by Scanner Device)
+    // 3. Activate session (Now machine-focused, session_id is secondary)
     activateSession: async (req, res, next) => {
         try {
-            const { session_id, machine_id, work_centre_id, emp_id, emp_code } = req.body;
+            const { machine_id, work_centre_id, emp_id, emp_code } = req.body;
 
-            if (!session_id || !machine_id || (!emp_id && !emp_code)) {
-                return res.status(400).json({ success: false, message: 'Missing required fields' });
+            if (!machine_id || (!emp_id && !emp_code)) {
+                return res.status(400).json({ success: false, message: 'Missing machine or employee info' });
             }
 
             // 1. Resolve Employee
@@ -89,7 +89,7 @@ const mobileSessionController = {
                 }
             }
 
-            // 2. Resolve Machine (to get work_centre_id if not provided)
+            // 2. Resolve Machine
             let finalWorkCentreId = work_centre_id;
             const [machineRows] = await pool.execute(
                 'SELECT machine_id, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?',
@@ -102,26 +102,25 @@ const mobileSessionController = {
                 return res.status(400).json({ success: false, message: `Machine ${machine_id} not found` });
             }
 
-            // 3. Update session
-            const [result] = await pool.execute(
-                `UPDATE mobile_sessions 
-                 SET status = 'active', machine_id = ?, work_centre_id = ?, emp_id = ?, activated_at = NOW() 
-                 WHERE session_id = ? AND status = 'waiting'`,
-                [machine_id, finalWorkCentreId || 1, finalEmpId || 1, session_id]
+            // 3. Upsert session by machine_id (This is the anchor for sync)
+            const [existing] = await pool.execute('SELECT session_id FROM mobile_sessions WHERE machine_id = ?', [machine_id]);
+            const finalSessionId = existing.length > 0 ? existing[0].session_id : randomUUID();
+
+            await pool.execute(
+                `INSERT INTO mobile_sessions (session_id, machine_id, work_centre_id, emp_id, status, activated_at) 
+                 VALUES (?, ?, ?, ?, 'active', NOW())
+                 ON DUPLICATE KEY UPDATE 
+                 work_centre_id = VALUES(work_centre_id), 
+                 emp_id = VALUES(emp_id), 
+                 status = 'active', 
+                 activated_at = NOW()`,
+                [finalSessionId, machine_id, finalWorkCentreId || 1, finalEmpId || 1]
             );
-
-            if (result.affectedRows === 0) {
-                // Check if it exists but is already active
-                const [check] = await pool.execute('SELECT status FROM mobile_sessions WHERE session_id = ?', [session_id]);
-                if (check.length === 0) return res.status(404).json({ success: false, message: 'Session ID not found in database' });
-                if (check[0].status !== 'waiting') return res.status(400).json({ success: false, message: `Session is already ${check[0].status}` });
-
-                return res.status(400).json({ success: false, message: 'Failed to update session status' });
-            }
 
             res.json({
                 success: true,
-                message: 'Session activated'
+                message: 'Machine session activated',
+                session_id: finalSessionId
             });
         } catch (error) {
             next(error);
@@ -157,7 +156,7 @@ const mobileSessionController = {
         }
     },
 
-    // 5. Find waiting session for machine (called by Mobile Phone if it scanned a machine but has no session ID)
+    // 5. Find waiting session for machine
     findWaitingSession: async (req, res, next) => {
         try {
             const { machine_id } = req.params;
