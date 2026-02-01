@@ -163,38 +163,44 @@ export const MobileLineSetupForm: React.FC = () => {
     }
 
     setLoading(true);
-    try {
-      let sessionId = urlSessionId;
+    let currentSessionId = urlSessionId || '';
 
-      if (!sessionId && formData.machine_id.includes('session=')) {
+    // If no session in URL, try to extract from the machine scan if it was a URL
+    if (!currentSessionId && formData.machine_id.includes('session=')) {
+      try {
         const params = new URLSearchParams(formData.machine_id.split('?')[1]);
-        sessionId = params.get('session');
-      } else if (!sessionId && formData.machine_id === 'DEMO-SESSION') {
-        sessionId = 'DEMO-SESSION';
-      }
+        currentSessionId = params.get('session') || '';
+      } catch (e) { }
+    } else if (!currentSessionId && formData.machine_id === 'DEMO-SESSION') {
+      currentSessionId = 'DEMO-SESSION';
+    }
 
+    try {
       const API_BASE = window.location.hostname === 'localhost'
         ? 'http://localhost:3001'
         : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
-      if (sessionId) {
+      if (currentSessionId) {
         let finalMachineId = formData.machine_id;
 
+        // If machine_id is a URL, clean it to just the ID
         if (finalMachineId.includes('session=')) {
-          const urlParams = new URLSearchParams(finalMachineId.split('?')[1]);
-          finalMachineId = urlParams.get('machine') || finalMachineId;
+          try {
+            const urlParams = new URLSearchParams(finalMachineId.split('?')[1]);
+            finalMachineId = urlParams.get('machine') || finalMachineId;
+            // If it's a full URL path like /mobile/MAC-001
+            if (finalMachineId.includes('/')) {
+              const parts = finalMachineId.split('/');
+              finalMachineId = parts[2] || finalMachineId;
+            }
+          } catch (e) { }
         }
 
-        // Clean ID
-        const activeSessionId = sessionId.trim().toLowerCase();
-
-        // The DDL says emp_id is an Int, but legacy logic used emp_code. 
-        // We'll send both to ensure the backend controller finds what it needs.
         const payload = {
-          session_id: activeSessionId,
+          session_id: currentSessionId.trim().toLowerCase(),
           machine_id: finalMachineId,
           emp_id: formData.employee_db_id ? Number(formData.employee_db_id) : null,
-          emp_code: formData.employee_id, // e.g. "EMP-1001"
+          emp_code: formData.employee_id,
           work_centre_id: 1,
           status: 'active'
         };
@@ -203,7 +209,6 @@ export const MobileLineSetupForm: React.FC = () => {
         const loadingToast = toast.loading('Synchronizing with display...');
 
         const fetchUrl = `${API_BASE}/api/mobile-session/activate`;
-        setDebugLog({ url: fetchUrl, payload, response: 'Sending...' });
 
         try {
           const response = await fetch(fetchUrl, {
@@ -215,28 +220,28 @@ export const MobileLineSetupForm: React.FC = () => {
           const result = await response.json();
           console.log('Activation Response:', result);
 
-          // Persist debug info for the next page
+          // Update Debug Log
           const debugData = { url: fetchUrl, payload, response: result };
           setDebugLog(debugData);
           sessionStorage.setItem('last_activation_debug', JSON.stringify(debugData));
 
-          if (result.success || activeSessionId === 'demo-session') {
+          if (result.success || currentSessionId.toLowerCase() === 'demo-session') {
             toast.success(`Connected! Laptop will update in 5s.`, { id: loadingToast, duration: 3000 });
-
-            // Navigate the phone to its dashboard
             const targetPath = `/mobile/${encodeURIComponent(finalMachineId)}/${encodeURIComponent(formData.employee_id)}`;
             setTimeout(() => navigate(targetPath), 1000);
           } else {
-            // Show the actual error from the server (e.g. "Session not found")
             toast.error(result.message || 'Server rejected activation.', { id: loadingToast });
           }
         } catch (err) {
           console.error('Activation Error:', err);
+          const errorDebug = { url: fetchUrl, payload, response: { error: 'Network Failure', details: String(err) } };
+          setDebugLog(errorDebug);
           toast.error('Network error. Is the backend online?', { id: loadingToast });
         }
         return;
       }
 
+      // OFFLINE / DIRECT FLOW (No session found)
       sessionStorage.setItem('mobile_setup_data', JSON.stringify({
         employee_id: formData.employee_id,
         employee_name: formData.employee_name,
@@ -245,12 +250,12 @@ export const MobileLineSetupForm: React.FC = () => {
       }));
 
       await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.success('Line setup complete! Opening production screen...');
+      toast.success('Offline setup complete (No Display Linked)');
       navigate(`/mobile/${encodeURIComponent(formData.machine_id)}/${encodeURIComponent(formData.employee_id)}`);
 
     } catch (error) {
       console.error('Error during setup:', error);
-      toast.error('Setup failed. Please ensure Backend is running.');
+      toast.error('Setup failed unexpectedly.');
     } finally {
       setLoading(false);
     }
