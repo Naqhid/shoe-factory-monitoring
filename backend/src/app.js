@@ -64,6 +64,8 @@ app.post('/api/login', authController.login);
 app.get('/api/masters/:table', masterController.getAll);
 app.get('/api/masters/:table/:id', masterController.getById);
 app.get('/api/masters/:table/code/:code', masterController.getByCode);
+app.get('/api/masters/employees/emp_id/:empId', masterController.getByEmpId);
+app.get('/api/masters/machine_centres/machine_id/:machineId', masterController.getByMachineId);
 app.post('/api/masters/:table', masterController.create);
 app.put('/api/masters/:table/:id', masterController.update);
 app.delete('/api/masters/:table/:id', masterController.delete);

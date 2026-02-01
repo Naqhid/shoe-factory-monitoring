@@ -267,6 +267,43 @@ class MasterController {
     }
   }
 
+  async getByEmpId(req, res) {
+    try {
+      const { empId } = req.params;
+      const query = `SELECT e.*, wc.name as work_centre_name, mc.name as machine_centre_name 
+                     FROM employees e 
+                     LEFT JOIN work_centres wc ON e.work_centre_id = wc.id 
+                     LEFT JOIN machine_centres mc ON e.machine_centre_id = mc.id 
+                     WHERE e.emp_id = ?`;
+      const [rows] = await db.execute(query, [empId]);
+      if (rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Employee not found' });
+      }
+      res.json({ success: true, data: rows[0] });
+    } catch (error) {
+      logger.error('Error getting employee by emp_id:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getByMachineId(req, res) {
+    try {
+      const { machineId } = req.params;
+      const query = `SELECT mc.*, wc.name as work_centre_name 
+                     FROM machine_centres mc 
+                     LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
+                     WHERE mc.machine_id = ?`;
+      const [rows] = await db.execute(query, [machineId]);
+      if (rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Machine not found' });
+      }
+      res.json({ success: true, data: rows[0] });
+    } catch (error) {
+      logger.error('Error getting machine by machine_id:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   async delete(req, res) {
     try {
       const { table, id } = req.params;
