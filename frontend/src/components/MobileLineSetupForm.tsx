@@ -35,14 +35,44 @@ export const MobileLineSetupForm: React.FC = () => {
 
   // Auto-submit removed - manual click required as per request
 
+  const extractId = (text: string) => {
+    if (!text) return '';
+    const trimmed = text.trim();
+
+    // If it's a URL, don't try to extract from patterns, let URL parser handle it
+    if (trimmed.includes('://')) return trimmed;
+
+    // Pattern 1: Look for "ID: XXXX" (common in labels)
+    const idMatch = trimmed.match(/ID:\s*([\w-]+)/i);
+    if (idMatch) return idMatch[1].trim();
+
+    // Pattern 2: Look for EMP-XXXX or MAC-XXXX explicitly
+    const empMacMatch = trimmed.match(/(EMP-\d+|MAC-\d+)/i);
+    if (empMacMatch) return empMacMatch[1].trim();
+
+    // Pattern 3: If it's multi-line, try to find a line that looks like an ID
+    const lines = trimmed.split(/\r?\n/);
+    if (lines.length > 1) {
+      for (const line of lines) {
+        const cleaned = line.trim();
+        if (cleaned.match(/^(EMP-\d+|MAC-\d+|ID:\s*[\w-]+|[\w-]+)$/i)) {
+          return extractId(cleaned); // Recurse to use Patterns 1 & 2
+        }
+      }
+    }
+
+    return trimmed;
+  };
+
   const handleEmployeeScan = async (data: { text: string } | null) => {
     if (data && data.text && !isProcessing) {
       setIsProcessing(true);
       console.log('SCAN SUCCESS (Employee):', data.text);
-      const empId = data.text.trim();
+      const rawText = data.text.trim();
+      const empId = extractId(rawText);
 
       setScanningEmployee(false);
-      const loadingToast = toast.loading('Fetching employee details...');
+      const loadingToast = toast.loading(`Fetching employee ${empId}...`);
 
       try {
         const API_BASE = window.location.hostname === 'localhost'
@@ -85,16 +115,42 @@ export const MobileLineSetupForm: React.FC = () => {
     }
   };
 
-  const handleMachineScan = (data: { text: string } | null) => {
+  const handleMachineScan = async (data: { text: string } | null) => {
     if (data && data.text && !isProcessing) {
       setIsProcessing(true);
       console.log('SCAN SUCCESS (Machine):', data.text);
-      const machId = data.text.trim();
-      setFormData(prev => ({ ...prev, machine_id: machId }));
+      const rawText = data.text.trim();
+      const machId = extractId(rawText);
+
       setScanningMachine(false);
-      if (navigator.vibrate) navigator.vibrate(100);
-      toast.success(`Machine detected: ${machId}`);
-      setTimeout(() => setIsProcessing(false), 500);
+      const loadingToast = toast.loading(`Fetching machine ${machId}...`);
+
+      try {
+        const API_BASE = window.location.hostname === 'localhost'
+          ? 'http://localhost:3001'
+          : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
+
+        const response = await fetch(`${API_BASE}/api/masters/machine_centres/code/${machId}`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          setFormData(prev => ({
+            ...prev,
+            machine_id: machId,
+            // We can temporarily store the name in the component state if we want to show it
+          }));
+          toast.success(`Machine detected: ${result.data.name || machId}`, { id: loadingToast });
+        } else {
+          setFormData(prev => ({ ...prev, machine_id: machId }));
+          toast.success(`Machine ID locked: ${machId}`, { id: loadingToast });
+        }
+      } catch (e) {
+        setFormData(prev => ({ ...prev, machine_id: machId }));
+        toast.success(`Machine ID locked: ${machId}`, { id: loadingToast });
+      } finally {
+        if (navigator.vibrate) navigator.vibrate(100);
+        setTimeout(() => setIsProcessing(false), 500);
+      }
     }
   };
 
