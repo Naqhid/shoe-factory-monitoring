@@ -82,7 +82,7 @@ export const MobileProduction: React.FC = () => {
                         fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
                     ]);
 
-                    const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
+                    const employee = empRes.data?.find((e: any) => e.emp_id === urlEmpId);
                     const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
 
                     if (!employee) {
@@ -130,7 +130,7 @@ export const MobileProduction: React.FC = () => {
         setLoading(true);
         try {
             // Look up the employee ID from the emp_id
-            const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empId}`);
+            const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
             const empResult = await empRes.json();
             
             if (!empResult.success || !empResult.data) {
@@ -138,12 +138,12 @@ export const MobileProduction: React.FC = () => {
                 return;
             }
             
-            const empId = empResult.data.id;
+            const empDbId = empResult.data.id;
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
                 work_centre_id: workCentreId,
                 machine_id: machineId,
-                emp_id: empId,
+                emp_id: empDbId,
                 output_pairs: 0,
                 target_mins: 10,
                 start_time: null,
