@@ -142,8 +142,7 @@ export const MobileLineSetupForm: React.FC = () => {
 
       const payload = {
         machine_id: finalMachineId,
-        emp_id: formData.employee_db_id ? Number(formData.employee_db_id) : null,
-        emp_code: formData.employee_id,
+        emp_id: formData.employee_id, // Send employee code as emp_id
         work_centre_id: formData.work_centre_id || 1,
         status: 'active'
       };
