@@ -14,6 +14,8 @@ import { Reports } from './components/Reports';
 import { ProductionRoutingForm } from './components/ProductionRoutingForm';
 import { MobileLineSetupForm } from './components/MobileLineSetupForm';
 import { MobileLiveDashboard } from './components/MobileLiveDashboard';
+import { MobileLineSelector } from './components/MobileLineSelector';
+import { MobileLineProduction } from './components/MobileLineProduction';
 import { MobileProduction } from './components/MobileProduction';
 import { MobileRemoteSetup } from './components/MobileRemoteSetup';
 import { LoginForm } from './components/LoginForm';
@@ -80,6 +82,9 @@ function App() {
 
   const isDashboard = isAuthenticated && activeMenu === 'overview';
   const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
+  const isMobileLineSelector = activeMenu === 'mobile';
+  const isMobileLineProduction = activeMenu.startsWith('mobile/line');
+  const isMobileProduction = activeMenu.startsWith('mobile/') && !activeMenu.startsWith('mobile/line');
 
   const {
     data: machines = [],
@@ -271,7 +276,11 @@ function App() {
           <MobileLineSetupForm />
         ) : isMobileLiveDashboard ? (
           <MobileLiveDashboard />
-        ) : isMobile ? (
+        ) : isMobileLineSelector ? (
+          <MobileLineSelector />
+        ) : isMobileLineProduction ? (
+          <MobileLineProduction />
+        ) : isMobileProduction ? (
           <MobileProduction />
         ) : activeMenu === 'mobile-remote-setup' ? (
           <MobileRemoteSetup />
