@@ -82,7 +82,7 @@ const mobileSessionController = {
             );
             
             if (empRows.length === 0) {
-                return res.status(400).json({ success: false, message: `Employee ID ${emp_id} not found` });
+                return res.status(400).json({ success: false, message: `Employee Code ${emp_id} not found` });
             }
             
             const finalEmpId = empRows[0].id;
