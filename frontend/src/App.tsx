@@ -62,7 +62,7 @@ function App() {
 
   const pathParts = location.pathname.split('/').filter(Boolean);
   const activeMenu = pathParts[0] || 'overview';
-  const isLineRoute = pathParts.length >= 2 && pathParts[0] === 'mobile' && pathParts[1].startsWith('line');
+  const isLineRoute = pathParts.length >= 2 && pathParts[0] === 'mobile' && (pathParts[1] === 'line1' || pathParts[1] === 'line2');
 
   // App-wide login: show LoginForm first when not authenticated
   const isAuthenticated = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('app_authenticated');
@@ -82,10 +82,10 @@ function App() {
   const [loading, setLoading] = React.useState(false);
 
   const isDashboard = isAuthenticated && activeMenu === 'overview';
-  const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
-  const isMobileLineSelector = activeMenu === 'mobile' && !isLineRoute;
+  const isMobile = activeMenu === 'mobile' || pathParts[0] === 'mobile';
+  const isMobileLineSelector = activeMenu === 'mobile' && pathParts.length === 1;
   const isMobileLineProduction = isLineRoute;
-  const isMobileProduction = activeMenu === 'mobile' && pathParts.length >= 3 && !isLineRoute;
+  const isMobileProduction = pathParts[0] === 'mobile' && pathParts.length >= 3 && !isLineRoute;
 
   const {
     data: machines = [],
