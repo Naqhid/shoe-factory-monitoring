@@ -84,7 +84,7 @@ function App() {
   const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
   const isMobileLineSelector = activeMenu === 'mobile';
   const isMobileLineProduction = activeMenu.startsWith('mobile/line');
-  const isMobileProduction = activeMenu.startsWith('mobile/') && !activeMenu.startsWith('mobile/line');
+  const isMobileProduction = activeMenu.startsWith('mobile/') && !activeMenu.startsWith('mobile/line') && activeMenu !== 'mobile';
 
   const {
     data: machines = [],
