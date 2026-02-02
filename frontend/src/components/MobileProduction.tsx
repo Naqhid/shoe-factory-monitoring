@@ -82,7 +82,7 @@ export const MobileProduction: React.FC = () => {
                         fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
                     ]);
 
-                    const employee = empRes.data?.find((e: any) => e.emp_id === urlEmpId);
+                    const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
                     const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
 
                     if (!employee) {
