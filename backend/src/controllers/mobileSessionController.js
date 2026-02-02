@@ -41,11 +41,11 @@ const mobileSessionController = {
 
             if (session.status === 'active') {
                 const [empRows] = await pool.execute(
-                    'SELECT emp_id, name FROM employees WHERE id = ?',
+                    'SELECT code, name FROM employees WHERE id = ?',
                     [session.emp_id]
                 );
                 if (empRows.length > 0) {
-                    session.emp_id = empRows[0].emp_id;
+                    session.emp_code = empRows[0].code;
                     session.emp_name = empRows[0].name;
                 }
                 const [macRows] = await pool.execute(
@@ -77,7 +77,7 @@ const mobileSessionController = {
 
             // 1. Resolve Employee - treat emp_id as employee code
             const [empRows] = await pool.execute(
-                'SELECT id FROM employees WHERE emp_id = ?',
+                'SELECT id FROM employees WHERE code = ?',
                 [emp_id]
             );
             
@@ -105,14 +105,15 @@ const mobileSessionController = {
             const finalSessionId = existing.length > 0 ? existing[0].session_id : randomUUID();
 
             await pool.execute(
-                `INSERT INTO mobile_sessions (session_id, machine_id, work_centre_id, emp_id, status, activated_at) 
-                 VALUES (?, ?, ?, ?, 'active', NOW())
+                `INSERT INTO mobile_sessions (session_id, machine_id, work_centre_id, emp_id, emp_code, status, activated_at) 
+                 VALUES (?, ?, ?, ?, ?, 'active', NOW())
                  ON DUPLICATE KEY UPDATE 
                  work_centre_id = VALUES(work_centre_id), 
                  emp_id = VALUES(emp_id), 
+                 emp_code = VALUES(emp_code),
                  status = 'active', 
                  activated_at = NOW()`,
-                [finalSessionId, machine_id, finalWorkCentreId || 1, finalEmpId]
+                [finalSessionId, machine_id, finalWorkCentreId || 1, finalEmpId, emp_id]
             );
 
             res.json({
@@ -132,7 +133,7 @@ const mobileSessionController = {
 
             // Only find sessions activated in the last 2 hours for security/relevance
             const [rows] = await pool.execute(
-                `SELECT ms.*, e.emp_id, e.name as emp_name 
+                `SELECT ms.*, e.code as emp_code, e.name as emp_name 
                  FROM mobile_sessions ms
                  JOIN employees e ON ms.emp_id = e.id
                  WHERE ms.machine_id = ? AND ms.status = 'active'

@@ -274,7 +274,7 @@ class MasterController {
                      FROM employees e 
                      LEFT JOIN work_centres wc ON e.work_centre_id = wc.id 
                      LEFT JOIN machine_centres mc ON e.machine_centre_id = mc.id 
-                     WHERE e.emp_id = ?`;
+                     WHERE e.code = ?`;
       const [rows] = await db.execute(query, [empId]);
       if (rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Employee not found' });

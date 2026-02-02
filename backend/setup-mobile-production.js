@@ -77,6 +77,7 @@ async function setupMobileProductionTables() {
         status ENUM('waiting', 'active', 'expired') DEFAULT 'waiting',
         work_centre_id INT,
         emp_id INT,
+        emp_code VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         activated_at TIMESTAMP NULL,
         INDEX idx_session_status (status)
