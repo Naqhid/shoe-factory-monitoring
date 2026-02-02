@@ -60,8 +60,9 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Get active menu from URL path, default to 'overview'
-  const activeMenu = location.pathname.slice(1) || 'overview';
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  const activeMenu = pathParts[0] || 'overview';
+  const isLineRoute = pathParts.length >= 2 && pathParts[0] === 'mobile' && pathParts[1].startsWith('line');
 
   // App-wide login: show LoginForm first when not authenticated
   const isAuthenticated = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('app_authenticated');
@@ -82,9 +83,9 @@ function App() {
 
   const isDashboard = isAuthenticated && activeMenu === 'overview';
   const isMobile = activeMenu === 'mobile' || activeMenu.startsWith('mobile/');
-  const isMobileLineSelector = activeMenu === 'mobile';
-  const isMobileLineProduction = activeMenu.startsWith('mobile/line');
-  const isMobileProduction = activeMenu.startsWith('mobile/') && !activeMenu.startsWith('mobile/line') && activeMenu !== 'mobile';
+  const isMobileLineSelector = activeMenu === 'mobile' && !isLineRoute;
+  const isMobileLineProduction = isLineRoute;
+  const isMobileProduction = activeMenu === 'mobile' && pathParts.length >= 3 && !isLineRoute;
 
   const {
     data: machines = [],

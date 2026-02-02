@@ -22,20 +22,13 @@ const lineConfigs = {
 };
 
 export const MobileLineProduction: React.FC = () => {
-  const { lineId } = useParams<{ lineId: string }>();
   const [showTestHelpers, setShowTestHelpers] = useState(false);
   
-  // Debug: log the lineId to see what we're getting
-  console.log('LineId from params:', lineId);
+  // Extract lineId from URL path
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  const lineId = pathParts[1]; // Should be 'line1' or 'line2'
   
   const config = lineConfigs[lineId as keyof typeof lineConfigs];
-  
-  // If no config found, try to extract from URL manually
-  if (!config) {
-    const pathParts = window.location.pathname.split('/');
-    const lastPart = pathParts[pathParts.length - 1];
-    console.log('Path parts:', pathParts, 'Last part:', lastPart);
-  }
   
   if (!config) {
     return (
