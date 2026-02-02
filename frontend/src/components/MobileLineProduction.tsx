@@ -29,15 +29,12 @@ export const MobileLineProduction: React.FC = () => {
   const pathParts = fullPath.split('/').filter(Boolean);
   const lineId = pathParts[pathParts.length - 1]; // Get last part
   
-  // Debug logging
-  console.log('Full path:', fullPath);
-  console.log('Path parts:', pathParts);
-  console.log('Line ID:', lineId);
-  console.log('Available configs:', Object.keys(lineConfigs));
-  
   const config = lineConfigs[lineId as keyof typeof lineConfigs];
   
-  if (!config) {
+  // If no specific config found, show line1 as default
+  const displayConfig = config || lineConfigs.line1;
+  
+  if (!displayConfig) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
@@ -60,16 +57,16 @@ export const MobileLineProduction: React.FC = () => {
             <Link to="/mobile" className="text-gray-500 hover:text-gray-700">
               <ArrowLeft className="h-6 w-6" />
             </Link>
-            <h1 className="text-2xl font-bold text-gray-900">{config.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{displayConfig.name}</h1>
             <div className="w-6"></div>
           </div>
-          <p className="text-gray-500 mb-2">Machine: {config.machineId}</p>
-          <p className="text-gray-600">Operator: {config.empName}</p>
+          <p className="text-gray-500 mb-2">Machine: {displayConfig.machineId}</p>
+          <p className="text-gray-600">Operator: {displayConfig.empName}</p>
         </div>
 
         {/* QR Codes Section */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-lg font-bold text-gray-900 mb-6 text-center">QR Codes for {config.name}</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-6 text-center">QR Codes for {displayConfig.name}</h2>
           
           <div className="space-y-8">
             {/* Employee QR */}
@@ -77,13 +74,13 @@ export const MobileLineProduction: React.FC = () => {
               <h3 className="text-md font-semibold text-gray-700 mb-4">Employee Badge</h3>
               <div className="bg-gray-50 p-6 rounded-xl inline-block">
                 <img 
-                  src={`${import.meta.env.BASE_URL}assets/${config.empQR}`} 
-                  alt={config.empId} 
+                  src={`${import.meta.env.BASE_URL}assets/${displayConfig.empQR}`} 
+                  alt={displayConfig.empId} 
                   className="w-48 h-48 object-contain mx-auto" 
                 />
               </div>
-              <p className="text-sm font-medium text-gray-700 mt-2">{config.empName}</p>
-              <p className="text-xs text-gray-500">ID: {config.empId}</p>
+              <p className="text-sm font-medium text-gray-700 mt-2">{displayConfig.empName}</p>
+              <p className="text-xs text-gray-500">ID: {displayConfig.empId}</p>
             </div>
 
             {/* Machine QR */}
@@ -91,13 +88,13 @@ export const MobileLineProduction: React.FC = () => {
               <h3 className="text-md font-semibold text-gray-700 mb-4">Machine Sticker</h3>
               <div className="bg-gray-50 p-6 rounded-xl inline-block">
                 <img 
-                  src={`${import.meta.env.BASE_URL}assets/${config.machineQR}`} 
-                  alt={config.machineId} 
+                  src={`${import.meta.env.BASE_URL}assets/${displayConfig.machineQR}`} 
+                  alt={displayConfig.machineId} 
                   className="w-48 h-48 object-contain mx-auto" 
                 />
               </div>
-              <p className="text-sm font-medium text-gray-700 mt-2">{config.name}</p>
-              <p className="text-xs text-gray-500">ID: {config.machineId}</p>
+              <p className="text-sm font-medium text-gray-700 mt-2">{displayConfig.name}</p>
+              <p className="text-xs text-gray-500">ID: {displayConfig.machineId}</p>
             </div>
           </div>
 
