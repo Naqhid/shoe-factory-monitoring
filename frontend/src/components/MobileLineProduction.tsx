@@ -41,12 +41,17 @@ export const MobileLineProduction: React.FC = () => {
 
   // Poll for active sessions every 5 seconds
   useEffect(() => {
+    console.log('Component mounted, starting polling...');
+    
     const pollInterval = setInterval(async () => {
       try {
+        console.log('Polling API...');
         const response = await fetch(`${API_BASE}/api/mobile-session/latest-active`);
         const result = await response.json();
+        console.log('API Response:', result);
         
         if (result.success && result.data && result.data.redirect_url) {
+          console.log('Redirecting to:', result.data.redirect_url);
           clearInterval(pollInterval);
           navigate(result.data.redirect_url);
         }
