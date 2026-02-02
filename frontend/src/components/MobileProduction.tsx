@@ -106,7 +106,7 @@ export const MobileProduction: React.FC = () => {
             return;
         }
 
-        // AUTO-DETECTION / POLLING MODE
+        // AUTO-DETECTION / POLLING MODE for specific machine
         if (urlMachineId && !urlEmpId) {
             setQrData(urlMachineId);
             const syncInterval = setInterval(async () => {
@@ -122,6 +122,25 @@ export const MobileProduction: React.FC = () => {
                 } catch (e) { }
             }, 1000); // 1 second polling
             return () => clearInterval(syncInterval);
+        }
+
+        // GLOBAL POLLING MODE - WhatsApp Web style (when no machine/employee specified)
+        if (!urlMachineId && !urlEmpId) {
+            const globalSyncInterval = setInterval(async () => {
+                try {
+                    const sessionRes = await fetch(`${API_BASE}/api/mobile-session/latest-active`);
+                    const sessionJson = await sessionRes.json();
+
+                    if (sessionJson.success && sessionJson.data && sessionJson.data.redirect_url) {
+                        clearInterval(globalSyncInterval);
+                        toast.success(`Redirecting to active session...`);
+                        navigate(sessionJson.data.redirect_url);
+                    }
+                } catch (e) {
+                    console.error('Global polling error:', e);
+                }
+            }, 5000); // 5 second polling as requested
+            return () => clearInterval(globalSyncInterval);
         }
     }, [location.pathname, API_BASE, navigate, urlMachineId, urlEmpId]);
 
@@ -331,7 +350,12 @@ export const MobileProduction: React.FC = () => {
 
                     <div className="text-sm text-gray-400 mb-8 flex items-center justify-center gap-2">
                         <RefreshCw className="h-3 w-3 animate-spin" />
-                        {urlMachineId && !urlEmpId ? `Waiting for supervisor scan on ${urlMachineId}...` : 'Waiting for connection...'}
+                        {urlMachineId && !urlEmpId 
+                            ? `Waiting for supervisor scan on ${urlMachineId}...` 
+                            : !urlMachineId && !urlEmpId 
+                                ? 'Waiting for QR scan from another device...' 
+                                : 'Waiting for connection...'
+                        }
                     </div>
 
                     {/* Simulation / Debug Button */}

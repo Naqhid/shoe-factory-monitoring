@@ -178,6 +178,36 @@ const mobileSessionController = {
         } catch (error) {
             next(error);
         }
+    },
+
+    // 6. Get latest active session for polling (WhatsApp Web style)
+    getLatestActiveSession: async (req, res, next) => {
+        try {
+            const [rows] = await pool.execute(
+                `SELECT ms.machine_id, ms.emp_code, ms.activated_at
+                 FROM mobile_sessions ms
+                 WHERE ms.status = 'active'
+                 AND ms.activated_at >= NOW() - INTERVAL 2 HOUR
+                 ORDER BY ms.activated_at DESC LIMIT 1`
+            );
+
+            if (rows.length === 0) {
+                return res.json({ success: true, data: null });
+            }
+
+            const session = rows[0];
+            res.json({
+                success: true,
+                data: {
+                    redirect_url: `/mobile/${session.machine_id}/${session.emp_code}`,
+                    machine_id: session.machine_id,
+                    emp_code: session.emp_code,
+                    activated_at: session.activated_at
+                }
+            });
+        } catch (error) {
+            next(error);
+        }
     }
 };
 

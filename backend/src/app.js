@@ -109,6 +109,7 @@ app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionSt
 app.post('/api/mobile-session/activate', mobileSessionController.activateSession);
 app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.findActiveSession);
 app.get('/api/mobile-session/waiting-for/:machine_id', mobileSessionController.findWaitingSession);
+app.get('/api/mobile-session/latest-active', mobileSessionController.getLatestActiveSession);
 
 // Mobile production routes
 app.get('/api/mobile-production', mobileProductionController.getAll);
