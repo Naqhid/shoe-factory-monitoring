@@ -40,16 +40,6 @@ export const MobileProduction: React.FC = () => {
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
     const [showTestHelpers, setShowTestHelpers] = useState(false);
-    const [activationDebug, setActivationDebug] = useState<any>(null);
-
-    useEffect(() => {
-        const saved = sessionStorage.getItem('last_activation_debug');
-        if (saved) {
-            try {
-                setActivationDebug(JSON.parse(saved));
-            } catch (e) { }
-        }
-    }, []);
 
     const API_BASE = window.location.hostname === 'localhost'
         ? 'http://localhost:3001'
@@ -472,36 +462,6 @@ export const MobileProduction: React.FC = () => {
                         )}
                     </div>
 
-                    {/* RED DEBUG TEXT FOR USER INSPECTION */}
-                    {activationDebug && (
-                        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6 relative">
-                            <button
-                                onClick={() => {
-                                    setActivationDebug(null);
-                                    sessionStorage.removeItem('last_activation_debug');
-                                }}
-                                className="absolute top-2 right-2 text-red-500 font-bold"
-                            >
-                                ✕
-                            </button>
-                            <h3 className="text-red-600 font-bold text-sm underline mb-3">API DATA (RED DEBUG MODE)</h3>
-                            <div className="text-red-700 font-mono text-[11px] leading-relaxed break-all space-y-3">
-                                <div>
-                                    <span className="font-bold underline text-red-800">1. SENDING TO:</span><br />
-                                    {activationDebug.url}
-                                </div>
-                                <div>
-                                    <span className="font-bold underline text-red-800">2. PAYLOAD SENT:</span><br />
-                                    {JSON.stringify(activationDebug.payload)}
-                                </div>
-                                <div>
-                                    <span className="font-bold underline text-red-800">3. SERVER SAID:</span><br />
-                                    {JSON.stringify(activationDebug.response)}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {/* Production Metrics */}
                     {productionData && (
                         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -596,41 +556,6 @@ export const MobileProduction: React.FC = () => {
                             </div>
                         </div>
                     )}
-                </div>
-            )}
-
-            {activationDebug && (
-                <div className="max-w-4xl mx-auto mt-8 px-4 pb-12">
-                    <div className="p-4 bg-gray-900 rounded-lg overflow-hidden border border-gray-700 shadow-2xl">
-                        <div className="flex items-center justify-between mb-4 border-b border-gray-800 pb-2">
-                            <h3 className="text-blue-400 font-mono text-xs font-bold uppercase tracking-wider">Activation Debug Inspector</h3>
-                            <button onClick={() => {
-                                setActivationDebug(null);
-                                sessionStorage.removeItem('last_activation_debug');
-                            }} className="text-gray-500 hover:text-white">✕</button>
-                        </div>
-
-                        <div className="space-y-4 font-mono text-[10px]">
-                            <div>
-                                <p className="text-gray-500 mb-1 font-bold uppercase">Activation Endpoint:</p>
-                                <div className="bg-gray-800 p-2 rounded text-blue-300 break-all border border-gray-700">{activationDebug.url}</div>
-                            </div>
-
-                            <div>
-                                <p className="text-gray-500 mb-1 font-bold uppercase">Request Sent to Server:</p>
-                                <pre className="bg-gray-800 p-2 rounded text-green-400 overflow-x-auto border border-gray-700">
-                                    {JSON.stringify(activationDebug.payload, null, 2)}
-                                </pre>
-                            </div>
-
-                            <div>
-                                <p className="text-gray-500 mb-1 font-bold uppercase">Server Response:</p>
-                                <pre className={`bg-gray-800 p-2 rounded overflow-x-auto border border-gray-700 ${activationDebug.response?.success ? 'text-green-400' : 'text-red-400'}`}>
-                                    {JSON.stringify(activationDebug.response, null, 2)}
-                                </pre>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             )}
         </div>
