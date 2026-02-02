@@ -187,7 +187,6 @@ const mobileSessionController = {
                 `SELECT ms.machine_id, ms.emp_code, ms.activated_at
                  FROM mobile_sessions ms
                  WHERE ms.status = 'active'
-                 AND ms.activated_at >= NOW() - INTERVAL 2 HOUR
                  ORDER BY ms.activated_at DESC LIMIT 1`
             );
 
