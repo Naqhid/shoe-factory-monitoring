@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 
 const lineConfigs = {
@@ -22,7 +22,12 @@ const lineConfigs = {
 };
 
 export const MobileLineProduction: React.FC = () => {
+  const navigate = useNavigate();
   const [showTestHelpers, setShowTestHelpers] = useState(false);
+  
+  const API_BASE = window.location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
   
   // Extract lineId from URL path
   const fullPath = window.location.pathname;
@@ -33,6 +38,25 @@ export const MobileLineProduction: React.FC = () => {
   
   // If no specific config found, show line1 as default
   const displayConfig = config || lineConfigs.line1;
+
+  // Poll for active sessions every 5 seconds
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active`);
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.redirect_url) {
+          clearInterval(pollInterval);
+          navigate(result.data.redirect_url);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [API_BASE, navigate]);
   
   if (!displayConfig) {
     return (
