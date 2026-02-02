@@ -45,8 +45,8 @@ export const MobileLineProduction: React.FC = () => {
     
     const pollInterval = setInterval(async () => {
       try {
-        console.log('Polling API...');
-        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active`);
+        console.log('Polling API for line:', lineId);
+        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active?line=${lineId}`);
         const result = await response.json();
         console.log('API Response:', result);
         
@@ -61,7 +61,7 @@ export const MobileLineProduction: React.FC = () => {
     }, 5000);
 
     return () => clearInterval(pollInterval);
-  }, [API_BASE, navigate]);
+  }, [API_BASE, navigate, lineId]);
   
   if (!displayConfig) {
     return (

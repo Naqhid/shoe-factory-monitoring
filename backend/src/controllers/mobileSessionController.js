@@ -183,12 +183,28 @@ const mobileSessionController = {
     // 6. Get latest active session for polling (WhatsApp Web style)
     getLatestActiveSession: async (req, res, next) => {
         try {
-            const [rows] = await pool.execute(
-                `SELECT ms.machine_id, ms.emp_code, ms.activated_at
-                 FROM mobile_sessions ms
-                 WHERE ms.status = 'active'
-                 ORDER BY ms.activated_at DESC LIMIT 1`
-            );
+            const { line } = req.query;
+            let query = `SELECT ms.machine_id, ms.emp_code, ms.activated_at
+                         FROM mobile_sessions ms
+                         WHERE ms.status = 'active'`;
+            let params = [];
+
+            // Filter by line if provided
+            if (line) {
+                const lineToMachine = {
+                    'line1': 'MAC-001',
+                    'line2': 'MAC-002'
+                };
+                const machineId = lineToMachine[line];
+                if (machineId) {
+                    query += ` AND ms.machine_id = ?`;
+                    params.push(machineId);
+                }
+            }
+
+            query += ` ORDER BY ms.activated_at DESC LIMIT 1`;
+
+            const [rows] = await pool.execute(query, params);
 
             if (rows.length === 0) {
                 return res.json({ success: true, data: null });
