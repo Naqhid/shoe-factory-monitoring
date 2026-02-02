@@ -25,8 +25,15 @@ export const MobileLineProduction: React.FC = () => {
   const [showTestHelpers, setShowTestHelpers] = useState(false);
   
   // Extract lineId from URL path
-  const pathParts = window.location.pathname.split('/').filter(Boolean);
-  const lineId = pathParts[1]; // Should be 'line1' or 'line2'
+  const fullPath = window.location.pathname;
+  const pathParts = fullPath.split('/').filter(Boolean);
+  const lineId = pathParts[pathParts.length - 1]; // Get last part
+  
+  // Debug logging
+  console.log('Full path:', fullPath);
+  console.log('Path parts:', pathParts);
+  console.log('Line ID:', lineId);
+  console.log('Available configs:', Object.keys(lineConfigs));
   
   const config = lineConfigs[lineId as keyof typeof lineConfigs];
   
