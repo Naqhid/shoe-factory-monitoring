@@ -64,7 +64,8 @@ class MasterController {
 
   async getById(req, res) {
     try {
-      const { table, id } = req.params;
+      const table = this.validateTable(req.params.table);
+      const { id } = req.params;
       let query;
 
       if (table === 'machine_centres') {
@@ -100,7 +101,8 @@ class MasterController {
 
   async getByCode(req, res) {
     try {
-      const { table, code } = req.params;
+      const table = this.validateTable(req.params.table);
+      const { code } = req.params;
       let query;
       let params = [code];
 
@@ -138,7 +140,7 @@ class MasterController {
 
   async create(req, res) {
     try {
-      const { table } = req.params;
+      const table = this.validateTable(req.params.table);
       const data = req.body;
 
       if (table === 'users') {
@@ -200,7 +202,8 @@ class MasterController {
 
   async update(req, res) {
     try {
-      const { table, id } = req.params;
+      const table = this.validateTable(req.params.table);
+      const { id } = req.params;
       const data = req.body;
 
       if (table === 'users') {
@@ -327,7 +330,8 @@ class MasterController {
 
   async delete(req, res) {
     try {
-      const { table, id } = req.params;
+      const table = this.validateTable(req.params.table);
+      const { id } = req.params;
       const [result] = await db.execute(`DELETE FROM ${table} WHERE id = ?`, [id]);
 
       if (result.affectedRows === 0) {
@@ -336,7 +340,7 @@ class MasterController {
 
       res.json({ success: true, message: 'Record deleted successfully' });
     } catch (error) {
-      logger.error(`Error deleting ${req.params.table}:`, error);
+      logger.error(`Error deleting from ${req.params.table}:`, error);
       res.status(500).json({ success: false, error: error.message });
     }
   }
