@@ -184,77 +184,34 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
-    const handleStart = async () => {
+    const handleStartFinish = async () => {
         if (!productionData?.id) return;
 
         setLoading(true);
         try {
+            const newStatus = productionData.button_status === 1 ? 2 : 1;
             const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    button_status: 1,
-                    output_pairs: outputIncrement
+                    button_status: newStatus,
+                    output_pairs: newStatus === 1 ? outputIncrement : 0
                 })
             });
 
             const result = await response.json();
             if (result.success) {
-                setProductionData({ ...productionData, button_status: 1, output_pairs: productionData.output_pairs + outputIncrement });
-                setOutputIncrement(0);
-                toast.success('Production started');
+                setProductionData({ 
+                    ...productionData, 
+                    button_status: newStatus, 
+                    output_pairs: newStatus === 1 ? productionData.output_pairs + outputIncrement : productionData.output_pairs
+                });
+                if (newStatus === 1) setOutputIncrement(0);
+                toast.success(newStatus === 1 ? 'Production started' : 'Production finished');
             }
         } catch (error) {
-            console.error('Error starting production:', error);
-            toast.error('Failed to start production');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleStop = async () => {
-        if (!productionData?.id) return;
-
-        setLoading(true);
-        try {
-            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ button_status: 3 })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                setProductionData({ ...productionData, button_status: 3 });
-                toast.success('Production stopped');
-            }
-        } catch (error) {
-            console.error('Error stopping production:', error);
-            toast.error('Failed to stop production');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleFinish = async () => {
-        if (!productionData?.id) return;
-
-        setLoading(true);
-        try {
-            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ button_status: 2 })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                setProductionData({ ...productionData, button_status: 2 });
-                toast.success('Production finished');
-            }
-        } catch (error) {
-            console.error('Error finishing production:', error);
-            toast.error('Failed to finish production');
+            console.error('Error updating production:', error);
+            toast.error('Failed to update production');
         } finally {
             setLoading(false);
         }
@@ -266,20 +223,21 @@ export const MobileProduction: React.FC = () => {
     };
 
     const getStatusText = () => {
-        if (!productionData) return 'Idle';
+        if (!productionData) return 'Ready';
         switch (productionData.button_status) {
-            case 1: return 'On-track';
+            case 1: return 'Running';
             case 2: return 'Finished';
-            case 3: return 'Stopped';
-            default: return 'Idle';
+            default: return 'Ready';
         }
     };
 
     const getStatusColor = () => {
-        const efficiency = calculateEfficiency();
-        if (efficiency >= 80) return 'text-green-600';
-        if (efficiency >= 60) return 'text-yellow-600';
-        return 'text-red-600';
+        if (!productionData) return 'text-gray-600';
+        switch (productionData.button_status) {
+            case 1: return 'text-green-600';
+            case 2: return 'text-blue-600';
+            default: return 'text-gray-600';
+        }
     };
 
     // --- RENDER ---
@@ -427,133 +385,98 @@ export const MobileProduction: React.FC = () => {
 
     // DASHBOARD STATE
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 overflow-hidden">
             {/* Loading Screen */}
             {loading && !productionData && (
-                <div className="flex items-center justify-center min-h-screen">
-                    <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-                        <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-                        <h2 className="text-xl font-semibold text-gray-900 mb-2">Setting up production...</h2>
-                        <p className="text-gray-500">Please wait while we initialize your workspace</p>
+                <div className="flex items-center justify-center h-full">
+                    <div className="bg-white rounded-lg shadow-lg p-6 text-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-3" />
+                        <h2 className="text-lg font-semibold text-gray-900 mb-1">Setting up...</h2>
+                        <p className="text-sm text-gray-500">Please wait</p>
                     </div>
                 </div>
             )}
 
             {/* Main Content */}
             {(!loading || productionData) && (
-                <div className="max-w-2xl mx-auto">
-                    {/* Header */}
-                    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                        <div className="flex items-center justify-between mb-4">
+                <div className="h-full flex flex-col">
+                    {/* Header - Compact */}
+                    <div className="bg-white rounded-lg shadow-lg p-3 mb-2 flex-shrink-0">
+                        <div className="flex items-center justify-between">
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900">Mobile Production</h1>
-                                <p className="text-sm text-gray-500">
-                                    {currentTime.toLocaleDateString()} - {currentTime.toLocaleTimeString()}
-                                </p>
+                                <h1 className="text-lg font-bold text-gray-900">Production</h1>
+                                <p className="text-xs text-gray-500">{currentTime.toLocaleTimeString()}</p>
                             </div>
-                            {/* QR Button removed as we are in Display Mode */}
+                            <div className="text-right">
+                                <p className="text-sm font-bold text-blue-800">{machineName || qrData}</p>
+                                <p className="text-xs text-blue-600">{employeeName}</p>
+                            </div>
                         </div>
-
-                        {qrData && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 space-y-1">
-                                <p className="text-sm text-blue-800 font-bold">Machine: {machineName || qrData}</p>
-                                {employeeName && <p className="text-xs text-blue-600 font-medium">Operator: {employeeName}</p>}
-                            </div>
-                        )}
                     </div>
 
-                    {/* Production Metrics */}
+                    {/* Production Metrics - Compact Grid */}
                     {productionData && (
-                        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                {/* Target Time */}
-                                <div className="bg-blue-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Target time Mins</p>
-                                    <p className="text-3xl font-bold text-blue-600">{productionData.target_mins}</p>
+                        <div className="bg-white rounded-lg shadow-lg p-3 mb-2 flex-1 min-h-0">
+                            {/* Top Row - Main Metrics */}
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                                <div className="bg-blue-50 rounded-lg p-2 text-center">
+                                    <p className="text-xs text-gray-600 mb-1">Target</p>
+                                    <p className="text-xl font-bold text-blue-600">{productionData.target_mins}m</p>
                                 </div>
-
-                                {/* Actual Time */}
-                                <div className="bg-green-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Actual time Mins</p>
-                                    <p className="text-3xl font-bold text-green-600">{productionData.actual_time}</p>
+                                <div className="bg-green-50 rounded-lg p-2 text-center">
+                                    <p className="text-xs text-gray-600 mb-1">Actual</p>
+                                    <p className="text-xl font-bold text-green-600">{productionData.actual_time}m</p>
                                 </div>
-
-                                {/* Target Pairs Per Tray */}
-                                <div className="bg-purple-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Pairs/Tray</p>
-                                    <p className="text-3xl font-bold text-purple-600">{productionData.target_pairs_per_tray || 0}</p>
-                                </div>
-
-                                {/* Tray Count */}
-                                <div className="bg-pink-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Total Trays</p>
-                                    <p className="text-3xl font-bold text-pink-600">{productionData.tray_count || Math.floor(productionData.output_pairs / (productionData.target_pairs_per_tray || 1))}</p>
-                                </div>
-
-                                {/* Total Output */}
-                                <div className="bg-orange-50 rounded-lg p-4 text-center col-span-2">
-                                    <p className="text-sm text-gray-600 mb-1">Total Output (Pairs)</p>
-                                    <p className="text-3xl font-bold text-orange-600">{productionData.output_pairs}</p>
+                                <div className="bg-purple-50 rounded-lg p-2 text-center">
+                                    <p className="text-xs text-gray-600 mb-1">Output</p>
+                                    <p className="text-xl font-bold text-purple-600">{productionData.output_pairs}</p>
                                 </div>
                             </div>
 
-                            {/* Efficiency and Status */}
-                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Avg. Efficiency %</p>
-                                    <p className="text-4xl font-bold text-indigo-600">{calculateEfficiency()}%</p>
+                            {/* Status and Efficiency */}
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg p-2 text-center">
+                                    <p className="text-xs text-gray-600 mb-1">Efficiency</p>
+                                    <p className="text-2xl font-bold text-indigo-600">{calculateEfficiency()}%</p>
                                 </div>
-
-                                <div className="bg-gradient-to-br from-yellow-50 to-red-50 rounded-lg p-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-1">Status</p>
-                                    <p className={`text-2xl font-bold ${getStatusColor()}`}>{getStatusText()}</p>
+                                <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg p-2 text-center">
+                                    <p className="text-xs text-gray-600 mb-1">Status</p>
+                                    <p className={`text-lg font-bold ${getStatusColor()}`}>{getStatusText()}</p>
                                 </div>
                             </div>
 
-                            {/* Output Increment Input */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Add Output Pairs (after pressing Start)
-                                </label>
-                                <input
-                                    type="number"
-                                    value={outputIncrement}
-                                    onChange={(e) => setOutputIncrement(parseInt(e.target.value) || 0)}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="Enter pairs to add"
-                                    min="0"
-                                />
-                            </div>
+                            {/* Output Input - Only show when not finished */}
+                            {productionData.button_status !== 2 && (
+                                <div className="mb-3">
+                                    <input
+                                        type="number"
+                                        value={outputIncrement}
+                                        onChange={(e) => setOutputIncrement(parseInt(e.target.value) || 0)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-semibold"
+                                        placeholder="Add pairs"
+                                        min="0"
+                                    />
+                                </div>
+                            )}
 
-                            {/* Action Buttons */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <button
-                                    onClick={handleStart}
-                                    disabled={loading || productionData.button_status === 2}
-                                    className="bg-green-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md active:scale-95"
-                                >
-                                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                                    START
-                                </button>
-
-                                <button
-                                    onClick={handleStop}
-                                    disabled={loading || productionData.button_status === 2}
-                                    className="bg-red-500 text-white py-4 rounded-lg font-semibold text-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md active:scale-95"
-                                >
-                                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Square className="h-5 w-5" />}
-                                    STOP
-                                </button>
-
-                                <button
-                                    onClick={handleFinish}
-                                    disabled={loading || productionData.button_status === 2}
-                                    className="bg-blue-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md active:scale-95"
-                                >
-                                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
-                                    FINISH
-                                </button>
-                            </div>
+                            {/* Single Action Button */}
+                            <button
+                                onClick={handleStartFinish}
+                                disabled={loading}
+                                className={`w-full py-4 rounded-lg font-bold text-xl transition-all duration-300 shadow-lg active:scale-95 ${
+                                    productionData.button_status === 1
+                                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                                        : 'bg-green-500 hover:bg-green-600 text-white'
+                                } disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
+                            >
+                                {loading ? (
+                                    <Loader2 className="h-6 w-6 animate-spin" />
+                                ) : productionData.button_status === 1 ? (
+                                    <><CheckCircle className="h-6 w-6" />FINISH</>
+                                ) : (
+                                    <><Play className="h-6 w-6" />START</>
+                                )}
+                            </button>
                         </div>
                     )}
                 </div>
