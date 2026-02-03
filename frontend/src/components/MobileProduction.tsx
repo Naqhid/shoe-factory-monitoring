@@ -48,10 +48,18 @@ export const MobileProduction: React.FC = () => {
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
     const queryParams = new URLSearchParams(location.search);
-    let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[2]) : null;
-    let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[3]) : null;
-    if (!urlMachineId) urlMachineId = queryParams.get('machine');
-    if (!urlEmpId) urlEmpId = queryParams.get('employee');
+    
+    // Validate and sanitize URL parameters
+    const validateParam = (param: string | null): string | null => {
+        if (!param) return null;
+        // Only allow alphanumeric, hyphens, and underscores
+        return /^[A-Za-z0-9_-]+$/.test(param) ? param : null;
+    };
+    
+    let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? validateParam(decodeURIComponent(pathParts[2])) : null;
+    let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? validateParam(decodeURIComponent(pathParts[3])) : null;
+    if (!urlMachineId) urlMachineId = validateParam(queryParams.get('machine'));
+    if (!urlEmpId) urlEmpId = validateParam(queryParams.get('employee'));
 
     // Update current time every second
     useEffect(() => {
@@ -104,10 +112,10 @@ export const MobileProduction: React.FC = () => {
                     const sessionRes = await fetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
                     const sessionJson = await sessionRes.json();
 
-                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_id) {
+                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_code) {
                         clearInterval(syncInterval);
                         toast.success(`Session Active: ${sessionJson.data.emp_name}`);
-                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_id)}`);
+                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_code)}`);
                     }
                 } catch (e) { }
             }, 1000); // 1 second polling
@@ -475,7 +483,7 @@ export const MobileProduction: React.FC = () => {
                                     <input
                                         type="number"
                                         value={outputIncrement}
-                                        onChange={(e) => setOutputIncrement(parseInt(e.target.value) || 0)}
+                                        onChange={(e) => setOutputIncrement(parseInt(e.target.value, 10) || 0)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-semibold"
                                         placeholder="Add pairs"
                                         min="0"

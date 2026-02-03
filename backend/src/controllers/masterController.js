@@ -2,10 +2,31 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 
 class MasterController {
+  // Whitelist of allowed table names to prevent SQL injection
+  static ALLOWED_TABLES = {
+    'customers': 'customers',
+    'groups_master': 'groups_master', 
+    'leather': 'leather',
+    'styles': 'styles',
+    'colors': 'colors',
+    'work_centres': 'work_centres',
+    'machine_centres': 'machine_centres',
+    'employees': 'employees',
+    'users': 'users',
+    'forms_master': 'forms_master'
+  };
+
+  validateTable(table) {
+    if (!MasterController.ALLOWED_TABLES[table]) {
+      throw new Error(`Invalid table name: ${table}`);
+    }
+    return MasterController.ALLOWED_TABLES[table];
+  }
+
   // Generic CRUD operations for all master tables
   async getAll(req, res) {
     try {
-      const { table } = req.params;
+      const table = this.validateTable(req.params.table);
       let rows;
 
       if (table === 'machine_centres') {
