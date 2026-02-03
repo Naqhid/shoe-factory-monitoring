@@ -22,22 +22,6 @@ interface ProductionData {
     tray_count?: number;
 }
 
-interface Employee {
-    id: number;
-    code: string;
-    name: string;
-    work_centre_id?: number;
-    machine_centre_id?: number;
-}
-
-interface Machine {
-    id: number;
-    code: string;
-    name: string;
-    machine_id: string;
-    work_centre_id: number;
-}
-
 export const MobileProduction: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -56,8 +40,6 @@ export const MobileProduction: React.FC = () => {
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
     const [showTestHelpers, setShowTestHelpers] = useState(false);
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
-    const [pendingActions, setPendingActions] = useState<any[]>([]);
 
     const API_BASE = window.location.hostname === 'localhost'
         ? 'http://localhost:3001'
@@ -66,18 +48,10 @@ export const MobileProduction: React.FC = () => {
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
     const queryParams = new URLSearchParams(location.search);
-    
-    // Validate and sanitize URL parameters
-    const validateParam = (param: string | null): string | null => {
-        if (!param) return null;
-        // Only allow alphanumeric, hyphens, and underscores
-        return /^[A-Za-z0-9_-]+$/.test(param) ? param : null;
-    };
-    
-    let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? validateParam(decodeURIComponent(pathParts[2])) : null;
-    let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? validateParam(decodeURIComponent(pathParts[3])) : null;
-    if (!urlMachineId) urlMachineId = validateParam(queryParams.get('machine'));
-    if (!urlEmpId) urlEmpId = validateParam(queryParams.get('employee'));
+    let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[2]) : null;
+    let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[3]) : null;
+    if (!urlMachineId) urlMachineId = queryParams.get('machine');
+    if (!urlEmpId) urlEmpId = queryParams.get('employee');
 
     // Update current time every second
     useEffect(() => {
@@ -86,52 +60,6 @@ export const MobileProduction: React.FC = () => {
         }, 1000);
         return () => clearInterval(timer);
     }, []);
-
-    // Real-time data refresh
-    useEffect(() => {
-        if (productionData?.id) {
-            const refreshInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}`);
-                    const result = await response.json();
-                    if (result.success) {
-                        setProductionData(result.data);
-                    }
-                } catch (error) {
-                    console.error('Failed to refresh production data:', error);
-                }
-            }, 10000); // Refresh every 10 seconds
-            
-            return () => clearInterval(refreshInterval);
-        }
-    }, [productionData?.id, API_BASE]);
-
-    // Offline support
-    useEffect(() => {
-        const handleOnline = () => {
-            setIsOnline(true);
-            toast.success('Connection restored');
-            // Process pending actions
-            pendingActions.forEach(action => {
-                // Retry failed actions
-                console.log('Retrying action:', action);
-            });
-            setPendingActions([]);
-        };
-        
-        const handleOffline = () => {
-            setIsOnline(false);
-            toast.error('Connection lost - working offline');
-        };
-        
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-        
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, [pendingActions]);
 
     // Session Initialization and Polling
     useEffect(() => {
@@ -144,8 +72,8 @@ export const MobileProduction: React.FC = () => {
                         fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
                     ]);
 
-                    const employee = empRes.data?.find((e: Employee) => e.code === urlEmpId);
-                    const machine = macRes.data?.find((m: Machine) => (m.machine_id === urlMachineId || m.code === urlMachineId));
+                    const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
+                    const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
 
                     if (!employee) {
                         toast.error(`Employee ${urlEmpId} not found`);
@@ -165,14 +93,7 @@ export const MobileProduction: React.FC = () => {
                 }
             };
             resolveAndInitialize();
-            
-            // Set session timeout (30 minutes)
-            const timeoutId = setTimeout(() => {
-                toast.error('Session expired due to inactivity');
-                navigate('/mobile');
-            }, 30 * 60 * 1000);
-            
-            return () => clearTimeout(timeoutId);
+            return;
         }
 
         // AUTO-DETECTION / POLLING MODE for specific machine
@@ -183,10 +104,10 @@ export const MobileProduction: React.FC = () => {
                     const sessionRes = await fetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
                     const sessionJson = await sessionRes.json();
 
-                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_code) {
+                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_id) {
                         clearInterval(syncInterval);
                         toast.success(`Session Active: ${sessionJson.data.emp_name}`);
-                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_code)}`);
+                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_id)}`);
                     }
                 } catch (e) { }
             }, 1000); // 1 second polling
@@ -266,17 +187,6 @@ export const MobileProduction: React.FC = () => {
     const handleStartFinish = async () => {
         if (!productionData?.id) return;
 
-        // Validate output increment
-        if (productionData.button_status !== 1 && outputIncrement < 0) {
-            toast.error('Output pairs cannot be negative');
-            return;
-        }
-
-        if (outputIncrement > 1000) {
-            toast.error('Output pairs cannot exceed 1000');
-            return;
-        }
-
         setLoading(true);
         try {
             const newStatus = productionData.button_status === 1 ? 2 : 1;
@@ -298,12 +208,10 @@ export const MobileProduction: React.FC = () => {
                 });
                 if (newStatus === 1) setOutputIncrement(0);
                 toast.success(newStatus === 1 ? 'Production started' : 'Production finished');
-            } else {
-                toast.error(result.error || 'Failed to update production');
             }
         } catch (error) {
             console.error('Error updating production:', error);
-            toast.error('Network error - please try again');
+            toast.error('Failed to update production');
         } finally {
             setLoading(false);
         }
@@ -324,12 +232,10 @@ export const MobileProduction: React.FC = () => {
             if (result.success) {
                 setProductionData({ ...productionData, button_status: 3 });
                 toast.success('Production stopped');
-            } else {
-                toast.error(result.error || 'Failed to stop production');
             }
         } catch (error) {
             console.error('Error stopping production:', error);
-            toast.error('Network error - please try again');
+            toast.error('Failed to stop production');
         } finally {
             setLoading(false);
         }
@@ -528,14 +434,6 @@ export const MobileProduction: React.FC = () => {
                             <div className="text-right">
                                 <p className="text-sm font-bold text-blue-800">{machineName || qrData}</p>
                                 <p className="text-xs text-blue-600">{employeeName}</p>
-                                <div className={`text-xs mt-1 flex items-center gap-1 ${
-                                    isOnline ? 'text-green-600' : 'text-red-600'
-                                }`}>
-                                    <div className={`w-2 h-2 rounded-full ${
-                                        isOnline ? 'bg-green-500' : 'bg-red-500'
-                                    }`}></div>
-                                    {isOnline ? 'Online' : 'Offline'}
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -577,16 +475,10 @@ export const MobileProduction: React.FC = () => {
                                     <input
                                         type="number"
                                         value={outputIncrement}
-                                        onChange={(e) => {
-                                            const value = parseInt(e.target.value, 10) || 0;
-                                            if (value >= 0 && value <= 1000) {
-                                                setOutputIncrement(value);
-                                            }
-                                        }}
+                                        onChange={(e) => setOutputIncrement(parseInt(e.target.value) || 0)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-semibold"
                                         placeholder="Add pairs"
                                         min="0"
-                                        max="1000"
                                     />
                                 </div>
                             )}
