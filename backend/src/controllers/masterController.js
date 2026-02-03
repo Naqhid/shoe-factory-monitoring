@@ -2,31 +2,10 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 
 class MasterController {
-  // Whitelist of allowed table names to prevent SQL injection
-  static ALLOWED_TABLES = {
-    'customers': 'customers',
-    'groups_master': 'groups_master', 
-    'leather': 'leather',
-    'styles': 'styles',
-    'colors': 'colors',
-    'work_centres': 'work_centres',
-    'machine_centres': 'machine_centres',
-    'employees': 'employees',
-    'users': 'users',
-    'forms_master': 'forms_master'
-  };
-
-  validateTable(table) {
-    if (!MasterController.ALLOWED_TABLES[table]) {
-      throw new Error(`Invalid table name: ${table}`);
-    }
-    return MasterController.ALLOWED_TABLES[table];
-  }
-
   // Generic CRUD operations for all master tables
   async getAll(req, res) {
     try {
-      const table = this.validateTable(req.params.table);
+      const { table } = req.params;
       let rows;
 
       if (table === 'machine_centres') {
@@ -64,8 +43,7 @@ class MasterController {
 
   async getById(req, res) {
     try {
-      const table = this.validateTable(req.params.table);
-      const { id } = req.params;
+      const { table, id } = req.params;
       let query;
 
       if (table === 'machine_centres') {
@@ -101,8 +79,7 @@ class MasterController {
 
   async getByCode(req, res) {
     try {
-      const table = this.validateTable(req.params.table);
-      const { code } = req.params;
+      const { table, code } = req.params;
       let query;
       let params = [code];
 
@@ -140,7 +117,7 @@ class MasterController {
 
   async create(req, res) {
     try {
-      const table = this.validateTable(req.params.table);
+      const { table } = req.params;
       const data = req.body;
 
       if (table === 'users') {
@@ -202,8 +179,7 @@ class MasterController {
 
   async update(req, res) {
     try {
-      const table = this.validateTable(req.params.table);
-      const { id } = req.params;
+      const { table, id } = req.params;
       const data = req.body;
 
       if (table === 'users') {
@@ -330,8 +306,7 @@ class MasterController {
 
   async delete(req, res) {
     try {
-      const table = this.validateTable(req.params.table);
-      const { id } = req.params;
+      const { table, id } = req.params;
       const [result] = await db.execute(`DELETE FROM ${table} WHERE id = ?`, [id]);
 
       if (result.affectedRows === 0) {
@@ -340,7 +315,7 @@ class MasterController {
 
       res.json({ success: true, message: 'Record deleted successfully' });
     } catch (error) {
-      logger.error(`Error deleting from ${req.params.table}:`, error);
+      logger.error(`Error deleting ${req.params.table}:`, error);
       res.status(500).json({ success: false, error: error.message });
     }
   }
