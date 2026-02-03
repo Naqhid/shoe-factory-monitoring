@@ -158,7 +158,7 @@ export const MobileProduction: React.FC = () => {
                 start_time: null,
                 finish_time: null,
                 actual_time: 10,
-                button_status: 1,
+                button_status: 0, // Start with ready state
                 target_pairs: 12,
                 smv_per_pair: 100,
                 target_pairs_per_tray: 0,
@@ -411,23 +411,21 @@ export const MobileProduction: React.FC = () => {
 
     // DASHBOARD STATE
     return (
-        <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 overflow-hidden">
+        <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-2">
             {/* Loading Screen */}
             {loading && !productionData && (
-                <div className="flex items-center justify-center h-full">
-                    <div className="bg-white rounded-lg shadow-lg p-6 text-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-3" />
-                        <h2 className="text-lg font-semibold text-gray-900 mb-1">Setting up...</h2>
-                        <p className="text-sm text-gray-500">Please wait</p>
-                    </div>
+                <div className="bg-white rounded-lg shadow-lg p-6 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-3" />
+                    <h2 className="text-lg font-semibold text-gray-900 mb-1">Setting up...</h2>
+                    <p className="text-sm text-gray-500">Please wait</p>
                 </div>
             )}
 
             {/* Main Content */}
             {(!loading || productionData) && (
-                <div className="h-full flex flex-col">
+                <div className="w-full max-w-md">
                     {/* Header - Compact */}
-                    <div className="bg-white rounded-lg shadow-lg p-3 mb-2 flex-shrink-0">
+                    <div className="bg-white rounded-lg shadow-lg p-3 mb-2">
                         <div className="flex items-center justify-between">
                             <div>
                                 <h1 className="text-lg font-bold text-gray-900">Production</h1>
@@ -442,7 +440,7 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Production Metrics - Compact Grid */}
                     {productionData && (
-                        <div className="bg-white rounded-lg shadow-lg p-3 mb-2 flex-1 min-h-0">
+                        <div className="bg-white rounded-lg shadow-lg p-3">
                             {/* Top Row - Main Metrics */}
                             <div className="grid grid-cols-3 gap-2 mb-3">
                                 <div className="bg-blue-50 rounded-lg p-2 text-center">
