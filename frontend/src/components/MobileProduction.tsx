@@ -217,6 +217,30 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
+    const handleStop = async () => {
+        if (!productionData?.id) return;
+
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ button_status: 3 })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                setProductionData({ ...productionData, button_status: 3 });
+                toast.success('Production stopped');
+            }
+        } catch (error) {
+            console.error('Error stopping production:', error);
+            toast.error('Failed to stop production');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const calculateEfficiency = () => {
         if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 100;
         return Math.min(100, Math.round((productionData.actual_time / productionData.target_mins) * 100));
@@ -227,6 +251,7 @@ export const MobileProduction: React.FC = () => {
         switch (productionData.button_status) {
             case 1: return 'Running';
             case 2: return 'Finished';
+            case 3: return 'Stopped';
             default: return 'Ready';
         }
     };
@@ -236,6 +261,7 @@ export const MobileProduction: React.FC = () => {
         switch (productionData.button_status) {
             case 1: return 'text-green-600';
             case 2: return 'text-blue-600';
+            case 3: return 'text-red-600';
             default: return 'text-gray-600';
         }
     };
@@ -459,24 +485,40 @@ export const MobileProduction: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Single Action Button */}
-                            <button
-                                onClick={handleStartFinish}
-                                disabled={loading}
-                                className={`w-full py-4 rounded-lg font-bold text-xl transition-all duration-300 shadow-lg active:scale-95 ${
-                                    productionData.button_status === 1
-                                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                                        : 'bg-green-500 hover:bg-green-600 text-white'
-                                } disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
-                            >
-                                {loading ? (
-                                    <Loader2 className="h-6 w-6 animate-spin" />
-                                ) : productionData.button_status === 1 ? (
-                                    <><CheckCircle className="h-6 w-6" />FINISH</>
-                                ) : (
-                                    <><Play className="h-6 w-6" />START</>
-                                )}
-                            </button>
+                            {/* Action Buttons */}
+                            <div className="grid grid-cols-2 gap-2">
+                                {/* START/FINISH Button */}
+                                <button
+                                    onClick={handleStartFinish}
+                                    disabled={loading || productionData.button_status === 2}
+                                    className={`py-3 rounded-lg font-bold text-lg transition-all duration-300 shadow-lg active:scale-95 ${
+                                        productionData.button_status === 1
+                                            ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                                            : 'bg-green-500 hover:bg-green-600 text-white'
+                                    } disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
+                                >
+                                    {loading ? (
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                    ) : productionData.button_status === 1 ? (
+                                        <><CheckCircle className="h-5 w-5" />FINISH</>
+                                    ) : (
+                                        <><Play className="h-5 w-5" />START</>
+                                    )}
+                                </button>
+
+                                {/* STOP Button */}
+                                <button
+                                    onClick={handleStop}
+                                    disabled={loading || productionData.button_status === 2 || productionData.button_status === 3}
+                                    className="bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-bold text-lg transition-all duration-300 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {loading ? (
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                    ) : (
+                                        <><Square className="h-5 w-5" />STOP</>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
