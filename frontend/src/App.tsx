@@ -20,6 +20,7 @@ import { MobileProduction } from './components/MobileProduction';
 import { MobileRemoteSetup } from './components/MobileRemoteSetup';
 import { LoginForm } from './components/LoginForm';
 import { TrackerApp } from './components/TrackerApp';
+import { ProductionTracker } from './components/ProductionTracker';
 import { UsersMasterForm } from './components/UsersMasterForm';
 import { FormsMasterForm } from './components/FormsMasterForm';
 import { UserRightsForm } from './components/UserRightsForm';
@@ -174,6 +175,7 @@ function App() {
   const isLineSetupForm = activeMenu === 'line_setup_form';
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
   const isTrackerApp = activeMenu === 'tracker_app';
+  const isProductionTracker = activeMenu === 'production_tracker';
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';
   const isUserRights = activeMenu === 'user_rights';
@@ -287,6 +289,8 @@ function App() {
           <MobileRemoteSetup />
         ) : isTrackerApp ? (
           <TrackerApp />
+        ) : isProductionTracker ? (
+          <ProductionTracker />
         ) : isUsers ? (
           <UsersMasterForm />
         ) : isFormsMaster ? (
