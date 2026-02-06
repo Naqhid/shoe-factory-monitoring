@@ -12,7 +12,7 @@ class ProductionTrackerController {
       }
 
       const whereClause = workCentreId && workCentreId !== 'all' 
-        ? 'AND pp.work_centre_id = ?' 
+        ? 'AND pd.work_centre_id = ?' 
         : '';
       const params = workCentreId && workCentreId !== 'all' ? [date, workCentreId] : [date];
 
@@ -20,14 +20,12 @@ class ProductionTrackerController {
       const [outputData] = await db.execute(`
         SELECT 
           COALESCE(SUM(pd.output_pairs), 0) as actual_pairs,
-          COALESCE(SUM(pp.target_pairs), 0) as target_pairs,
+          COALESCE(SUM(pd.target_pairs), 0) as target_pairs,
           COALESCE(COUNT(DISTINCT pd.emp_id), 0) as present_employees,
-          COALESCE(SUM(pr.employee_count), 0) as target_employees
-        FROM production_planning pp
-        LEFT JOIN prod_data pd ON pp.id = pd.planning_id AND pd.prod_date = ?
-        LEFT JOIN production_routing pr ON pp.routing_id = pr.id
-        WHERE pp.plan_date = ? ${whereClause}
-      `, params.length === 1 ? [date, date] : [date, date, workCentreId]);
+          10 as target_employees
+        FROM prod_data pd
+        WHERE pd.prod_date = ? ${whereClause}
+      `, params);
 
       const summary = outputData[0];
       const efficiency = summary.target_pairs > 0 
@@ -37,15 +35,14 @@ class ProductionTrackerController {
       // Get yesterday's efficiency
       const yesterday = new Date(date);
       yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
       const [yesterdayData] = await db.execute(`
         SELECT 
           COALESCE(SUM(pd.output_pairs), 0) as actual_pairs,
-          COALESCE(SUM(pp.target_pairs), 0) as target_pairs
-        FROM production_planning pp
-        LEFT JOIN prod_data pd ON pp.id = pd.planning_id AND pd.prod_date = ?
-        WHERE pp.plan_date = ? ${whereClause}
-      `, params.length === 1 ? [yesterday.toISOString().split('T')[0], yesterday.toISOString().split('T')[0]] 
-        : [yesterday.toISOString().split('T')[0], yesterday.toISOString().split('T')[0], workCentreId]);
+          COALESCE(SUM(pd.target_pairs), 0) as target_pairs
+        FROM prod_data pd
+        WHERE pd.prod_date = ? ${whereClause}
+      `, workCentreId && workCentreId !== 'all' ? [yesterdayStr, workCentreId] : [yesterdayStr]);
 
       const yesterdayEfficiency = yesterdayData[0].target_pairs > 0
         ? Math.round((yesterdayData[0].actual_pairs / yesterdayData[0].target_pairs) * 100)
@@ -54,19 +51,18 @@ class ProductionTrackerController {
       // Get last week average
       const lastWeek = new Date(date);
       lastWeek.setDate(lastWeek.getDate() - 7);
+      const lastWeekStr = lastWeek.toISOString().split('T')[0];
       const [weekData] = await db.execute(`
         SELECT 
           COALESCE(AVG(daily_eff), 0) as avg_efficiency
         FROM (
           SELECT 
-            (SUM(pd.output_pairs) / NULLIF(SUM(pp.target_pairs), 0)) * 100 as daily_eff
-          FROM production_planning pp
-          LEFT JOIN prod_data pd ON pp.id = pd.planning_id AND pd.prod_date = pp.plan_date
-          WHERE pp.plan_date BETWEEN ? AND ? ${whereClause}
-          GROUP BY pp.plan_date
+            (SUM(pd.output_pairs) / NULLIF(SUM(pd.target_pairs), 0)) * 100 as daily_eff
+          FROM prod_data pd
+          WHERE pd.prod_date BETWEEN ? AND ? ${whereClause}
+          GROUP BY pd.prod_date
         ) as daily_stats
-      `, params.length === 1 ? [lastWeek.toISOString().split('T')[0], date] 
-        : [lastWeek.toISOString().split('T')[0], date, workCentreId]);
+      `, workCentreId && workCentreId !== 'all' ? [lastWeekStr, date, workCentreId] : [lastWeekStr, date]);
 
       const weekEfficiency = Math.round(weekData[0].avg_efficiency || 0);
 
