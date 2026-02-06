@@ -14,6 +14,7 @@ const userRightsController = require('./controllers/userRightsController');
 const authController = require('./controllers/authController');
 const mobileProductionController = require('./controllers/mobileProductionController');
 const mobileSessionController = require('./controllers/mobileSessionController');
+const productionTrackerController = require('./controllers/productionTrackerController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Create required directories
@@ -125,6 +126,12 @@ app.delete('/api/mobile-production/:id', mobileProductionController.delete);
 // Pivot data routes
 app.get('/api/pivot-data', mobileProductionController.getPivotData);
 app.post('/api/pivot-data/refresh', mobileProductionController.refreshPivotData);
+
+// Production Tracker routes
+app.get('/api/tracker/summary', productionTrackerController.getSummary);
+app.get('/api/tracker/hourly', productionTrackerController.getHourlyPerformance);
+app.get('/api/tracker/workstations', productionTrackerController.getWorkstationPerformance);
+app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons);
 
 // Health check
 app.get('/health', (req, res) => {

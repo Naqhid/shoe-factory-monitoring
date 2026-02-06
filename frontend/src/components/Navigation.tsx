@@ -14,7 +14,7 @@ const processMenus = [
   { key: 'production_routing', label: 'Production Routing', icon: Route },
   { key: 'production_planning', label: 'Production Planning', icon: Calendar },
   { key: 'line_setup_form', label: 'Line Setup Form', icon: UserCheck },
-  { key: 'mobile_live_dashboard', label: 'Mobile Live Dashboard', icon: Smartphone },
+  { key: 'production_tracker', label: 'Mobile Production Tracker', icon: Smartphone },
   { key: 'mobile', label: 'Mobile', icon: Smartphone },
 ];
 
