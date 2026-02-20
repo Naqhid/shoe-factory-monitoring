@@ -17,14 +17,28 @@ const mobileSessionController = require('./controllers/mobileSessionController')
 const productionTrackerController = require('./controllers/productionTrackerController');
 const errorHandler = require('./middleware/errorHandler');
 
+// Path resolution helper
+const getAbsolutePath = (dirPath) => {
+  if (!dirPath) return null;
+  if (path.isAbsolute(dirPath)) return dirPath;
+  // Resolve relative to the backend root (one level up from src)
+  return path.resolve(__dirname, '..', dirPath);
+};
+
 // Create required directories
 const createDirectories = () => {
-  const dirs = [
-    process.env.INCOMING_DIR,
-    process.env.SUCCESS_DIR,
-    process.env.FAILURE_DIR,
-    process.env.LOGS_DIR
-  ];
+  const incomingDir = getAbsolutePath(process.env.INCOMING_DIR || './data/incoming');
+  const successDir = getAbsolutePath(process.env.SUCCESS_DIR || './data/processed');
+  const failureDir = getAbsolutePath(process.env.FAILURE_DIR || './data/error');
+  const logsDir = getAbsolutePath(process.env.LOGS_DIR || './logs');
+
+  // Update process.env so other services get the absolute path
+  process.env.INCOMING_DIR = incomingDir;
+  process.env.SUCCESS_DIR = successDir;
+  process.env.FAILURE_DIR = failureDir;
+  process.env.LOGS_DIR = logsDir;
+
+  const dirs = [incomingDir, successDir, failureDir, logsDir];
 
   dirs.forEach(dir => {
     if (dir && !fs.existsSync(dir)) {
