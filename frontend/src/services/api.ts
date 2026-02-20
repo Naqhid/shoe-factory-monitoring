@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { MachineStatus, RunIdleData, HourlyData, OverallEfficiency, ApiResponse } from '../types';
 
-// Always use Railway backend
-const API_BASE = 'https://shoe-factory-monitoring-production-8c06.up.railway.app/api';
+// Use Local Windows Server (192.168.56.103)
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:3001/api'
+  : `http://${window.location.hostname}:3001/api`;
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -46,7 +48,8 @@ export const apiService = {
   },
 
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
-    const response = await axios.get('https://shoe-factory-monitoring-production-8c06.up.railway.app/health');
+    const HEALTH_URL = API_BASE.replace('/api', '/health');
+    const response = await axios.get(HEALTH_URL);
     return response.data;
   },
 };

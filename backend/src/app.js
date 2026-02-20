@@ -42,10 +42,7 @@ createDirectories();
 
 // Middleware
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://naqhid.github.io'
-  ],
+  origin: true, // Allow all origins in local network setup
   credentials: true
 }));
 app.use(express.json());
@@ -110,7 +107,7 @@ app.post('/api/mobile-session/activate', mobileSessionController.activateSession
 app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.findActiveSession);
 app.get('/api/mobile-session/waiting-for/:machine_id', mobileSessionController.findWaitingSession);
 app.get('/api/mobile-session/latest-active', mobileSessionController.getLatestActiveSession);
-app.get('/api/mobile-session/test', (req, res) => res.json({test: 'working'}));
+app.get('/api/mobile-session/test', (req, res) => res.json({ test: 'working' }));
 app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionStatus);
 
 // Mobile production routes
