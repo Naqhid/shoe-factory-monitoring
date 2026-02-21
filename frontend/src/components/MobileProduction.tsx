@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { QrCode, Play, Square, CheckCircle, Loader2, X, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface ProductionData {
     id?: number;
@@ -40,10 +41,6 @@ export const MobileProduction: React.FC = () => {
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
     const [showTestHelpers, setShowTestHelpers] = useState(false);
-
-    const API_BASE = window.location.hostname === 'localhost'
-        ? 'http://localhost:3001'
-        : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -141,12 +138,12 @@ export const MobileProduction: React.FC = () => {
             // Look up the employee ID from the emp_id
             const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
             const empResult = await empRes.json();
-            
+
             if (!empResult.success || !empResult.data) {
                 toast.error(`Employee ${empCode} not found`);
                 return;
             }
-            
+
             const empDbId = empResult.data.id;
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
@@ -201,9 +198,9 @@ export const MobileProduction: React.FC = () => {
 
             const result = await response.json();
             if (result.success) {
-                setProductionData({ 
-                    ...productionData, 
-                    button_status: newStatus, 
+                setProductionData({
+                    ...productionData,
+                    button_status: newStatus,
                     output_pairs: newStatus === 1 ? productionData.output_pairs + outputIncrement : productionData.output_pairs
                 });
                 if (newStatus === 1) setOutputIncrement(0);
@@ -324,10 +321,10 @@ export const MobileProduction: React.FC = () => {
 
                     <div className="text-sm text-gray-400 mb-8 flex items-center justify-center gap-2">
                         <RefreshCw className="h-3 w-3 animate-spin" />
-                        {urlMachineId && !urlEmpId 
-                            ? `Waiting for supervisor scan on ${urlMachineId}...` 
-                            : !urlMachineId && !urlEmpId 
-                                ? 'Waiting for QR scan from another device...' 
+                        {urlMachineId && !urlEmpId
+                            ? `Waiting for supervisor scan on ${urlMachineId}...`
+                            : !urlMachineId && !urlEmpId
+                                ? 'Waiting for QR scan from another device...'
                                 : 'Waiting for connection...'
                         }
                     </div>
@@ -489,11 +486,10 @@ export const MobileProduction: React.FC = () => {
                                 <button
                                     onClick={handleStartFinish}
                                     disabled={loading || productionData.button_status === 2}
-                                    className={`py-3 rounded-lg font-bold text-lg transition-all duration-300 shadow-lg active:scale-95 ${
-                                        productionData.button_status === 1
-                                            ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                                            : 'bg-green-500 hover:bg-green-600 text-white'
-                                    } disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
+                                    className={`py-3 rounded-lg font-bold text-lg transition-all duration-300 shadow-lg active:scale-95 ${productionData.button_status === 1
+                                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                                        : 'bg-green-500 hover:bg-green-600 text-white'
+                                        } disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
                                 >
                                     {loading ? (
                                         <Loader2 className="h-5 w-5 animate-spin" />

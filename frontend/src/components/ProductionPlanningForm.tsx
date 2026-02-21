@@ -1,6 +1,7 @@
 import React from 'react';
 import { Save, Upload, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface MasterOption {
   id: number;
@@ -54,9 +55,6 @@ export const ProductionPlanningForm: React.FC = () => {
   const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   // Fetch styles and work centres on mount
   React.useEffect(() => {

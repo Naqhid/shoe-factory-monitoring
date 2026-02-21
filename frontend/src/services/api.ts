@@ -1,10 +1,10 @@
 import axios from 'axios';
 import { MachineStatus, RunIdleData, HourlyData, OverallEfficiency, ApiResponse } from '../types';
 
-// Use Local Windows Server (192.168.56.103)
-const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:3001/api'
-  : `http://${window.location.hostname}:3001/api`;
+// API Base URL configuration
+export const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:3001`;
+
+const API_BASE = `${API_BASE_URL}/api`;
 
 const api = axios.create({
   baseURL: API_BASE,

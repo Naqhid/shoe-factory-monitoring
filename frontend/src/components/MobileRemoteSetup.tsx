@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { ModernScanner } from './ModernScanner';
 import { Loader2, Camera, CheckCircle, X } from 'lucide-react';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 export const MobileRemoteSetup: React.FC = () => {
     const navigate = useNavigate();
@@ -14,10 +15,6 @@ export const MobileRemoteSetup: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [completed, setCompleted] = useState(false);
     const [machineId, setMachineId] = useState('');
-
-    const API_BASE = window.location.hostname === 'localhost'
-        ? 'http://localhost:3001'
-        : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
     const handleScan = (data: { text: string } | null) => {
         if (!data) return;

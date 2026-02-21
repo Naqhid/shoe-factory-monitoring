@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { ModernScanner } from './ModernScanner';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface FormData {
   employee_id: string; // The code (e.g. EMP-1001)
@@ -63,7 +64,6 @@ export const MobileLineSetupForm: React.FC = () => {
       const loadingToast = toast.loading(`Fetching employee ${empId}...`);
 
       try {
-        const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
         const response = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empId}`);
         const result = await response.json();
 
@@ -96,7 +96,6 @@ export const MobileLineSetupForm: React.FC = () => {
       const loadingToast = toast.loading(`Fetching machine ${machId}...`);
 
       try {
-        const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
         const response = await fetch(`${API_BASE}/api/masters/machine_centres/machine_id/${machId}`);
         const result = await response.json();
 
@@ -129,7 +128,6 @@ export const MobileLineSetupForm: React.FC = () => {
     }
 
     setLoading(true);
-    const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
     try {
       let finalMachineId = formData.machine_id;

@@ -1,7 +1,9 @@
+
 import React from 'react';
 import { Save, Plus, Trash2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface UserOption {
   id: number;
@@ -54,9 +56,6 @@ export const UserRightsForm: React.FC = () => {
   // Line items
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   // Fetch users and forms on mount
   React.useEffect(() => {
@@ -100,7 +99,7 @@ export const UserRightsForm: React.FC = () => {
   // When user is selected, populate User ID and load existing rights
   const handleUserChange = async (userId: string) => {
     setSelectedUserId(userId);
-    
+
     if (!userId) {
       setSelectedUserCode('');
       setLines([emptyLine()]);
@@ -448,16 +447,14 @@ export const UserRightsForm: React.FC = () => {
                       {record.form_code}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        record.read_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-                      }`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${record.read_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+                        }`}>
                         {record.read_permission ? 'Yes' : 'No'}
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        record.write_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-                      }`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${record.write_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+                        }`}>
                         {record.write_permission ? 'Yes' : 'No'}
                       </span>
                     </td>

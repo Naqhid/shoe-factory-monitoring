@@ -1,7 +1,9 @@
+
 import React from 'react';
 import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface UserRecord {
   id: number;
@@ -28,9 +30,6 @@ export const UsersMasterForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<UserRecord[]>([]);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   const fetchRecords = async () => {
     try {

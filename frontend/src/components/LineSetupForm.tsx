@@ -1,6 +1,7 @@
 import React from 'react';
 import { Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface MasterOption {
   id: number;
@@ -32,9 +33,6 @@ export const LineSetupForm: React.FC = () => {
     smv_per_pair: '',
   });
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   // Fetch data on mount
   React.useEffect(() => {

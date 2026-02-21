@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, TrendingDown, Users, AlertCircle, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface DashboardSummary {
   actual_pairs: number;
@@ -37,10 +38,6 @@ export const ProductionTracker: React.FC = () => {
   const [workstations, setWorkstations] = useState<Workstation[]>([]);
   const [stoppages, setStoppages] = useState<Stoppage[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   // Load work centres
   useEffect(() => {
@@ -135,7 +132,7 @@ export const ProductionTracker: React.FC = () => {
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Production Tracker</h1>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Line Selector */}
             <div>
@@ -258,8 +255,8 @@ export const ProductionTracker: React.FC = () => {
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900">{stop.stoppage_reason}</p>
                         <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                          <div 
-                            className="bg-red-500 h-2 rounded-full" 
+                          <div
+                            className="bg-red-500 h-2 rounded-full"
                             style={{ width: `${stop.percentage}%` }}
                           ></div>
                         </div>

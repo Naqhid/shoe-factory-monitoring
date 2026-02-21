@@ -2,6 +2,7 @@ import React from 'react';
 import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface FormRecord {
   id: number;
@@ -18,9 +19,6 @@ export const FormsMasterForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [nextCode, setNextCode] = React.useState('FRM001');
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   const generateNextCode = (existingRecords: FormRecord[]) => {
     if (existingRecords.length === 0) return 'FRM001';

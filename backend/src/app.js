@@ -55,10 +55,7 @@ const PORT = process.env.PORT || 3001;
 createDirectories();
 
 // Middleware
-app.use(cors({
-  origin: true, // Allow all origins in local network setup
-  credentials: true
-}));
+app.use(cors()); // Allow all origins for production/cross-origin compatibility
 app.use(express.json());
 
 // Routes

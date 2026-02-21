@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Trash2, Save, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface MasterOption {
   id: number;
@@ -63,9 +64,6 @@ export const ProductionRoutingForm: React.FC = () => {
     manpower: '',
   }]);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   // Fetch all master data
   React.useEffect(() => {
@@ -163,8 +161,8 @@ export const ProductionRoutingForm: React.FC = () => {
       return;
     }
 
-    const incompleteLine = lines.find(line => 
-      !line.machine_centre_id || !line.observed_time || 
+    const incompleteLine = lines.find(line =>
+      !line.machine_centre_id || !line.observed_time ||
       !line.rating_factor || !line.manpower
     );
 
@@ -235,7 +233,7 @@ export const ProductionRoutingForm: React.FC = () => {
         {/* Header Section */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Header Information</h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

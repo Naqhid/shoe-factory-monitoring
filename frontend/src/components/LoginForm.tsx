@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../services/api';
 
 export const LoginForm: React.FC = () => {
   const [login, setLogin] = useState('');
@@ -16,13 +17,8 @@ export const LoginForm: React.FC = () => {
       return;
     }
     setLoading(true);
-    setLoading(true);
     try {
-      const API_BASE = window.location.hostname === 'localhost'
-        ? 'http://localhost:3001'
-        : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
-
-      const response = await fetch(`${API_BASE}/api/login`, {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login, password })

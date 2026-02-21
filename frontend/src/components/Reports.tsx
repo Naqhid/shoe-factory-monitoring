@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from 'react-query';
 import { Loader2, AlertCircle, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface ReportData {
   machine_id: string;
@@ -23,9 +24,6 @@ export const Reports: React.FC = () => {
   const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [reportType, setReportType] = React.useState<'efficiency' | 'run-idle' | 'hourly'>('efficiency');
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   const { data, isLoading, error } = useQuery(
     ['reports', reportType, selectedDate],

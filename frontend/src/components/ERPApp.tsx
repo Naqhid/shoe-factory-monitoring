@@ -4,6 +4,7 @@ import { MasterForm } from './MasterForm';
 import { UsersMasterForm } from './UsersMasterForm';
 import { EmployeeMasterForm } from './EmployeeMasterForm';
 import { Loader2 } from 'lucide-react';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface MasterRecord {
   id: number;
@@ -32,9 +33,6 @@ export const ERPApp: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   const fetchRecords = async (table: string) => {
     setLoading(true);
@@ -73,12 +71,12 @@ export const ERPApp: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
-      <Navigation 
-        activeMenu={activeMenu} 
-        sidebarOpen={sidebarOpen} 
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
+      <Navigation
+        activeMenu={activeMenu}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
-      
+
       <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
         {loading ? (
           <div className="flex items-center justify-center h-full">

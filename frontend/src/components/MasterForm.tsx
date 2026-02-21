@@ -2,6 +2,7 @@ import React from 'react';
 import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 interface MasterRecord {
   id: number;
@@ -26,9 +27,6 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<MasterRecord[]>([]);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   React.useEffect(() => {
     if (table === 'machine_centres') {
@@ -58,12 +56,12 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
 
     setLoading(true);
     try {
-      const url = editingRecord 
+      const url = editingRecord
         ? `${API_BASE}/api/masters/${table}/${editingRecord.id}`
         : `${API_BASE}/api/masters/${table}`;
-      
+
       const method = editingRecord ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -71,7 +69,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(editingRecord ? 'Record updated' : 'Record created');
         resetForm();
@@ -88,9 +86,9 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
 
   const handleEdit = (record: MasterRecord) => {
     setEditingRecord(record);
-    setFormData({ 
-      code: record.code, 
-      name: record.name, 
+    setFormData({
+      code: record.code,
+      name: record.name,
       work_centre_id: record.work_centre_id?.toString() || '',
       machine_id: record.machine_id || ''
     });
@@ -106,7 +104,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success('Record deleted');
         onRefresh();
@@ -127,18 +125,18 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
     // Prepare data for export
     const exportData = records.map(record => {
       const row: any = {};
-      
+
       if (table === 'machine_centres' && record.machine_id) {
         row['Machine ID'] = record.machine_id;
       }
-      
+
       row.Code = record.code;
       row.Name = record.name;
-      
+
       if (table === 'machine_centres' && record.work_centre_name) {
         row['Work Centre'] = record.work_centre_name;
       }
-      
+
       return row;
     });
 
@@ -194,7 +192,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                 <X className="h-5 w-5" />
               </button>
             </div>
-            
+
             <form onSubmit={handleSubmit} className="space-y-4">
               {table === 'machine_centres' && (
                 <div>
@@ -209,7 +207,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                   />
                 </div>
               )}
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {title} Code
@@ -222,7 +220,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                   required
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {title} Name
@@ -235,7 +233,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                   required
                 />
               </div>
-              
+
               {table === 'machine_centres' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -256,7 +254,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
                   </select>
                 </div>
               )}
-              
+
               <div className="flex gap-2 pt-4">
                 <button
                   type="submit"
@@ -341,7 +339,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
             ))}
           </tbody>
         </table>
-        
+
         {records.length === 0 && (
           <div className="text-center py-8 text-gray-500">
             No records found

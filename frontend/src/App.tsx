@@ -23,8 +23,9 @@ import { TrackerApp } from './components/TrackerApp';
 import { ProductionTracker } from './components/ProductionTracker';
 import { UsersMasterForm } from './components/UsersMasterForm';
 import { FormsMasterForm } from './components/FormsMasterForm';
-import { UserRightsForm } from './components/UserRightsForm';
+import { UserRightsForm } from './UserRightsForm';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
+import { API_BASE_URL } from './services/api';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -106,14 +107,10 @@ function App() {
     isLoading: overallLoading
   } = useOverallDailyData(selectedDate, isDashboard);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
-
   const fetchRecords = async (table: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/masters/${table}`);
+      const response = await fetch(`${API_BASE_URL}/api/masters/${table}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);

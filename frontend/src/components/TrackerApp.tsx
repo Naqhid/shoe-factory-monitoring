@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, Square, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL as API_BASE } from '../services/api';
 
 export const TrackerApp: React.FC = () => {
   const navigate = useNavigate();
@@ -9,9 +10,6 @@ export const TrackerApp: React.FC = () => {
   const [status, setStatus] = React.useState<'idle' | 'running'>('idle');
   const [loading, setLoading] = React.useState(false);
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
 
   const handleStatusChange = async (newStatus: 0 | 1) => {
     if (!machineId.trim()) {
@@ -79,14 +77,12 @@ export const TrackerApp: React.FC = () => {
 
             {/* Status Display */}
             <div className="text-center py-4">
-              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
-                status === 'running'
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${status === 'running'
                   ? 'bg-green-100 text-green-800'
                   : 'bg-red-100 text-red-800'
-              }`}>
-                <div className={`w-3 h-3 rounded-full ${
-                  status === 'running' ? 'bg-green-500' : 'bg-red-500'
-                }`}></div>
+                }`}>
+                <div className={`w-3 h-3 rounded-full ${status === 'running' ? 'bg-green-500' : 'bg-red-500'
+                  }`}></div>
                 {status === 'running' ? 'Running' : 'Idle'}
               </div>
             </div>

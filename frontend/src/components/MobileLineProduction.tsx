@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { API_BASE_URL as API_BASE } from '../services/api';
 import { ArrowLeft } from 'lucide-react';
 
 const lineConfigs = {
-  line1: { 
-    name: 'Line 1', 
-    machineId: 'MAC-001', 
-    empId: 'EMP-1001', 
+  line1: {
+    name: 'Line 1',
+    machineId: 'MAC-001',
+    empId: 'EMP-1001',
     empName: 'John Doe',
     machineQR: 'qrcode-MAC-001.jpeg',
     empQR: 'qrcode-EMP-1001.jpeg'
   },
-  line2: { 
-    name: 'Line 2', 
-    machineId: 'MAC-002', 
-    empId: 'EMP-1002', 
+  line2: {
+    name: 'Line 2',
+    machineId: 'MAC-002',
+    empId: 'EMP-1002',
     empName: 'Jane Smith',
     machineQR: 'qrcode-MAC-002.jpeg',
     empQR: 'qrcode-EMP-1002.jpeg'
@@ -24,32 +25,28 @@ const lineConfigs = {
 export const MobileLineProduction: React.FC = () => {
   const navigate = useNavigate();
   const [showTestHelpers, setShowTestHelpers] = useState(false);
-  
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://shoe-factory-monitoring-production-8c06.up.railway.app';
-  
+
   // Extract lineId from URL path
   const fullPath = window.location.pathname;
   const pathParts = fullPath.split('/').filter(Boolean);
   const lineId = pathParts[pathParts.length - 1]; // Get last part
-  
+
   const config = lineConfigs[lineId as keyof typeof lineConfigs];
-  
+
   // If no specific config found, show line1 as default
   const displayConfig = config || lineConfigs.line1;
 
   // Poll for active sessions every 5 seconds
   useEffect(() => {
     console.log('Component mounted, starting polling...');
-    
+
     const pollInterval = setInterval(async () => {
       try {
         console.log('Polling API for line:', lineId);
         const response = await fetch(`${API_BASE}/api/mobile-session/latest-active?line=${lineId}`);
         const result = await response.json();
         console.log('API Response:', result);
-        
+
         if (result.success && result.data && result.data.redirect_url) {
           console.log('Redirecting to:', result.data.redirect_url);
           clearInterval(pollInterval);
@@ -61,8 +58,8 @@ export const MobileLineProduction: React.FC = () => {
     }, 5000);
 
     return () => clearInterval(pollInterval);
-  }, [API_BASE, navigate, lineId]);
-  
+  }, [navigate, lineId]);
+
   if (!displayConfig) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -96,16 +93,16 @@ export const MobileLineProduction: React.FC = () => {
         {/* QR Codes Section */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-lg font-bold text-gray-900 mb-6 text-center">QR Codes for {displayConfig.name}</h2>
-          
+
           <div className="space-y-8">
             {/* Employee QR */}
             <div className="text-center">
               <h3 className="text-md font-semibold text-gray-700 mb-4">Employee Badge</h3>
               <div className="bg-gray-50 p-6 rounded-xl inline-block">
-                <img 
-                  src={`${import.meta.env.BASE_URL}assets/${displayConfig.empQR}`} 
-                  alt={displayConfig.empId} 
-                  className="w-48 h-48 object-contain mx-auto" 
+                <img
+                  src={`${import.meta.env.BASE_URL}assets/${displayConfig.empQR}`}
+                  alt={displayConfig.empId}
+                  className="w-48 h-48 object-contain mx-auto"
                 />
               </div>
               <p className="text-sm font-medium text-gray-700 mt-2">{displayConfig.empName}</p>
@@ -116,10 +113,10 @@ export const MobileLineProduction: React.FC = () => {
             <div className="text-center">
               <h3 className="text-md font-semibold text-gray-700 mb-4">Machine Sticker</h3>
               <div className="bg-gray-50 p-6 rounded-xl inline-block">
-                <img 
-                  src={`${import.meta.env.BASE_URL}assets/${displayConfig.machineQR}`} 
-                  alt={displayConfig.machineId} 
-                  className="w-48 h-48 object-contain mx-auto" 
+                <img
+                  src={`${import.meta.env.BASE_URL}assets/${displayConfig.machineQR}`}
+                  alt={displayConfig.machineId}
+                  className="w-48 h-48 object-contain mx-auto"
                 />
               </div>
               <p className="text-sm font-medium text-gray-700 mt-2">{displayConfig.name}</p>
