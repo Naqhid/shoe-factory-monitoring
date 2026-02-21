@@ -56,17 +56,16 @@ createDirectories();
 
 // Middleware
 app.use(cors({
-  origin: true, // Reflect the request origin
-  credentials: true,
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  optionsSuccessStatus: 200
 }));
 app.use(express.json());
 
 // Request logging for debugging
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.url} from ${req.ip}`);
+  logger.info(`${req.method} ${req.url} from ${req.ip} | Origin: ${req.get('Origin') || 'None'}`);
   next();
 });
 
