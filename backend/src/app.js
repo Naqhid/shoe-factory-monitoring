@@ -55,8 +55,18 @@ const PORT = process.env.PORT || 3001;
 createDirectories();
 
 // Middleware
-app.use(cors()); // Allow all origins for production/cross-origin compatibility
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json());
+
+// Request logging for debugging
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.url} from ${req.ip}`);
+  next();
+});
 
 // Routes
 app.get('/api/machines/status', apiController.getMachineStatus);
