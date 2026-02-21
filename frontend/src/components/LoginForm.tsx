@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '../services/api';
+import { apiService } from '../services/api';
 
 export const LoginForm: React.FC = () => {
   const [login, setLogin] = useState('');
@@ -18,13 +18,7 @@ export const LoginForm: React.FC = () => {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login, password })
-      });
-
-      const data = await response.json();
+      const data = await apiService.login({ login, password });
 
       if (data.success) {
         if (typeof sessionStorage !== 'undefined') {
@@ -36,9 +30,10 @@ export const LoginForm: React.FC = () => {
       } else {
         toast.error(data.message || 'Login failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      toast.error('Network error during login');
+      const errorMessage = error.response?.data?.message || 'Network error during login';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

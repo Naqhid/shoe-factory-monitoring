@@ -56,9 +56,11 @@ createDirectories();
 
 // Middleware
 app.use(cors({
-  origin: '*',
+  origin: true, // Reflect the request origin
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 }));
 app.use(express.json());
 
@@ -160,8 +162,8 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-const server = app.listen(PORT, () => {
-  logger.info(`Server started on port ${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server started on port ${PORT} and listening on all interfaces`);
 
   // Start file watcher
   fileWatcherService.start();

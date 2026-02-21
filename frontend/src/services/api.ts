@@ -52,4 +52,9 @@ export const apiService = {
     const response = await axios.get(HEALTH_URL);
     return response.data;
   },
+
+  async login(credentials: any): Promise<any> {
+    const response = await api.post('/login', credentials);
+    return response.data;
+  },
 };
