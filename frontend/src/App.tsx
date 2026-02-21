@@ -23,7 +23,7 @@ import { TrackerApp } from './components/TrackerApp';
 import { ProductionTracker } from './components/ProductionTracker';
 import { UsersMasterForm } from './components/UsersMasterForm';
 import { FormsMasterForm } from './components/FormsMasterForm';
-import { UserRightsForm } from './UserRightsForm';
+import { UserRightsForm } from './components/UserRightsForm';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { API_BASE_URL } from './services/api';
 import { MachineStatus } from './types';
