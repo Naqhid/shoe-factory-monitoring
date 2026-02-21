@@ -5,7 +5,7 @@
   "type": "module",
   "homepage": "https://naqhid.github.io/shoe-factory-monitoring",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
