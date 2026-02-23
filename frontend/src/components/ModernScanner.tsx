@@ -26,8 +26,17 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
 
             try {
                 // Check if mediaDevices is supported
-                if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-                    throw new Error('Camera access not supported on this device');
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                    const protocol = window.location.protocol;
+                    
+                    if (protocol === 'http:' && !isLocalhost) {
+                        throw new Error(
+                            'Camera blocked on HTTP. Enable in Chrome: chrome://flags/#unsafely-treat-insecure-origin-as-secure then add ' + window.location.origin
+                        );
+                    } else {
+                        throw new Error('Camera not available. Check browser permissions.');
+                    }
                 }
 
                 const videoInputDevices = await codeReader.current.listVideoInputDevices();

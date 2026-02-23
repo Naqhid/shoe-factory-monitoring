@@ -587,3 +587,45 @@
 {"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:27:32.055Z"}
 {"level":"info","message":"HTTP server closed","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:27:33.024Z"}
 {"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:28:56.581Z"}
+{"level":"info","message":"Server started on port 3001 and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:28:59.616Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:28:59.619Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:28:59.626Z"}
+{"level":"info","message":"GET /api/production-planning from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:03.894Z"}
+{"level":"info","message":"GET /api/masters/styles from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:03.899Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:03.902Z"}
+{"level":"info","message":"GET /api/masters/styles from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:04.022Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:04.026Z"}
+{"level":"info","message":"GET /api/production-planning from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:04.055Z"}
+{"level":"info","message":"GET /api/production-planning/1 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:08.368Z"}
+{"level":"info","message":"PUT /api/production-planning/1 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:33.075Z"}
+{"level":"info","message":"GET /api/production-planning from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:29:33.176Z"}
+{"level":"info","message":"GET /api/production-routing from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.564Z"}
+{"level":"info","message":"GET /api/masters/customers from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.570Z"}
+{"level":"info","message":"GET /api/masters/groups_master from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.576Z"}
+{"level":"info","message":"GET /api/masters/leather from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.586Z"}
+{"level":"info","message":"GET /api/masters/styles from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.599Z"}
+{"level":"info","message":"GET /api/masters/colors from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.617Z"}
+{"level":"info","message":"GET /api/masters/machine_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.694Z"}
+{"level":"info","message":"GET /api/production-routing from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.699Z"}
+{"level":"info","message":"GET /api/masters/customers from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.761Z"}
+{"level":"info","message":"GET /api/masters/groups_master from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.798Z"}
+{"level":"info","message":"GET /api/masters/machine_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.828Z"}
+{"level":"info","message":"GET /api/masters/leather from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.832Z"}
+{"level":"info","message":"GET /api/masters/colors from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.847Z"}
+{"level":"info","message":"GET /api/masters/styles from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:30:46.851Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:31:53.626Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:31:53.629Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:31:53.749Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:31:53.759Z"}
+{"level":"info","message":"PUT /api/masters/users/4 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:30.249Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:30.319Z"}
+{"level":"info","message":"PUT /api/masters/users/5 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:43.138Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:43.168Z"}
+{"level":"info","message":"PUT /api/masters/users/7 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:51.185Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:51.304Z"}
+{"level":"info","message":"PUT /api/masters/users/8 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:59.715Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:32:59.809Z"}
+{"level":"info","message":"PUT /api/masters/users/12 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:33:06.993Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:33:07.073Z"}
+{"level":"info","message":"PUT /api/masters/users/3 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:33:16.312Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:33:16.394Z"}
