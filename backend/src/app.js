@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const https = require('https');
+const http = require('http');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
@@ -161,8 +163,27 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Server started on port ${PORT} and listening on all interfaces`);
+const certPath = path.join(__dirname, '../../frontend/cert');
+const keyFile = path.join(certPath, 'key.pem');
+const certFile = path.join(certPath, 'cert.pem');
+
+const useHttps = fs.existsSync(keyFile) && fs.existsSync(certFile);
+
+let server;
+if (useHttps) {
+  const httpsOptions = {
+    key: fs.readFileSync(keyFile),
+    cert: fs.readFileSync(certFile)
+  };
+  server = https.createServer(httpsOptions, app);
+  logger.info('HTTPS enabled for backend');
+} else {
+  server = http.createServer(app);
+  logger.info('Running on HTTP (HTTPS certificates not found)');
+}
+
+server.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server started on port ${PORT} (${useHttps ? 'HTTPS' : 'HTTP'}) and listening on all interfaces`);
 
   // Start file watcher
   fileWatcherService.start();
