@@ -39,7 +39,16 @@ export const LoginForm: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      const errorMessage = error.response?.data?.message || 'Network error during login';
+      let errorMessage = 'Network error during login';
+      
+      if (error.message?.includes('timed out')) {
+        errorMessage = 'Server is not responding. Please check if backend is running on port 3001.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);

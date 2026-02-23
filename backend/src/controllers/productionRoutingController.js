@@ -60,10 +60,8 @@ class ProductionRoutingController {
       const [lines] = await db.execute(`
         SELECT 
           prl.*,
-          wc.name as work_centre_name,
           mc.name as machine_centre_name
         FROM production_routing_lines prl
-        LEFT JOIN work_centres wc ON prl.work_centre_id = wc.id
         LEFT JOIN machine_centres mc ON prl.machine_centre_id = mc.id
         WHERE prl.routing_header_id = ?
         ORDER BY prl.id
@@ -201,11 +199,10 @@ class ProductionRoutingController {
       for (const line of lines) {
         await connection.execute(
           `INSERT INTO production_routing_lines 
-          (routing_header_id, work_centre_id, machine_centre_id, observed_time, rating_factor, manpower) 
-          VALUES (?, ?, ?, ?, ?, ?)`,
+          (routing_header_id, machine_centre_id, observed_time, rating_factor, manpower) 
+          VALUES (?, ?, ?, ?, ?)`,
           [
             id,
-            line.work_centre_id,
             line.machine_centre_id,
             line.observed_time,
             line.rating_factor,

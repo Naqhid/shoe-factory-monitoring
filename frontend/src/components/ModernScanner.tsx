@@ -16,23 +16,20 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
     const codeReader = useRef(new BrowserQRCodeReader());
 
     useEffect(() => {
-        // Add hints for faster scanning (TRY_HARDER)
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
-        // @ts-ignore - Accessing internal hints map if needed, but usually constructor is enough
-        codeReader.current.hints = hints;
-
         let isMounted = true;
 
         const startScanner = async () => {
             console.log('Scanner: Starting...');
-            // Minimal delay to allow browser to yield
             await new Promise(resolve => setTimeout(resolve, 50));
 
             if (!isMounted) return;
 
             try {
+                // Check if mediaDevices is supported
+                if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                    throw new Error('Camera access not supported on this device');
+                }
+
                 const videoInputDevices = await codeReader.current.listVideoInputDevices();
                 console.log('Scanner: Devices found:', videoInputDevices.length);
 
@@ -43,16 +40,14 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
                 // Try to find the best back camera
                 let selectedDeviceId = videoInputDevices[0].deviceId;
                 if (facingMode === 'environment') {
-                    // Look for labels that usually indicate the primary back camera
                     const backCameras = videoInputDevices.filter(device =>
                         device.label.toLowerCase().includes('back') ||
                         device.label.toLowerCase().includes('rear') ||
                         device.label.toLowerCase().includes('environment') ||
-                        device.label.toLowerCase().includes('camera 0') // Common primary sensor label
+                        device.label.toLowerCase().includes('camera 0')
                     );
 
                     if (backCameras.length > 0) {
-                        // Pick the first one in the list for back cameras, often the primary
                         selectedDeviceId = backCameras[0].deviceId;
                         console.log('Scanner: Selected camera:', backCameras[0].label);
                     } else if (videoInputDevices.length > 1) {
@@ -74,9 +69,12 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
                         }
                     );
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error('Scanner: Error:', err);
-                if (isMounted) onError(err);
+                if (isMounted) {
+                    const errorMsg = err.message || 'Camera access failed';
+                    onError(new Error(errorMsg));
+                }
             }
         };
 
@@ -87,7 +85,6 @@ export const ModernScanner: React.FC<ModernScannerProps> = ({
             isMounted = false;
             try {
                 codeReader.current.reset();
-                // Explicitly stop all tracks
                 const videoEl = videoRef.current;
                 if (videoEl && videoEl.srcObject) {
                     const stream = videoEl.srcObject as MediaStream;

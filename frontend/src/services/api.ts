@@ -8,7 +8,7 @@ const API_BASE = `${API_BASE_URL}/api`;
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 10000,
+  timeout: 30000,
 });
 
 export const apiService = {
@@ -54,7 +54,14 @@ export const apiService = {
   },
 
   async login(credentials: any): Promise<any> {
-    const response = await api.post('/login', credentials);
-    return response.data;
+    try {
+      const response = await api.post('/login', credentials);
+      return response.data;
+    } catch (error: any) {
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Login request timed out. Please check if the server is running.');
+      }
+      throw error;
+    }
   },
 };

@@ -31,7 +31,9 @@ interface Stoppage {
 
 export const ProductionTracker: React.FC = () => {
   const [selectedLine, setSelectedLine] = useState('all');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [selectedDate, setSelectedDate] = useState(today.toISOString().split('T')[0]);
   const [workCentres, setWorkCentres] = useState<any[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [hourlyData, setHourlyData] = useState<any[]>([]);

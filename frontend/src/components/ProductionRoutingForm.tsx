@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Trash2, Save, X } from 'lucide-react';
+import { Plus, Trash2, Save, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
 
@@ -10,17 +10,10 @@ interface MasterOption {
 }
 
 interface RoutingLine {
-  id?: number;
   machine_centre_id: string;
   observed_time: string;
   rating_factor: string;
   manpower: string;
-  // Calculated fields
-  normal_time_secs_pr?: number;
-  std_time_secs_pr?: number;
-  mins_12_prs_box?: number;
-  pairs_per_hr?: number;
-  pairs_per_day?: number;
 }
 
 interface HeaderData {
@@ -36,12 +29,14 @@ interface HeaderData {
 }
 
 export const ProductionRoutingForm: React.FC = () => {
+  const [routings, setRoutings] = React.useState<any[]>([]);
+  const [showModal, setShowModal] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<number | null>(null);
   const [customers, setCustomers] = React.useState<MasterOption[]>([]);
   const [groups, setGroups] = React.useState<MasterOption[]>([]);
   const [leathers, setLeathers] = React.useState<MasterOption[]>([]);
   const [styles, setStyles] = React.useState<MasterOption[]>([]);
   const [colors, setColors] = React.useState<MasterOption[]>([]);
-  const [workCentres, setWorkCentres] = React.useState<MasterOption[]>([]);
   const [machineCentres, setMachineCentres] = React.useState<MasterOption[]>([]);
   const [loading, setLoading] = React.useState(false);
 
@@ -64,51 +59,57 @@ export const ProductionRoutingForm: React.FC = () => {
     manpower: '',
   }]);
 
-
-  // Fetch all master data
   React.useEffect(() => {
-    const fetchMasters = async () => {
-      try {
-        const [custRes, grpRes, lthRes, stylRes, colRes, wcRes, mcRes] = await Promise.all([
-          fetch(`${API_BASE}/api/masters/customers`),
-          fetch(`${API_BASE}/api/masters/groups_master`),
-          fetch(`${API_BASE}/api/masters/leather`),
-          fetch(`${API_BASE}/api/masters/styles`),
-          fetch(`${API_BASE}/api/masters/colors`),
-          fetch(`${API_BASE}/api/masters/work_centres`),
-          fetch(`${API_BASE}/api/masters/machine_centres`),
-        ]);
-
-        const [cust, grp, lth, styl, col, wc, mc] = await Promise.all([
-          custRes.json(),
-          grpRes.json(),
-          lthRes.json(),
-          stylRes.json(),
-          colRes.json(),
-          wcRes.json(),
-          mcRes.json(),
-        ]);
-
-        if (cust.success) setCustomers(cust.data);
-        if (grp.success) setGroups(grp.data);
-        if (lth.success) setLeathers(lth.data);
-        if (styl.success) setStyles(styl.data);
-        if (col.success) setColors(col.data);
-        if (wc.success) setWorkCentres(wc.data);
-        if (mc.success) setMachineCentres(mc.data);
-      } catch (error) {
-        toast.error('Error loading master data');
-        console.error(error);
-      }
-    };
-
+    fetchRoutings();
     fetchMasters();
   }, []);
 
-  // Calculate target per hour
-  const targetPerHour = headerData.target_per_day ? Math.round(parseFloat(headerData.target_per_day) / 8).toString() : '0';
+  const fetchRoutings = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/production-routing`);
+      const result = await res.json();
+      if (result.success) setRoutings(result.data);
+    } catch (error) {
+      console.error('Error fetching routings:', error);
+    }
+  };
 
-  // Calculate line values
+  const fetchMasters = async () => {
+    try {
+      const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), ms));
+      const fetchWithTimeout = (url: string) => Promise.race([fetch(url), timeout(10000)]);
+
+      const [custRes, grpRes, lthRes, stylRes, colRes, mcRes] = await Promise.all([
+        fetchWithTimeout(`${API_BASE}/api/masters/customers`),
+        fetchWithTimeout(`${API_BASE}/api/masters/groups_master`),
+        fetchWithTimeout(`${API_BASE}/api/masters/leather`),
+        fetchWithTimeout(`${API_BASE}/api/masters/styles`),
+        fetchWithTimeout(`${API_BASE}/api/masters/colors`),
+        fetchWithTimeout(`${API_BASE}/api/masters/machine_centres`),
+      ]);
+
+      const [cust, grp, lth, styl, col, mc] = await Promise.all([
+        (custRes as Response).json(),
+        (grpRes as Response).json(),
+        (lthRes as Response).json(),
+        (stylRes as Response).json(),
+        (colRes as Response).json(),
+        (mcRes as Response).json(),
+      ]);
+
+      if (cust.success) setCustomers(cust.data);
+      if (grp.success) setGroups(grp.data);
+      if (lth.success) setLeathers(lth.data);
+      if (styl.success) setStyles(styl.data);
+      if (col.success) setColors(col.data);
+      if (mc.success) setMachineCentres(mc.data);
+    } catch (error: any) {
+      toast.error(error.message === 'Request timeout' ? 'Loading master data timeout' : 'Error loading master data');
+    }
+  };
+
+  const targetPerHour = headerData.target_per_day ? Math.round(parseFloat(headerData.target_per_day) / 8) : 0;
+
   const calculateLineValues = (line: RoutingLine) => {
     const observedTime = parseFloat(line.observed_time) || 0;
     const ratingFactor = parseFloat(line.rating_factor) || 0;
@@ -116,436 +117,58 @@ export const ProductionRoutingForm: React.FC = () => {
 
     const normalTimeSecs = (observedTime * ratingFactor) / 100;
     const stdTimeSecs = normalTimeSecs * 1.15;
-
-    // mins 12 pairs/box = (stdTimeSecs * 12) / 60. Keep 1 decimal.
     const mins12Prs = Math.round(((stdTimeSecs * 12) / 60) * 10) / 10;
-
-    // pairs/hour = Target per day / Standard Time (S/PR). Round off without decimal.
-    // Using the user's literal formula from feedback.
     const pairsPerHr = stdTimeSecs > 0 ? Math.round(targetPerDay / stdTimeSecs) : 0;
-
-    // Pairs/day = Line items Pairs/hour * 8
     const pairsPerDay = pairsPerHr * 8;
+    const manpower = line.manpower ? (Math.round(parseFloat(line.manpower) * 10) / 10) : 0;
 
-    return {
-      normal_time_secs_pr: Math.round(normalTimeSecs),
-      std_time_secs_pr: Math.round(stdTimeSecs),
-      mins_12_prs_box: mins12Prs,
-      pairs_per_hr: pairsPerHr,
-      pairs_per_day: pairsPerDay,
-      manpower: line.manpower ? (Math.round(parseFloat(line.manpower) * 10) / 10).toString() : '0'
-    };
+    return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_12_prs_box: mins12Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
   };
 
-  const addLine = () => {
-    setLines([...lines, {
-      machine_centre_id: '',
-      observed_time: '',
-      rating_factor: '',
-      manpower: '',
-    }]);
-  };
-
-  const removeLine = (index: number) => {
-    if (lines.length > 1) {
-      setLines(lines.filter((_, i) => i !== index));
-    } else {
-      toast.error('At least one line item is required');
-    }
-  };
-
+  const addLine = () => setLines([...lines, { machine_centre_id: '', observed_time: '', rating_factor: '', manpower: '' }]);
+  const removeLine = (index: number) => lines.length > 1 ? setLines(lines.filter((_, i) => i !== index)) : toast.error('At least one line required');
   const updateLine = (index: number, field: keyof RoutingLine, value: string) => {
     const newLines = [...lines];
     newLines[index] = { ...newLines[index], [field]: value };
     setLines(newLines);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validation
-    if (!headerData.customer_id || !headerData.style_id || !headerData.target_per_day) {
-      toast.error('Please fill all required header fields');
-      return;
-    }
-
-    const incompleteLine = lines.find(line =>
-      !line.machine_centre_id || !line.observed_time ||
-      !line.rating_factor || !line.manpower
-    );
-
-    if (incompleteLine) {
-      toast.error('Please fill all line item fields');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const payload = {
-        header: headerData,
-        lines: lines.map(line => ({
-          machine_centre_id: parseInt(line.machine_centre_id),
-          observed_time: parseFloat(line.observed_time),
-          rating_factor: parseFloat(line.rating_factor),
-          manpower: parseFloat(line.manpower),
-        })),
-      };
-
-      const response = await fetch(`${API_BASE}/api/production-routing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success('Production routing created successfully');
-        // Reset form
-        setHeaderData({
-          customer_id: '',
-          group_id: '',
-          leather_id: '',
-          style_id: '',
-          color_id: '',
-          created_on: new Date().toISOString().split('T')[0],
-          category: '',
-          target_per_day: '',
-          tot_smv: '',
-        });
-        setLines([{
-          machine_centre_id: '',
-          observed_time: '',
-          rating_factor: '',
-          manpower: '',
-        }]);
-      } else {
-        toast.error(result.error || 'Failed to create routing');
-      }
-    } catch (error) {
-      toast.error('Network error');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const handleAdd = () => {
+    setEditingId(null);
+    setHeaderData({ customer_id: '', group_id: '', leather_id: '', style_id: '', color_id: '', created_on: new Date().toISOString().split('T')[0], category: '', target_per_day: '', tot_smv: '' });
+    setLines([{ machine_centre_id: '', observed_time: '', rating_factor: '', manpower: '' }]);
+    setShowModal(true);
   };
 
-  return (
-    <div className="p-6">
-      <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Production Routing</h1>
-      </header>
-
-      <form onSubmit={handleSubmit}>
-        {/* Header Section */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Header Information</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={headerData.customer_id}
-                onChange={(e) => setHeaderData({ ...headerData, customer_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">Select Customer</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Group <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={headerData.group_id}
-                onChange={(e) => setHeaderData({ ...headerData, group_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">Select Group</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Leather <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={headerData.leather_id}
-                onChange={(e) => setHeaderData({ ...headerData, leather_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">Select Leather</option>
-                {leathers.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Style <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={headerData.style_id}
-                onChange={(e) => setHeaderData({ ...headerData, style_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">Select Style</option>
-                {styles.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Color <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={headerData.color_id}
-                onChange={(e) => setHeaderData({ ...headerData, color_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">Select Color</option>
-                {colors.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Created On <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={headerData.created_on}
-                onChange={(e) => setHeaderData({ ...headerData, created_on: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <input
-                type="text"
-                value={headerData.category}
-                onChange={(e) => setHeaderData({ ...headerData, category: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target per Day <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                value={headerData.target_per_day}
-                onChange={(e) => setHeaderData({ ...headerData, target_per_day: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target per Hour
-              </label>
-              <input
-                type="text"
-                value={targetPerHour}
-                readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Total SMV <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                step="0.0001"
-                value={headerData.tot_smv}
-                onChange={(e) => setHeaderData({ ...headerData, tot_smv: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Line Items Section */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Line Items</h2>
-            <button
-              type="button"
-              onClick={addLine}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Line
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Normal Time (s/pr)</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Std Time (s/pr)</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Mins 12 prs/box</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/hr</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/day</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Manpower</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {lines.map((line, index) => {
-                  const calculated = calculateLineValues(line);
-                  return (
-                    <tr key={index}>
-                      <td className="px-3 py-2">
-                        <select
-                          value={line.machine_centre_id}
-                          onChange={(e) => updateLine(index, 'machine_centre_id', e.target.value)}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                          required
-                        >
-                          <option value="">Select</option>
-                          {machineCentres.map((mc) => (
-                            <option key={mc.id} value={mc.id}>{mc.name}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={line.observed_time}
-                          onChange={(e) => updateLine(index, 'observed_time', e.target.value)}
-                          className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
-                          required
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={line.rating_factor}
-                          onChange={(e) => updateLine(index, 'rating_factor', e.target.value)}
-                          className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
-                          required
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.normal_time_secs_pr}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.std_time_secs_pr}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.mins_12_prs_box.toFixed(1)}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.pairs_per_hr}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.pairs_per_day}
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={line.manpower}
-                          onChange={(e) => updateLine(index, 'manpower', e.target.value)}
-                          className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
-                          required
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => removeLine(index)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Submit Button */}
-        <div className="flex justify-end gap-2">
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" />
-            {loading ? 'Saving...' : 'Save Routing'}
-          </button>
-        </div>
-      </form>
-
-      {/* Routing List Section */}
-      <RoutingList />
-    </div>
-  );
-};
-
-const RoutingList: React.FC = () => {
-  const [routings, setRoutings] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(false);
-
-  const fetchRoutings = async () => {
-    setLoading(true);
+  const handleEdit = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/api/production-routing`);
+      const res = await fetch(`${API_BASE}/api/production-routing/${id}`);
       const result = await res.json();
       if (result.success) {
-        setRoutings(result.data);
+        setEditingId(id);
+        const header = result.data.header;
+        setHeaderData({
+          ...header,
+          customer_id: String(header.customer_id),
+          group_id: String(header.group_id),
+          leather_id: String(header.leather_id),
+          style_id: String(header.style_id),
+          color_id: String(header.color_id),
+          created_on: header.created_on ? new Date(header.created_on).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          category: header.category || '',
+          target_per_day: String(header.target_per_day),
+          tot_smv: String(header.tot_smv)
+        });
+        setLines(result.data.lines.map((l: any) => ({ machine_centre_id: String(l.machine_centre_id), observed_time: String(l.observed_time), rating_factor: String(l.rating_factor), manpower: String(l.manpower) })));
+        setShowModal(true);
       }
     } catch (error) {
-      console.error('Error fetching routings:', error);
-    } finally {
-      setLoading(false);
+      toast.error('Failed to load routing');
     }
   };
 
-  React.useEffect(() => {
-    fetchRoutings();
-  }, []);
-
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this routing?')) return;
+    if (!confirm('Delete this routing?')) return;
     try {
       const res = await fetch(`${API_BASE}/api/production-routing/${id}`, { method: 'DELETE' });
       const result = await res.json();
@@ -560,53 +183,251 @@ const RoutingList: React.FC = () => {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!headerData.customer_id || !headerData.style_id || !headerData.target_per_day || !headerData.tot_smv) {
+      toast.error('Please fill all required header fields');
+      return;
+    }
+    if (lines.some(l => !l.machine_centre_id || !l.observed_time || !l.rating_factor || !l.manpower)) {
+      toast.error('Please fill all line item fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        header: headerData,
+        lines: lines.map(line => ({ machine_centre_id: parseInt(line.machine_centre_id), observed_time: parseFloat(line.observed_time), rating_factor: parseFloat(line.rating_factor), manpower: parseFloat(line.manpower) })),
+      };
+
+      const url = editingId ? `${API_BASE}/api/production-routing/${editingId}` : `${API_BASE}/api/production-routing`;
+      const method = editingId ? 'PUT' : 'POST';
+
+      const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(editingId ? 'Routing updated' : 'Routing created');
+        setShowModal(false);
+        fetchRoutings();
+      } else {
+        toast.error(result.error || 'Failed to save routing');
+      }
+    } catch (error) {
+      toast.error('Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Existing Production Routings</h2>
-        <button onClick={fetchRoutings} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-          <RefreshCw className="h-3 w-3" /> Refresh
-        </button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Color</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target/Day</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total SMV</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {routings.map((r) => (
-              <tr key={r.id}>
-                <td className="px-4 py-2 text-sm">{r.customer_name}</td>
-                <td className="px-4 py-2 text-sm">{r.style_name}</td>
-                <td className="px-4 py-2 text-sm">{r.color_name}</td>
-                <td className="px-4 py-2 text-sm">{r.target_per_day}</td>
-                <td className="px-4 py-2 text-sm font-mono">{r.tot_smv}</td>
-                <td className="px-4 py-2 text-sm">{new Date(r.created_on).toLocaleDateString()}</td>
-                <td className="px-4 py-2 text-sm">
-                  <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-900">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {routings.length === 0 && !loading && (
+    <div className="p-6">
+      <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">Production Routing</h1>
+          <div className="flex gap-2">
+            <button onClick={fetchRoutings} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </button>
+            <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
+              <Plus className="h-4 w-4" />Add New
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Color</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target/Day</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total SMV</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {routings.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-4 py-2 text-sm">{r.customer_name}</td>
+                  <td className="px-4 py-2 text-sm">{r.style_name}</td>
+                  <td className="px-4 py-2 text-sm">{r.color_name}</td>
+                  <td className="px-4 py-2 text-sm">{r.target_per_day}</td>
+                  <td className="px-4 py-2 text-sm font-mono">{r.tot_smv}</td>
+                  <td className="px-4 py-2 text-sm">{new Date(r.created_on).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-sm">
+                    <div className="flex gap-2">
+                      <button onClick={() => handleEdit(r.id)} className="text-blue-600 hover:text-blue-900">
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-900">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {routings.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold">{editingId ? 'Edit' : 'Add'} Production Routing</h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-4">Header Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Customer <span className="text-red-500">*</span></label>
+                    <select value={headerData.customer_id} onChange={(e) => setHeaderData({ ...headerData, customer_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                      <option value="">Select Customer</option>
+                      {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Group <span className="text-red-500">*</span></label>
+                    <select value={headerData.group_id} onChange={(e) => setHeaderData({ ...headerData, group_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                      <option value="">Select Group</option>
+                      {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Leather <span className="text-red-500">*</span></label>
+                    <select value={headerData.leather_id} onChange={(e) => setHeaderData({ ...headerData, leather_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                      <option value="">Select Leather</option>
+                      {leathers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Style <span className="text-red-500">*</span></label>
+                    <select value={headerData.style_id} onChange={(e) => setHeaderData({ ...headerData, style_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                      <option value="">Select Style</option>
+                      {styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Color <span className="text-red-500">*</span></label>
+                    <select value={headerData.color_id} onChange={(e) => setHeaderData({ ...headerData, color_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                      <option value="">Select Color</option>
+                      {colors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Created On <span className="text-red-500">*</span></label>
+                    <input type="date" value={headerData.created_on} onChange={(e) => setHeaderData({ ...headerData, created_on: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <input type="text" value={headerData.category} onChange={(e) => setHeaderData({ ...headerData, category: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Target per Day <span className="text-red-500">*</span></label>
+                    <input type="number" value={headerData.target_per_day} onChange={(e) => setHeaderData({ ...headerData, target_per_day: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Target per Hour</label>
+                    <input type="text" value={targetPerHour} readOnly className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Total SMV <span className="text-red-500">*</span></label>
+                    <input type="number" step="0.0001" value={headerData.tot_smv} onChange={(e) => setHeaderData({ ...headerData, tot_smv: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Line Items</h3>
+                  <button type="button" onClick={addLine} className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 flex items-center gap-1 text-sm">
+                    <Plus className="h-4 w-4" />Add Line
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Normal Time</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Std Time</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Mins 12 prs</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/hr</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/day</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Manpower</th>
+                        <th className="px-2 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {lines.map((line, index) => {
+                        const calc = calculateLineValues(line);
+                        return (
+                          <tr key={index}>
+                            <td className="px-2 py-2">
+                              <select value={line.machine_centre_id} onChange={(e) => updateLine(index, 'machine_centre_id', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1" required>
+                                <option value="">Select</option>
+                                {machineCentres.map((mc) => <option key={mc.id} value={mc.id}>{mc.name}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" step="0.01" value={line.observed_time} onChange={(e) => updateLine(index, 'observed_time', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" step="0.01" value={line.rating_factor} onChange={(e) => updateLine(index, 'rating_factor', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
+                            <td className="px-2 py-2 text-gray-700">{calc.normal_time_secs_pr}</td>
+                            <td className="px-2 py-2 text-gray-700">{calc.std_time_secs_pr}</td>
+                            <td className="px-2 py-2 text-gray-700">{calc.mins_12_prs_box.toFixed(1)}</td>
+                            <td className="px-2 py-2 text-gray-700">{calc.pairs_per_hr}</td>
+                            <td className="px-2 py-2 text-gray-700">{calc.pairs_per_day}</td>
+                            <td className="px-2 py-2">
+                              <input type="number" step="0.1" value={line.manpower} onChange={(e) => updateLine(index, 'manpower', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
+                            <td className="px-2 py-2">
+                              <button type="button" onClick={() => removeLine(index)} className="text-red-600 hover:text-red-900">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setShowModal(false)} className="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400">
+                  Cancel
+                </button>
+                <button type="submit" disabled={loading} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
+                  <Save className="h-4 w-4" />{loading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
-import { RefreshCw } from 'lucide-react';

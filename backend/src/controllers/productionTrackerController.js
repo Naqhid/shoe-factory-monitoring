@@ -24,7 +24,7 @@ class ProductionTrackerController {
           COALESCE(COUNT(DISTINCT pd.emp_id), 0) as present_employees,
           10 as target_employees
         FROM prod_data pd
-        WHERE pd.prod_date = ? ${whereClause}
+        WHERE DATE(pd.prod_date) = DATE(?) ${whereClause}
       `, params);
 
       const summary = outputData[0];
@@ -41,7 +41,7 @@ class ProductionTrackerController {
           COALESCE(SUM(pd.output_pairs), 0) as actual_pairs,
           COALESCE(SUM(pd.target_pairs), 0) as target_pairs
         FROM prod_data pd
-        WHERE pd.prod_date = ? ${whereClause}
+        WHERE DATE(pd.prod_date) = DATE(?) ${whereClause}
       `, workCentreId && workCentreId !== 'all' ? [yesterdayStr, workCentreId] : [yesterdayStr]);
 
       const yesterdayEfficiency = yesterdayData[0].target_pairs > 0
@@ -59,8 +59,8 @@ class ProductionTrackerController {
           SELECT 
             (SUM(pd.output_pairs) / NULLIF(SUM(pd.target_pairs), 0)) * 100 as daily_eff
           FROM prod_data pd
-          WHERE pd.prod_date BETWEEN ? AND ? ${whereClause}
-          GROUP BY pd.prod_date
+          WHERE DATE(pd.prod_date) BETWEEN DATE(?) AND DATE(?) ${whereClause}
+          GROUP BY DATE(pd.prod_date)
         ) as daily_stats
       `, workCentreId && workCentreId !== 'all' ? [lastWeekStr, date, workCentreId] : [lastWeekStr, date]);
 
@@ -112,7 +112,7 @@ class ProductionTrackerController {
           HOUR(pd.created_at) as hour,
           SUM(pd.output_pairs) as pairs
         FROM prod_data pd
-        WHERE pd.prod_date = ? ${whereClause}
+        WHERE DATE(pd.prod_date) = DATE(?) ${whereClause}
         GROUP BY HOUR(pd.created_at)
         ORDER BY hour
       `, params);
@@ -150,7 +150,7 @@ class ProductionTrackerController {
           ROUND((SUM(pd.output_pairs) / NULLIF(SUM(pd.target_pairs), 0)) * 100) as efficiency
         FROM prod_data pd
         JOIN machine_centres mc ON pd.machine_id = mc.machine_id
-        WHERE pd.prod_date = ? ${whereClause}
+        WHERE DATE(pd.prod_date) = DATE(?) ${whereClause}
         GROUP BY mc.id, mc.code, mc.name
         HAVING target_pairs > 0
         ORDER BY efficiency ASC
@@ -187,7 +187,7 @@ class ProductionTrackerController {
           SUM(pd.idle_stop_time) as total_minutes,
           ROUND((SUM(pd.idle_stop_time) / NULLIF(SUM(SUM(pd.idle_stop_time)) OVER(), 0)) * 100) as percentage
         FROM prod_data pd
-        WHERE pd.prod_date = ? 
+        WHERE DATE(pd.prod_date) = DATE(?) 
           AND pd.stoppage_reason IS NOT NULL 
           AND pd.idle_stop_time > 0 
           ${whereClause}

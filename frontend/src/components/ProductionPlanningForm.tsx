@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, Upload, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
 
@@ -46,41 +46,43 @@ const emptyLine = (): LineItem => ({
 });
 
 export const ProductionPlanningForm: React.FC = () => {
+  const [plans, setPlans] = React.useState<any[]>([]);
+  const [showModal, setShowModal] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<number | null>(null);
   const [styles, setStyles] = React.useState<MasterOption[]>([]);
   const [workCentres, setWorkCentres] = React.useState<MasterOption[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [bulkMode, setBulkMode] = React.useState(false);
-  const [bulkData, setBulkData] = React.useState<any[]>([]);
-
   const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
 
-
-  // Fetch styles and work centres on mount
   React.useEffect(() => {
-    const fetchStyles = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/masters/styles`);
-        const result = await response.json();
-        if (result.success) setStyles(result.data);
-      } catch (error) {
-        toast.error('Error loading styles');
-        console.error(error);
-      }
-    };
-    const fetchWorkCentres = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/masters/work_centres`);
-        const result = await response.json();
-        if (result.success) setWorkCentres(result.data);
-      } catch (error) {
-        toast.error('Error loading work centres');
-        console.error(error);
-      }
-    };
-    fetchStyles();
-    fetchWorkCentres();
+    fetchPlans();
+    fetchMasters();
   }, []);
+
+  const fetchPlans = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/production-planning`);
+      const result = await res.json();
+      if (result.success) setPlans(result.data);
+    } catch (error) {
+      console.error('Error fetching plans:', error);
+    }
+  };
+
+  const fetchMasters = async () => {
+    try {
+      const [stylesRes, wcRes] = await Promise.all([
+        fetch(`${API_BASE}/api/masters/styles`),
+        fetch(`${API_BASE}/api/masters/work_centres`)
+      ]);
+      const [stylesData, wcData] = await Promise.all([stylesRes.json(), wcRes.json()]);
+      if (stylesData.success) setStyles(stylesData.data);
+      if (wcData.success) setWorkCentres(wcData.data);
+    } catch (error) {
+      toast.error('Error loading master data');
+    }
+  };
 
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
   const removeLine = (idx: number) => {
@@ -125,293 +127,54 @@ export const ProductionPlanningForm: React.FC = () => {
           smv_per_pair: String(r.tot_smv ?? ''),
         });
       } else {
-        toast.error(`No routing found for this style.`);
+        toast.error('No routing found for this style');
       }
     } catch (e) {
       toast.error('Error fetching routing');
-      console.error(e);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const csv = (ev.target?.result as string) || '';
-      const rows = csv.split('\n');
-      const headers = rows[0].split(',').map((h) => h.trim());
-      const data = rows.slice(1)
-        .map((row) => {
-          const v = row.split(',');
-          const o: any = {};
-          headers.forEach((h, i) => { o[h] = v[i]?.trim(); });
-          return o;
-        })
-        .filter((r) => r.plan_date && r.style_code && r.work_centre_id && r.total_target_per_day && r.target_pairs_per_tray && r.man_hours_minutes && r.smv_per_pair);
-      setBulkData(data);
-      setBulkMode(true);
-    };
-    reader.readAsText(file);
+  const handleAdd = () => {
+    setEditingId(null);
+    setPlanDate(new Date().toISOString().split('T')[0]);
+    setLines([emptyLine()]);
+    setShowModal(true);
   };
 
-  const handleBulkSubmit = async () => {
-    if (bulkData.length === 0) return;
-    setLoading(true);
-    let ok = 0, err = 0;
-    for (const row of bulkData) {
-      try {
-        const style = styles.find((s) => s.code === row.style_code);
-        if (!style) { err++; continue; }
-        const payload: any = {
-          plan_date: row.plan_date,
-          style_id: style.id,
-          customer_id: null,
-          group_id: null,
-          leather_id: null,
-          color_id: null,
-          work_centre_id: parseInt(row.work_centre_id),
-          total_target_per_day: parseInt(row.total_target_per_day),
-          target_pairs_per_tray: parseInt(row.target_pairs_per_tray),
-          tray_count: parseInt(row.tray_count || '0'),
-          man_hours_minutes: parseInt(row.man_hours_minutes),
-          smv_per_pair: parseFloat(row.smv_per_pair || '0'),
-        };
-        const rr = await fetch(`${API_BASE}/api/production-routing/style/${style.id}`);
-        const rj = await rr.json();
-        if (rj.success && rj.data) {
-          payload.customer_id = rj.data.customer_id;
-          payload.group_id = rj.data.group_id;
-          payload.leather_id = rj.data.leather_id;
-          payload.color_id = rj.data.color_id;
-        }
-        const res = await fetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        const j = await res.json();
-        if (j.success) ok++; else err++;
-      } catch { err++; }
-    }
-    setLoading(false);
-    toast.success(`Bulk: ${ok} ok, ${err} errors`);
-    setBulkMode(false);
-    setBulkData([]);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const toSave = lines.filter(
-      (l) =>
-        l.style_id && l.customer_id && l.work_centre_id && l.total_target_per_day &&
-        l.target_pairs_per_tray && l.man_hours_minutes && l.smv_per_pair
-    );
-    if (toSave.length === 0) {
-      toast.error('Add at least one line with Style, Work Centre, targets, and SMV. Customer/Group/Leather/Color come from routing when Style is selected.');
-      return;
-    }
-
-    setLoading(true);
-    let ok = 0, err = 0;
-    for (const l of toSave) {
-      try {
-        const payload = {
-          plan_date: planDate,
-          style_id: parseInt(l.style_id),
-          customer_id: parseInt(l.customer_id),
-          group_id: l.group_id ? parseInt(l.group_id) : null,
-          leather_id: l.leather_id ? parseInt(l.leather_id) : null,
-          color_id: l.color_id ? parseInt(l.color_id) : null,
-          work_centre_id: parseInt(l.work_centre_id),
-          total_target_per_day: parseInt(l.total_target_per_day),
-          target_pairs_per_tray: parseInt(l.target_pairs_per_tray),
-          tray_count: parseInt(l.tray_count || '0'),
-          man_hours_minutes: parseInt(l.man_hours_minutes),
-          smv_per_pair: parseFloat(l.smv_per_pair),
-        };
-        const res = await fetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        const j = await res.json();
-        if (j.success) ok++; else { err++; toast.error(j.error || 'Failed to save line'); }
-      } catch (e) {
-        err++;
-        toast.error('Network error');
-      }
-    }
-    setLoading(false);
-    if (ok) {
-      toast.success(`Saved ${ok} line(s)${err ? `, ${err} failed` : ''}.`);
-      setLines([emptyLine()]);
-    }
-  };
-
-  return (
-    <div className="p-6">
-      <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
-      </header>
-
-      {/* Bulk Upload */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4 text-gray-800">Bulk Upload</h2>
-        <div className="flex items-center gap-4 flex-wrap">
-          <input type="file" accept=".csv" onChange={handleFileUpload} className="border border-gray-300 rounded-md px-3 py-2" />
-          <span className="text-sm text-gray-600">CSV: plan_date, style_code, work_centre_id, total_target_per_day, target_pairs_per_tray, man_hours_minutes, smv_per_pair</span>
-        </div>
-        {bulkData.length > 0 && (
-          <div className="mt-4 flex items-center gap-2">
-            <span className="text-sm text-gray-700">{bulkData.length} rows</span>
-            <button type="button" onClick={handleBulkSubmit} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2">
-              <Upload className="h-4 w-4" />{loading ? 'Uploading...' : 'Upload Plans'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        {/* Header: Plan Date only */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Plan</h2>
-          <div className="max-w-xs">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Plan Date <span className="text-red-500">*</span></label>
-            <input
-              type="date"
-              value={planDate}
-              onChange={(e) => setPlanDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Line items: Customer, Style, Leather, Color, Group + Work Centre, targets, SMV */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Line Items</h2>
-            <button type="button" onClick={addLine} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm font-medium">
-              <Plus className="h-4 w-4" /> Add Line
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Customer</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Style</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Leather</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Color</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Group</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Total Target</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Pairs/Tray</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Tray Count</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">Man Hrs (min)</th>
-                  <th className="text-left py-2 px-2 font-medium text-gray-700">SMV</th>
-                  <th className="w-10" />
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, idx) => (
-                  <tr key={idx} className="border-b border-gray-100">
-                    <td className="py-1 px-2">
-                      <input readOnly value={line.customer_name} className="w-full min-w-[100px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <select
-                        value={line.style_id}
-                        onChange={(e) => handleStyleChange(idx, e.target.value)}
-                        className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
-                      >
-                        <option value="">Style</option>
-                        {styles.map((s) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-1 px-2">
-                      <input readOnly value={line.leather_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <input readOnly value={line.color_name} className="w-full min-w-[80px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <input readOnly value={line.group_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <select
-                        value={line.work_centre_id}
-                        onChange={(e) => updateLine(idx, { work_centre_id: e.target.value })}
-                        className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
-                      >
-                        <option value="">Work Centre</option>
-                        {workCentres.map((c) => (
-                          <option key={c.id} value={c.id}>{c.code} - {c.name}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-1 px-2">
-                      <input type="number" value={line.total_target_per_day} onChange={(e) => updateLine(idx, { total_target_per_day: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <input type="number" value={line.target_pairs_per_tray} onChange={(e) => updateLine(idx, { target_pairs_per_tray: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <input type="number" value={line.tray_count} onChange={(e) => updateLine(idx, { tray_count: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <input type="number" value={line.man_hours_minutes} onChange={(e) => updateLine(idx, { man_hours_minutes: e.target.value })} className="w-24 border border-gray-300 rounded px-2 py-1" />
-                    </td>
-                    <td className="py-1 px-2">
-                      <input readOnly value={line.smv_per_pair} className="w-16 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
-                    </td>
-                    <td className="py-1 px-1">
-                      <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1} className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-40" title="Remove line">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">Customer, Group, Leather, and Color are filled from Production Routing when you select a Style.</p>
-        </div>
-
-        <div className="flex justify-end">
-          <button type="submit" disabled={loading} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
-            <Save className="h-4 w-4" />{loading ? 'Saving...' : 'Save Plan'}
-          </button>
-        </div>
-      </form>
-
-      {/* Plans List Section */}
-      <PlanList />
-    </div>
-  );
-};
-
-const PlanList: React.FC = () => {
-  const [plans, setPlans] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(false);
-
-  const fetchPlans = async () => {
-    setLoading(true);
+  const handleEdit = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/api/production-planning`);
+      const res = await fetch(`${API_BASE}/api/production-planning/${id}`);
       const result = await res.json();
       if (result.success) {
-        setPlans(result.data);
+        const plan = result.data;
+        setEditingId(id);
+        setPlanDate(plan.plan_date ? new Date(plan.plan_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+        setLines([{
+          style_id: String(plan.style_id),
+          customer_id: String(plan.customer_id),
+          group_id: String(plan.group_id || ''),
+          leather_id: String(plan.leather_id || ''),
+          color_id: String(plan.color_id || ''),
+          customer_name: plan.customer_name || '',
+          group_name: plan.group_name || '',
+          leather_name: plan.leather_name || '',
+          color_name: plan.color_name || '',
+          work_centre_id: String(plan.work_centre_id),
+          total_target_per_day: String(plan.total_target_per_day),
+          target_pairs_per_tray: String(plan.target_pairs_per_tray),
+          tray_count: String(plan.tray_count || '0'),
+          man_hours_minutes: String(plan.man_hours_minutes),
+          smv_per_pair: String(plan.smv_per_pair),
+        }]);
+        setShowModal(true);
       }
     } catch (error) {
-      console.error('Error fetching plans:', error);
-    } finally {
-      setLoading(false);
+      toast.error('Failed to load plan');
     }
   };
 
-  React.useEffect(() => {
-    fetchPlans();
-  }, []);
-
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this plan?')) return;
+    if (!confirm('Delete this plan?')) return;
     try {
       const res = await fetch(`${API_BASE}/api/production-planning/${id}`, { method: 'DELETE' });
       const result = await res.json();
@@ -426,49 +189,274 @@ const PlanList: React.FC = () => {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const toSave = lines.filter(
+      (l) =>
+        l.style_id && l.customer_id && l.work_centre_id && l.total_target_per_day &&
+        l.target_pairs_per_tray && l.man_hours_minutes && l.smv_per_pair
+    );
+    if (toSave.length === 0) {
+      toast.error('Add at least one complete line');
+      return;
+    }
+
+    setLoading(true);
+    
+    if (editingId) {
+      // Update existing plan
+      try {
+        const l = toSave[0];
+        const payload = {
+          plan_date: planDate,
+          style_id: parseInt(l.style_id),
+          customer_id: parseInt(l.customer_id),
+          group_id: l.group_id ? parseInt(l.group_id) : null,
+          leather_id: l.leather_id ? parseInt(l.leather_id) : null,
+          color_id: l.color_id ? parseInt(l.color_id) : null,
+          work_centre_id: parseInt(l.work_centre_id),
+          total_target_per_day: parseInt(l.total_target_per_day),
+          target_pairs_per_tray: parseInt(l.target_pairs_per_tray),
+          tray_count: parseInt(l.tray_count || '0'),
+          man_hours_minutes: parseInt(l.man_hours_minutes),
+          smv_per_pair: parseFloat(l.smv_per_pair),
+        };
+        const res = await fetch(`${API_BASE}/api/production-planning/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const result = await res.json();
+        if (result.success) {
+          toast.success('Plan updated');
+          setShowModal(false);
+          fetchPlans();
+        } else {
+          toast.error(result.error || 'Failed to update plan');
+        }
+      } catch (e) {
+        toast.error('Network error');
+      }
+      setLoading(false);
+    } else {
+      // Create new plans
+      let ok = 0, err = 0;
+      for (const l of toSave) {
+        try {
+          const payload = {
+            plan_date: planDate,
+            style_id: parseInt(l.style_id),
+            customer_id: parseInt(l.customer_id),
+            group_id: l.group_id ? parseInt(l.group_id) : null,
+            leather_id: l.leather_id ? parseInt(l.leather_id) : null,
+            color_id: l.color_id ? parseInt(l.color_id) : null,
+            work_centre_id: parseInt(l.work_centre_id),
+            total_target_per_day: parseInt(l.total_target_per_day),
+            target_pairs_per_tray: parseInt(l.target_pairs_per_tray),
+            tray_count: parseInt(l.tray_count || '0'),
+            man_hours_minutes: parseInt(l.man_hours_minutes),
+            smv_per_pair: parseFloat(l.smv_per_pair),
+          };
+          const res = await fetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          const j = await res.json();
+          if (j.success) ok++; else { err++; toast.error(j.error || 'Failed to save line'); }
+        } catch (e) {
+          err++;
+          toast.error('Network error');
+        }
+      }
+      setLoading(false);
+      if (ok) {
+        toast.success(`Saved ${ok} line(s)${err ? `, ${err} failed` : ''}`);
+        setShowModal(false);
+        fetchPlans();
+      }
+    }
+  };
+
   return (
-    <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Existing Production Plans</h2>
-        <button onClick={fetchPlans} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-          <RefreshCw className="h-3 w-3" /> Refresh
-        </button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Work Centre</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/Tray</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {plans.map((p) => (
-              <tr key={p.id}>
-                <td className="px-4 py-2 text-sm">{new Date(p.plan_date).toLocaleDateString()}</td>
-                <td className="px-4 py-2 text-sm">{p.style_name}</td>
-                <td className="px-4 py-2 text-sm">{p.work_centre_name}</td>
-                <td className="px-4 py-2 text-sm">{p.total_target_per_day}</td>
-                <td className="px-4 py-2 text-sm">{p.target_pairs_per_tray}</td>
-                <td className="px-4 py-2 text-sm">
-                  <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-900">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {plans.length === 0 && !loading && (
+    <div className="p-6">
+      <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
+          <div className="flex gap-2">
+            <button onClick={fetchPlans} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </button>
+            <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
+              <Plus className="h-4 w-4" />Add New
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No planning records found</td>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Work Centre</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/Tray</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {plans.map((p) => (
+                <tr key={p.id}>
+                  <td className="px-4 py-2 text-sm">{new Date(p.plan_date).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-sm">{p.style_name}</td>
+                  <td className="px-4 py-2 text-sm">{p.work_centre_name}</td>
+                  <td className="px-4 py-2 text-sm">{p.total_target_per_day}</td>
+                  <td className="px-4 py-2 text-sm">{p.target_pairs_per_tray}</td>
+                  <td className="px-4 py-2 text-sm">
+                    <div className="flex gap-2">
+                      <button onClick={() => handleEdit(p.id)} className="text-blue-600 hover:text-blue-900">
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-900">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {plans.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No planning records found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold">{editingId ? 'Edit' : 'Add'} Production Plan</h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Plan Date <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={planDate}
+                  onChange={(e) => setPlanDate(e.target.value)}
+                  className="max-w-xs border border-gray-300 rounded-md px-3 py-2"
+                  required
+                />
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Line Items</h3>
+                  <button type="button" onClick={addLine} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm font-medium">
+                    <Plus className="h-4 w-4" /> Add Line
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Customer</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Style</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Leather</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Color</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Group</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Work Centre</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Total Target</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Pairs/Tray</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Tray Count</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">Man Hrs (min)</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-700">SMV</th>
+                        <th className="w-10" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((line, idx) => (
+                        <tr key={idx} className="border-b border-gray-100">
+                          <td className="py-1 px-2">
+                            <input readOnly value={line.customer_name} className="w-full min-w-[100px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <select
+                              value={line.style_id}
+                              onChange={(e) => handleStyleChange(idx, e.target.value)}
+                              className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
+                            >
+                              <option value="">Style</option>
+                              {styles.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-1 px-2">
+                            <input readOnly value={line.leather_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input readOnly value={line.color_name} className="w-full min-w-[80px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input readOnly value={line.group_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <select
+                              value={line.work_centre_id}
+                              onChange={(e) => updateLine(idx, { work_centre_id: e.target.value })}
+                              className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
+                            >
+                              <option value="">Work Centre</option>
+                              {workCentres.map((c) => (
+                                <option key={c.id} value={c.id}>{c.code} - {c.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-1 px-2">
+                            <input type="number" value={line.total_target_per_day} onChange={(e) => updateLine(idx, { total_target_per_day: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input type="number" value={line.target_pairs_per_tray} onChange={(e) => updateLine(idx, { target_pairs_per_tray: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input type="number" value={line.tray_count} onChange={(e) => updateLine(idx, { tray_count: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input type="number" value={line.man_hours_minutes} onChange={(e) => updateLine(idx, { man_hours_minutes: e.target.value })} className="w-24 border border-gray-300 rounded px-2 py-1" />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input readOnly value={line.smv_per_pair} className="w-16 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          </td>
+                          <td className="py-1 px-1">
+                            <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1} className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-40">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="mt-4 text-sm text-gray-600">Customer, Group, Leather, and Color are filled from Production Routing when you select a Style.</p>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setShowModal(false)} className="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400">
+                  Cancel
+                </button>
+                <button type="submit" disabled={loading} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
+                  <Save className="h-4 w-4" />{loading ? 'Saving...' : (editingId ? 'Update' : 'Save')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
