@@ -29,7 +29,7 @@ try {
   const certPath = path.join(certDir, 'cert.pem');
 
   // Generate private key and certificate
-  const command = `openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subjectaltname "DNS:localhost,IP:192.168.1.11,IP:127.0.0.1" -keyout "${keyPath}" -out "${certPath}" -days 365 -config "${path.join(__dirname, 'openssl.cnf')}"`;
+  const command = `openssl req -x509 -newkey rsa:2048 -nodes -keyout "${keyPath}" -out "${certPath}" -days 365 -config "${path.join(__dirname, 'openssl.cnf')}"`;
   
   execSync(command, { stdio: 'inherit' });
 

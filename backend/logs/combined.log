@@ -629,3 +629,7 @@
 {"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:33:07.073Z"}
 {"level":"info","message":"PUT /api/masters/users/3 from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:33:16.312Z"}
 {"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:33:16.394Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:58:42.632Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:58:42.634Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:58:42.700Z"}
+{"level":"info","message":"GET /api/masters/users from 127.0.0.1 | Origin: http://localhost:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-23T19:58:42.707Z"}
