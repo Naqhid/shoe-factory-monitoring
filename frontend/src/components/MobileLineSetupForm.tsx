@@ -171,7 +171,13 @@ export const MobileLineSetupForm: React.FC = () => {
   };
 
   const handleScanError = (err: any) => {
-    toast.error('Scanner error');
+    console.error('Scanner error:', err);
+    // Suppress common errors like 'Permission denied' or 'Not found' from being too aggressive 
+    // but show them once properly.
+    const msg = err?.message || err || 'Scanner error';
+    if (!msg.toString().includes('NotFoundException')) {
+      toast.error(`Scanner: ${msg}`);
+    }
     setScanningEmployee(false);
     setScanningMachine(false);
     setIsProcessing(false);

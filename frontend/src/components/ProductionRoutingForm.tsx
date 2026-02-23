@@ -106,7 +106,7 @@ export const ProductionRoutingForm: React.FC = () => {
   }, []);
 
   // Calculate target per hour
-  const targetPerHour = headerData.target_per_day ? (parseFloat(headerData.target_per_day) / 8).toFixed(2) : '0.00';
+  const targetPerHour = headerData.target_per_day ? Math.round(parseFloat(headerData.target_per_day) / 8).toString() : '0';
 
   // Calculate line values
   const calculateLineValues = (line: RoutingLine) => {
@@ -116,16 +116,24 @@ export const ProductionRoutingForm: React.FC = () => {
 
     const normalTimeSecs = (observedTime * ratingFactor) / 100;
     const stdTimeSecs = normalTimeSecs * 1.15;
-    const mins12Prs = (stdTimeSecs * 12) / 60;
-    const pairsPerHr = targetPerDay / 8;
+
+    // mins 12 pairs/box = (stdTimeSecs * 12) / 60. Keep 1 decimal.
+    const mins12Prs = Math.round(((stdTimeSecs * 12) / 60) * 10) / 10;
+
+    // pairs/hour = Target per day / Standard Time (S/PR). Round off without decimal.
+    // Using the user's literal formula from feedback.
+    const pairsPerHr = stdTimeSecs > 0 ? Math.round(targetPerDay / stdTimeSecs) : 0;
+
+    // Pairs/day = Line items Pairs/hour * 8
     const pairsPerDay = pairsPerHr * 8;
 
     return {
-      normal_time_secs_pr: normalTimeSecs,
-      std_time_secs_pr: stdTimeSecs,
+      normal_time_secs_pr: Math.round(normalTimeSecs),
+      std_time_secs_pr: Math.round(stdTimeSecs),
       mins_12_prs_box: mins12Prs,
       pairs_per_hr: pairsPerHr,
       pairs_per_day: pairsPerDay,
+      manpower: line.manpower ? (Math.round(parseFloat(line.manpower) * 10) / 10).toString() : '0'
     };
   };
 
@@ -453,19 +461,19 @@ export const ProductionRoutingForm: React.FC = () => {
                         />
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.normal_time_secs_pr.toFixed(4)}
+                        {calculated.normal_time_secs_pr}
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.std_time_secs_pr.toFixed(4)}
+                        {calculated.std_time_secs_pr}
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.mins_12_prs_box.toFixed(4)}
+                        {calculated.mins_12_prs_box.toFixed(1)}
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.pairs_per_hr.toFixed(2)}
+                        {calculated.pairs_per_hr}
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-700">
-                        {calculated.pairs_per_day.toFixed(2)}
+                        {calculated.pairs_per_day}
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -506,6 +514,99 @@ export const ProductionRoutingForm: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* Routing List Section */}
+      <RoutingList />
     </div>
   );
 };
+
+const RoutingList: React.FC = () => {
+  const [routings, setRoutings] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  const fetchRoutings = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/production-routing`);
+      const result = await res.json();
+      if (result.success) {
+        setRoutings(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching routings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchRoutings();
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this routing?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/production-routing/${id}`, { method: 'DELETE' });
+      const result = await res.json();
+      if (result.success) {
+        toast.success('Routing deleted');
+        fetchRoutings();
+      } else {
+        toast.error(result.error || 'Delete failed');
+      }
+    } catch (error) {
+      toast.error('Network error');
+    }
+  };
+
+  return (
+    <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-gray-800">Existing Production Routings</h2>
+        <button onClick={fetchRoutings} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+          <RefreshCw className="h-3 w-3" /> Refresh
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Color</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target/Day</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total SMV</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {routings.map((r) => (
+              <tr key={r.id}>
+                <td className="px-4 py-2 text-sm">{r.customer_name}</td>
+                <td className="px-4 py-2 text-sm">{r.style_name}</td>
+                <td className="px-4 py-2 text-sm">{r.color_name}</td>
+                <td className="px-4 py-2 text-sm">{r.target_per_day}</td>
+                <td className="px-4 py-2 text-sm font-mono">{r.tot_smv}</td>
+                <td className="px-4 py-2 text-sm">{new Date(r.created_on).toLocaleDateString()}</td>
+                <td className="px-4 py-2 text-sm">
+                  <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-900">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {routings.length === 0 && !loading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+import { RefreshCw } from 'lucide-react';

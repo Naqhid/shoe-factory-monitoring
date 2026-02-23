@@ -13,7 +13,10 @@ class AuthController {
             // In production, password should be hashed (e.g., bcrypt).
             // For this demo, we check plain text as seeded.
             const [rows] = await db.execute(
-                'SELECT id, code, name, role, email FROM users WHERE (code = ? OR email = ?) AND password = ?',
+                `SELECT u.id, u.code, u.name, u.role, u.email, u.machine_id, wc.code as work_centre_code 
+                 FROM users u 
+                 LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
+                 WHERE (u.code = ? OR u.email = ?) AND u.password = ?`,
                 [login, login, password]
             );
 
@@ -28,8 +31,11 @@ class AuthController {
                 success: true,
                 data: {
                     id: user.id,
+                    code: user.code,
                     name: user.name,
-                    role: user.role
+                    role: user.role,
+                    machine_id: user.machine_id,
+                    work_centre_code: user.work_centre_code
                 }
             });
         } catch (error) {

@@ -408,60 +408,62 @@ export const UserRightsForm: React.FC = () => {
         <div className="mt-8">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">All User Rights</h2>
           <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User ID
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Form Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Form ID
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Read
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Write
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {existingRecords.map((record) => (
-                  <tr key={record.id}>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                      {record.user_name}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {record.user_code}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                      {record.form_name}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {record.form_code}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${record.read_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                        {record.read_permission ? 'Yes' : 'No'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${record.write_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                        {record.write_permission ? 'Yes' : 'No'}
-                      </span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      User Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      User ID
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Form Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Form ID
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Read
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Write
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {existingRecords.map((record) => (
+                    <tr key={record.id}>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                        {record.user_name}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {record.user_code}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                        {record.form_name}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {record.form_code}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${record.read_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                          {record.read_permission ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${record.write_permission ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                          {record.write_permission ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

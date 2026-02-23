@@ -12,7 +12,9 @@ interface UserRecord {
   email?: string;
   role: string;
   work_centre_id?: number;
+  work_centre_code?: string;
   work_centre_name?: string;
+  machine_id?: string;
 }
 
 export const UsersMasterForm: React.FC = () => {
@@ -25,7 +27,8 @@ export const UsersMasterForm: React.FC = () => {
     email: '',
     password: '',
     role: 'user',
-    work_centre_id: ''
+    work_centre_id: '',
+    machine_id: ''
   });
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<UserRecord[]>([]);
@@ -61,7 +64,7 @@ export const UsersMasterForm: React.FC = () => {
   }, []);
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', email: '', password: '', role: 'user', work_centre_id: '' });
+    setFormData({ code: '', name: '', email: '', password: '', role: 'user', work_centre_id: '', machine_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -111,7 +114,8 @@ export const UsersMasterForm: React.FC = () => {
       email: record.email || '',
       password: '', // Don't populate password for security
       role: record.role,
-      work_centre_id: record.work_centre_id?.toString() || ''
+      work_centre_id: record.work_centre_id?.toString() || '',
+      machine_id: record.machine_id || ''
     });
     setShowForm(true);
   };
@@ -148,7 +152,9 @@ export const UsersMasterForm: React.FC = () => {
       'Name': record.name,
       'Email': record.email || '',
       'Role': record.role,
-      'Work Centre': record.work_centre_name || ''
+      'Work Centre Code': record.work_centre_code || '',
+      'Work Centre Name': record.work_centre_name || '',
+      'Machine ID': record.machine_id || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -163,7 +169,7 @@ export const UsersMasterForm: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Users Master</h1>
@@ -190,8 +196,8 @@ export const UsersMasterForm: React.FC = () => {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold">
                 {editingRecord ? 'Edit' : 'Add'} User
@@ -204,7 +210,7 @@ export const UsersMasterForm: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Login *
+                  Login (Code) *
                 </label>
                 <input
                   type="text"
@@ -280,24 +286,37 @@ export const UsersMasterForm: React.FC = () => {
                   <option value="">Select Work Centre</option>
                   {workCentres.map((wc) => (
                     <option key={wc.id} value={wc.id}>
-                      {wc.name}
+                      {wc.code} - {wc.name}
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Machine ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.machine_id}
+                  onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. MAC-001"
+                />
               </div>
 
               <div className="flex gap-2 pt-4">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 flex-1"
                 >
                   {loading ? 'Saving...' : 'Save'}
                 </button>
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 flex-1"
                 >
                   Cancel
                 </button>
@@ -309,65 +328,75 @@ export const UsersMasterForm: React.FC = () => {
 
       {/* Records Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Login
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Role
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Work Centre
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {records.map((record) => (
-              <tr key={record.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {record.code}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {record.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {record.email || 'N/A'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {record.role}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {record.work_centre_name || 'N/A'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleEdit(record)}
-                    className="text-blue-600 hover:text-blue-900 mr-3"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(record.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Login
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Work Centre
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Machine ID
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {records.map((record) => (
+                <tr key={record.id}>
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {record.code}
+                  </td>
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.name}
+                  </td>
+                  <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.email || 'N/A'}
+                  </td>
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
+                    {record.role}
+                  </td>
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.work_centre_code ? `${record.work_centre_code} - ${record.work_centre_name}` : 'N/A'}
+                  </td>
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.machine_id || 'N/A'}
+                  </td>
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(record)}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(record.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {records.length === 0 && (
           <div className="text-center py-8 text-gray-500">

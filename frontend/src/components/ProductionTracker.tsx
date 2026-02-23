@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, TrendingDown, Users, AlertCircle, Clock } from 'lucide-react';
+import { Calendar, TrendingUp, TrendingDown, Users, AlertCircle, Clock, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
@@ -55,35 +55,38 @@ export const ProductionTracker: React.FC = () => {
     loadWorkCentres();
   }, [API_BASE]);
 
+  const [error, setError] = useState<string | null>(null);
+
   // Load dashboard data
   const loadDashboardData = async () => {
-    setLoading(true);
+    if (!summary) setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({
         date: selectedDate,
         ...(selectedLine !== 'all' && { workCentreId: selectedLine })
       });
 
-      const [summaryRes, hourlyRes, workstationsRes, stoppagesRes] = await Promise.all([
+      const responses = await Promise.all([
         fetch(`${API_BASE}/api/tracker/summary?${params}`),
         fetch(`${API_BASE}/api/tracker/hourly?${params}`),
         fetch(`${API_BASE}/api/tracker/workstations?${params}`),
         fetch(`${API_BASE}/api/tracker/stoppages?${params}`)
       ]);
 
-      const [summaryData, hourlyDataRes, workstationsData, stoppagesData] = await Promise.all([
-        summaryRes.json(),
-        hourlyRes.json(),
-        workstationsRes.json(),
-        stoppagesRes.json()
-      ]);
+      const results = await Promise.all(responses.map(r => r.json()));
+
+      const [summaryData, hourlyDataRes, workstationsData, stoppagesData] = results;
 
       if (summaryData.success) setSummary(summaryData.data);
       if (hourlyDataRes.success) setHourlyData(hourlyDataRes.data);
       if (workstationsData.success) setWorkstations(workstationsData.data);
       if (stoppagesData.success) setStoppages(stoppagesData.data);
-    } catch (error) {
+
+      if (!summaryData.success) setError(summaryData.error || 'Failed to load summary');
+    } catch (error: any) {
       console.error('Failed to load dashboard data:', error);
+      setError(error.message || 'Connection error');
       toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -114,6 +117,24 @@ export const ProductionTracker: React.FC = () => {
       default: return 'Unknown';
     }
   };
+
+  if (error && !summary) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-md p-8 max-w-sm w-full text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Oops!</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <button
+            onClick={loadDashboardData}
+            className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading && !summary) {
     return (

@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255),
     role VARCHAR(50) DEFAULT 'user',
     work_centre_id INT,
+    machine_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (work_centre_id) REFERENCES work_centres(id)

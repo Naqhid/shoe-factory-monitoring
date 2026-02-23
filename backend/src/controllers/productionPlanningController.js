@@ -23,7 +23,7 @@ class ProductionPlanningController {
         LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
         ORDER BY pp.plan_date DESC
       `);
-      
+
       res.json({ success: true, data: rows });
     } catch (error) {
       logger.error('Error getting production plans:', error);
@@ -35,7 +35,7 @@ class ProductionPlanningController {
   async getById(req, res) {
     try {
       const { id } = req.params;
-      
+
       const [rows] = await db.execute(`
         SELECT 
           pp.*,
@@ -54,11 +54,11 @@ class ProductionPlanningController {
         LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
         WHERE pp.id = ?
       `, [id]);
-      
+
       if (rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Plan not found' });
       }
-      
+
       res.json({ success: true, data: rows[0] });
     } catch (error) {
       logger.error('Error getting production plan by id:', error);
@@ -78,28 +78,29 @@ class ProductionPlanningController {
         color_id,
         work_centre_id,
         total_target_per_day,
-        target_pairs_per_day,
+        target_pairs_per_tray,
+        tray_count,
         man_hours_minutes,
         smv_per_pair
       } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_day || !man_hours_minutes || !smv_per_pair) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Required fields are missing' 
+      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_tray || !tray_count || !man_hours_minutes || !smv_per_pair) {
+        return res.status(400).json({
+          success: false,
+          error: 'Required fields are missing'
         });
       }
 
       const [result] = await db.execute(
         `INSERT INTO production_plan 
-        (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair]
+        (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0, man_hours_minutes, smv_per_pair]
       );
 
-      res.status(201).json({ 
-        success: true, 
-        data: { id: result.insertId } 
+      res.status(201).json({
+        success: true,
+        data: { id: result.insertId }
       });
     } catch (error) {
       logger.error('Error creating production plan:', error);
@@ -120,24 +121,25 @@ class ProductionPlanningController {
         color_id,
         work_centre_id,
         total_target_per_day,
-        target_pairs_per_day,
+        target_pairs_per_tray,
+        tray_count,
         man_hours_minutes,
         smv_per_pair
       } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_day || !man_hours_minutes || !smv_per_pair) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Required fields are missing' 
+      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_tray || !tray_count || !man_hours_minutes || !smv_per_pair) {
+        return res.status(400).json({
+          success: false,
+          error: 'Required fields are missing'
         });
       }
 
       const [result] = await db.execute(
         `UPDATE production_plan 
         SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?, 
-            leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?, target_pairs_per_day = ?, man_hours_minutes = ?, smv_per_pair = ?
+            leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?, target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
         WHERE id = ?`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_day, man_hours_minutes, smv_per_pair, id]
+        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0, man_hours_minutes, smv_per_pair, id]
       );
 
       if (result.affectedRows === 0) {

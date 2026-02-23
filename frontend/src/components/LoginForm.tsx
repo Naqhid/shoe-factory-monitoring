@@ -25,8 +25,15 @@ export const LoginForm: React.FC = () => {
           sessionStorage.setItem('app_authenticated', '1');
           sessionStorage.setItem('user_info', JSON.stringify(data.data));
         }
-        toast.success(`Welcome, ${data.data.name}`);
-        navigate('/overview');
+        const user = data.data;
+        toast.success(`Welcome, ${user.name}`);
+
+        // Redirect based on role/setup
+        if (user.role === 'user' && user.machine_id && user.code) {
+          navigate(`/mobile/${encodeURIComponent(user.machine_id)}/${encodeURIComponent(user.code)}`);
+        } else {
+          navigate('/overview');
+        }
       } else {
         toast.error(data.message || 'Login failed');
       }

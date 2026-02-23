@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, Upload, Plus, Trash2 } from 'lucide-react';
+import { Save, Upload, Plus, Trash2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
 
@@ -380,6 +380,95 @@ export const ProductionPlanningForm: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* Plans List Section */}
+      <PlanList />
+    </div>
+  );
+};
+
+const PlanList: React.FC = () => {
+  const [plans, setPlans] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  const fetchPlans = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/production-planning`);
+      const result = await res.json();
+      if (result.success) {
+        setPlans(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching plans:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchPlans();
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this plan?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/production-planning/${id}`, { method: 'DELETE' });
+      const result = await res.json();
+      if (result.success) {
+        toast.success('Plan deleted');
+        fetchPlans();
+      } else {
+        toast.error(result.error || 'Delete failed');
+      }
+    } catch (error) {
+      toast.error('Network error');
+    }
+  };
+
+  return (
+    <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-gray-800">Existing Production Plans</h2>
+        <button onClick={fetchPlans} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+          <RefreshCw className="h-3 w-3" /> Refresh
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Work Centre</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/Tray</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {plans.map((p) => (
+              <tr key={p.id}>
+                <td className="px-4 py-2 text-sm">{new Date(p.plan_date).toLocaleDateString()}</td>
+                <td className="px-4 py-2 text-sm">{p.style_name}</td>
+                <td className="px-4 py-2 text-sm">{p.work_centre_name}</td>
+                <td className="px-4 py-2 text-sm">{p.total_target_per_day}</td>
+                <td className="px-4 py-2 text-sm">{p.target_pairs_per_tray}</td>
+                <td className="px-4 py-2 text-sm">
+                  <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-900">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {plans.length === 0 && !loading && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No planning records found</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

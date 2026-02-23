@@ -1,7 +1,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import { Header } from './components/Header';
 import { StatsPanel } from './components/StatsPanel';
 import { MachineCard } from './components/MachineCard';
@@ -114,9 +114,12 @@ function App() {
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
+      } else {
+        toast.error(result.error || `Failed to load ${table}`);
       }
     } catch (error) {
       console.error('Error fetching records:', error);
+      toast.error('Network error while loading master data');
     } finally {
       setLoading(false);
     }
