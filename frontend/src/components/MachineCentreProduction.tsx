@@ -1,10 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ModernScanner } from './ModernScanner';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { Clock, User, Factory, Cpu, Calendar } from 'lucide-react';
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:3001/api`;
+
+interface ProductionStatus {
+  id: number;
+  prod_date: string;
+  work_centre_id: number;
+  machine_id: number;
+  emp_id: string;
+  output_pairs: number;
+  target_mins: number;
+  target_pairs: number;
+  start_time: string;
+  actual_time: number;
+  button_status: number;
+  operator_name?: string;
+  line_name?: string;
+  updated_at?: string;
+}
+
+const calculateStatus = (actualMins: number, targetMins: number, lastActivity: string | undefined, buttonStatus: number): { label: string; color: string; bgColor: string } => {
+  if (buttonStatus === 3) return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
+  
+  if (lastActivity) {
+    const idleMinutes = Math.floor((Date.now() - new Date(lastActivity).getTime()) / 60000);
+    if (idleMinutes >= 5) return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
+  }
+  
+  if (targetMins === 0) return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
+  
+  const efficiency = (actualMins / targetMins) * 100;
+  if (efficiency < 80) return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
+  return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
+};
 
 export const MachineCentreProduction: React.FC = () => {
   const { machineId } = useParams();
@@ -15,11 +48,10 @@ export const MachineCentreProduction: React.FC = () => {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [machineData, setMachineData] = useState<any>(null);
   const [planData, setPlanData] = useState<any>(null);
-  const [status, setStatus] = useState<any>(null);
+  const [status, setStatus] = useState<ProductionStatus | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Fetch machine status
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     if (!machineId) return;
     try {
       const res = await axios.get(`${API_BASE}/machine-centre/status/${machineId}`);
@@ -30,7 +62,7 @@ export const MachineCentreProduction: React.FC = () => {
     } catch (error) {
       console.error('Fetch status error:', error);
     }
-  };
+  }, [machineId]);
 
   // Fetch production plan
   const fetchPlan = async (workCentreId: number, machId: number) => {
@@ -59,7 +91,6 @@ export const MachineCentreProduction: React.FC = () => {
     }
   };
 
-  // Handle employee QR scan
   const handleEmpScan = async (text: string) => {
     try {
       const empData = JSON.parse(text);
@@ -73,15 +104,15 @@ export const MachineCentreProduction: React.FC = () => {
         return;
       }
 
-      // Calculate target mins for 12 pairs
-      const targetMins = planData.smv ? (planData.smv * 12) : 60;
+      const targetPairs = 12;
+      const targetMins = planData.smv ? Math.round(planData.smv * targetPairs) : 60;
 
       const res = await axios.post(`${API_BASE}/machine-centre/start`, {
         workCentreId: machineData.workCentreId,
         machineId: machineData.machineId,
         empId: empData.emp_id,
         targetMins: targetMins,
-        targetPairs: 12
+        targetPairs: targetPairs
       });
 
       if (res.data.success) {
@@ -119,16 +150,22 @@ export const MachineCentreProduction: React.FC = () => {
     }
   };
 
-  // Finish production
   const handleFinish = async () => {
-    if (!sessionId) return;
-    const output = prompt('Enter output pairs:');
+    if (!sessionId || !status) return;
+    const output = prompt(`Enter output pairs (Target: ${status.target_pairs || 12}):`);
     if (!output) return;
+
+    const outputPairs = parseInt(output);
+    if (isNaN(outputPairs) || outputPairs < 0) {
+      toast.error('Invalid output value');
+      return;
+    }
 
     try {
       await axios.post(`${API_BASE}/machine-centre/finish`, {
         id: sessionId,
-        outputPairs: parseInt(output)
+        outputPairs: status.output_pairs + outputPairs,
+        targetPairs: status.target_pairs || 12
       });
       toast.success('Production finished');
       navigate('/mobile');
@@ -137,7 +174,6 @@ export const MachineCentreProduction: React.FC = () => {
     }
   };
 
-  // Timer effect - update every minute
   useEffect(() => {
     if (!sessionId || !status || status.button_status !== 1) return;
 
@@ -148,10 +184,10 @@ export const MachineCentreProduction: React.FC = () => {
       } catch (error) {
         console.error('Timer update error:', error);
       }
-    }, 60000); // Every 1 minute
+    }, 60000);
 
     return () => clearInterval(interval);
-  }, [sessionId, status]);
+  }, [sessionId, status, fetchStatus]);
 
   // Clock effect
   useEffect(() => {
@@ -159,12 +195,11 @@ export const MachineCentreProduction: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Initial fetch
   useEffect(() => {
     if (machineId) {
       fetchStatus();
     }
-  }, [machineId]);
+  }, [machineId, fetchStatus]);
 
   if (scanning) {
     return (
@@ -211,94 +246,119 @@ export const MachineCentreProduction: React.FC = () => {
   }
 
   const efficiency = status.target_mins > 0 ? (status.actual_time / status.target_mins * 100) : 0;
-  const statusColor = status.button_status === 3 ? 'bg-yellow-500' : 
-                      efficiency < 80 ? 'bg-red-500' : 'bg-green-500';
+  const statusInfo = calculateStatus(status.actual_time, status.target_mins, status.updated_at, status.button_status);
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4">
-      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
-        {/* Header */}
-        <div className="bg-blue-600 text-white p-6">
-          <h1 className="text-2xl font-bold text-center">MACHINE CENTRE PRODUCTION</h1>
-          <p className="text-center text-sm mt-2">{currentTime.toLocaleString()}</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-3 md:p-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header Section */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl p-4 md:p-6">
+          <h1 className="text-xl md:text-2xl font-bold text-center mb-3">MACHINE CENTRE PRODUCTION</h1>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+              <Factory className="h-4 w-4 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs opacity-80">Line Name</p>
+                <p className="font-semibold truncate">{status.line_name || 'N/A'}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+              <Cpu className="h-4 w-4 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs opacity-80">Work Centre</p>
+                <p className="font-semibold truncate">{status.work_centre_id}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+              <Cpu className="h-4 w-4 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs opacity-80">Machine ID</p>
+                <p className="font-semibold truncate">{status.machine_id}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+              <User className="h-4 w-4 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs opacity-80">Operator</p>
+                <p className="font-semibold truncate">{status.operator_name || status.emp_id}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+              <Clock className="h-4 w-4 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs opacity-80">Date & Time</p>
+                <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Info Section */}
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Line</p>
-              <p className="font-semibold">{status.line_name || 'N/A'}</p>
+        {/* Metrics Section */}
+        <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
+          <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Metrics</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
+              <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
+              <p className="text-3xl md:text-5xl font-bold text-blue-900">{status.target_mins}</p>
+              <p className="text-xs text-blue-600 mt-1">mins</p>
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Operator</p>
-              <p className="font-semibold">{status.operator_name || status.emp_id}</p>
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">
+              <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
+              <p className="text-3xl md:text-5xl font-bold text-purple-900">{status.actual_time}</p>
+              <p className="text-xs text-purple-600 mt-1">mins</p>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Machine ID</p>
-              <p className="font-semibold">{status.machine_id}</p>
+            <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
+              <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs</p>
+              <p className="text-3xl md:text-5xl font-bold text-green-900">{status.target_pairs || 12}</p>
+              <p className="text-xs text-green-600 mt-1">pairs</p>
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Date</p>
-              <p className="font-semibold">{new Date(status.prod_date).toLocaleDateString()}</p>
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm">
+              <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>
+              <p className="text-3xl md:text-5xl font-bold text-orange-900">{status.output_pairs}</p>
+              <p className="text-xs text-orange-600 mt-1">pairs</p>
             </div>
-          </div>
-
-          {/* Metrics */}
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Target Time</p>
-              <p className="text-2xl font-bold text-blue-600">{status.target_mins}m</p>
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm">
+              <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Avg Efficiency</p>
+              <p className="text-3xl md:text-5xl font-bold text-indigo-900">{efficiency.toFixed(1)}%</p>
+              <p className="text-xs text-indigo-600 mt-1">percentage</p>
             </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Actual Time</p>
-              <p className="text-2xl font-bold text-purple-600">{status.actual_time}m</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Output</p>
-              <p className="text-2xl font-bold text-green-600">{status.output_pairs}</p>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Efficiency</p>
-              <p className="text-2xl font-bold text-orange-600">{efficiency.toFixed(1)}%</p>
+            <div className={`p-4 md:p-6 rounded-xl border-2 shadow-sm ${statusInfo.bgColor} ${statusInfo.color}`}>
+              <p className="text-xs font-semibold uppercase mb-1 opacity-90">Status</p>
+              <p className="text-3xl md:text-5xl font-bold">{statusInfo.label}</p>
+              <p className="text-xs mt-1 opacity-90">current</p>
             </div>
           </div>
+        </div>
 
-          {/* Status */}
-          <div className="mt-6">
-            <div className={`${statusColor} text-white p-4 rounded-lg text-center`}>
-              <p className="text-lg font-bold">{status.status_label}</p>
-            </div>
-          </div>
-
-          {/* Buttons */}
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            {status.button_status === 3 && (
+        {/* Control Buttons */}
+        <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+            {status.button_status === 3 ? (
               <button
                 onClick={handleStart}
-                className="col-span-3 bg-green-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-green-700"
+                className="md:col-span-3 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
               >
                 START
               </button>
-            )}
-            {status.button_status === 1 && (
+            ) : status.button_status === 1 ? (
               <>
                 <button
                   onClick={handleStop}
-                  className="bg-yellow-600 text-white py-4 rounded-lg font-bold hover:bg-yellow-700"
+                  className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
                 >
                   STOP
                 </button>
                 <button
                   onClick={handleFinish}
-                  className="col-span-2 bg-blue-600 text-white py-4 rounded-lg font-bold hover:bg-blue-700"
+                  className="md:col-span-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
                 >
                   FINISH
                 </button>
               </>
+            ) : (
+              <div className="md:col-span-3 text-center py-6 text-gray-500 font-medium">
+                Production session completed
+              </div>
             )}
           </div>
         </div>

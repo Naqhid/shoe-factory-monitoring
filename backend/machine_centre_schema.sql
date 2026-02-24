@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS machine_centre_app (
     emp_id VARCHAR(10) NOT NULL,
     
     output_pairs INT DEFAULT 0,
+    target_pairs INT DEFAULT 12,
     target_mins INT NOT NULL,
     
     start_time DATETIME,
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS pivot_data (
     emp_id VARCHAR(10) NOT NULL,
     
     total_output_pairs INT DEFAULT 0,
+    total_target_pairs INT DEFAULT 0,
     total_target_mins INT DEFAULT 0,
     total_actual_time INT DEFAULT 0,
     

@@ -11,9 +11,9 @@ exports.startProduction = async (req, res) => {
     
     const [result] = await connection.execute(
       `INSERT INTO machine_centre_app 
-       (prod_date, work_centre_id, machine_id, emp_id, target_mins, output_pairs, start_time, button_status, actual_time)
-       VALUES (CURDATE(), ?, ?, ?, ?, 0, NOW(), 1, 0)`,
-      [workCentreId, machineId, empId, targetMins]
+       (prod_date, work_centre_id, machine_id, emp_id, target_mins, target_pairs, output_pairs, start_time, button_status, actual_time)
+       VALUES (CURDATE(), ?, ?, ?, ?, ?, 0, NOW(), 1, 0)`,
+      [workCentreId, machineId, empId, targetMins, targetPairs || 12]
     );
     
     await connection.commit();
@@ -77,7 +77,7 @@ exports.resumeProduction = async (req, res) => {
 exports.finishProduction = async (req, res) => {
   const connection = await db.getConnection();
   try {
-    const { id, outputPairs } = req.body;
+    const { id, outputPairs, targetPairs } = req.body;
     
     await connection.beginTransaction();
     
@@ -85,22 +85,24 @@ exports.finishProduction = async (req, res) => {
       `UPDATE machine_centre_app 
        SET finish_time = NOW(),
            output_pairs = ?,
+           target_pairs = ?,
            actual_time = TIMESTAMPDIFF(MINUTE, start_time, NOW()) - idle_duration,
            button_status = 2
        WHERE id = ?`,
-      [outputPairs, id]
+      [outputPairs, targetPairs || 12, id]
     );
     
     // Aggregate to pivot table
     await connection.execute(
       `INSERT INTO pivot_data 
-       (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_time, cumulative_avg_time, avg_efficiency)
+       (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_pairs, total_target_mins, total_actual_time, cumulative_avg_time, avg_efficiency)
        SELECT 
          prod_date,
          work_centre_id,
          machine_id,
          emp_id,
          SUM(output_pairs),
+         SUM(target_pairs),
          SUM(target_mins),
          SUM(actual_time),
          CASE WHEN SUM(output_pairs) > 0 THEN SUM(actual_time) / (SUM(output_pairs) / 12) ELSE 0 END,
@@ -110,6 +112,7 @@ exports.finishProduction = async (req, res) => {
        GROUP BY prod_date, work_centre_id, machine_id, emp_id
        ON DUPLICATE KEY UPDATE
          total_output_pairs = VALUES(total_output_pairs),
+         total_target_pairs = VALUES(total_target_pairs),
          total_target_mins = VALUES(total_target_mins),
          total_actual_time = VALUES(total_actual_time),
          cumulative_avg_time = VALUES(cumulative_avg_time),
@@ -138,13 +141,7 @@ exports.getMachineStatus = async (req, res) => {
          mca.*,
          e.emp_name as operator_name,
          wc.work_centre_name as line_name,
-         CASE 
-           WHEN button_status = 3 THEN 'Idle'
-           WHEN button_status = 2 THEN 'Finished'
-           WHEN (actual_time / target_mins * 100) < 80 THEN 'Low'
-           ELSE 'On-track'
-         END as status_label,
-         CASE WHEN target_mins > 0 THEN (actual_time / target_mins * 100) ELSE 0 END as efficiency
+         mca.updated_at as last_activity
        FROM machine_centre_app mca
        LEFT JOIN employees e ON mca.emp_id = e.emp_id
        LEFT JOIN work_centres wc ON mca.work_centre_id = wc.id
