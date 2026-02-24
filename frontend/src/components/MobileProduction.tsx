@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { QrCode, Play, Square, CheckCircle, Loader2, X, RefreshCw } from 'lucide-react';
+import { QrCode, Play, Pause, CheckCircle, Loader2, X, RefreshCw, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE } from '../services/api';
@@ -9,6 +9,7 @@ interface ProductionData {
     id?: number;
     prod_date: string;
     work_centre_id: number;
+    work_centre_name?: string;
     machine_id: string;
     emp_id: number;
     output_pairs: number;
@@ -18,8 +19,9 @@ interface ProductionData {
     finish_time: string | null;
     idle_start_time: string | null;
     actual_time: number;
-    button_status: number; // 1=Running, 2=Finished, 3=Stopped
+    button_status: number; // 1=Running, 2=Finished, 3=Paused
     updated_at?: string;
+    is_paused?: boolean;
 }
 
 export const MobileProduction: React.FC = () => {
@@ -36,7 +38,7 @@ export const MobileProduction: React.FC = () => {
     const [qrData, setQrData] = useState('');
     const [showQRScanner, setShowQRScanner] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [outputIncrement, setOutputIncrement] = useState(0);
+    const [actualTimeCounter, setActualTimeCounter] = useState(0);
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
     const [showTestHelpers, setShowTestHelpers] = useState(false);
@@ -57,30 +59,37 @@ export const MobileProduction: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Timer logic - update actual_time every minute when running
+    // Timer logic - increment actual_time counter every second when running
     useEffect(() => {
-        if (!productionData?.id || productionData.button_status !== 1) return;
+        if (!productionData || productionData.button_status !== 1 || productionData.is_paused) return;
         
-        const timerInterval = setInterval(async () => {
+        const counterInterval = setInterval(() => {
+            setActualTimeCounter(prev => prev + 1);
+        }, 1000); // Every 1 second
+        
+        return () => clearInterval(counterInterval);
+    }, [productionData?.button_status, productionData?.is_paused]);
+
+    // Sync actual_time to database every minute
+    useEffect(() => {
+        if (!productionData?.id || productionData.button_status !== 1 || productionData.is_paused) return;
+        
+        const syncInterval = setInterval(async () => {
+            const actualMins = Math.floor(actualTimeCounter / 60);
             try {
                 await fetch(`${API_BASE}/api/machine-centre/update-time`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: productionData.id })
+                    body: JSON.stringify({ id: productionData.id, actual_time: actualMins })
                 });
-                // Fetch updated status
-                const statusRes = await fetch(`${API_BASE}/api/machine-centre/status/${productionData.machine_id}`);
-                const statusData = await statusRes.json();
-                if (statusData.success && statusData.data) {
-                    setProductionData(prev => prev ? { ...prev, ...statusData.data } : null);
-                }
+                setProductionData(prev => prev ? { ...prev, actual_time: actualMins } : null);
             } catch (error) {
-                console.error('Timer update error:', error);
+                console.error('Timer sync error:', error);
             }
         }, 60000); // Every 1 minute
         
-        return () => clearInterval(timerInterval);
-    }, [productionData?.id, productionData?.button_status, API_BASE]);
+        return () => clearInterval(syncInterval);
+    }, [productionData?.id, productionData?.button_status, productionData?.is_paused, actualTimeCounter, API_BASE]);
 
     // Session Initialization and Polling
     useEffect(() => {
@@ -159,29 +168,46 @@ export const MobileProduction: React.FC = () => {
     const initializeProduction = async (machineId: string, empCode: string, workCentreId: number = 1) => {
         setLoading(true);
         try {
-            // Look up the employee ID from the emp_id
-            const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
-            const empResult = await empRes.json();
+            // Fetch employee, work centre, production routing, and production planning data
+            const [empRes, wcRes, routingRes, planningRes] = await Promise.all([
+                fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`).then(r => r.json()),
+                fetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
+                fetch(`${API_BASE}/api/production-routing`).then(r => r.json()),
+                fetch(`${API_BASE}/api/production-planning`).then(r => r.json())
+            ]);
 
-            if (!empResult.success || !empResult.data) {
+            if (!empRes.success || !empRes.data) {
                 toast.error(`Employee ${empCode} not found`);
                 return;
             }
 
-            const empDbId = empResult.data.id;
+            const empDbId = empRes.data.id;
+            const workCentre = wcRes.data?.find((wc: any) => wc.id === workCentreId);
+            const workCentreName = workCentre?.work_centre_name || workCentre?.name || `WC-${workCentreId}`;
+
+            // Find routing for this machine (SMV for 12 pairs)
+            const routing = routingRes.data?.find((r: any) => r.machine_id === machineId);
+            const smvFor12Pairs = routing?.smv ? Math.round(routing.smv * 12) : 60;
+
+            // Find planning for pairs per tray
+            const planning = planningRes.data?.find((p: any) => p.work_centre_id === workCentreId);
+            const pairsPerTray = planning?.pairs_per_tray || planning?.target_pairs || 12;
+
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
                 work_centre_id: workCentreId,
+                work_centre_name: workCentreName,
                 machine_id: machineId,
                 emp_id: empDbId,
                 output_pairs: 0,
-                target_mins: 60,
-                target_pairs: 12,
+                target_mins: smvFor12Pairs,
+                target_pairs: pairsPerTray,
                 start_time: null,
                 finish_time: null,
                 idle_start_time: null,
                 actual_time: 0,
-                button_status: 3 // Start in stopped state
+                button_status: 3, // Start in stopped state
+                is_paused: false
             };
 
             const response = await fetch(`${API_BASE}/api/mobile-production`, {
@@ -193,6 +219,7 @@ export const MobileProduction: React.FC = () => {
             const result = await response.json();
             if (result.success) {
                 setProductionData({ ...newData, id: result.data.id });
+                setActualTimeCounter(0);
                 toast.success('Production initialized');
             }
         } catch (error) {
@@ -207,14 +234,14 @@ export const MobileProduction: React.FC = () => {
         if (!productionData?.id) return;
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/machine-centre/${productionData.button_status === 3 ? 'resume' : 'start'}`, {
+            const response = await fetch(`${API_BASE}/api/machine-centre/${productionData.button_status === 3 ? 'start' : 'resume'}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: productionData.id })
             });
             const result = await response.json();
             if (result.success) {
-                setProductionData({ ...productionData, button_status: 1 });
+                setProductionData({ ...productionData, button_status: 1, is_paused: false });
                 toast.success('Production started');
             }
         } catch (error) {
@@ -224,7 +251,7 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
-    const handleStop = async () => {
+    const handlePause = async () => {
         if (!productionData?.id) return;
         setLoading(true);
         try {
@@ -235,11 +262,11 @@ export const MobileProduction: React.FC = () => {
             });
             const result = await response.json();
             if (result.success) {
-                setProductionData({ ...productionData, button_status: 3 });
-                toast.success('Production stopped');
+                setProductionData({ ...productionData, is_paused: true });
+                toast.success('Production paused');
             }
         } catch (error) {
-            toast.error('Failed to stop production');
+            toast.error('Failed to pause production');
         } finally {
             setLoading(false);
         }
@@ -247,15 +274,10 @@ export const MobileProduction: React.FC = () => {
 
     const handleFinish = async () => {
         if (!productionData?.id) return;
-        const output = prompt(`Enter output pairs (Target: ${productionData.target_pairs || 12}):`);
-        if (!output) return;
-        const outputPairs = parseInt(output);
-        if (isNaN(outputPairs) || outputPairs < 0) {
-            toast.error('Invalid output value');
-            return;
-        }
         setLoading(true);
         try {
+            // Auto-set output to target pairs
+            const outputPairs = productionData.target_pairs || 12;
             const response = await fetch(`${API_BASE}/api/machine-centre/finish`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -267,8 +289,8 @@ export const MobileProduction: React.FC = () => {
             });
             const result = await response.json();
             if (result.success) {
+                setProductionData({ ...productionData, button_status: 2, output_pairs: productionData.output_pairs + outputPairs });
                 toast.success('Production finished');
-                navigate('/mobile');
             }
         } catch (error) {
             toast.error('Failed to finish production');
@@ -277,15 +299,28 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
+    const handleReset = () => {
+        setActualTimeCounter(0);
+        if (productionData) {
+            setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
+        }
+        toast.success('Timer reset');
+    };
+
     const calculateEfficiency = () => {
         if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 0;
         return Math.round((productionData.actual_time / productionData.target_mins) * 100);
     };
 
     const calculateStatus = () => {
-        if (!productionData) return { label: 'Ready', color: 'text-gray-600', bgColor: 'bg-gray-400' };
+        if (!productionData) return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
         
-        if (productionData.button_status === 3) {
+        // Initial state - always on-track
+        if (productionData.actual_time === 0 && actualTimeCounter === 0) {
+            return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
+        }
+        
+        if (productionData.is_paused || productionData.button_status === 3) {
             return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
         }
         
@@ -488,7 +523,7 @@ export const MobileProduction: React.FC = () => {
                             <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
                                 <div className="min-w-0">
                                     <p className="text-xs opacity-80">Work Centre</p>
-                                    <p className="font-semibold truncate">{productionData.work_centre_id}</p>
+                                    <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
                                 </div>
                             </div>
                             <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
@@ -523,8 +558,8 @@ export const MobileProduction: React.FC = () => {
                             </div>
                             <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">
                                 <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-purple-900">{productionData.actual_time}</p>
-                                <p className="text-xs text-purple-600 mt-1">mins</p>
+                                <p className="text-3xl md:text-5xl font-bold text-purple-900">{Math.floor(actualTimeCounter / 60)}</p>
+                                <p className="text-xs text-purple-600 mt-1">{actualTimeCounter % 60}s</p>
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
                                 <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs</p>
@@ -552,36 +587,65 @@ export const MobileProduction: React.FC = () => {
                     {/* Control Buttons */}
                     <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                            {productionData.button_status === 3 ? (
-                                <button
-                                    onClick={handleStart}
-                                    disabled={loading}
-                                    className="md:col-span-3 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />START</>}
-                                </button>
-                            ) : productionData.button_status === 1 ? (
+                            {productionData.button_status === 3 || productionData.button_status === 2 ? (
                                 <>
                                     <button
-                                        onClick={handleStop}
+                                        onClick={handleStart}
+                                        disabled={loading}
+                                        className="md:col-span-2 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />START</>}
+                                    </button>
+                                    <button
+                                        onClick={handleReset}
+                                        disabled={loading}
+                                        className="bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        <RotateCcw className="h-5 w-5" />RESET
+                                    </button>
+                                </>
+                            ) : productionData.button_status === 1 && !productionData.is_paused ? (
+                                <>
+                                    <button
+                                        onClick={handlePause}
                                         disabled={loading}
                                         className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Square className="h-5 w-5" />STOP</>}
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Pause className="h-5 w-5" />PAUSE</>}
                                     </button>
                                     <button
                                         onClick={handleFinish}
                                         disabled={loading}
-                                        className="md:col-span-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" />FINISH</>}
                                     </button>
+                                    <button
+                                        onClick={handleReset}
+                                        disabled={loading}
+                                        className="bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        <RotateCcw className="h-5 w-5" />RESET
+                                    </button>
                                 </>
-                            ) : (
-                                <div className="md:col-span-3 text-center py-6 text-gray-500 font-medium">
-                                    Production session completed
-                                </div>
-                            )}
+                            ) : productionData.is_paused ? (
+                                <>
+                                    <button
+                                        onClick={handleStart}
+                                        disabled={loading}
+                                        className="md:col-span-2 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />RESUME</>}
+                                    </button>
+                                    <button
+                                        onClick={handleReset}
+                                        disabled={loading}
+                                        className="bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        <RotateCcw className="h-5 w-5" />RESET
+                                    </button>
+                                </>
+                            ) : null}
                         </div>
                     </div>
                 </div>
