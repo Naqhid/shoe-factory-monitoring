@@ -97,25 +97,53 @@ export const MobileProduction: React.FC = () => {
             const resolveAndInitialize = async () => {
                 setLoading(true);
                 try {
-                    const [empRes, macRes] = await Promise.all([
-                        fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
-                        fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
-                    ]);
+                    // First check if there's an existing session in database
+                    const existingSessionRes = await fetch(`${API_BASE}/api/machine-centre/status/${urlMachineId}`);
+                    const existingSession = await existingSessionRes.json();
+                    
+                    if (existingSession.success && existingSession.data) {
+                        // Load existing session
+                        const [empRes, macRes, wcRes] = await Promise.all([
+                            fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
+                            fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
+                            fetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json())
+                        ]);
 
-                    const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
-                    const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
+                        const employee = empRes.data?.find((e: any) => e.id === existingSession.data.emp_id);
+                        const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
+                        const workCentre = wcRes.data?.find((wc: any) => wc.id === existingSession.data.work_centre_id);
 
-                    if (!employee) {
-                        toast.error(`Employee ${urlEmpId} not found`);
-                        return;
+                        setSessionStatus('active');
+                        setQrData(urlMachineId);
+                        setEmployeeName(employee?.name || employee?.emp_name || '');
+                        setMachineName(machine?.name || urlMachineId);
+                        setProductionData({
+                            ...existingSession.data,
+                            work_centre_name: workCentre?.work_centre_name || workCentre?.name
+                        });
+                        setActualTimeCounter(existingSession.data.actual_time * 60); // Convert mins to seconds
+                    } else {
+                        // Create new session
+                        const [empRes, macRes] = await Promise.all([
+                            fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
+                            fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
+                        ]);
+
+                        const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
+                        const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
+
+                        if (!employee) {
+                            toast.error(`Employee ${urlEmpId} not found`);
+                            return;
+                        }
+
+                        setSessionStatus('active');
+                        setQrData(urlMachineId);
+                        setEmployeeName(employee.name);
+                        setMachineName(machine?.name || urlMachineId);
+
+                        initializeProduction(urlMachineId, urlEmpId, machine?.work_centre_id || 1);
                     }
-
-                    setSessionStatus('active');
-                    setQrData(urlMachineId);
-                    setEmployeeName(employee.name);
-                    setMachineName(machine?.name || urlMachineId);
-
-                    initializeProduction(urlMachineId, urlEmpId, machine?.work_centre_id || 1);
                 } catch (e) {
                     toast.error('Failed to load setup data');
                 } finally {
@@ -302,10 +330,29 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
-    const handleReset = () => {
+    const handleReset = async () => {
         setActualTimeCounter(0);
         if (productionData) {
-            setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
+            // Re-fetch planning data to get latest target_pairs
+            try {
+                const planningRes = await fetch(`${API_BASE}/api/production-planning`);
+                const planningData = await planningRes.json();
+                const planning = planningData.data?.find((p: any) => 
+                    p.work_centre_id === productionData.work_centre_id && 
+                    p.plan_date === new Date().toISOString().split('T')[0]
+                );
+                const updatedTargetPairs = planning?.pairs_per_tray || planning?.target_pairs || productionData.target_pairs;
+                
+                setProductionData({ 
+                    ...productionData, 
+                    actual_time: 0, 
+                    button_status: 3, 
+                    is_paused: false,
+                    target_pairs: updatedTargetPairs // Update with latest value
+                });
+            } catch (error) {
+                setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
+            }
         }
         toast.success('Timer reset');
     };
