@@ -222,7 +222,11 @@ export const MobileProduction: React.FC = () => {
                 p.work_centre_id === workCentreId && 
                 p.plan_date === new Date().toISOString().split('T')[0]
             );
+            console.log('Init - All planning data:', planningRes.data);
+            console.log('Init - Matched planning:', planning);
+            console.log('Init - work_centre_id:', workCentreId);
             const pairsPerTray = planning?.target_pairs_per_tray || 0; // Use target_pairs_per_tray from planning
+            console.log('Init - Pairs per tray:', pairsPerTray);
 
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
@@ -338,11 +342,16 @@ export const MobileProduction: React.FC = () => {
             try {
                 const planningRes = await fetch(`${API_BASE}/api/production-planning`);
                 const planningData = await planningRes.json();
+                console.log('Reset - All planning data:', planningData.data);
                 const planning = planningData.data?.find((p: any) => 
                     p.work_centre_id === productionData.work_centre_id && 
                     p.plan_date === new Date().toISOString().split('T')[0]
                 );
+                console.log('Reset - Matched planning:', planning);
+                console.log('Reset - work_centre_id:', productionData.work_centre_id);
+                console.log('Reset - plan_date:', new Date().toISOString().split('T')[0]);
                 const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
+                console.log('Reset - Updated target pairs:', updatedTargetPairs);
                 
                 setProductionData({ 
                     ...productionData, 
@@ -352,6 +361,7 @@ export const MobileProduction: React.FC = () => {
                     target_pairs: updatedTargetPairs // Update with latest value
                 });
             } catch (error) {
+                console.error('Reset error:', error);
                 setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
             }
         }
@@ -614,7 +624,7 @@ export const MobileProduction: React.FC = () => {
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
                                 <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs</p>
-                                <p className="text-3xl md:text-5xl font-bold text-green-900">{productionData.target_pairs || 12}</p>
+                                <p className="text-3xl md:text-5xl font-bold text-green-900">{productionData.target_pairs || 0}</p>
                                 <p className="text-xs text-green-600 mt-1">pairs</p>
                             </div>
                             <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm">
