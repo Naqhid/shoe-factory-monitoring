@@ -189,9 +189,12 @@ export const MobileProduction: React.FC = () => {
             const routing = routingRes.data?.find((r: any) => r.machine_id === machineId);
             const mins12Prs = routing?.mins_12_prs || routing?.smv || 16.6; // Use mins_12_prs field directly
 
-            // Find planning for pairs per tray
-            const planning = planningRes.data?.find((p: any) => p.work_centre_id === workCentreId);
-            const pairsPerTray = planning?.pairs_per_tray || planning?.target_pairs || 12;
+            // Find planning for pairs per tray - match by work_centre_id and today's date
+            const planning = planningRes.data?.find((p: any) => 
+                p.work_centre_id === workCentreId && 
+                p.plan_date === new Date().toISOString().split('T')[0]
+            );
+            const pairsPerTray = planning?.pairs_per_tray || 2; // Use pairs_per_tray from planning
 
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
