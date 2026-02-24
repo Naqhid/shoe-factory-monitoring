@@ -13,14 +13,13 @@ interface ProductionData {
     emp_id: number;
     output_pairs: number;
     target_mins: number;
+    target_pairs: number;
     start_time: string | null;
     finish_time: string | null;
+    idle_start_time: string | null;
     actual_time: number;
-    button_status: number; // 1=Start, 2=Finish, 3=Stop
-    target_pairs?: number;
-    smv_per_pair?: number;
-    target_pairs_per_tray?: number;
-    tray_count?: number;
+    button_status: number; // 1=Running, 2=Finished, 3=Stopped
+    updated_at?: string;
 }
 
 export const MobileProduction: React.FC = () => {
@@ -57,6 +56,31 @@ export const MobileProduction: React.FC = () => {
         }, 1000);
         return () => clearInterval(timer);
     }, []);
+
+    // Timer logic - update actual_time every minute when running
+    useEffect(() => {
+        if (!productionData?.id || productionData.button_status !== 1) return;
+        
+        const timerInterval = setInterval(async () => {
+            try {
+                await fetch(`${API_BASE}/api/machine-centre/update-time`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: productionData.id })
+                });
+                // Fetch updated status
+                const statusRes = await fetch(`${API_BASE}/api/machine-centre/status/${productionData.machine_id}`);
+                const statusData = await statusRes.json();
+                if (statusData.success && statusData.data) {
+                    setProductionData(prev => prev ? { ...prev, ...statusData.data } : null);
+                }
+            } catch (error) {
+                console.error('Timer update error:', error);
+            }
+        }, 60000); // Every 1 minute
+        
+        return () => clearInterval(timerInterval);
+    }, [productionData?.id, productionData?.button_status, API_BASE]);
 
     // Session Initialization and Polling
     useEffect(() => {
@@ -151,15 +175,13 @@ export const MobileProduction: React.FC = () => {
                 machine_id: machineId,
                 emp_id: empDbId,
                 output_pairs: 0,
-                target_mins: 10,
+                target_mins: 60,
+                target_pairs: 12,
                 start_time: null,
                 finish_time: null,
-                actual_time: 10,
-                button_status: 0, // Start with ready state
-                target_pairs: 12,
-                smv_per_pair: 100,
-                target_pairs_per_tray: 0,
-                tray_count: 0
+                idle_start_time: null,
+                actual_time: 0,
+                button_status: 3 // Start in stopped state
             };
 
             const response = await fetch(`${API_BASE}/api/mobile-production`, {
@@ -181,34 +203,22 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
-    const handleStartFinish = async () => {
+    const handleStart = async () => {
         if (!productionData?.id) return;
-
         setLoading(true);
         try {
-            const newStatus = productionData.button_status === 1 ? 2 : 1;
-            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                method: 'PATCH',
+            const response = await fetch(`${API_BASE}/api/machine-centre/${productionData.button_status === 3 ? 'resume' : 'start'}`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    button_status: newStatus,
-                    output_pairs: newStatus === 1 ? outputIncrement : 0
-                })
+                body: JSON.stringify({ id: productionData.id })
             });
-
             const result = await response.json();
             if (result.success) {
-                setProductionData({
-                    ...productionData,
-                    button_status: newStatus,
-                    output_pairs: newStatus === 1 ? productionData.output_pairs + outputIncrement : productionData.output_pairs
-                });
-                if (newStatus === 1) setOutputIncrement(0);
-                toast.success(newStatus === 1 ? 'Production started' : 'Production finished');
+                setProductionData({ ...productionData, button_status: 1 });
+                toast.success('Production started');
             }
         } catch (error) {
-            console.error('Error updating production:', error);
-            toast.error('Failed to update production');
+            toast.error('Failed to start production');
         } finally {
             setLoading(false);
         }
@@ -216,51 +226,93 @@ export const MobileProduction: React.FC = () => {
 
     const handleStop = async () => {
         if (!productionData?.id) return;
-
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                method: 'PATCH',
+            const response = await fetch(`${API_BASE}/api/machine-centre/stop`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ button_status: 3 })
+                body: JSON.stringify({ id: productionData.id })
             });
-
             const result = await response.json();
             if (result.success) {
                 setProductionData({ ...productionData, button_status: 3 });
                 toast.success('Production stopped');
             }
         } catch (error) {
-            console.error('Error stopping production:', error);
             toast.error('Failed to stop production');
         } finally {
             setLoading(false);
         }
     };
 
+    const handleFinish = async () => {
+        if (!productionData?.id) return;
+        const output = prompt(`Enter output pairs (Target: ${productionData.target_pairs || 12}):`);
+        if (!output) return;
+        const outputPairs = parseInt(output);
+        if (isNaN(outputPairs) || outputPairs < 0) {
+            toast.error('Invalid output value');
+            return;
+        }
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_BASE}/api/machine-centre/finish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: productionData.id,
+                    outputPairs: productionData.output_pairs + outputPairs,
+                    targetPairs: productionData.target_pairs || 12
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                toast.success('Production finished');
+                navigate('/mobile');
+            }
+        } catch (error) {
+            toast.error('Failed to finish production');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const calculateEfficiency = () => {
-        if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 100;
-        return Math.min(100, Math.round((productionData.actual_time / productionData.target_mins) * 100));
+        if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 0;
+        return Math.round((productionData.actual_time / productionData.target_mins) * 100);
+    };
+
+    const calculateStatus = () => {
+        if (!productionData) return { label: 'Ready', color: 'text-gray-600', bgColor: 'bg-gray-400' };
+        
+        if (productionData.button_status === 3) {
+            return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
+        }
+        
+        if (productionData.updated_at) {
+            const idleMinutes = Math.floor((Date.now() - new Date(productionData.updated_at).getTime()) / 60000);
+            if (idleMinutes >= 5) {
+                return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
+            }
+        }
+        
+        const efficiency = calculateEfficiency();
+        if (efficiency < 80) {
+            return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
+        }
+        return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
     };
 
     const getStatusText = () => {
-        if (!productionData) return 'Ready';
-        switch (productionData.button_status) {
-            case 1: return 'Running';
-            case 2: return 'Finished';
-            case 3: return 'Stopped';
-            default: return 'Ready';
-        }
+        return calculateStatus().label;
     };
 
     const getStatusColor = () => {
-        if (!productionData) return 'text-gray-600';
-        switch (productionData.button_status) {
-            case 1: return 'text-green-600';
-            case 2: return 'text-blue-600';
-            case 3: return 'text-red-600';
-            default: return 'text-gray-600';
-        }
+        return calculateStatus().color;
+    };
+
+    const getStatusBgColor = () => {
+        return calculateStatus().bgColor;
     };
 
     // --- RENDER ---
@@ -408,113 +460,130 @@ export const MobileProduction: React.FC = () => {
 
     // DASHBOARD STATE
     return (
-        <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-2">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-3 md:p-6">
             {/* Loading Screen */}
             {loading && !productionData && (
-                <div className="bg-white rounded-lg shadow-lg p-6 text-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-3" />
-                    <h2 className="text-lg font-semibold text-gray-900 mb-1">Setting up...</h2>
-                    <p className="text-sm text-gray-500">Please wait</p>
+                <div className="flex items-center justify-center h-screen">
+                    <div className="bg-white rounded-lg shadow-lg p-6 text-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-3" />
+                        <h2 className="text-lg font-semibold text-gray-900 mb-1">Setting up...</h2>
+                        <p className="text-sm text-gray-500">Please wait</p>
+                    </div>
                 </div>
             )}
 
             {/* Main Content */}
-            {(!loading || productionData) && (
-                <div className="w-full max-w-md">
-                    {/* Header - Compact */}
-                    <div className="bg-white rounded-lg shadow-lg p-3 mb-2">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h1 className="text-lg font-bold text-gray-900">Production</h1>
-                                <p className="text-xs text-gray-500">{currentTime.toLocaleTimeString()}</p>
+            {(!loading || productionData) && productionData && (
+                <div className="max-w-4xl mx-auto">
+                    {/* Header Section */}
+                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl p-4 md:p-6">
+                        <h1 className="text-xl md:text-2xl font-bold text-center mb-3">MACHINE CENTRE PRODUCTION</h1>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs opacity-80">Line Name</p>
+                                    <p className="font-semibold truncate">{machineName || 'N/A'}</p>
+                                </div>
                             </div>
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-blue-800">{machineName || qrData}</p>
-                                <p className="text-xs text-blue-600">{employeeName}</p>
+                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs opacity-80">Work Centre</p>
+                                    <p className="font-semibold truncate">{productionData.work_centre_id}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs opacity-80">Machine ID</p>
+                                    <p className="font-semibold truncate">{productionData.machine_id}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs opacity-80">Operator</p>
+                                    <p className="font-semibold truncate">{employeeName || productionData.emp_id}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs opacity-80">Date & Time</p>
+                                    <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Production Metrics - Compact Grid */}
-                    {productionData && (
-                        <div className="bg-white rounded-lg shadow-lg p-3">
-                            {/* Top Row - Main Metrics */}
-                            <div className="grid grid-cols-3 gap-2 mb-3">
-                                <div className="bg-blue-50 rounded-lg p-2 text-center">
-                                    <p className="text-xs text-gray-600 mb-1">Target</p>
-                                    <p className="text-xl font-bold text-blue-600">{productionData.target_mins}m</p>
-                                </div>
-                                <div className="bg-green-50 rounded-lg p-2 text-center">
-                                    <p className="text-xs text-gray-600 mb-1">Actual</p>
-                                    <p className="text-xl font-bold text-green-600">{productionData.actual_time}m</p>
-                                </div>
-                                <div className="bg-purple-50 rounded-lg p-2 text-center">
-                                    <p className="text-xs text-gray-600 mb-1">Output</p>
-                                    <p className="text-xl font-bold text-purple-600">{productionData.output_pairs}</p>
-                                </div>
+                    {/* Metrics Section */}
+                    <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
+                        <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Metrics</h2>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
+                                <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
+                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{productionData.target_mins}</p>
+                                <p className="text-xs text-blue-600 mt-1">mins</p>
                             </div>
-
-                            {/* Status and Efficiency */}
-                            <div className="grid grid-cols-2 gap-2 mb-3">
-                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg p-2 text-center">
-                                    <p className="text-xs text-gray-600 mb-1">Efficiency</p>
-                                    <p className="text-2xl font-bold text-indigo-600">{calculateEfficiency()}%</p>
-                                </div>
-                                <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg p-2 text-center">
-                                    <p className="text-xs text-gray-600 mb-1">Status</p>
-                                    <p className={`text-lg font-bold ${getStatusColor()}`}>{getStatusText()}</p>
-                                </div>
+                            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">
+                                <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
+                                <p className="text-3xl md:text-5xl font-bold text-purple-900">{productionData.actual_time}</p>
+                                <p className="text-xs text-purple-600 mt-1">mins</p>
                             </div>
-
-                            {/* Output Input - Only show when not finished */}
-                            {productionData.button_status !== 2 && (
-                                <div className="mb-3">
-                                    <input
-                                        type="number"
-                                        value={outputIncrement}
-                                        onChange={(e) => setOutputIncrement(parseInt(e.target.value) || 0)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-semibold"
-                                        placeholder="Add pairs"
-                                        min="0"
-                                    />
-                                </div>
-                            )}
-
-                            {/* Action Buttons */}
-                            <div className="grid grid-cols-2 gap-2">
-                                {/* START/FINISH Button */}
-                                <button
-                                    onClick={handleStartFinish}
-                                    disabled={loading || productionData.button_status === 2}
-                                    className={`py-3 rounded-lg font-bold text-lg transition-all duration-300 shadow-lg active:scale-95 ${productionData.button_status === 1
-                                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                                        : 'bg-green-500 hover:bg-green-600 text-white'
-                                        } disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
-                                >
-                                    {loading ? (
-                                        <Loader2 className="h-5 w-5 animate-spin" />
-                                    ) : productionData.button_status === 1 ? (
-                                        <><CheckCircle className="h-5 w-5" />FINISH</>
-                                    ) : (
-                                        <><Play className="h-5 w-5" />START</>
-                                    )}
-                                </button>
-
-                                {/* STOP Button */}
-                                <button
-                                    onClick={handleStop}
-                                    disabled={loading || productionData.button_status === 2 || productionData.button_status === 3}
-                                    className="bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-bold text-lg transition-all duration-300 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {loading ? (
-                                        <Loader2 className="h-5 w-5 animate-spin" />
-                                    ) : (
-                                        <><Square className="h-5 w-5" />STOP</>
-                                    )}
-                                </button>
+                            <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
+                                <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs</p>
+                                <p className="text-3xl md:text-5xl font-bold text-green-900">{productionData.target_pairs || 12}</p>
+                                <p className="text-xs text-green-600 mt-1">pairs</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm">
+                                <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>
+                                <p className="text-3xl md:text-5xl font-bold text-orange-900">{productionData.output_pairs}</p>
+                                <p className="text-xs text-orange-600 mt-1">pairs</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm">
+                                <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Avg Efficiency</p>
+                                <p className="text-3xl md:text-5xl font-bold text-indigo-900">{calculateEfficiency()}%</p>
+                                <p className="text-xs text-indigo-600 mt-1">percentage</p>
+                            </div>
+                            <div className={`p-4 md:p-6 rounded-xl border-2 shadow-sm ${getStatusBgColor()} ${getStatusColor()}`}>
+                                <p className="text-xs font-semibold uppercase mb-1 opacity-90">Status</p>
+                                <p className="text-3xl md:text-5xl font-bold">{getStatusText()}</p>
+                                <p className="text-xs mt-1 opacity-90">current</p>
                             </div>
                         </div>
-                    )}
+                    </div>
+
+                    {/* Control Buttons */}
+                    <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                            {productionData.button_status === 3 ? (
+                                <button
+                                    onClick={handleStart}
+                                    disabled={loading}
+                                    className="md:col-span-3 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />START</>}
+                                </button>
+                            ) : productionData.button_status === 1 ? (
+                                <>
+                                    <button
+                                        onClick={handleStop}
+                                        disabled={loading}
+                                        className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Square className="h-5 w-5" />STOP</>}
+                                    </button>
+                                    <button
+                                        onClick={handleFinish}
+                                        disabled={loading}
+                                        className="md:col-span-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" />FINISH</>}
+                                    </button>
+                                </>
+                            ) : (
+                                <div className="md:col-span-3 text-center py-6 text-gray-500 font-medium">
+                                    Production session completed
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
