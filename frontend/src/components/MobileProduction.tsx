@@ -222,7 +222,7 @@ export const MobileProduction: React.FC = () => {
                 p.work_centre_id === workCentreId && 
                 p.plan_date === new Date().toISOString().split('T')[0]
             );
-            const pairsPerTray = planning?.pairs_per_tray || planning?.target_pairs || 0; // Use pairs_per_tray from planning, no hardcoded fallback
+            const pairsPerTray = planning?.target_pairs_per_tray || 0; // Use target_pairs_per_tray from planning
 
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
@@ -342,7 +342,7 @@ export const MobileProduction: React.FC = () => {
                     p.work_centre_id === productionData.work_centre_id && 
                     p.plan_date === new Date().toISOString().split('T')[0]
                 );
-                const updatedTargetPairs = planning?.pairs_per_tray || planning?.target_pairs || productionData.target_pairs;
+                const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
                 
                 setProductionData({ 
                     ...productionData, 
