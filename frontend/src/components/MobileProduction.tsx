@@ -217,12 +217,11 @@ export const MobileProduction: React.FC = () => {
             const routing = routingRes.data?.find((r: any) => r.machine_id === machineId);
             const mins12Prs = routing?.mins_12_prs || routing?.smv || 16.6; // Use mins_12_prs field directly
 
-            // Find planning for pairs per tray - match by work_centre_id and today's date
-            const todayLocal = new Date().toISOString().split('T')[0];
-            const planning = planningRes.data?.find((p: any) => {
-                const planDateLocal = new Date(p.plan_date).toISOString().split('T')[0];
-                return p.work_centre_id === workCentreId && planDateLocal === todayLocal;
-            });
+            // Find most recent planning for this work centre
+            const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === workCentreId) || [];
+            const planning = matchingPlans.sort((a: any, b: any) => 
+                new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
+            )[0];
             const pairsPerTray = planning?.target_pairs_per_tray || 0;
 
             const newData: ProductionData = {
@@ -338,11 +337,10 @@ export const MobileProduction: React.FC = () => {
             try {
                 const planningRes = await fetch(`${API_BASE}/api/production-planning`);
                 const planningData = await planningRes.json();
-                const todayLocal = new Date().toISOString().split('T')[0];
-                const planning = planningData.data?.find((p: any) => {
-                    const planDateLocal = new Date(p.plan_date).toISOString().split('T')[0];
-                    return p.work_centre_id === productionData.work_centre_id && planDateLocal === todayLocal;
-                });
+                const matchingPlans = planningData.data?.filter((p: any) => p.work_centre_id === productionData.work_centre_id) || [];
+                const planning = matchingPlans.sort((a: any, b: any) => 
+                    new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
+                )[0];
                 const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
                 
                 setProductionData({ 
