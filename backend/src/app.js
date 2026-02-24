@@ -17,6 +17,7 @@ const authController = require('./controllers/authController');
 const mobileProductionController = require('./controllers/mobileProductionController');
 const mobileSessionController = require('./controllers/mobileSessionController');
 const productionTrackerController = require('./controllers/productionTrackerController');
+const machineCentreController = require('./controllers/machineCentreController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Path resolution helper
@@ -153,6 +154,15 @@ app.get('/api/tracker/summary', productionTrackerController.getSummary);
 app.get('/api/tracker/hourly', productionTrackerController.getHourlyPerformance);
 app.get('/api/tracker/workstations', productionTrackerController.getWorkstationPerformance);
 app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons);
+
+// Machine Centre routes
+app.post('/api/machine-centre/start', machineCentreController.startProduction);
+app.post('/api/machine-centre/stop', machineCentreController.stopProduction);
+app.post('/api/machine-centre/resume', machineCentreController.resumeProduction);
+app.post('/api/machine-centre/finish', machineCentreController.finishProduction);
+app.get('/api/machine-centre/status/:machineId', machineCentreController.getMachineStatus);
+app.post('/api/machine-centre/update-time', machineCentreController.updateActualTime);
+app.get('/api/machine-centre/plan/:workCentreId/:machineId', machineCentreController.getProductionPlan);
 
 // Health check
 app.get('/health', (req, res) => {
