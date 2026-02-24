@@ -218,15 +218,12 @@ export const MobileProduction: React.FC = () => {
             const mins12Prs = routing?.mins_12_prs || routing?.smv || 16.6; // Use mins_12_prs field directly
 
             // Find planning for pairs per tray - match by work_centre_id and today's date
-            const planning = planningRes.data?.find((p: any) => 
-                p.work_centre_id === workCentreId && 
-                p.plan_date === new Date().toISOString().split('T')[0]
-            );
-            console.log('Init - All planning data:', planningRes.data);
-            console.log('Init - Matched planning:', planning);
-            console.log('Init - work_centre_id:', workCentreId);
-            const pairsPerTray = planning?.target_pairs_per_tray || 0; // Use target_pairs_per_tray from planning
-            console.log('Init - Pairs per tray:', pairsPerTray);
+            const todayLocal = new Date().toISOString().split('T')[0];
+            const planning = planningRes.data?.find((p: any) => {
+                const planDateLocal = new Date(p.plan_date).toISOString().split('T')[0];
+                return p.work_centre_id === workCentreId && planDateLocal === todayLocal;
+            });
+            const pairsPerTray = planning?.target_pairs_per_tray || 0;
 
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
@@ -338,30 +335,24 @@ export const MobileProduction: React.FC = () => {
     const handleReset = async () => {
         setActualTimeCounter(0);
         if (productionData) {
-            // Re-fetch planning data to get latest target_pairs
             try {
                 const planningRes = await fetch(`${API_BASE}/api/production-planning`);
                 const planningData = await planningRes.json();
-                console.log('Reset - All planning data:', planningData.data);
-                const planning = planningData.data?.find((p: any) => 
-                    p.work_centre_id === productionData.work_centre_id && 
-                    p.plan_date === new Date().toISOString().split('T')[0]
-                );
-                console.log('Reset - Matched planning:', planning);
-                console.log('Reset - work_centre_id:', productionData.work_centre_id);
-                console.log('Reset - plan_date:', new Date().toISOString().split('T')[0]);
+                const todayLocal = new Date().toISOString().split('T')[0];
+                const planning = planningData.data?.find((p: any) => {
+                    const planDateLocal = new Date(p.plan_date).toISOString().split('T')[0];
+                    return p.work_centre_id === productionData.work_centre_id && planDateLocal === todayLocal;
+                });
                 const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
-                console.log('Reset - Updated target pairs:', updatedTargetPairs);
                 
                 setProductionData({ 
                     ...productionData, 
                     actual_time: 0, 
                     button_status: 3, 
                     is_paused: false,
-                    target_pairs: updatedTargetPairs // Update with latest value
+                    target_pairs: updatedTargetPairs
                 });
             } catch (error) {
-                console.error('Reset error:', error);
                 setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
             }
         }
