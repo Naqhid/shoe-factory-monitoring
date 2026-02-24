@@ -345,6 +345,9 @@ export const MobileProduction: React.FC = () => {
                 ]);
                 const [planningData, routingData] = await Promise.all([planningRes.json(), routingRes.json()]);
                 
+                console.log('🔄 Reset - Machine ID:', productionData.machine_id);
+                console.log('🔄 Reset - All routing data:', routingData.data);
+                
                 // Get latest planning
                 const matchingPlans = planningData.data?.filter((p: any) => p.work_centre_id === productionData.work_centre_id) || [];
                 const planning = matchingPlans.sort((a: any, b: any) => 
@@ -353,11 +356,17 @@ export const MobileProduction: React.FC = () => {
                 const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
                 
                 // Get latest routing
-                const matchingRoutings = routingData.data?.filter((r: any) => r.machine_id === productionData.machine_id) || [];
+                const matchingRoutings = routingData.data?.filter((r: any) => {
+                    console.log(`🔍 Checking routing: machine_id=${r.machine_id}, mins_12_prs=${r.mins_12_prs}`);
+                    return r.machine_id === productionData.machine_id;
+                }) || [];
+                console.log('✅ Matching routings:', matchingRoutings);
                 const routing = matchingRoutings.sort((a: any, b: any) => 
                     new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
                 )[0];
+                console.log('✅ Selected routing:', routing);
                 const updatedTargetMins = routing?.mins_12_prs || routing?.smv || productionData.target_mins;
+                console.log('✅ Updated target mins:', updatedTargetMins);
                 
                 setProductionData({ 
                     ...productionData, 
@@ -368,6 +377,7 @@ export const MobileProduction: React.FC = () => {
                     target_mins: updatedTargetMins
                 });
             } catch (error) {
+                console.error('❌ Reset error:', error);
                 setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
             }
         }
