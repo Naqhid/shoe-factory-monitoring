@@ -213,12 +213,22 @@ export const MobileProduction: React.FC = () => {
             const workCentre = wcRes.data?.find((wc: any) => wc.id === workCentreId);
             const workCentreName = workCentre?.work_centre_name || workCentre?.name || `WC-${workCentreId}`;
 
-            // Find routing for this machine - get mins_12_prs directly
-            const matchingRoutings = routingRes.data?.filter((r: any) => r.machine_id === machineId) || [];
-            const routing = matchingRoutings.sort((a: any, b: any) => 
-                new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+            // Find routing - get most recent and fetch its lines
+            const mostRecentRouting = routingRes.data?.sort((a: any, b: any) => 
+                new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime()
             )[0];
-            const mins12Prs = routing?.mins_12_prs || routing?.smv || 16.6; // Use mins_12_prs field directly
+            
+            let mins12Prs = 16.6;
+            if (mostRecentRouting?.id) {
+                const linesRes = await fetch(`${API_BASE}/api/production-routing/${mostRecentRouting.id}`);
+                const linesData = await linesRes.json();
+                if (linesData.success && linesData.data?.lines?.length > 0) {
+                    // Sum all mins_12_prs_box from all lines
+                    mins12Prs = linesData.data.lines.reduce((sum: number, line: any) => 
+                        sum + (parseFloat(line.mins_12_prs_box) || 0), 0
+                    );
+                }
+            } // Use mins_12_prs field directly
 
             // Find most recent planning for this work centre
             const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === workCentreId) || [];
@@ -338,15 +348,11 @@ export const MobileProduction: React.FC = () => {
         setActualTimeCounter(0);
         if (productionData) {
             try {
-                // Fetch latest planning AND routing data
                 const [planningRes, routingRes] = await Promise.all([
                     fetch(`${API_BASE}/api/production-planning`),
                     fetch(`${API_BASE}/api/production-routing`)
                 ]);
                 const [planningData, routingData] = await Promise.all([planningRes.json(), routingRes.json()]);
-                
-                console.log('🔄 Reset - Machine ID:', productionData.machine_id);
-                console.log('🔄 Reset - All routing data:', routingData.data);
                 
                 // Get latest planning
                 const matchingPlans = planningData.data?.filter((p: any) => p.work_centre_id === productionData.work_centre_id) || [];
@@ -355,18 +361,22 @@ export const MobileProduction: React.FC = () => {
                 )[0];
                 const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
                 
-                // Get latest routing
-                const matchingRoutings = routingData.data?.filter((r: any) => {
-                    console.log(`🔍 Checking routing: machine_id=${r.machine_id}, mins_12_prs=${r.mins_12_prs}`);
-                    return r.machine_id === productionData.machine_id;
-                }) || [];
-                console.log('✅ Matching routings:', matchingRoutings);
-                const routing = matchingRoutings.sort((a: any, b: any) => 
-                    new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+                // Get most recent routing and fetch its lines
+                const mostRecentRouting = routingData.data?.sort((a: any, b: any) => 
+                    new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime()
                 )[0];
-                console.log('✅ Selected routing:', routing);
-                const updatedTargetMins = routing?.mins_12_prs || routing?.smv || productionData.target_mins;
-                console.log('✅ Updated target mins:', updatedTargetMins);
+                
+                let updatedTargetMins = productionData.target_mins;
+                if (mostRecentRouting?.id) {
+                    const linesRes = await fetch(`${API_BASE}/api/production-routing/${mostRecentRouting.id}`);
+                    const linesData = await linesRes.json();
+                    if (linesData.success && linesData.data?.lines?.length > 0) {
+                        // Sum all mins_12_prs_box from all lines
+                        updatedTargetMins = linesData.data.lines.reduce((sum: number, line: any) => 
+                            sum + (parseFloat(line.mins_12_prs_box) || 0), 0
+                        );
+                    }
+                }
                 
                 setProductionData({ 
                     ...productionData, 
@@ -377,7 +387,6 @@ export const MobileProduction: React.FC = () => {
                     target_mins: updatedTargetMins
                 });
             } catch (error) {
-                console.error('❌ Reset error:', error);
                 setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
             }
         }
