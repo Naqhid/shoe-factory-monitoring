@@ -338,20 +338,34 @@ export const MobileProduction: React.FC = () => {
         setActualTimeCounter(0);
         if (productionData) {
             try {
-                const planningRes = await fetch(`${API_BASE}/api/production-planning`);
-                const planningData = await planningRes.json();
+                // Fetch latest planning AND routing data
+                const [planningRes, routingRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/production-planning`),
+                    fetch(`${API_BASE}/api/production-routing`)
+                ]);
+                const [planningData, routingData] = await Promise.all([planningRes.json(), routingRes.json()]);
+                
+                // Get latest planning
                 const matchingPlans = planningData.data?.filter((p: any) => p.work_centre_id === productionData.work_centre_id) || [];
                 const planning = matchingPlans.sort((a: any, b: any) => 
                     new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
                 )[0];
                 const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
                 
+                // Get latest routing
+                const matchingRoutings = routingData.data?.filter((r: any) => r.machine_id === productionData.machine_id) || [];
+                const routing = matchingRoutings.sort((a: any, b: any) => 
+                    new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+                )[0];
+                const updatedTargetMins = routing?.mins_12_prs || routing?.smv || productionData.target_mins;
+                
                 setProductionData({ 
                     ...productionData, 
                     actual_time: 0, 
                     button_status: 3, 
                     is_paused: false,
-                    target_pairs: updatedTargetPairs
+                    target_pairs: updatedTargetPairs,
+                    target_mins: updatedTargetMins
                 });
             } catch (error) {
                 setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
