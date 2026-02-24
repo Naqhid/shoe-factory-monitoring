@@ -98,7 +98,7 @@ export const MobileProduction: React.FC = () => {
                 setLoading(true);
                 try {
                     // First check if there's an existing session in database
-                    const existingSessionRes = await fetch(`${API_BASE}/api/mobile-production?machine_id=${urlMachineId}&prod_date=${new Date().toISOString().split('T')[0]}`);
+                    const existingSessionRes = await fetch(`${API_BASE}/api/machine-centre/status/${urlMachineId}`);
                     const existingSession = await existingSessionRes.json();
                     
                     if (existingSession.success && existingSession.data) {
