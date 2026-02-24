@@ -77,10 +77,10 @@ export const MobileProduction: React.FC = () => {
         const syncInterval = setInterval(async () => {
             const actualMins = Math.floor(actualTimeCounter / 60);
             try {
-                await fetch(`${API_BASE}/api/machine-centre/update-time`, {
-                    method: 'POST',
+                await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: productionData.id, actual_time: actualMins })
+                    body: JSON.stringify({ actual_time: actualMins })
                 });
                 setProductionData(prev => prev ? { ...prev, actual_time: actualMins } : null);
             } catch (error) {
@@ -98,7 +98,7 @@ export const MobileProduction: React.FC = () => {
                 setLoading(true);
                 try {
                     // First check if there's an existing session in database
-                    const existingSessionRes = await fetch(`${API_BASE}/api/machine-centre/status/${urlMachineId}`);
+                    const existingSessionRes = await fetch(`${API_BASE}/api/mobile-production?machine_id=${urlMachineId}&prod_date=${new Date().toISOString().split('T')[0]}`);
                     const existingSession = await existingSessionRes.json();
                     
                     if (existingSession.success && existingSession.data) {
@@ -265,10 +265,12 @@ export const MobileProduction: React.FC = () => {
         if (!productionData?.id) return;
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/machine-centre/${productionData.button_status === 3 ? 'start' : 'resume'}`, {
-                method: 'POST',
+            // Use mobile-production endpoint instead
+            const endpoint = productionData.button_status === 3 ? 'start' : 'resume';
+            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: productionData.id })
+                body: JSON.stringify({ button_status: 1 })
             });
             const result = await response.json();
             if (result.success) {
@@ -286,14 +288,14 @@ export const MobileProduction: React.FC = () => {
         if (!productionData?.id) return;
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/machine-centre/stop`, {
-                method: 'POST',
+            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: productionData.id })
+                body: JSON.stringify({ button_status: 3 })
             });
             const result = await response.json();
             if (result.success) {
-                setProductionData({ ...productionData, is_paused: true });
+                setProductionData({ ...productionData, is_paused: true, button_status: 3 });
                 toast.success('Production paused');
             }
         } catch (error) {
@@ -309,13 +311,12 @@ export const MobileProduction: React.FC = () => {
         try {
             // Auto-set output to target pairs
             const outputPairs = productionData.target_pairs || 12;
-            const response = await fetch(`${API_BASE}/api/machine-centre/finish`, {
-                method: 'POST',
+            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    id: productionData.id,
-                    outputPairs: productionData.output_pairs + outputPairs,
-                    targetPairs: productionData.target_pairs || 12
+                    button_status: 2,
+                    output_pairs: productionData.output_pairs + outputPairs
                 })
             });
             const result = await response.json();
