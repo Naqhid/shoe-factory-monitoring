@@ -395,7 +395,8 @@ export const MobileProduction: React.FC = () => {
 
     const calculateEfficiency = () => {
         if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 0;
-        return Math.round((productionData.actual_time / productionData.target_mins) * 100);
+        const actualMins = Math.floor(actualTimeCounter / 60);
+        return Math.round((actualMins / productionData.target_mins) * 100);
     };
 
     const calculateStatus = () => {
