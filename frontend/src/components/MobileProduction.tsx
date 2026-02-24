@@ -214,7 +214,10 @@ export const MobileProduction: React.FC = () => {
             const workCentreName = workCentre?.work_centre_name || workCentre?.name || `WC-${workCentreId}`;
 
             // Find routing for this machine - get mins_12_prs directly
-            const routing = routingRes.data?.find((r: any) => r.machine_id === machineId);
+            const matchingRoutings = routingRes.data?.filter((r: any) => r.machine_id === machineId) || [];
+            const routing = matchingRoutings.sort((a: any, b: any) => 
+                new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+            )[0];
             const mins12Prs = routing?.mins_12_prs || routing?.smv || 16.6; // Use mins_12_prs field directly
 
             // Find most recent planning for this work centre
@@ -608,7 +611,7 @@ export const MobileProduction: React.FC = () => {
                             </div>
                             <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">
                                 <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-purple-900">{Math.floor(actualTimeCounter / 60)}</p>
+                                <p className="text-3xl md:text-5xl font-bold text-purple-900">{Math.floor(actualTimeCounter / 60)}<span className="text-lg">m</span></p>
                                 <p className="text-xs text-purple-600 mt-1">{actualTimeCounter % 60}s</p>
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
