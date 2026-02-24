@@ -194,7 +194,7 @@ export const MobileProduction: React.FC = () => {
                 p.work_centre_id === workCentreId && 
                 p.plan_date === new Date().toISOString().split('T')[0]
             );
-            const pairsPerTray = planning?.pairs_per_tray || 2; // Use pairs_per_tray from planning
+            const pairsPerTray = planning?.pairs_per_tray || planning?.target_pairs || 0; // Use pairs_per_tray from planning, no hardcoded fallback
 
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
