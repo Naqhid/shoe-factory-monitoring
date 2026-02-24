@@ -185,9 +185,9 @@ export const MobileProduction: React.FC = () => {
             const workCentre = wcRes.data?.find((wc: any) => wc.id === workCentreId);
             const workCentreName = workCentre?.work_centre_name || workCentre?.name || `WC-${workCentreId}`;
 
-            // Find routing for this machine (SMV for 12 pairs)
+            // Find routing for this machine - get mins_12_prs directly
             const routing = routingRes.data?.find((r: any) => r.machine_id === machineId);
-            const smvFor12Pairs = routing?.smv ? Math.round(routing.smv * 12) : 60;
+            const mins12Prs = routing?.mins_12_prs || routing?.smv || 16.6; // Use mins_12_prs field directly
 
             // Find planning for pairs per tray
             const planning = planningRes.data?.find((p: any) => p.work_centre_id === workCentreId);
@@ -200,7 +200,7 @@ export const MobileProduction: React.FC = () => {
                 machine_id: machineId,
                 emp_id: empDbId,
                 output_pairs: 0,
-                target_mins: smvFor12Pairs,
+                target_mins: mins12Prs,
                 target_pairs: pairsPerTray,
                 start_time: null,
                 finish_time: null,
