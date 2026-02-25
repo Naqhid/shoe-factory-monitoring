@@ -7,8 +7,10 @@ export const useMachineStatus = (enabled: boolean = true) => {
     'machineStatus',
     apiService.getMachineStatus,
     {
-      refetchInterval: 5000, // Refresh every 5 seconds
-      refetchOnWindowFocus: true,
+      refetchInterval: 5000,
+      refetchOnWindowFocus: false,
+      staleTime: 3000,
+      cacheTime: 60000,
       enabled,
     }
   );

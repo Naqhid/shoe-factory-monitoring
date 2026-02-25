@@ -3,6 +3,7 @@ const express = require('express');
 const https = require('https');
 const http = require('http');
 const cors = require('cors');
+const compression = require('compression');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
@@ -58,6 +59,7 @@ const PORT = process.env.PORT || 3001;
 createDirectories();
 
 // Middleware
+app.use(compression());
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],

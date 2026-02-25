@@ -1,17 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import fs from 'fs'
-import path from 'path'
+import compression from 'vite-plugin-compression'
 
-const certPath = path.resolve(__dirname, 'cert')
-const keyFile = path.join(certPath, 'key.pem')
-const certFile = path.join(certPath, 'cert.pem')
-
-const useHttps = fs.existsSync(keyFile) && fs.existsSync(certFile)
-
+// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  base: '/',
+  plugins: [
+    react(),
+    compression({
+      algorithm: 'gzip',
+      ext: '.gz',
+    }),
+    compression({
+      algorithm: 'brotliCompress',
+      ext: '.br',
+    }),
+  ],
   build: {
     rollupOptions: {
       output: {
@@ -19,6 +22,7 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'query-vendor': ['react-query', 'axios'],
           'ui-vendor': ['lucide-react', 'react-hot-toast'],
+          'chart-vendor': ['recharts'],
         },
       },
     },
@@ -33,11 +37,12 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    host: '0.0.0.0',
-    https: useHttps ? {
-      key: fs.readFileSync(keyFile),
-      cert: fs.readFileSync(certFile),
-    } : undefined,
+    proxy: {
+      '/api': {
+        target: 'http://192.168.1.11:3001',
+        changeOrigin: true,
+      },
+    },
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'react-query'],
