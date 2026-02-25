@@ -230,62 +230,37 @@ class StitchingEventRepository {
   }
 
   async getOverallDailyData(date) {
-    // Get total target from production plan
+    // Get total target from production_planning
     const targetQuery = `
-      SELECT SUM(target_pairs_per_day) as total_target
-      FROM production_plan 
+      SELECT SUM(pairs_per_tray) as total_target
+      FROM production_planning 
       WHERE plan_date = ?
     `;
     
     const [targetRows] = await pool.execute(targetQuery, [date]);
     const totalTarget = targetRows[0]?.total_target || 0;
     
-    // Get total output
+    // Get total output from machine_centre_app
     const outputQuery = `
-      SELECT COUNT(*) as total_output
-      FROM stitching_events 
-      WHERE DATE(event_time) = ? AND status = 1
+      SELECT SUM(output_pairs) as total_output
+      FROM machine_centre_app 
+      WHERE prod_date = ?
     `;
     
     const [outputRows] = await pool.execute(outputQuery, [date]);
     const totalOutput = outputRows[0]?.total_output || 0;
     
-    // Get total man hours
-    const manHoursQuery = `
-      SELECT SUM(man_hours_minutes) as total_man_hours
-      FROM production_plan 
-      WHERE plan_date = ?
+    // Get average efficiency from pivot_data
+    const efficiencyQuery = `
+      SELECT AVG(avg_efficiency) as overall_efficiency
+      FROM pivot_data 
+      WHERE prod_date = ?
     `;
     
-    const [manHoursRows] = await pool.execute(manHoursQuery, [date]);
-    const totalManHours = manHoursRows[0]?.total_man_hours || 0;
-    
-    // Get average SMV
-    const smvQuery = `
-      SELECT AVG(ls.smv_per_pair) as avg_smv
-      FROM line_setup ls
-      WHERE DATE(ls.login_date_time) <= ? 
-      AND (ls.logout_date_time IS NULL OR DATE(ls.logout_date_time) >= ?)
-    `;
-    
-    const [smvRows] = await pool.execute(smvQuery, [date, date]);
-    const avgSmv = smvRows[0]?.avg_smv || 0;
-    
-    // Get total employees
-    const employeeQuery = `
-      SELECT COUNT(DISTINCT ls.employee_id) as total_employees
-      FROM line_setup ls
-      WHERE DATE(ls.login_date_time) <= ? 
-      AND (ls.logout_date_time IS NULL OR DATE(ls.logout_date_time) >= ?)
-    `;
-    
-    const [employeeRows] = await pool.execute(employeeQuery, [date, date]);
-    const totalEmployees = employeeRows[0]?.total_employees || 0;
+    const [efficiencyRows] = await pool.execute(efficiencyQuery, [date]);
+    const overallEfficiency = efficiencyRows[0]?.overall_efficiency || 0;
     
     const outputPercentage = totalTarget > 0 ? (totalOutput / totalTarget) * 100 : 0;
-    const overallEfficiency = (totalOutput > 0 && avgSmv > 0 && totalEmployees > 0 && totalManHours > 0) 
-      ? (totalOutput * avgSmv) / (totalEmployees * totalManHours) * 100 
-      : 0;
     
     return {
       todays_target: totalTarget,
