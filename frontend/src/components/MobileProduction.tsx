@@ -395,33 +395,30 @@ export const MobileProduction: React.FC = () => {
 
     const calculateEfficiency = () => {
         if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 0;
-        const actualMins = actualTimeCounter / 60;
-        return Math.round((actualMins / productionData.target_mins) * 100);
+        // Only calculate after FINISH (button_status === 2)
+        if (productionData.button_status !== 2) return 0;
+        const actualMins = productionData.actual_time;
+        return parseFloat(((actualMins / productionData.target_mins) * 100).toFixed(1));
     };
 
     const calculateStatus = () => {
         if (!productionData) return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
         
-        // Initial state - always on-track
-        if (productionData.actual_time === 0 && actualTimeCounter === 0) {
-            return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
-        }
-        
+        // Paused/Idle state
         if (productionData.is_paused || productionData.button_status === 3) {
             return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
         }
         
-        if (productionData.updated_at) {
-            const idleMinutes = Math.floor((Date.now() - new Date(productionData.updated_at).getTime()) / 60000);
-            if (idleMinutes >= 5) {
-                return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
+        // After FINISH, calculate based on efficiency
+        if (productionData.button_status === 2) {
+            const efficiency = calculateEfficiency();
+            if (efficiency < 80) {
+                return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
             }
+            return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
         }
         
-        const efficiency = calculateEfficiency();
-        if (efficiency < 80) {
-            return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
-        }
+        // While running (button_status === 1), always On-track
         return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
     };
 
@@ -640,7 +637,7 @@ export const MobileProduction: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
                                 <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{productionData.target_mins}</p>
+                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{productionData.target_mins.toFixed(1)}</p>
                                 <p className="text-xs text-blue-600 mt-1">mins</p>
                             </div>
                             <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">
