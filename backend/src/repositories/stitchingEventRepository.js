@@ -110,6 +110,30 @@ class StitchingEventRepository {
     return rows;
   }
 
+  async getOverallEfficiency(date) {
+    const query = `
+      SELECT 
+        COUNT(DISTINCT machine_id) as total_machines,
+        SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as total_run_minutes,
+        SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as total_idle_minutes,
+        COUNT(*) as total_events,
+        ROUND(
+          (SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2
+        ) as overall_efficiency_percentage
+      FROM stitching_events
+      WHERE DATE(event_time) = ?
+    `;
+    
+    const [rows] = await pool.execute(query, [date]);
+    return rows[0] || {
+      total_machines: 0,
+      total_run_minutes: 0,
+      total_idle_minutes: 0,
+      total_events: 0,
+      overall_efficiency_percentage: 0
+    };
+  }
+
   async getDailyDashboardData(date) {
     // Get production plan data
     const planQuery = `
@@ -230,10 +254,10 @@ class StitchingEventRepository {
   }
 
   async getOverallDailyData(date) {
-    // Get total target from production_planning
+    // Get total target from production_plan
     const targetQuery = `
-      SELECT SUM(pairs_per_tray) as total_target
-      FROM production_planning 
+      SELECT SUM(target_pairs_per_tray) as total_target
+      FROM production_plan 
       WHERE plan_date = ?
     `;
     
@@ -250,23 +274,13 @@ class StitchingEventRepository {
     const [outputRows] = await pool.execute(outputQuery, [date]);
     const totalOutput = outputRows[0]?.total_output || 0;
     
-    // Get average efficiency from pivot_data
-    const efficiencyQuery = `
-      SELECT AVG(avg_efficiency) as overall_efficiency
-      FROM pivot_data 
-      WHERE prod_date = ?
-    `;
-    
-    const [efficiencyRows] = await pool.execute(efficiencyQuery, [date]);
-    const overallEfficiency = efficiencyRows[0]?.overall_efficiency || 0;
-    
     const outputPercentage = totalTarget > 0 ? (totalOutput / totalTarget) * 100 : 0;
     
     return {
       todays_target: totalTarget,
       output: totalOutput,
       output_percentage: outputPercentage,
-      overall_efficiency_percentage: overallEfficiency
+      overall_efficiency_percentage: 0
     };
   }
 }
