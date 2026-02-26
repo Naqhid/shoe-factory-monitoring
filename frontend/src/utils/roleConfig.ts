@@ -17,19 +17,19 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   },
   'Machine Centre User': {
     defaultRoute: '/mobile',
-    allowedMenus: ['production_tracker', 'mobile']
+    allowedMenus: ['mobile']
   },
   'IED': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'production_routing', 'production_tracker', 'mobile', 'reports']
+    allowedMenus: ['overview', 'production_routing', 'production_tracker','reports']
   },
   'Planner': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'production_planning', 'production_tracker', 'mobile', 'reports', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
+    allowedMenus: ['overview', 'production_planning', 'production_tracker','reports', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
   },
   'Unit Head': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'production_tracker', 'mobile', 'reports']
+    allowedMenus: ['overview', 'production_tracker','reports']
   }
 };
 

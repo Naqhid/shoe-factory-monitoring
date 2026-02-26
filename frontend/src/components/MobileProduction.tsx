@@ -397,7 +397,8 @@ export const MobileProduction: React.FC = () => {
         if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 0;
         // Only calculate after FINISH (button_status === 2)
         if (productionData.button_status !== 2) return 0;
-        const actualMins = productionData.actual_time;
+        const actualMins = actualTimeCounter / 60; // Use live counter in seconds, convert to minutes
+        if (actualMins === 0) return 0;
         return parseFloat(((actualMins / productionData.target_mins) * 100).toFixed(1));
     };
 

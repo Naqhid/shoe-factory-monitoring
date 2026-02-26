@@ -156,9 +156,13 @@ exports.updateStatus = async (req, res, next) => {
     if (button_status === 2) {
       updateQuery += ', finish_time = NOW()';
     }
-    // If starting, update start_time
+    // If starting/resuming, update start_time and idle_stop_time
     if (button_status === 1) {
-      updateQuery += ', start_time = NOW()';
+      updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
+    }
+    // If pausing (button_status === 3), update idle_start_time
+    if (button_status === 3) {
+      updateQuery += ', idle_start_time = NOW()';
     }
     // Update output pairs if provided
     if (output_pairs !== undefined) {
