@@ -186,7 +186,8 @@ const mobileSessionController = {
             const { line } = req.query;
             let query = `SELECT ms.machine_id, ms.emp_code, ms.activated_at
                          FROM mobile_sessions ms
-                         WHERE ms.status = 'active'`;
+                         WHERE ms.status = 'active'
+                         AND DATE(ms.activated_at) = CURDATE()`;
             let params = [];
 
             // Filter by line if provided

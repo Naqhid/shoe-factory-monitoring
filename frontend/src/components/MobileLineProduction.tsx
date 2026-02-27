@@ -36,6 +36,25 @@ export const MobileLineProduction: React.FC = () => {
   // If no specific config found, show line1 as default
   const displayConfig = config || lineConfigs.line1;
 
+  // Poll for active sessions to redirect display device after QR scans
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active`);
+        const result = await response.json();
+
+        if (result.success && result.data && result.data.redirect_url) {
+          clearInterval(pollInterval);
+          navigate(result.data.redirect_url);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [navigate]);
+
   if (!displayConfig) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
