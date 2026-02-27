@@ -171,26 +171,23 @@ export const MobileProduction: React.FC = () => {
                         setActualTimeCounter(unfinishedRecord.actual_time * 60);
                         toast.success('Loaded existing session');
                     } else {
-                        // Create new session only if no unfinished record exists
-                        const [empRes, macRes] = await Promise.all([
-                            fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
-                            fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
-                        ]);
+                        // Create new session - use optimized endpoint
+                        const response = await fetch(`${API_BASE}/api/mobile-production/init/${urlMachineId}/${urlEmpId}`);
+                        const result = await response.json();
 
-                        const employee = empRes.data?.find((e: any) => e.code === urlEmpId);
-                        const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
-
-                        if (!employee) {
-                            toast.error(`Employee ${urlEmpId} not found`);
+                        if (!result.success) {
+                            toast.error(result.message || 'Failed to initialize');
                             return;
                         }
+
+                        const { employee, machine, workCentre, targetMins, targetPairs, existingRecord } = result.data;
 
                         setSessionStatus('active');
                         setQrData(urlMachineId);
                         setEmployeeName(employee.name);
-                        setMachineName(machine?.name || urlMachineId);
+                        setMachineName(machine.name);
 
-                        initializeProduction(urlMachineId, urlEmpId, machine?.work_centre_id || 1);
+                        initializeProduction(urlMachineId, urlEmpId, machine.work_centre_id, targetMins, targetPairs, workCentre.name);
                     }
                 } catch (e) {
                     toast.error('Failed to load setup data');
@@ -241,72 +238,45 @@ export const MobileProduction: React.FC = () => {
     }, [location.pathname, API_BASE, navigate, urlMachineId, urlEmpId]);
 
 
-    const initializeProduction = async (machineId: string, empCode: string, workCentreId: number = 1) => {
-        if (isInitializingRef.current) return; // Prevent duplicate calls
+    const initializeProduction = async (machineId: string, empCode: string, workCentreId: number = 1, targetMins?: number, targetPairs?: number, workCentreName?: string) => {
+        if (isInitializingRef.current) return;
         isInitializingRef.current = true;
         setLoading(true);
         try {
-            // Always create a new record for each cycle
-            // Fetch employee, work centre, production routing, and production planning data
-            const [empRes, wcRes, routingRes, planningRes] = await Promise.all([
-                fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`).then(r => r.json()),
-                fetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
-                fetch(`${API_BASE}/api/production-routing`).then(r => r.json()),
-                fetch(`${API_BASE}/api/production-planning`).then(r => r.json())
-            ]);
+            // If data not provided, fetch from optimized endpoint
+            if (!targetMins || !targetPairs) {
+                const response = await fetch(`${API_BASE}/api/mobile-production/init/${machineId}/${empCode}`);
+                const result = await response.json();
+                if (!result.success) {
+                    toast.error(result.message || 'Failed to initialize');
+                    return;
+                }
+                targetMins = result.data.targetMins;
+                targetPairs = result.data.targetPairs;
+                workCentreName = result.data.workCentre.name;
+            }
 
-            if (!empRes.success || !empRes.data) {
+            const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
+            const empData = await empRes.json();
+            if (!empData.success || !empData.data) {
                 toast.error(`Employee ${empCode} not found`);
                 return;
             }
 
-            const empDbId = empRes.data.id;
-            const workCentre = wcRes.data?.find((wc: any) => wc.id === workCentreId);
-            const workCentreName = workCentre?.work_centre_name || workCentre?.name || `WC-${workCentreId}`;
-
-            // Find routing - get most recent and fetch its lines
-            const mostRecentRouting = routingRes.data?.sort((a: any, b: any) => 
-                new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime()
-            )[0];
-            
-            let mins12Prs = 16.6;
-            if (mostRecentRouting?.id) {
-                const linesRes = await fetch(`${API_BASE}/api/production-routing/${mostRecentRouting.id}`);
-                const linesData = await linesRes.json();
-                if (linesData.success && linesData.data?.lines?.length > 0) {
-                    // Sum all mins_12_prs_box from all lines
-                    mins12Prs = linesData.data.lines.reduce((sum: number, line: any) => 
-                        sum + (parseFloat(line.mins_12_prs_box) || 0), 0
-                    );
-                }
-            } // Use mins_12_prs field directly
-
-            // Find most recent planning for this work centre
-            const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === workCentreId) || [];
-            console.log('Work Centre ID:', workCentreId);
-            console.log('All planning data:', planningRes.data);
-            console.log('Matching plans:', matchingPlans);
-            const planning = matchingPlans.sort((a: any, b: any) => 
-                new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
-            )[0];
-            console.log('Selected planning:', planning);
-            const pairsPerTray = planning?.target_pairs_per_tray || 0;
-            console.log('Pairs per tray:', pairsPerTray);
-
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
                 work_centre_id: workCentreId,
-                work_centre_name: workCentreName,
+                work_centre_name: workCentreName || `WC-${workCentreId}`,
                 machine_id: machineId,
-                emp_id: empDbId,
+                emp_id: empData.data.id,
                 output_pairs: 0,
-                target_mins: mins12Prs,
-                target_pairs: pairsPerTray,
+                target_mins: targetMins,
+                target_pairs: targetPairs,
                 start_time: null,
                 finish_time: null,
                 idle_start_time: null,
                 actual_time: 0,
-                button_status: 3, // Start in stopped state
+                button_status: 3,
                 is_paused: false
             };
 

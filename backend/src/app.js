@@ -139,6 +139,7 @@ app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionSt
 
 // Mobile production routes
 app.get('/api/mobile-production', mobileProductionController.getAll);
+app.get('/api/mobile-production/init/:machineId/:empCode', mobileProductionController.getInitData);
 app.get('/api/mobile-production/:id', mobileProductionController.getById);
 app.get('/api/mobile-production/machine/:machineId/date/:date', mobileProductionController.getByMachineAndDate);
 app.get('/api/mobile-production/summary/:machineId/date/:date', mobileProductionController.getSummaryByMachineAndDate);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { API_BASE_URL as API_BASE } from '../services/api';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 
 const lineConfigs = {
   line1: {
@@ -25,6 +25,7 @@ const lineConfigs = {
 export const MobileLineProduction: React.FC = () => {
   const navigate = useNavigate();
   const [showTestHelpers, setShowTestHelpers] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Extract lineId from URL path
   const fullPath = window.location.pathname;
@@ -45,7 +46,10 @@ export const MobileLineProduction: React.FC = () => {
 
         if (result.success && result.data && result.data.redirect_url) {
           clearInterval(pollInterval);
-          navigate(result.data.redirect_url);
+          setIsRedirecting(true);
+          setTimeout(() => {
+            navigate(result.data.redirect_url);
+          }, 500);
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -64,6 +68,18 @@ export const MobileLineProduction: React.FC = () => {
           <Link to="/mobile" className="text-blue-600 hover:underline">
             ← Back to Line Selection
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (isRedirecting) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Loading Production...</h2>
+          <p className="text-gray-500">Please wait</p>
         </div>
       </div>
     );

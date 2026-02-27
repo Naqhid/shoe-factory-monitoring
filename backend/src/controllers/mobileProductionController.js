@@ -318,3 +318,59 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
     next(error);
   }
 };
+
+// Get initialization data in one call (optimized)
+exports.getInitData = async (req, res, next) => {
+  try {
+    const { machineId, empCode } = req.params;
+    const today = new Date().toISOString().split('T')[0];
+
+    const [employeeRows, machineRows, routingRows, planningRows, existingRows] = await Promise.all([
+      db.query('SELECT id, code, name FROM employees WHERE code = ?', [empCode]),
+      db.query('SELECT machine_id, code, name, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?', [machineId, machineId]),
+      db.query('SELECT id, updated_at, created_at FROM production_routing ORDER BY updated_at DESC, created_at DESC LIMIT 1'),
+      db.query('SELECT work_centre_id, target_pairs_per_tray, plan_date FROM production_planning ORDER BY plan_date DESC'),
+      db.query('SELECT * FROM machine_centre_production WHERE machine_id = ? AND prod_date = ? AND button_status != 2 ORDER BY created_at DESC LIMIT 1', [machineId, today])
+    ]);
+
+    const employee = employeeRows[0][0];
+    const machine = machineRows[0][0];
+    const routing = routingRows[0][0];
+    const existingRecord = existingRows[0][0];
+
+    if (!employee) {
+      return res.status(404).json({ success: false, message: `Employee ${empCode} not found` });
+    }
+
+    const workCentreId = machine?.work_centre_id || 1;
+    const [wcRows] = await db.query('SELECT id, name, work_centre_name FROM work_centres WHERE id = ?', [workCentreId]);
+    const workCentre = wcRows[0];
+
+    let targetMins = 16.6;
+    if (routing?.id) {
+      const [linesRows] = await db.query('SELECT mins_12_prs_box FROM production_routing_lines WHERE routing_id = ?', [routing.id]);
+      if (linesRows.length > 0) {
+        targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
+      }
+    }
+
+    const matchingPlans = planningRows[0].filter(p => p.work_centre_id === workCentreId);
+    const planning = matchingPlans.sort((a, b) => new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime())[0];
+    const targetPairs = planning?.target_pairs_per_tray || 0;
+
+    res.json({
+      success: true,
+      data: {
+        employee: { id: employee.id, code: employee.code, name: employee.name },
+        machine: { machine_id: machine?.machine_id || machineId, name: machine?.name || machineId, work_centre_id: workCentreId },
+        workCentre: { id: workCentreId, name: workCentre?.work_centre_name || workCentre?.name || `WC-${workCentreId}` },
+        targetMins,
+        targetPairs,
+        existingRecord
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching init data:', error);
+    next(error);
+  }
+};
