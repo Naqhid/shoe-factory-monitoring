@@ -42,6 +42,9 @@ export const MobileProduction: React.FC = () => {
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
     const [showTestHelpers, setShowTestHelpers] = useState(false);
+    const isInitializingRef = React.useRef(false);
+    const [totalOutputToday, setTotalOutputToday] = useState(0);
+    const [avgEfficiencyToday, setAvgEfficiencyToday] = useState(0);
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -91,39 +94,68 @@ export const MobileProduction: React.FC = () => {
         return () => clearInterval(syncInterval);
     }, [productionData?.id, productionData?.button_status, productionData?.is_paused, actualTimeCounter, API_BASE]);
 
+    // Fetch summary data from machine_centre_summary table
+    const fetchSummaryData = async (machineId: string) => {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const response = await fetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${today}`);
+            const result = await response.json();
+            if (result.success && result.data) {
+                setTotalOutputToday(result.data.total_output_pairs || 0);
+                setAvgEfficiencyToday(parseFloat(result.data.avg_efficiency_percent || 0).toFixed(1));
+            } else {
+                setTotalOutputToday(0);
+                setAvgEfficiencyToday(0);
+            }
+        } catch (error) {
+            console.error('Error fetching summary data:', error);
+        }
+    };
+
+    useEffect(() => {
+        if (productionData?.machine_id) {
+            fetchSummaryData(productionData.machine_id);
+        }
+    }, [productionData?.output_pairs, productionData?.machine_id]);
+
     // Session Initialization and Polling
     useEffect(() => {
         if (urlMachineId && urlEmpId) {
             const resolveAndInitialize = async () => {
                 setLoading(true);
                 try {
-                    // First check if there's an existing session in database
-                    const existingSessionRes = await fetch(`${API_BASE}/api/machine-centre/status/${urlMachineId}`);
-                    const existingSession = await existingSessionRes.json();
+                    // Check for existing production record for today that's not finished
+                    const today = new Date().toISOString().split('T')[0];
+                    const existingRes = await fetch(`${API_BASE}/api/mobile-production/machine/${urlMachineId}/date/${today}`);
+                    const existingData = await existingRes.json();
                     
-                    if (existingSession.success && existingSession.data) {
-                        // Load existing session
+                    // Find the most recent unfinished record (button_status !== 2)
+                    const unfinishedRecord = existingData.data?.find((r: any) => r.button_status !== 2);
+                    
+                    if (unfinishedRecord) {
+                        // Use the unfinished record
                         const [empRes, macRes, wcRes] = await Promise.all([
                             fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
                             fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
                             fetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json())
                         ]);
 
-                        const employee = empRes.data?.find((e: any) => e.id === existingSession.data.emp_id);
+                        const employee = empRes.data?.find((e: any) => e.id === unfinishedRecord.emp_id);
                         const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
-                        const workCentre = wcRes.data?.find((wc: any) => wc.id === existingSession.data.work_centre_id);
+                        const workCentre = wcRes.data?.find((wc: any) => wc.id === unfinishedRecord.work_centre_id);
 
                         setSessionStatus('active');
                         setQrData(urlMachineId);
                         setEmployeeName(employee?.name || employee?.emp_name || '');
                         setMachineName(machine?.name || urlMachineId);
                         setProductionData({
-                            ...existingSession.data,
+                            ...unfinishedRecord,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
-                        setActualTimeCounter(existingSession.data.actual_time * 60); // Convert mins to seconds
+                        setActualTimeCounter(unfinishedRecord.actual_time * 60);
+                        toast.success('Loaded existing session');
                     } else {
-                        // Create new session
+                        // Create new session only if no unfinished record exists
                         const [empRes, macRes] = await Promise.all([
                             fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
                             fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json())
@@ -194,8 +226,11 @@ export const MobileProduction: React.FC = () => {
 
 
     const initializeProduction = async (machineId: string, empCode: string, workCentreId: number = 1) => {
+        if (isInitializingRef.current) return; // Prevent duplicate calls
+        isInitializingRef.current = true;
         setLoading(true);
         try {
+            // Always create a new record for each cycle
             // Fetch employee, work centre, production routing, and production planning data
             const [empRes, wcRes, routingRes, planningRes] = await Promise.all([
                 fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`).then(r => r.json()),
@@ -271,15 +306,20 @@ export const MobileProduction: React.FC = () => {
             toast.error('Failed to initialize production');
         } finally {
             setLoading(false);
+            isInitializingRef.current = false;
         }
     };
 
     const handleStart = async () => {
         if (!productionData?.id) return;
+        
+        if (productionData.button_status === 2) {
+            toast.error('Please click RESET to start next cycle');
+            return;
+        }
+        
         setLoading(true);
         try {
-            // Use mobile-production endpoint instead
-            const endpoint = productionData.button_status === 3 ? 'start' : 'resume';
             const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -322,20 +362,19 @@ export const MobileProduction: React.FC = () => {
         if (!productionData?.id) return;
         setLoading(true);
         try {
-            // Auto-set output to target pairs
-            const outputPairs = productionData.target_pairs || 12;
+            const outputPairs = productionData.target_pairs || 0;
             const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     button_status: 2,
-                    output_pairs: productionData.output_pairs + outputPairs
+                    output_pairs: outputPairs
                 })
             });
             const result = await response.json();
             if (result.success) {
-                setProductionData({ ...productionData, button_status: 2, output_pairs: productionData.output_pairs + outputPairs });
-                toast.success('Production finished');
+                setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
+                toast.success('Production finished - Click RESET for next cycle');
             }
         } catch (error) {
             toast.error('Failed to finish production');
@@ -345,52 +384,37 @@ export const MobileProduction: React.FC = () => {
     };
 
     const handleReset = async () => {
-        setActualTimeCounter(0);
-        if (productionData) {
-            try {
-                const [planningRes, routingRes] = await Promise.all([
-                    fetch(`${API_BASE}/api/production-planning`),
-                    fetch(`${API_BASE}/api/production-routing`)
-                ]);
-                const [planningData, routingData] = await Promise.all([planningRes.json(), routingRes.json()]);
-                
-                // Get latest planning
-                const matchingPlans = planningData.data?.filter((p: any) => p.work_centre_id === productionData.work_centre_id) || [];
-                const planning = matchingPlans.sort((a: any, b: any) => 
-                    new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
-                )[0];
-                const updatedTargetPairs = planning?.target_pairs_per_tray || productionData.target_pairs;
-                
-                // Get most recent routing and fetch its lines
-                const mostRecentRouting = routingData.data?.sort((a: any, b: any) => 
-                    new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime()
-                )[0];
-                
-                let updatedTargetMins = productionData.target_mins;
-                if (mostRecentRouting?.id) {
-                    const linesRes = await fetch(`${API_BASE}/api/production-routing/${mostRecentRouting.id}`);
-                    const linesData = await linesRes.json();
-                    if (linesData.success && linesData.data?.lines?.length > 0) {
-                        // Sum all mins_12_prs_box from all lines
-                        updatedTargetMins = linesData.data.lines.reduce((sum: number, line: any) => 
-                            sum + (parseFloat(line.mins_12_prs_box) || 0), 0
+        if (!productionData) return;
+        
+        if (productionData.button_status === 2) {
+            if (urlEmpId) {
+                await initializeProduction(
+                    productionData.machine_id,
+                    urlEmpId,
+                    productionData.work_centre_id
+                );
+            } else {
+                try {
+                    const empRes = await fetch(`${API_BASE}/api/masters/employees`);
+                    const empData = await empRes.json();
+                    const employee = empData.data?.find((e: any) => e.id === productionData.emp_id);
+                    if (employee) {
+                        await initializeProduction(
+                            productionData.machine_id,
+                            employee.code,
+                            productionData.work_centre_id
                         );
                     }
+                } catch (error) {
+                    toast.error('Failed to get employee info');
                 }
-                
-                setProductionData({ 
-                    ...productionData, 
-                    actual_time: 0, 
-                    button_status: 3, 
-                    is_paused: false,
-                    target_pairs: updatedTargetPairs,
-                    target_mins: updatedTargetMins
-                });
-            } catch (error) {
-                setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
             }
+            toast.success('Ready for next cycle');
+        } else {
+            setActualTimeCounter(0);
+            setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
+            toast.success('Timer reset');
         }
-        toast.success('Timer reset');
     };
 
     const calculateEfficiency = () => {
@@ -601,13 +625,13 @@ export const MobileProduction: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                             <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
                                 <div className="min-w-0">
-                                    <p className="text-xs opacity-80">Line Name</p>
+                                    <p className="text-xs opacity-80">Process Name</p>
                                     <p className="font-semibold truncate">{machineName || 'N/A'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
                                 <div className="min-w-0">
-                                    <p className="text-xs opacity-80">Work Centre</p>
+                                    <p className="text-xs opacity-80">Line Name</p>
                                     <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
                                 </div>
                             </div>
@@ -653,12 +677,12 @@ export const MobileProduction: React.FC = () => {
                             </div>
                             <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm">
                                 <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>
-                                <p className="text-3xl md:text-5xl font-bold text-orange-900">{productionData.output_pairs}</p>
-                                <p className="text-xs text-orange-600 mt-1">pairs</p>
+                                <p className="text-3xl md:text-5xl font-bold text-orange-900">{totalOutputToday}</p>
+                                <p className="text-xs text-orange-600 mt-1">pairs (today)</p>
                             </div>
                             <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm">
                                 <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Avg Efficiency</p>
-                                <p className="text-3xl md:text-5xl font-bold text-indigo-900">{calculateEfficiency()}%</p>
+                                <p className="text-3xl md:text-5xl font-bold text-indigo-900">{avgEfficiencyToday}%</p>
                                 <p className="text-xs text-indigo-600 mt-1">percentage</p>
                             </div>
                             <div className={`p-4 md:p-6 rounded-xl border-2 shadow-sm ${getStatusBgColor()} ${getStatusColor()}`}>
@@ -676,8 +700,8 @@ export const MobileProduction: React.FC = () => {
                                 <>
                                     <button
                                         onClick={handleStart}
-                                        disabled={loading}
-                                        className="md:col-span-2 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        disabled={loading || productionData.button_status === 2}
+                                        className="md:col-span-2 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />START</>}
                                     </button>

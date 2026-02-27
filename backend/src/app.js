@@ -141,6 +141,7 @@ app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionSt
 app.get('/api/mobile-production', mobileProductionController.getAll);
 app.get('/api/mobile-production/:id', mobileProductionController.getById);
 app.get('/api/mobile-production/machine/:machineId/date/:date', mobileProductionController.getByMachineAndDate);
+app.get('/api/mobile-production/summary/:machineId/date/:date', mobileProductionController.getSummaryByMachineAndDate);
 app.get('/api/mobile-production/live-status/:machineId', mobileProductionController.getLiveMachineStatus);
 app.post('/api/mobile-production', mobileProductionController.create);
 app.put('/api/mobile-production/:id', mobileProductionController.update);

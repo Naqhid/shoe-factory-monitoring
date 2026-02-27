@@ -89,7 +89,7 @@ exports.create = async (req, res, next) => {
        (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins, 
         start_time, finish_time, idle_start_time, idle_stop_time, button_status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [prod_date, work_centre_id, machine_id, emp_id, output_pairs || 12, target_mins || 0,
+      [prod_date, work_centre_id, machine_id, emp_id, output_pairs !== undefined ? output_pairs : 0, target_mins || 0,
         start_time, finish_time, idle_start_time, idle_stop_time, button_status || 1]
     );
 
@@ -152,22 +152,21 @@ exports.updateStatus = async (req, res, next) => {
     let updateQuery = 'UPDATE machine_centre_production SET button_status = ?';
     let params = [button_status];
 
-    // If finishing, update finish_time
+    // If finishing, update finish_time and output_pairs
     if (button_status === 2) {
       updateQuery += ', finish_time = NOW()';
+      if (output_pairs !== undefined) {
+        updateQuery += ', output_pairs = ?';
+        params.push(output_pairs);
+      }
     }
     // If starting/resuming, update start_time and idle_stop_time
-    if (button_status === 1) {
+    else if (button_status === 1) {
       updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
     }
     // If pausing (button_status === 3), update idle_start_time
-    if (button_status === 3) {
+    else if (button_status === 3) {
       updateQuery += ', idle_start_time = NOW()';
-    }
-    // Update output pairs if provided
-    if (output_pairs !== undefined) {
-      updateQuery += ', output_pairs = output_pairs + ?';
-      params.push(output_pairs);
     }
 
     updateQuery += ' WHERE id = ?';
@@ -177,6 +176,30 @@ exports.updateStatus = async (req, res, next) => {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: 'Production data not found' });
+    }
+
+    // If finishing, update machine_centre_summary
+    if (button_status === 2) {
+      const [record] = await db.query('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
+      if (record.length > 0) {
+        const prod = record[0];
+        await db.query(
+          `INSERT INTO machine_centre_summary 
+           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, avg_efficiency_percent, button_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+           total_output_pairs = total_output_pairs + VALUES(total_output_pairs),
+           total_target_mins = total_target_mins + VALUES(total_target_mins),
+           total_actual_mins = total_actual_mins + VALUES(total_actual_mins),
+           avg_efficiency_percent = CASE WHEN (total_target_mins + VALUES(total_target_mins)) > 0 
+                                THEN ((total_actual_mins + VALUES(total_actual_mins)) / (total_target_mins + VALUES(total_target_mins))) * 100 
+                                ELSE 0 END,
+           button_status = VALUES(button_status)`,
+          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id.toString(), 
+           prod.output_pairs || 0, prod.target_mins || 0, prod.actual_time || 0,
+           prod.target_mins > 0 ? (prod.actual_time / prod.target_mins) * 100 : 0, 2]
+        );
+      }
     }
 
     res.json({ success: true, message: 'Status updated successfully' });
@@ -272,6 +295,26 @@ exports.getLiveMachineStatus = async (req, res, next) => {
     res.json({ success: true, data: rows[0] });
   } catch (error) {
     logger.error('Error fetching live machine status:', error);
+    next(error);
+  }
+};
+
+// Get summary data for a specific machine and date
+exports.getSummaryByMachineAndDate = async (req, res, next) => {
+  try {
+    const { machineId, date } = req.params;
+    const [rows] = await db.query(`
+      SELECT * FROM machine_centre_summary
+      WHERE machine_id = ? AND prod_date = ?
+    `, [machineId, date]);
+
+    if (rows.length === 0) {
+      return res.json({ success: true, data: null });
+    }
+
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    logger.error('Error fetching summary data:', error);
     next(error);
   }
 };

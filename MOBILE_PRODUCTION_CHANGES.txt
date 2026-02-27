@@ -1,0 +1,95 @@
+// Add after line 47 (after isInitializingRef)
+const [totalOutputToday, setTotalOutputToday] = useState(0);
+
+// Add this function after initializeProduction function
+const fetchTotalOutput = async (machineId: string) => {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const response = await fetch(`${API_BASE}/api/mobile-production/machine/${machineId}/date/${today}`);
+        const result = await response.json();
+        if (result.success && result.data) {
+            const total = result.data.reduce((sum: number, record: any) => sum + (record.output_pairs || 0), 0);
+            setTotalOutputToday(total);
+        }
+    } catch (error) {
+        console.error('Error fetching total output:', error);
+    }
+};
+
+// Add useEffect after other useEffects
+useEffect(() => {
+    if (productionData?.machine_id) {
+        fetchTotalOutput(productionData.machine_id);
+    }
+}, [productionData?.output_pairs, productionData?.machine_id]);
+
+// Replace handleStart function
+const handleStart = async () => {
+    if (!productionData?.id) return;
+    
+    if (productionData.button_status === 2) {
+        toast.error('Please click RESET to start next cycle');
+        return;
+    }
+    
+    setLoading(true);
+    try {
+        const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ button_status: 1 })
+        });
+        const result = await response.json();
+        if (result.success) {
+            setProductionData({ ...productionData, button_status: 1, is_paused: false });
+            toast.success('Production started');
+        }
+    } catch (error) {
+        toast.error('Failed to start production');
+    } finally {
+        setLoading(false);
+    }
+};
+
+// Replace handleReset function
+const handleReset = async () => {
+    if (!productionData) return;
+    
+    if (productionData.button_status === 2) {
+        if (urlEmpId) {
+            await initializeProduction(
+                productionData.machine_id,
+                urlEmpId,
+                productionData.work_centre_id
+            );
+        } else {
+            try {
+                const empRes = await fetch(`${API_BASE}/api/masters/employees`);
+                const empData = await empRes.json();
+                const employee = empData.data?.find((e: any) => e.id === productionData.emp_id);
+                if (employee) {
+                    await initializeProduction(
+                        productionData.machine_id,
+                        employee.code,
+                        productionData.work_centre_id
+                    );
+                }
+            } catch (error) {
+                toast.error('Failed to get employee info');
+            }
+        }
+        toast.success('Ready for next cycle');
+    } else {
+        setActualTimeCounter(0);
+        setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
+        toast.success('Timer reset');
+    }
+};
+
+// In the Total Output metric, replace:
+<p className="text-3xl md:text-5xl font-bold text-orange-900">{totalOutputToday}</p>
+<p className="text-xs text-orange-600 mt-1">pairs (today)</p>
+
+// In START button when finished, add disabled attribute:
+disabled={loading || productionData.button_status === 2}
+className="... disabled:cursor-not-allowed ..."
