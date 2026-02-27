@@ -44,7 +44,8 @@ export const MobileProduction: React.FC = () => {
     const [showTestHelpers, setShowTestHelpers] = useState(false);
     const isInitializingRef = React.useRef(false);
     const [totalOutputToday, setTotalOutputToday] = useState(0);
-    const [avgEfficiencyToday, setAvgEfficiencyToday] = useState(0);
+    const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
+    const [loadingSummary, setLoadingSummary] = useState(true);
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -96,6 +97,7 @@ export const MobileProduction: React.FC = () => {
 
     // Fetch summary data from machine_centre_summary table
     const fetchSummaryData = async (machineId: string) => {
+        setLoadingSummary(true);
         try {
             const today = new Date().toISOString().split('T')[0];
             const response = await fetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${today}`);
@@ -105,10 +107,12 @@ export const MobileProduction: React.FC = () => {
                 setAvgEfficiencyToday(parseFloat(result.data.avg_efficiency_percent || 0).toFixed(1));
             } else {
                 setTotalOutputToday(0);
-                setAvgEfficiencyToday(0);
+                setAvgEfficiencyToday('0');
             }
         } catch (error) {
             console.error('Error fetching summary data:', error);
+        } finally {
+            setLoadingSummary(false);
         }
     };
 
@@ -134,15 +138,26 @@ export const MobileProduction: React.FC = () => {
                     
                     if (unfinishedRecord) {
                         // Use the unfinished record
-                        const [empRes, macRes, wcRes] = await Promise.all([
+                        const [empRes, macRes, wcRes, planningRes] = await Promise.all([
                             fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
                             fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
-                            fetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json())
+                            fetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
+                            fetch(`${API_BASE}/api/production-planning`).then(r => r.json())
                         ]);
 
                         const employee = empRes.data?.find((e: any) => e.id === unfinishedRecord.emp_id);
                         const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
                         const workCentre = wcRes.data?.find((wc: any) => wc.id === unfinishedRecord.work_centre_id);
+
+                        // Get target_pairs from planning if not set
+                        let targetPairs = unfinishedRecord.target_pairs || 0;
+                        if (targetPairs === 0) {
+                            const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === unfinishedRecord.work_centre_id) || [];
+                            const planning = matchingPlans.sort((a: any, b: any) => 
+                                new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
+                            )[0];
+                            targetPairs = planning?.target_pairs_per_tray || 0;
+                        }
 
                         setSessionStatus('active');
                         setQrData(urlMachineId);
@@ -150,6 +165,7 @@ export const MobileProduction: React.FC = () => {
                         setMachineName(machine?.name || urlMachineId);
                         setProductionData({
                             ...unfinishedRecord,
+                            target_pairs: targetPairs,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
                         setActualTimeCounter(unfinishedRecord.actual_time * 60);
@@ -267,10 +283,15 @@ export const MobileProduction: React.FC = () => {
 
             // Find most recent planning for this work centre
             const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === workCentreId) || [];
+            console.log('Work Centre ID:', workCentreId);
+            console.log('All planning data:', planningRes.data);
+            console.log('Matching plans:', matchingPlans);
             const planning = matchingPlans.sort((a: any, b: any) => 
                 new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
             )[0];
+            console.log('Selected planning:', planning);
             const pairsPerTray = planning?.target_pairs_per_tray || 0;
+            console.log('Pairs per tray:', pairsPerTray);
 
             const newData: ProductionData = {
                 prod_date: new Date().toISOString().split('T')[0],
@@ -434,16 +455,11 @@ export const MobileProduction: React.FC = () => {
             return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
         }
         
-        // After FINISH, calculate based on efficiency
-        if (productionData.button_status === 2) {
-            const efficiency = calculateEfficiency();
-            if (efficiency < 80) {
-                return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
-            }
-            return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
+        // Use efficiency from summary table
+        const efficiency = parseFloat(avgEfficiencyToday || '0');
+        if (efficiency < 80) {
+            return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
         }
-        
-        // While running (button_status === 1), always On-track
         return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
     };
 
@@ -483,10 +499,10 @@ export const MobileProduction: React.FC = () => {
                 target_mins: 60,
                 start_time: '09:00:00',
                 finish_time: null,
+                idle_start_time: null,
                 actual_time: 55,
                 button_status: 1,
-                target_pairs: 100,
-                smv_per_pair: 12
+                target_pairs: 100
             };
             setProductionData(demoData);
             toast.success('Connected to Demo Machine');
@@ -662,13 +678,15 @@ export const MobileProduction: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
                                 <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{productionData.target_mins.toFixed(1)}</p>
+                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{parseFloat(productionData.target_mins || 0).toFixed(1)}</p>
                                 <p className="text-xs text-blue-600 mt-1">mins</p>
                             </div>
                             <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">
                                 <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-purple-900">{Math.floor(actualTimeCounter / 60)}<span className="text-lg">m</span></p>
-                                <p className="text-xs text-purple-600 mt-1">{actualTimeCounter % 60}s</p>
+                                <p className="text-3xl md:text-5xl font-bold text-purple-900">
+                                    {Math.floor(actualTimeCounter / 60)}<span className="text-2xl md:text-3xl">m</span>
+                                    <span className="text-2xl md:text-3xl font-bold text-purple-700 ml-2">{actualTimeCounter % 60}s</span>
+                                </p>
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
                                 <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs</p>
@@ -677,13 +695,25 @@ export const MobileProduction: React.FC = () => {
                             </div>
                             <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm">
                                 <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>
-                                <p className="text-3xl md:text-5xl font-bold text-orange-900">{totalOutputToday}</p>
-                                <p className="text-xs text-orange-600 mt-1">pairs (today)</p>
+                                {loadingSummary ? (
+                                    <Loader2 className="h-8 w-8 animate-spin text-orange-600 mx-auto my-4" />
+                                ) : (
+                                    <>
+                                        <p className="text-3xl md:text-5xl font-bold text-orange-900">{totalOutputToday}</p>
+                                        <p className="text-xs text-orange-600 mt-1">pairs (today)</p>
+                                    </>
+                                )}
                             </div>
                             <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm">
                                 <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Avg Efficiency</p>
-                                <p className="text-3xl md:text-5xl font-bold text-indigo-900">{avgEfficiencyToday}%</p>
-                                <p className="text-xs text-indigo-600 mt-1">percentage</p>
+                                {loadingSummary ? (
+                                    <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mx-auto my-4" />
+                                ) : (
+                                    <>
+                                        <p className="text-3xl md:text-5xl font-bold text-indigo-900">{avgEfficiencyToday}%</p>
+                                        <p className="text-xs text-indigo-600 mt-1">percentage</p>
+                                    </>
+                                )}
                             </div>
                             <div className={`p-4 md:p-6 rounded-xl border-2 shadow-sm ${getStatusBgColor()} ${getStatusColor()}`}>
                                 <p className="text-xs font-semibold uppercase mb-1 opacity-90">Status</p>

@@ -36,30 +36,6 @@ export const MobileLineProduction: React.FC = () => {
   // If no specific config found, show line1 as default
   const displayConfig = config || lineConfigs.line1;
 
-  // Poll for active sessions every 5 seconds
-  useEffect(() => {
-    console.log('Component mounted, starting polling...');
-
-    const pollInterval = setInterval(async () => {
-      try {
-        console.log('Polling API for line:', lineId);
-        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active?line=${lineId}`);
-        const result = await response.json();
-        console.log('API Response:', result);
-
-        if (result.success && result.data && result.data.redirect_url) {
-          console.log('Redirecting to:', result.data.redirect_url);
-          clearInterval(pollInterval);
-          navigate(result.data.redirect_url);
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    }, 5000);
-
-    return () => clearInterval(pollInterval);
-  }, [navigate, lineId]);
-
   if (!displayConfig) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

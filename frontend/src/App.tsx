@@ -149,6 +149,17 @@ function App() {
     return map;
   }, [efficiencyData]);
 
+  // Deduplicate machines by machine_id
+  const uniqueMachines = React.useMemo(() => {
+    const seen = new Map();
+    machines.forEach(machine => {
+      if (!seen.has(machine.machine_id)) {
+        seen.set(machine.machine_id, machine);
+      }
+    });
+    return Array.from(seen.values());
+  }, [machines]);
+
   const handleMachineClick = (machine: MachineStatus) => {
     setSelectedMachine(machine);
   };
@@ -250,7 +261,7 @@ function App() {
                   </span>
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
-                  {machines.map((machine) => (
+                  {uniqueMachines.map((machine) => (
                     <MachineCard
                       key={machine.machine_id}
                       machine={machine}
@@ -260,7 +271,7 @@ function App() {
                   ))}
                 </div>
 
-                {machines.length === 0 && !isLoading && (
+                {uniqueMachines.length === 0 && !isLoading && (
                   <div className="text-center py-8 text-gray-500">
                     <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                     <p>No machine data available</p>
