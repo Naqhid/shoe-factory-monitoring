@@ -97,6 +97,7 @@ app.delete('/api/masters/:table/:id', masterController.delete);
 
 // Production routing routes
 app.get('/api/production-routing', productionRoutingController.getAll);
+app.get('/api/production-routing/masters', productionRoutingController.getMastersData);
 app.get('/api/production-routing/:id', productionRoutingController.getById);
 app.get('/api/production-routing/style/:styleId', productionRoutingController.getByStyleId);
 app.post('/api/production-routing', productionRoutingController.create);

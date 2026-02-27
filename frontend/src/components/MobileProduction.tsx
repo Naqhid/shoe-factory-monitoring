@@ -34,6 +34,7 @@ export const MobileProduction: React.FC = () => {
 
     // Production State
     const [loading, setLoading] = useState(false);
+    const [initializing, setInitializing] = useState(true);
     const [productionData, setProductionData] = useState<ProductionData | null>(null);
     const [qrData, setQrData] = useState('');
     const [showQRScanner, setShowQRScanner] = useState(false);
@@ -127,8 +128,12 @@ export const MobileProduction: React.FC = () => {
         if (urlMachineId && urlEmpId) {
             const resolveAndInitialize = async () => {
                 setLoading(true);
+                setInitializing(true);
                 try {
-                    // Check for existing production record for today that's not finished
+                    // Add minimum delay to show loader
+                    const [_, __] = await Promise.all([
+                        (async () => {
+                            // Check for existing production record for today that's not finished
                     const today = new Date().toISOString().split('T')[0];
                     const existingRes = await fetch(`${API_BASE}/api/mobile-production/machine/${urlMachineId}/date/${today}`);
                     const existingData = await existingRes.json();
@@ -137,7 +142,8 @@ export const MobileProduction: React.FC = () => {
                     const unfinishedRecord = existingData.data?.find((r: any) => r.button_status !== 2);
                     
                     if (unfinishedRecord) {
-                        // Use the unfinished record
+                        // Use the unfinished record ONLY if it's truly in progress (button_status = 1 or 3)
+                        // If button_status = 2 (finished), create new record instead
                         const [empRes, macRes, wcRes, planningRes] = await Promise.all([
                             fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
                             fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
@@ -145,7 +151,7 @@ export const MobileProduction: React.FC = () => {
                             fetch(`${API_BASE}/api/production-planning`).then(r => r.json())
                         ]);
 
-                        const employee = empRes.data?.find((e: any) => e.id === unfinishedRecord.emp_id);
+                        const employee = empRes.data?.find((e: any) => e.id === parseInt(unfinishedRecord.emp_id));
                         const machine = macRes.data?.find((m: any) => (m.machine_id === urlMachineId || m.code === urlMachineId));
                         const workCentre = wcRes.data?.find((wc: any) => wc.id === unfinishedRecord.work_centre_id);
 
@@ -187,12 +193,35 @@ export const MobileProduction: React.FC = () => {
                         setEmployeeName(employee.name);
                         setMachineName(machine.name);
 
-                        initializeProduction(urlMachineId, urlEmpId, machine.work_centre_id, targetMins, targetPairs, workCentre.name);
+                        // Don't create record on page load - just set up UI
+                        // Record will be created when START is clicked
+                        const defaultData: ProductionData = {
+                            prod_date: new Date().toISOString().split('T')[0],
+                            work_centre_id: workCentre.id,
+                            work_centre_name: workCentre.name,
+                            machine_id: urlMachineId,
+                            emp_id: employee.id,
+                            output_pairs: 0,
+                            target_mins: targetMins,
+                            target_pairs: targetPairs,
+                            start_time: null,
+                            finish_time: null,
+                            idle_start_time: null,
+                            actual_time: 0,
+                            button_status: 3,
+                            is_paused: false
+                        };
+                        setProductionData(defaultData);
+                        toast.success('Ready to start production');
                     }
+                        })(),
+                        new Promise(resolve => setTimeout(resolve, 500))
+                    ]);
                 } catch (e) {
                     toast.error('Failed to load setup data');
                 } finally {
                     setLoading(false);
+                    setInitializing(false);
                 }
             };
             resolveAndInitialize();
@@ -243,18 +272,18 @@ export const MobileProduction: React.FC = () => {
         isInitializingRef.current = true;
         setLoading(true);
         try {
-            // If data not provided, fetch from optimized endpoint
-            if (!targetMins || !targetPairs) {
-                const response = await fetch(`${API_BASE}/api/mobile-production/init/${machineId}/${empCode}`);
-                const result = await response.json();
-                if (!result.success) {
-                    toast.error(result.message || 'Failed to initialize');
-                    return;
-                }
-                targetMins = result.data.targetMins;
-                targetPairs = result.data.targetPairs;
-                workCentreName = result.data.workCentre.name;
+            // Always fetch from optimized endpoint to get latest data
+            const initResponse = await fetch(`${API_BASE}/api/mobile-production/init/${machineId}/${empCode}`);
+            const initResult = await initResponse.json();
+            if (!initResult.success) {
+                toast.error(initResult.message || 'Failed to initialize');
+                return;
             }
+            // Use fetched values, override with provided values if they exist
+            targetMins = targetMins || initResult.data.targetMins;
+            targetPairs = targetPairs || initResult.data.targetPairs;
+            workCentreName = workCentreName || initResult.data.workCentre.name;
+            workCentreId = initResult.data.machine.work_centre_id || workCentreId;
 
             const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
             const empData = await empRes.json();
@@ -302,12 +331,42 @@ export const MobileProduction: React.FC = () => {
     };
 
     const handleStart = async () => {
-        if (!productionData?.id) return;
-        
-        if (productionData.button_status === 2) {
-            toast.error('Please click RESET to start next cycle');
+        // If no production data ID (first time) or after FINISH, create new record
+        if (!productionData?.id || productionData.button_status === 2) {
+            if (!urlEmpId) {
+                toast.error('Employee information missing');
+                return;
+            }
+            
+            setLoading(true);
+            try {
+                // Create new production record in database
+                const response = await fetch(`${API_BASE}/api/mobile-production`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...productionData,
+                        button_status: 1 // Start immediately
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    setProductionData({ ...productionData!, id: result.data.id, button_status: 1, is_paused: false });
+                    setActualTimeCounter(0);
+                    toast.success('Production started');
+                } else {
+                    toast.error('Failed to start production');
+                }
+            } catch (error) {
+                toast.error('Failed to start production');
+            } finally {
+                setLoading(false);
+            }
             return;
         }
+        
+        if (!productionData?.id) return;
         
         setLoading(true);
         try {
@@ -378,29 +437,21 @@ export const MobileProduction: React.FC = () => {
         if (!productionData) return;
         
         if (productionData.button_status === 2) {
-            if (urlEmpId) {
-                await initializeProduction(
-                    productionData.machine_id,
-                    urlEmpId,
-                    productionData.work_centre_id
-                );
-            } else {
-                try {
-                    const empRes = await fetch(`${API_BASE}/api/masters/employees`);
-                    const empData = await empRes.json();
-                    const employee = empData.data?.find((e: any) => e.id === productionData.emp_id);
-                    if (employee) {
-                        await initializeProduction(
-                            productionData.machine_id,
-                            employee.code,
-                            productionData.work_centre_id
-                        );
-                    }
-                } catch (error) {
-                    toast.error('Failed to get employee info');
-                }
-            }
-            toast.success('Ready for next cycle');
+            // After FINISH, reset to initial state without database record
+            const resetData: ProductionData = {
+                ...productionData,
+                id: undefined, // Remove ID so next START creates new record
+                output_pairs: 0,
+                actual_time: 0,
+                button_status: 3,
+                is_paused: false,
+                start_time: null,
+                finish_time: null,
+                idle_start_time: null
+            };
+            setProductionData(resetData);
+            setActualTimeCounter(0);
+            toast.success('Ready for next cycle - Click START to begin');
         } else {
             setActualTimeCounter(0);
             setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
@@ -591,6 +642,17 @@ export const MobileProduction: React.FC = () => {
     // DASHBOARD STATE
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-3 md:p-6">
+            {/* Initial Loading Screen */}
+            {initializing && (
+                <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                        <RefreshCw className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+                        <h2 className="text-xl font-bold text-gray-900 mb-2">Loading Production...</h2>
+                        <p className="text-sm text-gray-600">Please wait</p>
+                    </div>
+                </div>
+            )}
+
             {/* Loading Screen */}
             {loading && !productionData && (
                 <div className="flex items-center justify-center h-screen">
@@ -603,8 +665,9 @@ export const MobileProduction: React.FC = () => {
             )}
 
             {/* Main Content */}
-            {(!loading || productionData) && productionData && (
+            {(!loading || productionData) && (
                 <div className="max-w-4xl mx-auto">
+                        <>
                     {/* Header Section */}
                     <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl p-4 md:p-6">
                         <h1 className="text-xl md:text-2xl font-bold text-center mb-3">MACHINE CENTRE PRODUCTION</h1>
@@ -757,6 +820,7 @@ export const MobileProduction: React.FC = () => {
                             ) : null}
                         </div>
                     </div>
+                        </>
                 </div>
             )}
         </div>

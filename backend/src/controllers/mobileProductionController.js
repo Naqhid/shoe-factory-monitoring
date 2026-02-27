@@ -185,18 +185,19 @@ exports.updateStatus = async (req, res, next) => {
         const prod = record[0];
         await db.query(
           `INSERT INTO machine_centre_summary 
-           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, avg_efficiency_percent, button_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, avg_efficiency_percent, button_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
            total_output_pairs = total_output_pairs + VALUES(total_output_pairs),
            total_target_mins = total_target_mins + VALUES(total_target_mins),
            total_actual_mins = total_actual_mins + VALUES(total_actual_mins),
+           total_idle_mins = total_idle_mins + VALUES(total_idle_mins),
            avg_efficiency_percent = CASE WHEN (total_target_mins + VALUES(total_target_mins)) > 0 
                                 THEN ((total_actual_mins + VALUES(total_actual_mins)) / (total_target_mins + VALUES(total_target_mins))) * 100 
                                 ELSE 0 END,
            button_status = VALUES(button_status)`,
           [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id.toString(), 
-           prod.output_pairs || 0, prod.target_mins || 0, prod.actual_time || 0,
+           prod.output_pairs || 0, prod.target_mins || 0, prod.actual_time || 0, prod.idle_mins || 0,
            prod.target_mins > 0 ? (prod.actual_time / prod.target_mins) * 100 : 0, 2]
         );
       }
@@ -325,45 +326,72 @@ exports.getInitData = async (req, res, next) => {
     const { machineId, empCode } = req.params;
     const today = new Date().toISOString().split('T')[0];
 
-    const [employeeRows, machineRows, routingRows, planningRows, existingRows] = await Promise.all([
+    // Fetch all data in parallel
+    const [employeeRows, machineRows, existingRows] = await Promise.all([
       db.query('SELECT id, code, name FROM employees WHERE code = ?', [empCode]),
       db.query('SELECT machine_id, code, name, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?', [machineId, machineId]),
-      db.query('SELECT id, updated_at, created_at FROM production_routing ORDER BY updated_at DESC, created_at DESC LIMIT 1'),
-      db.query('SELECT work_centre_id, target_pairs_per_tray, plan_date FROM production_planning ORDER BY plan_date DESC'),
       db.query('SELECT * FROM machine_centre_production WHERE machine_id = ? AND prod_date = ? AND button_status != 2 ORDER BY created_at DESC LIMIT 1', [machineId, today])
     ]);
 
     const employee = employeeRows[0][0];
     const machine = machineRows[0][0];
-    const routing = routingRows[0][0];
     const existingRecord = existingRows[0][0];
 
     if (!employee) {
       return res.status(404).json({ success: false, message: `Employee ${empCode} not found` });
     }
 
-    const workCentreId = machine?.work_centre_id || 1;
-    const [wcRows] = await db.query('SELECT id, name, work_centre_name FROM work_centres WHERE id = ?', [workCentreId]);
-    const workCentre = wcRows[0];
-
-    let targetMins = 16.6;
-    if (routing?.id) {
-      const [linesRows] = await db.query('SELECT mins_12_prs_box FROM production_routing_lines WHERE routing_id = ?', [routing.id]);
-      if (linesRows.length > 0) {
-        targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
-      }
+    if (!machine) {
+      return res.status(404).json({ success: false, message: `Machine ${machineId} not found` });
     }
 
-    const matchingPlans = planningRows[0].filter(p => p.work_centre_id === workCentreId);
-    const planning = matchingPlans.sort((a, b) => new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime())[0];
-    const targetPairs = planning?.target_pairs_per_tray || 0;
+    const workCentreId = machine.work_centre_id || 1;
+    
+    // Get work centre
+    const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE id = ?', [workCentreId]);
+    const workCentre = wcRows[0] || { id: workCentreId, name: `WC-${workCentreId}` };
+
+    // Get target mins from routing (default 16.6)
+    let targetMins = 16.6;
+    try {
+      const [routingRows] = await db.query('SELECT id FROM production_routing_header ORDER BY created_on DESC LIMIT 1');
+      if (routingRows[0]) {
+        const [linesRows] = await db.query('SELECT mins_12_prs_box FROM production_routing_lines WHERE routing_header_id = ?', [routingRows[0].id]);
+        if (linesRows.length > 0) {
+          targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
+        }
+      }
+    } catch (err) {
+      logger.warn('Could not fetch routing data, using default target mins:', err.message);
+    }
+
+    // Get target pairs from planning (default 0)
+    let targetPairs = 0;
+    try {
+      const [planningRows] = await db.query('SELECT work_centre_id, target_pairs_per_tray, plan_date FROM production_plan ORDER BY plan_date DESC');
+      logger.info(`Found ${planningRows.length} planning records. Looking for work_centre_id: ${workCentreId}`);
+      if (planningRows.length > 0) {
+        // Find matching work centre or use the latest plan
+        const matchingPlan = planningRows.find((p) => p.work_centre_id === workCentreId);
+        if (matchingPlan) {
+          targetPairs = matchingPlan.target_pairs_per_tray || 0;
+          logger.info(`Found matching plan for work_centre_id ${workCentreId}: target_pairs = ${targetPairs}`);
+        } else {
+          // Use latest plan if no exact match
+          targetPairs = planningRows[0].target_pairs_per_tray || 0;
+          logger.info(`No matching plan for work_centre_id ${workCentreId}, using latest plan: target_pairs = ${targetPairs}`);
+        }
+      }
+    } catch (err) {
+      logger.warn('Could not fetch planning data, using default target pairs:', err.message);
+    }
 
     res.json({
       success: true,
       data: {
         employee: { id: employee.id, code: employee.code, name: employee.name },
-        machine: { machine_id: machine?.machine_id || machineId, name: machine?.name || machineId, work_centre_id: workCentreId },
-        workCentre: { id: workCentreId, name: workCentre?.work_centre_name || workCentre?.name || `WC-${workCentreId}` },
+        machine: { machine_id: machine.machine_id, name: machine.name, work_centre_id: workCentreId },
+        workCentre: { id: workCentreId, name: workCentre.name },
         targetMins,
         targetPairs,
         existingRecord

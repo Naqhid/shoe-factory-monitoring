@@ -39,6 +39,8 @@ export const ProductionRoutingForm: React.FC = () => {
   const [colors, setColors] = React.useState<MasterOption[]>([]);
   const [machineCentres, setMachineCentres] = React.useState<MasterOption[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const hasFetched = React.useRef(false);
 
   const [headerData, setHeaderData] = React.useState<HeaderData>({
     customer_id: '',
@@ -60,51 +62,43 @@ export const ProductionRoutingForm: React.FC = () => {
   }]);
 
   React.useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
     fetchRoutings();
     fetchMasters();
   }, []);
 
   const fetchRoutings = async () => {
+    setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE}/api/production-routing`);
+      const [res] = await Promise.all([
+        fetch(`${API_BASE}/api/production-routing`),
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
       const result = await res.json();
       if (result.success) setRoutings(result.data);
     } catch (error) {
       console.error('Error fetching routings:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
   const fetchMasters = async () => {
     try {
-      const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), ms));
-      const fetchWithTimeout = (url: string) => Promise.race([fetch(url), timeout(10000)]);
-
-      const [custRes, grpRes, lthRes, stylRes, colRes, mcRes] = await Promise.all([
-        fetchWithTimeout(`${API_BASE}/api/masters/customers`),
-        fetchWithTimeout(`${API_BASE}/api/masters/groups_master`),
-        fetchWithTimeout(`${API_BASE}/api/masters/leather`),
-        fetchWithTimeout(`${API_BASE}/api/masters/styles`),
-        fetchWithTimeout(`${API_BASE}/api/masters/colors`),
-        fetchWithTimeout(`${API_BASE}/api/masters/machine_centres`),
-      ]);
-
-      const [cust, grp, lth, styl, col, mc] = await Promise.all([
-        (custRes as Response).json(),
-        (grpRes as Response).json(),
-        (lthRes as Response).json(),
-        (stylRes as Response).json(),
-        (colRes as Response).json(),
-        (mcRes as Response).json(),
-      ]);
-
-      if (cust.success) setCustomers(cust.data);
-      if (grp.success) setGroups(grp.data);
-      if (lth.success) setLeathers(lth.data);
-      if (styl.success) setStyles(styl.data);
-      if (col.success) setColors(col.data);
-      if (mc.success) setMachineCentres(mc.data);
+      const res = await fetch(`${API_BASE}/api/production-routing/masters`);
+      const result = await res.json();
+      
+      if (result.success) {
+        setCustomers(result.data.customers);
+        setGroups(result.data.groups);
+        setLeathers(result.data.leathers);
+        setStyles(result.data.styles);
+        setColors(result.data.colors);
+        setMachineCentres(result.data.machineCentres);
+      }
     } catch (error: any) {
-      toast.error(error.message === 'Request timeout' ? 'Loading master data timeout' : 'Error loading master data');
+      toast.error('Error loading master data');
     }
   };
 
@@ -227,8 +221,8 @@ export const ProductionRoutingForm: React.FC = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Production Routing</h1>
           <div className="flex gap-2">
-            <button onClick={fetchRoutings} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-              <RefreshCw className="h-4 w-4" /> Refresh
+            <button onClick={fetchRoutings} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
             <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
               <Plus className="h-4 w-4" />Add New
@@ -237,7 +231,15 @@ export const ProductionRoutingForm: React.FC = () => {
         </div>
       </header>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-md p-6 relative min-h-[400px]">
+        {refreshing && (
+          <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+            <div className="flex flex-col items-center gap-2">
+              <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
+              <span className="text-sm text-gray-600">Loading...</span>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">

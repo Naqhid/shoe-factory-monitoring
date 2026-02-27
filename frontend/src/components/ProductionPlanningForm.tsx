@@ -52,6 +52,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const [styles, setStyles] = React.useState<MasterOption[]>([]);
   const [workCentres, setWorkCentres] = React.useState<MasterOption[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
 
@@ -61,12 +62,18 @@ export const ProductionPlanningForm: React.FC = () => {
   }, []);
 
   const fetchPlans = async () => {
+    setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE}/api/production-planning`);
+      const [res] = await Promise.all([
+        fetch(`${API_BASE}/api/production-planning`),
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
       const result = await res.json();
       if (result.success) setPlans(result.data);
     } catch (error) {
       console.error('Error fetching plans:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -276,8 +283,8 @@ export const ProductionPlanningForm: React.FC = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
           <div className="flex gap-2">
-            <button onClick={fetchPlans} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-              <RefreshCw className="h-4 w-4" /> Refresh
+            <button onClick={fetchPlans} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
             <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
               <Plus className="h-4 w-4" />Add New
@@ -286,7 +293,15 @@ export const ProductionPlanningForm: React.FC = () => {
         </div>
       </header>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-md p-6 relative min-h-[400px]">
+        {refreshing && (
+          <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+            <div className="flex flex-col items-center gap-2">
+              <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
+              <span className="text-sm text-gray-600">Loading...</span>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">

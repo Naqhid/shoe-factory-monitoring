@@ -277,6 +277,35 @@ class ProductionRoutingController {
       res.status(500).json({ success: false, error: error.message });
     }
   }
+
+  // Get all masters data in one call (optimized)
+  async getMastersData(req, res) {
+    try {
+      const [customers, groups, leathers, styles, colors, machineCentres] = await Promise.all([
+        db.execute('SELECT id, code, name FROM customers ORDER BY name'),
+        db.execute('SELECT id, code, name FROM groups_master ORDER BY name'),
+        db.execute('SELECT id, code, name FROM leather ORDER BY name'),
+        db.execute('SELECT id, code, name FROM styles ORDER BY name'),
+        db.execute('SELECT id, code, name FROM colors ORDER BY name'),
+        db.execute('SELECT id, code, name FROM machine_centres ORDER BY name')
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          customers: customers[0],
+          groups: groups[0],
+          leathers: leathers[0],
+          styles: styles[0],
+          colors: colors[0],
+          machineCentres: machineCentres[0]
+        }
+      });
+    } catch (error) {
+      logger.error('Error getting masters data:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
 }
 
 module.exports = new ProductionRoutingController();
