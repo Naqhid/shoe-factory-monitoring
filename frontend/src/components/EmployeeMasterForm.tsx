@@ -1,4 +1,5 @@
-import React from 'react';`nimport { ConfirmDialog } from './ConfirmDialog';
+import React from 'react';
+import { ConfirmDialog } from './ConfirmDialog';
 import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -27,6 +28,7 @@ export const EmployeeMasterForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<EmployeeRecord[]>([]);
   const [machineCentres, setMachineCentres] = React.useState<EmployeeRecord[]>([]);
+  const [deleteId, setDeleteId] = React.useState<number | null>(null);
 
 
   const fetchRecords = async () => {
@@ -125,10 +127,14 @@ export const EmployeeMasterForm: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: number) => {
-    setDeleteId(id);`n  };`n`n  const confirmDelete = async () => {`n    if (!deleteId) return;`n    setDeleteId(null);
+  const handleDelete = (id: number) => {
+    setDeleteId(id);
+  };
 
-    try {try {
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleteId(null);
+    try {
       const response = await fetch(`${API_BASE}/api/masters/employees/${deleteId}`, {
         method: 'DELETE',
       });
@@ -172,6 +178,15 @@ export const EmployeeMasterForm: React.FC = () => {
 
   return (
     <div className="p-6">
+      <ConfirmDialog
+        isOpen={deleteId !== null}
+        title="Delete Employee"
+        message="Are you sure you want to delete this employee? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+        confirmText="Delete"
+      />
+      
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Employees Master</h1>

@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface MasterRecord {
   id: number;
@@ -26,6 +27,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
   const [formData, setFormData] = React.useState({ code: '', name: '', work_centre_id: '', machine_id: '' });
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<MasterRecord[]>([]);
+  const [deleteId, setDeleteId] = React.useState<number | null>(null);
 
 
   React.useEffect(() => {
@@ -95,10 +97,16 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
     setShowForm(true);
   };
 
-  const handleDelete = async (id: number) => {
-    setDeleteId(id);`n  };`n`n  const confirmDelete = async () => {`n    if (!deleteId) return;`n    setDeleteId(null);
+  const handleDelete = (id: number) => {
+    setDeleteId(id);
+  };
 
-    try {try {
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    const id = deleteId;
+    setDeleteId(null);
+
+    try {
       const response = await fetch(`${API_BASE}/api/masters/${table}/${id}`, {
         method: 'DELETE',
       });
@@ -156,6 +164,14 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
 
   return (
     <div className="p-6">
+      <ConfirmDialog
+        isOpen={deleteId !== null}
+        title="Delete Record"
+        message="Are you sure you want to delete this record? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+        confirmText="Delete"
+      />
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{title}</h1>
@@ -351,3 +367,5 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
     </div>
   );
 };
+
+

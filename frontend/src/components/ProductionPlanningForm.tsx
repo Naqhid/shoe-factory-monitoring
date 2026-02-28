@@ -1,4 +1,5 @@
-import React from 'react';`nimport { ConfirmDialog } from './ConfirmDialog';
+import React from 'react';
+import { ConfirmDialog } from './ConfirmDialog';
 import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
@@ -51,7 +52,8 @@ export const ProductionPlanningForm: React.FC = () => {
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const [styles, setStyles] = React.useState<MasterOption[]>([]);
   const [workCentres, setWorkCentres] = React.useState<MasterOption[]>([]);
-  const [loading, setLoading] = React.useState(false);`n  const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [deleteId, setDeleteId] = React.useState<number | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
@@ -180,9 +182,14 @@ export const ProductionPlanningForm: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    setDeleteId(id);`n  };`n`n  const confirmDelete = async () => {`n    if (!deleteId) return;`n    setDeleteId(null);
-    try {try {
+  const handleDelete = (id: number) => {
+    setDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleteId(null);
+    try {
       const res = await fetch(`${API_BASE}/api/production-planning/${deleteId}`, { method: 'DELETE' });
       const result = await res.json();
       if (result.success) {
@@ -279,6 +286,15 @@ export const ProductionPlanningForm: React.FC = () => {
 
   return (
     <div className="p-6">
+      <ConfirmDialog
+        isOpen={deleteId !== null}
+        title="Delete Plan"
+        message="Are you sure you want to delete this plan? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+        confirmText="Delete"
+      />
+      
       <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
@@ -475,5 +491,7 @@ export const ProductionPlanningForm: React.FC = () => {
     </div>
   );
 };
+
+
 
 

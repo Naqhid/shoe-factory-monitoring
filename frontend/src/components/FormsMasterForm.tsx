@@ -1,4 +1,5 @@
-import React from 'react';`nimport { ConfirmDialog } from './ConfirmDialog';
+import React from 'react';
+import { ConfirmDialog } from './ConfirmDialog';
 import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -18,6 +19,7 @@ export const FormsMasterForm: React.FC = () => {
   const [formData, setFormData] = React.useState({ code: '', name: '' });
   const [loading, setLoading] = React.useState(false);
   const [nextCode, setNextCode] = React.useState('FRM001');
+  const [deleteId, setDeleteId] = React.useState<number | null>(null);
 
 
   const generateNextCode = (existingRecords: FormRecord[]) => {
@@ -105,11 +107,15 @@ export const FormsMasterForm: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: number) => {
-    setDeleteId(id);`n  };`n`n  const confirmDelete = async () => {`n    if (!deleteId) return;`n    setDeleteId(null);
+  const handleDelete = (id: number) => {
+    setDeleteId(id);
+  };
 
-    try {try {
-      const response = await fetch(`${API_BASE}/api/masters/forms_master/${id}`, {
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleteId(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/masters/forms_master/${deleteId}`, {
         method: 'DELETE',
       });
 
@@ -150,6 +156,15 @@ export const FormsMasterForm: React.FC = () => {
 
   return (
     <div className="p-6">
+      <ConfirmDialog
+        isOpen={deleteId !== null}
+        title="Delete Form"
+        message="Are you sure you want to delete this form? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+        confirmText="Delete"
+      />
+      
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Forms Master</h1>

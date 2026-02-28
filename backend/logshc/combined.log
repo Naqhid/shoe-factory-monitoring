@@ -2480,3 +2480,8 @@
 {"level":"info","message":"GET /api/mobile-production/summary/MAC-001/date/2026-02-28 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T10:24:15.931Z"}
 {"level":"info","message":"Found 1 planning records. Looking for work_centre_id: 3","service":"shoe-factory-monitoring","timestamp":"2026-02-28T10:24:17.126Z"}
 {"level":"info","message":"Found matching plan for work_centre_id 3: target_pairs = 13","service":"shoe-factory-monitoring","timestamp":"2026-02-28T10:24:17.126Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:00.393Z"}
+{"level":"info","message":"HTTPS enabled for backend","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:04.660Z"}
+{"level":"info","message":"Server started on port 3001 (HTTPS) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:04.693Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:04.695Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:04.701Z"}
