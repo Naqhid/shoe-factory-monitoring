@@ -96,9 +96,9 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this record?')) return;
+    setDeleteId(id);`n  };`n`n  const confirmDelete = async () => {`n    if (!deleteId) return;`n    setDeleteId(null);
 
-    try {
+    try {try {
       const response = await fetch(`${API_BASE}/api/masters/${table}/${id}`, {
         method: 'DELETE',
       });

@@ -47,6 +47,7 @@ export const MobileProduction: React.FC = () => {
     const [totalOutputToday, setTotalOutputToday] = useState(0);
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
+    const [showFinishConfirm, setShowFinishConfirm] = useState(false);
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -410,9 +411,12 @@ export const MobileProduction: React.FC = () => {
 
     const handleFinish = async () => {
         if (!productionData?.id) return;
-        
-        if (!confirm('Are you sure you want to finish this production cycle?')) return;
-        
+        setShowFinishConfirm(true);
+    };
+
+    const confirmFinish = async () => {
+        if (!productionData?.id) return;
+        setShowFinishConfirm(false);
         setLoading(true);
         try {
             const outputPairs = productionData.target_pairs || 0;
@@ -651,6 +655,35 @@ export const MobileProduction: React.FC = () => {
             {(!loading || productionData) && productionData && (
                 <div className="max-w-4xl mx-auto">
                         <>
+                    {/* Finish Confirmation Dialog */}
+                    {showFinishConfirm && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+                                <div className="mb-6">
+                                    <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <CheckCircle className="w-10 h-10 text-blue-600" />
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Finish Production?</h2>
+                                    <p className="text-gray-600">Are you sure you want to complete this production cycle?</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setShowFinishConfirm(false)}
+                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-6 rounded-xl font-semibold transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={confirmFinish}
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors"
+                                    >
+                                        Finish
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Header Section */}
                     <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl p-4 md:p-6">
                         <h1 className="text-xl md:text-2xl font-bold text-center mb-3">MACHINE CENTRE PRODUCTION</h1>

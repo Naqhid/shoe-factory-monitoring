@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react';`nimport { ConfirmDialog } from './ConfirmDialog';
 import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
@@ -51,7 +51,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const [styles, setStyles] = React.useState<MasterOption[]>([]);
   const [workCentres, setWorkCentres] = React.useState<MasterOption[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);`n  const [deleteId, setDeleteId] = React.useState<number | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
@@ -150,7 +150,7 @@ export const ProductionPlanningForm: React.FC = () => {
 
   const handleEdit = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/api/production-planning/${id}`);
+      const res = await fetch(`${API_BASE}/api/production-planning/${deleteId}`);
       const result = await res.json();
       if (result.success) {
         const plan = result.data;
@@ -181,9 +181,9 @@ export const ProductionPlanningForm: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this plan?')) return;
-    try {
-      const res = await fetch(`${API_BASE}/api/production-planning/${id}`, { method: 'DELETE' });
+    setDeleteId(id);`n  };`n`n  const confirmDelete = async () => {`n    if (!deleteId) return;`n    setDeleteId(null);
+    try {try {
+      const res = await fetch(`${API_BASE}/api/production-planning/${deleteId}`, { method: 'DELETE' });
       const result = await res.json();
       if (result.success) {
         toast.success('Plan deleted');
@@ -475,3 +475,5 @@ export const ProductionPlanningForm: React.FC = () => {
     </div>
   );
 };
+
+

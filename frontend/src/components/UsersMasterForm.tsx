@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React from 'react';`nimport { ConfirmDialog } from './ConfirmDialog';
 import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -121,10 +121,10 @@ export const UsersMasterForm: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+    setDeleteId(id);`n  };`n`n  const confirmDelete = async () => {`n    if (!deleteId) return;`n    setDeleteId(null);
 
-    try {
-      const response = await fetch(`${API_BASE}/api/masters/users/${id}`, {
+    try {try {
+      const response = await fetch(`${API_BASE}/api/masters/users/${deleteId}`, {
         method: 'DELETE',
       });
 
@@ -411,3 +411,4 @@ export const UsersMasterForm: React.FC = () => {
     </div>
   );
 };
+

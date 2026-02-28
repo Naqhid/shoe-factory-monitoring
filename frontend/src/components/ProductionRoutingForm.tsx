@@ -2,6 +2,7 @@ import React from 'react';
 import { Plus, Trash2, Save, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface MasterOption {
   id: number;
@@ -41,6 +42,7 @@ export const ProductionRoutingForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
   const hasFetched = React.useRef(false);
+  const [deleteId, setDeleteId] = React.useState<number | null>(null);
 
   const [headerData, setHeaderData] = React.useState<HeaderData>({
     customer_id: '',
@@ -162,9 +164,14 @@ export const ProductionRoutingForm: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this routing?')) return;
+    setDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleteId(null);
     try {
-      const res = await fetch(`${API_BASE}/api/production-routing/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/production-routing/${deleteId}`, { method: 'DELETE' });
       const result = await res.json();
       if (result.success) {
         toast.success('Routing deleted');
@@ -217,6 +224,15 @@ export const ProductionRoutingForm: React.FC = () => {
 
   return (
     <div className="p-6">
+      <ConfirmDialog
+        isOpen={deleteId !== null}
+        title="Delete Routing"
+        message="Are you sure you want to delete this routing? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+        confirmText="Delete"
+      />
+      
       <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Production Routing</h1>
