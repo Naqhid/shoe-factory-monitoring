@@ -135,8 +135,9 @@ export const MobileProduction: React.FC = () => {
                     const [_, __] = await Promise.all([
                         (async () => {
                             // Check for existing production record for today that's not finished
-                    const today = new Date().toISOString().split('T')[0];
-                    const existingRes = await fetch(`${API_BASE}/api/mobile-production/machine/${urlMachineId}/date/${today}`);
+                    const today = new Date();
+                    const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                    const existingRes = await fetch(`${API_BASE}/api/mobile-production/machine/${urlMachineId}/date/${localDate}`);
                     const existingData = await existingRes.json();
                     
                     // Find the most recent unfinished record (button_status !== 2)
@@ -196,8 +197,10 @@ export const MobileProduction: React.FC = () => {
 
                         // Don't create record on page load - just set up UI
                         // Record will be created when START is clicked
+                        const localDate = new Date();
+                        const prodDate = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
                         const defaultData: ProductionData = {
-                            prod_date: new Date().toISOString().split('T')[0],
+                            prod_date: prodDate,
                             work_centre_id: workCentre.id,
                             work_centre_name: workCentre.name,
                             machine_id: urlMachineId,
@@ -293,8 +296,10 @@ export const MobileProduction: React.FC = () => {
                 return;
             }
 
+            const localDate = new Date();
+            const prodDate = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
             const newData: ProductionData = {
-                prod_date: new Date().toISOString().split('T')[0],
+                prod_date: prodDate,
                 work_centre_id: workCentreId,
                 work_centre_name: workCentreName || `WC-${workCentreId}`,
                 machine_id: machineId,
