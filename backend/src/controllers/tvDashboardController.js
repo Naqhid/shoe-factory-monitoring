@@ -19,8 +19,7 @@ exports.getWorkCentres = async (req, res) => {
 exports.getDashboard = async (req, res) => {
     try {
         const { workCentreId } = req.params;
-        const now = new Date();
-        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const today = req.query.date || new Date().toISOString().split('T')[0];
 
         // Top Section - Overall metrics
         const [topSection] = await pool.query(`

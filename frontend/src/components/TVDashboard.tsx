@@ -33,7 +33,9 @@ export const TVDashboard: React.FC = () => {
         const fetchDashboard = async () => {
             try {
                 const workCentreId = workCentres[currentIndex].id;
-                const res = await fetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}`);
+                const now = new Date();
+                const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const res = await fetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${localDate}`);
                 const result = await res.json();
                 if (result.success) {
                     setDashboardData(result.data);
