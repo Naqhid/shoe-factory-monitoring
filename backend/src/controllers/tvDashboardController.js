@@ -30,7 +30,7 @@ exports.getDashboard = async (req, res) => {
                 COALESCE(SUM(pp.target_mins), 0) as total_target_mins,
                 COALESCE(SUM(mcs.total_actual_mins), 0) as total_actual_mins
             FROM work_centres wc
-            LEFT JOIN production_planning pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?
+            LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?
             LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND mcs.prod_date = ?
             WHERE wc.id = ?
             GROUP BY wc.id, wc.name
@@ -48,7 +48,7 @@ exports.getDashboard = async (req, res) => {
                 COALESCE(SUM(pp.target_mins), 0) as target_mins,
                 COALESCE(SUM(mcs.total_actual_mins), 0) as actual_mins
             FROM work_centres wc
-            LEFT JOIN production_planning pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?
+            LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?
             LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND mcs.prod_date = ?
             WHERE wc.id = ?
         `, [today, today, workCentreId]);
