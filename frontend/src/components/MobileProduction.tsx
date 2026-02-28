@@ -42,6 +42,7 @@ export const MobileProduction: React.FC = () => {
     const [actualTimeCounter, setActualTimeCounter] = useState(0);
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
+    const [headerExpanded, setHeaderExpanded] = useState(false);
     const isInitializingRef = React.useRef(false);
     const [totalOutputToday, setTotalOutputToday] = useState(0);
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
@@ -588,40 +589,55 @@ export const MobileProduction: React.FC = () => {
                     )}
 
                     {/* Header Section */}
-                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl p-4 md:p-6">
-                        <h1 className="text-xl md:text-2xl font-bold text-center mb-3">MACHINE CENTRE PRODUCTION</h1>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                <div className="min-w-0">
-                                    <p className="text-xs opacity-80">Process Name</p>
-                                    <p className="font-semibold truncate">{machineName || 'N/A'}</p>
+                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl">
+                        <button
+                            onClick={() => setHeaderExpanded(!headerExpanded)}
+                            className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+                        >
+                            <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
+                            <svg
+                                className={`h-6 w-6 transition-transform ${headerExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        {headerExpanded && (
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm px-4 pb-4">
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Process Name</p>
+                                        <p className="font-semibold truncate">{machineName || 'N/A'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Line Name</p>
+                                        <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Machine ID</p>
+                                        <p className="font-semibold truncate">{productionData.machine_id}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Operator</p>
+                                        <p className="font-semibold truncate">{employeeName || productionData.emp_id}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Date & Time</p>
+                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                <div className="min-w-0">
-                                    <p className="text-xs opacity-80">Line Name</p>
-                                    <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                <div className="min-w-0">
-                                    <p className="text-xs opacity-80">Machine ID</p>
-                                    <p className="font-semibold truncate">{productionData.machine_id}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                <div className="min-w-0">
-                                    <p className="text-xs opacity-80">Operator</p>
-                                    <p className="font-semibold truncate">{employeeName || productionData.emp_id}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                <div className="min-w-0">
-                                    <p className="text-xs opacity-80">Date & Time</p>
-                                    <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                </div>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Metrics Section */}
