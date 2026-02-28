@@ -156,7 +156,7 @@ export const MobileLineSetupForm: React.FC = () => {
 
       if (result.success) {
         toast.success(`Connected! Laptop will update shortly.`, { id: loadingToast });
-        setShowSuccessDialog(true);
+        navigate(`/mobile/${finalMachineId}/${formData.employee_id}`);
       } else {
         toast.error(result.message || 'Activation failed', { id: loadingToast });
       }

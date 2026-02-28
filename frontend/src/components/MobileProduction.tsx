@@ -42,7 +42,6 @@ export const MobileProduction: React.FC = () => {
     const [actualTimeCounter, setActualTimeCounter] = useState(0);
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
-    const [showTestHelpers, setShowTestHelpers] = useState(false);
     const isInitializingRef = React.useRef(false);
     const [totalOutputToday, setTotalOutputToday] = useState(0);
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
@@ -513,29 +512,6 @@ export const MobileProduction: React.FC = () => {
             ? `${baseUrl}/line_setup_form?session=${sessionId}${qrData ? `&machine=${qrData}` : ''}`
             : '';
 
-        // Demo Mode Handler
-        const handleDemoConnect = () => {
-            setSessionStatus('active');
-            setQrData('DEMO-MACHINE-01');
-            const demoData: ProductionData = {
-                id: 999,
-                prod_date: new Date().toISOString().split('T')[0],
-                work_centre_id: 1,
-                machine_id: 'DEMO-MACHINE-01',
-                emp_id: 1,
-                output_pairs: 45,
-                target_mins: 60,
-                start_time: '09:00:00',
-                finish_time: null,
-                idle_start_time: null,
-                actual_time: 55,
-                button_status: 1,
-                target_pairs: 100
-            };
-            setProductionData(demoData);
-            toast.success('Connected to Demo Machine');
-        };
-
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
@@ -547,79 +523,6 @@ export const MobileProduction: React.FC = () => {
                                 ? 'Waiting for QR scan from another device...'
                                 : 'Waiting for connection...'
                         }
-                    </div>
-
-                    {/* Simulation / Debug Button */}
-                    {(sessionId === 'DEMO-SESSION' || import.meta.env.DEV) && (
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
-                            <p className="text-xs text-blue-800 mb-2">Debug / Simulation Mode</p>
-                            <button
-                                onClick={handleDemoConnect}
-                                className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                            >
-                                Simulate Scan & Connect
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Testing Helper Section */}
-                    <div className="mt-8 border-t pt-8">
-                        <button
-                            onClick={() => setShowTestHelpers(!showTestHelpers)}
-                            className="text-sm text-gray-500 hover:text-blue-600 underline"
-                        >
-                            {showTestHelpers ? 'Hide Test QR Codes' : 'Show Demo QR Codes (for Laptop Screen)'}
-                        </button>
-
-                        {showTestHelpers && (
-                            <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                                <p className="text-[10px] text-gray-400 mb-4 font-semibold uppercase tracking-wider">
-                                    Scan these with your Phone from this screen
-                                </p>
-
-                                <div className="space-y-12">
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-600 mb-6 text-center border-b pb-2">1. Employee Badges</h4>
-                                        <div className="flex flex-col gap-12">
-                                            <div className="flex flex-col items-center">
-                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1001.jpeg`} alt="EMP-1001" className="w-64 h-64 object-contain" />
-                                                </div>
-                                                <span className="mt-3 text-lg font-bold text-gray-700">John Doe</span>
-                                                <span className="text-xs text-gray-400 font-mono">ID: EMP-1001</span>
-                                            </div>
-                                            <div className="flex flex-col items-center">
-                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-EMP-1002.jpeg`} alt="EMP-1002" className="w-64 h-64 object-contain" />
-                                                </div>
-                                                <span className="mt-3 text-lg font-bold text-gray-700">Jane Smith</span>
-                                                <span className="text-xs text-gray-400 font-mono">ID: EMP-1002</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-600 mb-6 text-center border-b pb-2">2. Machine Stickers</h4>
-                                        <div className="flex flex-col gap-12">
-                                            <div className="flex flex-col items-center">
-                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-001.jpeg`} alt="MAC-001" className="w-64 h-64 object-contain" />
-                                                </div>
-                                                <span className="mt-3 text-lg font-bold text-gray-700">Machine 1</span>
-                                                <span className="text-xs text-gray-400 font-mono">ID: MAC-001</span>
-                                            </div>
-                                            <div className="flex flex-col items-center">
-                                                <div className="p-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl shadow-sm">
-                                                    <img src={`${import.meta.env.BASE_URL}assets/qrcode-MAC-002.jpeg`} alt="MAC-002" className="w-64 h-64 object-contain" />
-                                                </div>
-                                                <span className="mt-3 text-lg font-bold text-gray-700">Machine 2</span>
-                                                <span className="text-xs text-gray-400 font-mono">ID: MAC-002</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>

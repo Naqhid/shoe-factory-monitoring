@@ -2485,3 +2485,23 @@
 {"level":"info","message":"Server started on port 3001 (HTTPS) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:04.693Z"}
 {"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:04.695Z"}
 {"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:09:04.701Z"}
+{"level":"info","message":"HTTPS enabled for backend","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:20:18.885Z"}
+{"level":"info","message":"Server started on port 3001 (HTTPS) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:20:18.917Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:20:18.921Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:20:18.930Z"}
+{"level":"info","message":"POST /api/login from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:33.104Z"}
+{"level":"info","message":"Login attempt for: user","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:33.106Z"}
+{"level":"info","message":"Login query took 174ms","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:33.280Z"}
+{"level":"info","message":"GET /api/machines/status from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:33.331Z"}
+{"level":"info","message":"GET /api/reports/efficiency?date=2026-02-28 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:33.346Z"}
+{"level":"info","message":"GET /api/dashboard/overall-daily?date=2026-02-28 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:33.351Z"}
+{"level":"info","message":"GET /api/mobile-session/latest-active from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:40.402Z"}
+{"level":"info","message":"GET /api/mobile-session/latest-active from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:42.393Z"}
+{"level":"info","message":"GET /api/mobile-session/latest-active from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:44.392Z"}
+{"level":"info","message":"GET /api/mobile-session/latest-active from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:46.392Z"}
+{"level":"info","message":"GET /api/production-planning from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:48.285Z"}
+{"level":"info","message":"GET /api/masters/styles from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:48.307Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:48.314Z"}
+{"level":"info","message":"GET /api/production-planning from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:48.331Z"}
+{"level":"info","message":"GET /api/masters/styles from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:48.335Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T11:21:48.350Z"}
