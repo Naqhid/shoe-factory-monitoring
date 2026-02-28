@@ -191,7 +191,6 @@ function App() {
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';
   const isUserRights = activeMenu === 'user_rights';
-  const isProductionDashboard = activeMenu === 'overview';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
@@ -234,54 +233,7 @@ function App() {
 
       <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
         {isProductionDashboard ? (
-          <>
-            <Header isConnected={isConnected} lastRefresh={lastRefresh} />
-
-            <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-full overflow-x-hidden">
-              {isLoading && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  <span className="ml-2 text-gray-600">Loading dashboard...</span>
-                </div>
-              )}
-
-              <StatsPanel machines={machines} overallDailyData={overallDailyData} />
-
-              {/* Efficiency Chart First */}
-              <div className="mb-6">
-                {efficiencyData.length > 0 && (
-                  <EfficiencyChart data={efficiencyData} />
-                )}
-              </div>
-
-              {/* Production Floor Status Below */}
-              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">
-                  Production Floor Status
-                  <span className="text-xs sm:text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
-                    (Click machine for details)
-                  </span>
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
-                  {uniqueMachines.map((machine) => (
-                    <MachineCard
-                      key={machine.machine_id}
-                      machine={machine}
-                      efficiency={efficiencyMap.get(machine.machine_id)}
-                      onClick={() => handleMachineClick(machine)}
-                    />
-                  ))}
-                </div>
-
-                {uniqueMachines.length === 0 && !isLoading && (
-                  <div className="text-center py-8 text-gray-500">
-                    <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                    <p>No machine data available</p>
-                  </div>
-                )}
-              </div>
-            </main>
-          </>
+          <TVDashboard />
         ) : isReports ? (
           <Reports />
         ) : isProductionRouting ? (
@@ -310,8 +262,6 @@ function App() {
           <FormsMasterForm />
         ) : isUserRights ? (
           <UserRightsForm />
-        ) : isProductionDashboard ? (
-          <TVDashboard />
         ) : isMasterView ? (
           loading ? (
             <div className="flex items-center justify-center h-full">
