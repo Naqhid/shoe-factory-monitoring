@@ -19,6 +19,7 @@ const mobileProductionController = require('./controllers/mobileProductionContro
 const mobileSessionController = require('./controllers/mobileSessionController');
 const productionTrackerController = require('./controllers/productionTrackerController');
 const machineCentreController = require('./controllers/machineCentreController');
+const tvDashboardController = require('./controllers/tvDashboardController');
 const errorHandler = require('./middleware/errorHandler');
 
 // Path resolution helper
@@ -168,6 +169,10 @@ app.post('/api/machine-centre/finish', machineCentreController.finishProduction)
 app.get('/api/machine-centre/status/:machineId', machineCentreController.getMachineStatus);
 app.post('/api/machine-centre/update-time', machineCentreController.updateActualTime);
 app.get('/api/machine-centre/plan/:workCentreId/:machineId', machineCentreController.getProductionPlan);
+
+// TV Dashboard routes
+app.get('/api/tv-dashboard/work-centres', tvDashboardController.getWorkCentres);
+app.get('/api/tv-dashboard/dashboard/:workCentreId', tvDashboardController.getDashboard);
 
 // Health check
 app.get('/health', (req, res) => {

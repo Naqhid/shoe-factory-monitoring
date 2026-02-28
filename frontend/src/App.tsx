@@ -24,6 +24,7 @@ import { ProductionTracker } from './components/ProductionTracker';
 import { UsersMasterForm } from './components/UsersMasterForm';
 import { FormsMasterForm } from './components/FormsMasterForm';
 import { UserRightsForm } from './components/UserRightsForm';
+import { TVDashboard } from './components/TVDashboard';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { API_BASE_URL } from './services/api';
 import { MachineStatus } from './types';
@@ -95,17 +96,17 @@ function App() {
     error: machinesError,
     refetch: refetchMachines,
     dataUpdatedAt
-  } = useMachineStatus(isDashboard);
+  } = useMachineStatus(false); // Disabled for new TV dashboard
 
   const {
     data: efficiencyData = [],
     isLoading: efficiencyLoading
-  } = useEfficiencyReport(selectedDate, isDashboard);
+  } = useEfficiencyReport(selectedDate, false); // Disabled for new TV dashboard
 
   const {
     data: overallDailyData,
     isLoading: overallLoading
-  } = useOverallDailyData(selectedDate, isDashboard);
+  } = useOverallDailyData(selectedDate, false); // Disabled for new TV dashboard
 
   const fetchRecords = async (table: string) => {
     setLoading(true);
@@ -190,6 +191,7 @@ function App() {
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';
   const isUserRights = activeMenu === 'user_rights';
+  const isProductionDashboard = activeMenu === 'overview';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
@@ -308,6 +310,8 @@ function App() {
           <FormsMasterForm />
         ) : isUserRights ? (
           <UserRightsForm />
+        ) : isProductionDashboard ? (
+          <TVDashboard />
         ) : isMasterView ? (
           loading ? (
             <div className="flex items-center justify-center h-full">
