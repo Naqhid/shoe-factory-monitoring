@@ -13,8 +13,8 @@ interface ProductionData {
     machine_id: string;
     emp_id: number;
     output_pairs: number;
-    target_mins: number;
-    target_pairs: number;
+    target_mins: any;
+    target_pairs: any;
     start_time: string | null;
     finish_time: string | null;
     idle_start_time: string | null;
@@ -665,7 +665,7 @@ export const MobileProduction: React.FC = () => {
             )}
 
             {/* Main Content */}
-            {(!loading || productionData) && (
+            {(!loading || productionData) && productionData && (
                 <div className="max-w-4xl mx-auto">
                         <>
                     {/* Header Section */}
@@ -711,7 +711,7 @@ export const MobileProduction: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
                                 <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{parseFloat(productionData.target_mins || 0).toFixed(1)}</p>
+                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{(productionData.target_mins || 0).toFixed(1)}</p>
                                 <p className="text-xs text-blue-600 mt-1">mins</p>
                             </div>
                             <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">

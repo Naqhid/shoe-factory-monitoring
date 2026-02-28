@@ -28,6 +28,7 @@ export const MobileLineSetupForm: React.FC = () => {
   const [showTestHelpers, setShowTestHelpers] = React.useState(false);
   const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
   const [debugLog, setDebugLog] = React.useState<{ url: string; payload: any; response: any } | null>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
 
   const [formData, setFormData] = React.useState<FormData>({
     employee_id: '',
@@ -159,7 +160,7 @@ export const MobileLineSetupForm: React.FC = () => {
 
       if (result.success) {
         toast.success(`Connected! Laptop will update shortly.`, { id: loadingToast });
-        navigate(`/mobile/${encodeURIComponent(finalMachineId)}/${encodeURIComponent(formData.employee_id)}`);
+        setShowSuccessDialog(true);
       } else {
         toast.error(result.message || 'Activation failed', { id: loadingToast });
       }
@@ -258,6 +259,36 @@ export const MobileLineSetupForm: React.FC = () => {
           <div className="mt-8 p-4 bg-gray-900 rounded-xl border border-gray-800 shadow-xl overflow-auto max-h-60">
             <h3 className="text-blue-400 font-mono text-xs font-bold mb-2 uppercase">Debug Output</h3>
             <pre className="text-green-400 text-[10px] font-mono leading-tight">{JSON.stringify(debugLog, null, 2)}</pre>
+          </div>
+        )}
+
+        {showSuccessDialog && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+              <div className="mb-6">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Setup Complete!</h2>
+                <p className="text-gray-600">The display device has been successfully connected and will update shortly.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSuccessDialog(false);
+                  setFormData({
+                    employee_id: '',
+                    employee_name: '',
+                    machine_id: searchParams.get('machine') || '',
+                    login_date_time: new Date().toISOString().slice(0, 16),
+                  });
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors"
+              >
+                OK
+              </button>
+            </div>
           </div>
         )}
 
