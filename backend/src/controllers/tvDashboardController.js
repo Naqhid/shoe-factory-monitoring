@@ -25,7 +25,7 @@ exports.getDashboard = async (req, res) => {
         const [topSection] = await pool.query(`
             SELECT 
                 wc.name as work_centre_name,
-                COALESCE(SUM(pp.target_pairs_per_tray), 0) as total_target,
+                COALESCE(SUM(pp.target_pairs_per_tray), SUM(mcs.total_output_pairs)) as total_target,
                 COALESCE(SUM(mcs.total_output_pairs), 0) as total_output,
                 COALESCE(SUM(mcs.total_target_mins), 0) as total_target_mins,
                 COALESCE(SUM(mcs.total_actual_mins), 0) as total_actual_mins
@@ -37,13 +37,13 @@ exports.getDashboard = async (req, res) => {
         `, [today, today, workCentreId]);
 
         const topData = topSection[0] || {};
-        const outputPercent = topData.total_target > 0 ? (topData.total_output / topData.total_target * 100).toFixed(1) : 0;
-        const efficiencyPercent = topData.total_actual_mins > 0 ? (topData.total_target_mins / topData.total_actual_mins * 100).toFixed(1) : 0;
+        const outputPercent = topData.total_target > 0 ? ((topData.total_output / topData.total_target) * 100).toFixed(1) : 0;
+        const efficiencyPercent = topData.total_actual_mins > 0 ? ((topData.total_target_mins / topData.total_actual_mins) * 100).toFixed(1) : 0;
 
         // Middle Section - Line wise output
         const [middleSection] = await pool.query(`
             SELECT 
-                COALESCE(SUM(pp.target_pairs_per_tray), 0) as target,
+                COALESCE(SUM(pp.target_pairs_per_tray), SUM(mcs.total_output_pairs)) as target,
                 COALESCE(SUM(mcs.total_output_pairs), 0) as output,
                 COALESCE(SUM(mcs.total_target_mins), 0) as target_mins,
                 COALESCE(SUM(mcs.total_actual_mins), 0) as actual_mins
@@ -54,8 +54,8 @@ exports.getDashboard = async (req, res) => {
         `, [today, today, workCentreId]);
 
         const middleData = middleSection[0] || {};
-        const lineOutputPercent = middleData.target > 0 ? (middleData.output / middleData.target * 100).toFixed(1) : 0;
-        const lineEfficiency = middleData.actual_mins > 0 ? (middleData.target_mins / middleData.actual_mins * 100).toFixed(1) : 0;
+        const lineOutputPercent = middleData.target > 0 ? ((middleData.output / middleData.target) * 100).toFixed(1) : 0;
+        const lineEfficiency = middleData.actual_mins > 0 ? ((middleData.target_mins / middleData.actual_mins) * 100).toFixed(1) : 0;
         
         // Calculate hourly output
         const currentHour = new Date().getHours();
@@ -99,15 +99,15 @@ exports.getDashboard = async (req, res) => {
                 topSection: {
                     workCentreName: topData.work_centre_name || 'N/A',
                     dateTime: new Date().toISOString(),
-                    target: topData.total_target,
-                    output: topData.total_output,
+                    target: topData.total_target || 0,
+                    output: topData.total_output || 0,
                     outputPercent: parseFloat(outputPercent),
                     efficiencyPercent: parseFloat(efficiencyPercent),
                     showHappyEmoji: outputPercent >= 90 && efficiencyPercent >= 90
                 },
                 middleSection: {
-                    target: middleData.target,
-                    output: middleData.output,
+                    target: middleData.target || 0,
+                    output: middleData.output || 0,
                     outputPercent: parseFloat(lineOutputPercent),
                     hourlyOutput: parseInt(hourlyOutput),
                     efficiencyPercent: parseFloat(lineEfficiency)
