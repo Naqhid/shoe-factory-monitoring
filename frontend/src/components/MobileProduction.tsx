@@ -608,8 +608,6 @@ export const MobileProduction: React.FC = () => {
                             >
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                        </button> 9l-7 7-7-7" />
-                            </svg>
                         </button>
                         {headerExpanded && (
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm px-4 pb-4">

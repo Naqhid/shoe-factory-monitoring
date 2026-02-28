@@ -2590,3 +2590,8 @@
 {"level":"info","message":"GET /api/mobile-production/summary/MAC-001/date/2026-02-28 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:15:37.549Z"}
 {"level":"info","message":"Found 1 planning records. Looking for work_centre_id: 3","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:15:37.713Z"}
 {"level":"info","message":"Found matching plan for work_centre_id 3: target_pairs = 13","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:15:37.714Z"}
+{"level":"info","message":"GET /api/mobile-production/summary/MAC-001/date/2026-02-28 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.396Z"}
+{"level":"info","message":"GET /api/mobile-production/machine/MAC-001/date/2026-02-28 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.407Z"}
+{"level":"info","message":"GET /api/mobile-production/init/MAC-001/EMP-1001 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.449Z"}
+{"level":"info","message":"Found 1 planning records. Looking for work_centre_id: 3","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.503Z"}
+{"level":"info","message":"Found matching plan for work_centre_id 3: target_pairs = 13","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.504Z"}
