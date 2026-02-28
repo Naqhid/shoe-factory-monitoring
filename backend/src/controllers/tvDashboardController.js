@@ -27,7 +27,7 @@ exports.getDashboard = async (req, res) => {
                 wc.name as work_centre_name,
                 COALESCE(SUM(pp.target_pairs_per_tray), 0) as total_target,
                 COALESCE(SUM(mcs.total_output_pairs), 0) as total_output,
-                COALESCE(SUM(pp.target_mins), 0) as total_target_mins,
+                COALESCE(SUM(mcs.total_target_mins), 0) as total_target_mins,
                 COALESCE(SUM(mcs.total_actual_mins), 0) as total_actual_mins
             FROM work_centres wc
             LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?
@@ -45,7 +45,7 @@ exports.getDashboard = async (req, res) => {
             SELECT 
                 COALESCE(SUM(pp.target_pairs_per_tray), 0) as target,
                 COALESCE(SUM(mcs.total_output_pairs), 0) as output,
-                COALESCE(SUM(pp.target_mins), 0) as target_mins,
+                COALESCE(SUM(mcs.total_target_mins), 0) as target_mins,
                 COALESCE(SUM(mcs.total_actual_mins), 0) as actual_mins
             FROM work_centres wc
             LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?

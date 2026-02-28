@@ -81,7 +81,7 @@ export const TVDashboard: React.FC = () => {
     }));
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 p-6">
+        <div className="min-h-screen p-6">
             {/* Top Section */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-3xl shadow-2xl p-8 mb-6">
                 <div className="flex justify-between items-center mb-6">
