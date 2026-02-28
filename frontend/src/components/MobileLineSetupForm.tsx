@@ -27,7 +27,6 @@ export const MobileLineSetupForm: React.FC = () => {
   const [lastScanned, setLastScanned] = React.useState<string | null>(null);
   const [showTestHelpers, setShowTestHelpers] = React.useState(false);
   const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
-  const [debugLog, setDebugLog] = React.useState<{ url: string; payload: any; response: any } | null>(null);
   const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
 
   const [formData, setFormData] = React.useState<FormData>({
@@ -154,9 +153,6 @@ export const MobileLineSetupForm: React.FC = () => {
       });
 
       const result = await response.json();
-      const debugData = { url: `${API_BASE}/api/mobile-session/activate`, payload, response: result };
-      setDebugLog(debugData);
-      sessionStorage.setItem('last_activation_debug', JSON.stringify(debugData));
 
       if (result.success) {
         toast.success(`Connected! Laptop will update shortly.`, { id: loadingToast });
@@ -255,13 +251,6 @@ export const MobileLineSetupForm: React.FC = () => {
           </form>
         </div>
 
-        {debugLog && (
-          <div className="mt-8 p-4 bg-gray-900 rounded-xl border border-gray-800 shadow-xl overflow-auto max-h-60">
-            <h3 className="text-blue-400 font-mono text-xs font-bold mb-2 uppercase">Debug Output</h3>
-            <pre className="text-green-400 text-[10px] font-mono leading-tight">{JSON.stringify(debugLog, null, 2)}</pre>
-          </div>
-        )}
-
         {showSuccessDialog && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
@@ -272,7 +261,14 @@ export const MobileLineSetupForm: React.FC = () => {
                   </svg>
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Setup Complete!</h2>
-                <p className="text-gray-600">The display device has been successfully connected and will update shortly.</p>
+                <p className="text-gray-600 mb-4">The display device has been successfully connected and will update shortly.</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
+                  <p className="text-sm font-semibold text-blue-900 mb-2">Connection Details:</p>
+                  <div className="space-y-1 text-sm text-blue-800">
+                    <p><span className="font-medium">Machine:</span> {formData.machine_name || formData.machine_id}</p>
+                    <p><span className="font-medium">Operator:</span> {formData.employee_name}</p>
+                  </div>
+                </div>
               </div>
               <button
                 onClick={() => {
