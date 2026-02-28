@@ -410,6 +410,9 @@ export const MobileProduction: React.FC = () => {
 
     const handleFinish = async () => {
         if (!productionData?.id) return;
+        
+        if (!confirm('Are you sure you want to finish this production cycle?')) return;
+        
         setLoading(true);
         try {
             const outputPairs = productionData.target_pairs || 0;
@@ -532,26 +535,6 @@ export const MobileProduction: React.FC = () => {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Connect Display</h1>
-                    <p className="text-gray-500 mb-8">Scan this QR code with your mobile device to control this display.</p>
-
-                    <div className="bg-gray-100 p-6 rounded-xl inline-block mb-6 relative">
-                        {sessionId ? (
-                            <QRCodeSVG value={activationUrl} size={200} level="H" />
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-[200px] w-[200px]">
-                                <Loader2 className="h-12 w-12 animate-spin text-gray-400 mb-4" />
-                                <p className="text-sm text-gray-400">Connecting to server...</p>
-                                <button
-                                    onClick={() => setSessionId('DEMO-SESSION')}
-                                    className="mt-4 text-xs text-blue-500 hover:underline"
-                                >
-                                    Use Demo Session
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
                     <div className="text-sm text-gray-400 mb-8 flex items-center justify-center gap-2">
                         <RefreshCw className="h-3 w-3 animate-spin" />
                         {urlMachineId && !urlEmpId
@@ -708,13 +691,39 @@ export const MobileProduction: React.FC = () => {
                     {/* Metrics Section */}
                     <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
                         <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Metrics</h2>
+                        
+                        {/* Progress Bar */}
+                        {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (
+                            <div className="mb-4">
+                                <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                    <span>Progress</span>
+                                    <span>{Math.min(100, Math.round((actualTimeCounter / 60 / productionData.target_mins) * 100))}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                    <div 
+                                        className={`h-full transition-all duration-1000 ${
+                                            (actualTimeCounter / 60) > productionData.target_mins 
+                                                ? 'bg-red-500' 
+                                                : 'bg-green-500'
+                                        }`}
+                                        style={{ width: `${Math.min(100, (actualTimeCounter / 60 / productionData.target_mins) * 100)}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
                                 <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
                                 <p className="text-3xl md:text-5xl font-bold text-blue-900">{(productionData.target_mins || 0).toFixed(1)}</p>
                                 <p className="text-xs text-blue-600 mt-1">mins</p>
                             </div>
-                            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm">
+                            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm relative">
+                                {productionData.button_status === 1 && !productionData.is_paused && (
+                                    <div className="absolute top-2 right-2">
+                                        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                                    </div>
+                                )}
                                 <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
                                 <p className="text-3xl md:text-5xl font-bold text-purple-900">
                                     {Math.floor(actualTimeCounter / 60)}<span className="text-2xl md:text-3xl">m</span>
