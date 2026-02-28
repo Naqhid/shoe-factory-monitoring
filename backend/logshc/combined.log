@@ -2595,3 +2595,14 @@
 {"level":"info","message":"GET /api/mobile-production/init/MAC-001/EMP-1001 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.449Z"}
 {"level":"info","message":"Found 1 planning records. Looking for work_centre_id: 3","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.503Z"}
 {"level":"info","message":"Found matching plan for work_centre_id 3: target_pairs = 13","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:19:26.504Z"}
+{"level":"info","message":"HTTPS enabled for backend","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:08.098Z"}
+{"level":"info","message":"Server started on port 3001 (HTTPS) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:08.213Z"}
+{"level":"info","message":"Starting file watcher on directory: C:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:08.230Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:08.266Z"}
+{"level":"info","message":"GET /api/production-routing from 192.168.1.4 | Origin: https://192.168.1.22:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:11.907Z"}
+{"level":"info","message":"GET /api/production-routing/masters from 192.168.1.4 | Origin: https://192.168.1.22:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:11.991Z"}
+{"level":"info","message":"GET /api/mobile-production/machine/MAC-001/date/2026-02-28 from 192.168.1.13 | Origin: https://192.168.1.22:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:12.483Z"}
+{"level":"info","message":"GET /api/mobile-production/init/MAC-001/EMP-1001 from 192.168.1.13 | Origin: https://192.168.1.22:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:12.575Z"}
+{"level":"info","message":"Found 1 planning records. Looking for work_centre_id: 3","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:12.630Z"}
+{"level":"info","message":"Found matching plan for work_centre_id 3: target_pairs = 13","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:12.639Z"}
+{"level":"info","message":"GET /api/mobile-production/summary/MAC-001/date/2026-02-28 from 192.168.1.13 | Origin: https://192.168.1.22:3000","service":"shoe-factory-monitoring","timestamp":"2026-02-28T19:23:12.675Z"}
