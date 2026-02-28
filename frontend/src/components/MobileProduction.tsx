@@ -514,17 +514,17 @@ export const MobileProduction: React.FC = () => {
             : '';
 
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-                    <div className="text-sm text-gray-400 mb-8 flex items-center justify-center gap-2">
-                        <RefreshCw className="h-3 w-3 animate-spin" />
+            <div className="fixed inset-0 bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center z-50">
+                <div className="text-center">
+                    <RefreshCw className="h-16 w-16 animate-spin text-white mx-auto mb-4" />
+                    <p className="text-white text-lg font-semibold">
                         {urlMachineId && !urlEmpId
                             ? `Waiting for supervisor scan on ${urlMachineId}...`
                             : !urlMachineId && !urlEmpId
                                 ? 'Waiting for QR scan from another device...'
                                 : 'Waiting for connection...'
                         }
-                    </div>
+                    </p>
                 </div>
             </div>
         );
@@ -594,7 +594,12 @@ export const MobileProduction: React.FC = () => {
                             onClick={() => setHeaderExpanded(!headerExpanded)}
                             className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
                         >
-                            <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
+                                {!headerExpanded && (
+                                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full animate-pulse">Tap to view details</span>
+                                )}
+                            </div>
                             <svg
                                 className={`h-6 w-6 transition-transform ${headerExpanded ? 'rotate-180' : ''}`}
                                 fill="none"
@@ -602,6 +607,8 @@ export const MobileProduction: React.FC = () => {
                                 viewBox="0 0 24 24"
                             >
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button> 9l-7 7-7-7" />
                             </svg>
                         </button>
                         {headerExpanded && (
