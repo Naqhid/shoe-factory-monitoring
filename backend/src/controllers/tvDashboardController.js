@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../config/database');
+const pool = require('../../config/database');
 
 // Get all work centres for rotation
 exports.getWorkCentres = async (req, res) => {
