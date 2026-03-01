@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smile, Frown, TrendingUp, Target, Clock, Zap } from 'lucide-react';
+import { Smile, Frown, Meh, TrendingUp, Target, Clock, Zap } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../services/api';
 
@@ -125,6 +125,8 @@ export const TVDashboard: React.FC = () => {
                     <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 flex items-center justify-center col-span-2 sm:col-span-1">
                         {topSection.showHappyEmoji ? (
                             <Smile className="h-16 w-16 sm:h-24 sm:w-24 text-green-400" />
+                        ) : topSection.showMediumEmoji ? (
+                            <Meh className="h-16 w-16 sm:h-24 sm:w-24 text-yellow-400" />
                         ) : (
                             <Frown className="h-16 w-16 sm:h-24 sm:w-24 text-red-400" />
                         )}

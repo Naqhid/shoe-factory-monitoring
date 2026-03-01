@@ -21,59 +21,61 @@ exports.getDashboard = async (req, res) => {
         const { workCentreId } = req.params;
         const today = req.query.date || new Date().toISOString().split('T')[0];
 
-        // Top Section - Overall metrics
-        const [topSection] = await pool.query(`
-            SELECT 
-                wc.name as work_centre_name,
-                COALESCE(SUM(pp.target_pairs_per_tray), SUM(mcs.total_output_pairs)) as total_target,
-                COALESCE(SUM(mcs.total_output_pairs), 0) as total_output,
-                COALESCE(SUM(mcs.total_target_mins), 0) as total_target_mins,
-                COALESCE(SUM(mcs.total_actual_mins), 0) as total_actual_mins
-            FROM work_centres wc
-            LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?
-            LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND mcs.prod_date = ?
-            WHERE wc.id = ?
-            GROUP BY wc.id, wc.name
-        `, [today, today, workCentreId]);
+        // Top Section - Overall metrics (all work centres)
+        const [planningData] = await pool.query(
+            'SELECT SUM(target_pairs_per_tray) as total_target FROM production_plan WHERE plan_date = ?',
+            [today]
+        );
+        const [summaryData] = await pool.query(
+            'SELECT SUM(total_output_pairs) as total_output, SUM(total_target_mins) as total_target_mins, SUM(total_actual_mins) as total_actual_mins, SUM(total_idle_mins) as total_idle_mins FROM machine_centre_summary WHERE prod_date = ?',
+            [today]
+        );
+        const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
-        const topData = topSection[0] || {};
-        const outputPercent = topData.total_target > 0 ? ((topData.total_output / topData.total_target) * 100).toFixed(1) : 0;
-        const efficiencyPercent = topData.total_actual_mins > 0 ? ((topData.total_target_mins / topData.total_actual_mins) * 100).toFixed(1) : 0;
+        const target = planningData[0]?.total_target || 0;
+        const output = summaryData[0]?.total_output || 0;
+        const outputPercent = target > 0 ? (output / target) * 100 : 0;
+        const totalTargetMins = summaryData[0]?.total_target_mins || 0;
+        const totalActualMins = summaryData[0]?.total_actual_mins || 0;
+        const totalIdleMins = summaryData[0]?.total_idle_mins || 0;
+        const efficiencyPercent = (totalActualMins + totalIdleMins) > 0 ? (totalTargetMins / (totalActualMins + totalIdleMins)) * 100 : 0;
 
-        // Middle Section - Line wise output
-        const [middleSection] = await pool.query(`
-            SELECT 
-                COALESCE(SUM(pp.target_pairs_per_tray), SUM(mcs.total_output_pairs)) as target,
-                COALESCE(SUM(mcs.total_output_pairs), 0) as output,
-                COALESCE(SUM(mcs.total_target_mins), 0) as target_mins,
-                COALESCE(SUM(mcs.total_actual_mins), 0) as actual_mins
-            FROM work_centres wc
-            LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND pp.plan_date = ?
-            LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND mcs.prod_date = ?
-            WHERE wc.id = ?
-        `, [today, today, workCentreId]);
+        let emojiType = 'sad';
+        if (outputPercent >= 90 && efficiencyPercent >= 90) emojiType = 'happy';
+        else if (outputPercent >= 70 && efficiencyPercent >= 70) emojiType = 'medium';
 
-        const middleData = middleSection[0] || {};
-        const lineOutputPercent = middleData.target > 0 ? ((middleData.output / middleData.target) * 100).toFixed(1) : 0;
-        const lineEfficiency = middleData.actual_mins > 0 ? ((middleData.target_mins / middleData.actual_mins) * 100).toFixed(1) : 0;
-        
-        // Calculate hourly output
+        // Middle Section - Line wise output (filtered by work centre)
+        const [wcPlanningData] = await pool.query(
+            'SELECT SUM(target_pairs_per_tray) as target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
+            [today, workCentreId]
+        );
+        const [wcSummaryData] = await pool.query(
+            'SELECT SUM(total_output_pairs) as output, SUM(total_target_mins) as target_mins, SUM(total_actual_mins) as actual_mins, SUM(total_idle_mins) as idle_mins FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?',
+            [today, workCentreId]
+        );
+
+        const wcTarget = wcPlanningData[0]?.target || 0;
+        const wcOutput = wcSummaryData[0]?.output || 0;
+        const wcOutputPercent = wcTarget > 0 ? (wcOutput / wcTarget) * 100 : 0;
+        const wcTargetMins = wcSummaryData[0]?.target_mins || 0;
+        const wcActualMins = wcSummaryData[0]?.actual_mins || 0;
+        const wcIdleMins = wcSummaryData[0]?.idle_mins || 0;
+        const wcEfficiency = (wcActualMins + wcIdleMins) > 0 ? (wcTargetMins / (wcActualMins + wcIdleMins)) * 100 : 0;
+
         const currentHour = new Date().getHours();
         const startHour = 8;
-        const passedHours = Math.max(1, currentHour - startHour + 1);
-        const hourlyOutput = middleData.output > 0 ? (middleData.output / passedHours).toFixed(0) : 0;
+        const passedHours = Math.max(1, currentHour >= startHour ? currentHour - startHour + 1 : 1);
+        const hourlyOutput = Math.round(wcOutput / passedHours);
 
-        // Lower Section - Hourly output graph data
+        // Lower Section - Hourly output graph (based on updated_at)
         const [hourlyData] = await pool.query(`
             SELECT 
-                HOUR(created_at) as hour,
+                HOUR(updated_at) as hour,
                 SUM(output_pairs) as output
             FROM machine_centre_production
             WHERE work_centre_id = ? 
             AND DATE(prod_date) = ?
-            AND HOUR(created_at) >= 8 
-            AND HOUR(created_at) <= 17
-            GROUP BY HOUR(created_at)
+            GROUP BY HOUR(updated_at)
             ORDER BY hour
         `, [workCentreId, today]);
 
@@ -82,7 +84,7 @@ exports.getDashboard = async (req, res) => {
             SELECT 
                 mc.name as machine_centre_name,
                 wc.name as work_centre_name,
-                mcs.avg_efficiency_percent as efficiency
+                ROUND(mcs.avg_efficiency_percent, 1) as efficiency
             FROM machine_centre_summary mcs
             JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
             JOIN work_centres wc ON mcs.work_centre_id = wc.id
@@ -97,20 +99,20 @@ exports.getDashboard = async (req, res) => {
             success: true,
             data: {
                 topSection: {
-                    workCentreName: topData.work_centre_name || 'N/A',
-                    dateTime: new Date().toISOString(),
-                    target: topData.total_target || 0,
-                    output: topData.total_output || 0,
-                    outputPercent: parseFloat(outputPercent),
-                    efficiencyPercent: parseFloat(efficiencyPercent),
-                    showHappyEmoji: outputPercent >= 90 && efficiencyPercent >= 90
+                    workCentreName: wcData[0]?.name || 'N/A',
+                    target: Math.round(target),
+                    output: Math.round(output),
+                    outputPercent: Math.round(outputPercent),
+                    efficiencyPercent: Math.round(efficiencyPercent),
+                    showHappyEmoji: emojiType === 'happy',
+                    showMediumEmoji: emojiType === 'medium'
                 },
                 middleSection: {
-                    target: middleData.target || 0,
-                    output: middleData.output || 0,
-                    outputPercent: parseFloat(lineOutputPercent),
-                    hourlyOutput: parseInt(hourlyOutput),
-                    efficiencyPercent: parseFloat(lineEfficiency)
+                    target: Math.round(wcTarget),
+                    output: Math.round(wcOutput),
+                    outputPercent: Math.round(wcOutputPercent),
+                    hourlyOutput: hourlyOutput,
+                    efficiencyPercent: Math.round(wcEfficiency)
                 },
                 lowerSection: {
                     hourlyData: hourlyData,
