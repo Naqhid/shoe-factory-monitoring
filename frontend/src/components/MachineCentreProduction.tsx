@@ -332,11 +332,11 @@ export const MachineCentreProduction: React.FC = () => {
 
         {/* Control Buttons */}
         <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+          <div className="flex gap-3">
             {status.button_status === 3 ? (
               <button
                 onClick={handleStart}
-                className="md:col-span-3 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
+                className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
               >
                 START
               </button>
@@ -344,19 +344,19 @@ export const MachineCentreProduction: React.FC = () => {
               <>
                 <button
                   onClick={handleStop}
-                  className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
+                  className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
                 >
                   STOP
                 </button>
                 <button
                   onClick={handleFinish}
-                  className="md:col-span-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide"
                 >
                   FINISH
                 </button>
               </>
             ) : (
-              <div className="md:col-span-3 text-center py-6 text-gray-500 font-medium">
+              <div className="flex-1 text-center py-6 text-gray-500 font-medium">
                 Production session completed
               </div>
             )}

@@ -83,88 +83,88 @@ export const TVDashboard: React.FC = () => {
     }));
 
     return (
-        <div className="min-h-screen p-6">
+        <div className="min-h-screen p-3 sm:p-6">
             {/* Top Section */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-3xl shadow-2xl p-8 mb-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-5xl font-bold text-white">{topSection.workCentreName}</h1>
-                    <div className="text-right">
-                        <div className="text-white text-2xl font-semibold">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
+                    <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white">{topSection.workCentreName}</h1>
+                    <div className="text-left sm:text-right">
+                        <div className="text-white text-lg sm:text-2xl font-semibold">
                             {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </div>
-                        <div className="text-blue-200 text-xl">
+                        <div className="text-blue-200 text-base sm:text-xl">
                             {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-5 gap-6">
-                    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center">
-                        <Target className="h-12 w-12 text-white mx-auto mb-3" />
-                        <div className="text-white/80 text-sm mb-2">Target</div>
-                        <div className="text-white text-4xl font-bold">{topSection.target}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
+                        <Target className="h-8 w-8 sm:h-12 sm:w-12 text-white mx-auto mb-2 sm:mb-3" />
+                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Target</div>
+                        <div className="text-white text-2xl sm:text-4xl font-bold">{topSection.target}</div>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center">
-                        <TrendingUp className="h-12 w-12 text-green-400 mx-auto mb-3" />
-                        <div className="text-white/80 text-sm mb-2">Output</div>
-                        <div className="text-white text-4xl font-bold">{topSection.output}</div>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
+                        <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 text-green-400 mx-auto mb-2 sm:mb-3" />
+                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Output</div>
+                        <div className="text-white text-2xl sm:text-4xl font-bold">{topSection.output}</div>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center">
-                        <div className="text-white/80 text-sm mb-2">Output %</div>
-                        <div className={`text-4xl font-bold ${topSection.outputPercent >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
+                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Output %</div>
+                        <div className={`text-2xl sm:text-4xl font-bold ${topSection.outputPercent >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
                             {topSection.outputPercent}%
                         </div>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center">
-                        <Zap className="h-12 w-12 text-yellow-400 mx-auto mb-3" />
-                        <div className="text-white/80 text-sm mb-2">Efficiency %</div>
-                        <div className={`text-4xl font-bold ${topSection.efficiencyPercent >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
+                        <Zap className="h-8 w-8 sm:h-12 sm:w-12 text-yellow-400 mx-auto mb-2 sm:mb-3" />
+                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Efficiency %</div>
+                        <div className={`text-2xl sm:text-4xl font-bold ${topSection.efficiencyPercent >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
                             {topSection.efficiencyPercent}%
                         </div>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 flex items-center justify-center">
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 flex items-center justify-center col-span-2 sm:col-span-1">
                         {topSection.showHappyEmoji ? (
-                            <Smile className="h-24 w-24 text-green-400" />
+                            <Smile className="h-16 w-16 sm:h-24 sm:w-24 text-green-400" />
                         ) : (
-                            <Frown className="h-24 w-24 text-red-400" />
+                            <Frown className="h-16 w-16 sm:h-24 sm:w-24 text-red-400" />
                         )}
                     </div>
                 </div>
             </div>
 
             {/* Middle Section */}
-            <div className="bg-white rounded-3xl shadow-2xl p-8 mb-6">
-                <h2 className="text-3xl font-bold text-gray-800 mb-6">Line Wise Output</h2>
-                <div className="grid grid-cols-5 gap-6">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 text-center border-2 border-blue-200">
-                        <div className="text-blue-700 text-sm font-semibold mb-2">Target</div>
-                        <div className="text-blue-900 text-4xl font-bold">{middleSection.target}</div>
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6">
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 mb-4 sm:mb-6">Line Wise Output</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-blue-200">
+                        <div className="text-blue-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Target</div>
+                        <div className="text-blue-900 text-2xl sm:text-4xl font-bold">{middleSection.target}</div>
                     </div>
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 text-center border-2 border-green-200">
-                        <div className="text-green-700 text-sm font-semibold mb-2">Output</div>
-                        <div className="text-green-900 text-4xl font-bold">{middleSection.output}</div>
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-green-200">
+                        <div className="text-green-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output</div>
+                        <div className="text-green-900 text-2xl sm:text-4xl font-bold">{middleSection.output}</div>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 text-center border-2 border-purple-200">
-                        <div className="text-purple-700 text-sm font-semibold mb-2">Output %</div>
-                        <div className="text-purple-900 text-4xl font-bold">{middleSection.outputPercent}%</div>
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-purple-200">
+                        <div className="text-purple-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output %</div>
+                        <div className="text-purple-900 text-2xl sm:text-4xl font-bold">{middleSection.outputPercent}%</div>
                     </div>
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-6 text-center border-2 border-orange-200">
-                        <div className="text-orange-700 text-sm font-semibold mb-2">Hourly Output</div>
-                        <div className="text-orange-900 text-4xl font-bold">{middleSection.hourlyOutput}</div>
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-orange-200">
+                        <div className="text-orange-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Hourly Output</div>
+                        <div className="text-orange-900 text-2xl sm:text-4xl font-bold">{middleSection.hourlyOutput}</div>
                     </div>
-                    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-2xl p-6 text-center border-2 border-indigo-200">
-                        <div className="text-indigo-700 text-sm font-semibold mb-2">Efficiency %</div>
-                        <div className="text-indigo-900 text-4xl font-bold">{middleSection.efficiencyPercent}%</div>
+                    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-indigo-200 col-span-2 sm:col-span-1">
+                        <div className="text-indigo-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Efficiency %</div>
+                        <div className="text-indigo-900 text-2xl sm:text-4xl font-bold">{middleSection.efficiencyPercent}%</div>
                     </div>
                 </div>
             </div>
 
             {/* Lower Section */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* Hourly Output Chart */}
-                <div className="bg-white rounded-3xl shadow-2xl p-8">
-                    <h3 className="text-2xl font-bold text-gray-800 mb-6">Hourly Output</h3>
-                    <ResponsiveContainer width="100%" height={300}>
+                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8">
+                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">Hourly Output</h3>
+                    <ResponsiveContainer width="100%" height={250}>
                         <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="hour" />
@@ -176,27 +176,27 @@ export const TVDashboard: React.FC = () => {
                 </div>
 
                 {/* Top 3 Bottlenecks */}
-                <div className="bg-white rounded-3xl shadow-2xl p-8">
-                    <h3 className="text-2xl font-bold text-gray-800 mb-6">Top 3 Bottleneck Machines</h3>
+                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8">
+                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">Top 3 Bottleneck Machines</h3>
                     {lowerSection.bottlenecks.length > 0 ? (
-                        <div className="space-y-4">
+                        <div className="space-y-3 sm:space-y-4">
                             {lowerSection.bottlenecks.map((item: any, index: number) => (
-                                <div key={index} className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <div className="text-gray-800 font-bold text-lg">{item.machine_centre_name}</div>
-                                            <div className="text-gray-600 text-sm">{item.work_centre_name}</div>
+                                <div key={index} className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 sm:p-4">
+                                    <div className="flex justify-between items-center gap-2">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-gray-800 font-bold text-sm sm:text-lg truncate">{item.machine_centre_name}</div>
+                                            <div className="text-gray-600 text-xs sm:text-sm truncate">{item.work_centre_name}</div>
                                         </div>
-                                        <div className="text-red-600 text-3xl font-bold">{item.efficiency}%</div>
+                                        <div className="text-red-600 text-2xl sm:text-3xl font-bold flex-shrink-0">{item.efficiency}%</div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="flex items-center justify-center h-64 text-gray-400">
-                            <div className="text-center">
-                                <Smile className="h-16 w-16 mx-auto mb-4 text-green-400" />
-                                <div className="text-xl">No Bottlenecks - All machines performing well!</div>
+                        <div className="flex items-center justify-center h-48 sm:h-64 text-gray-400">
+                            <div className="text-center px-4">
+                                <Smile className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-green-400" />
+                                <div className="text-sm sm:text-xl">No Bottlenecks - All machines performing well!</div>
                             </div>
                         </div>
                     )}

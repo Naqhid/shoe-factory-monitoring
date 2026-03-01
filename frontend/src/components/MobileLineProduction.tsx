@@ -107,7 +107,7 @@ export const MobileLineProduction: React.FC = () => {
 
           <div className="space-y-8">
             {/* Employee QR */}
-            <div className="text-center">
+            {/* <div className="text-center">
               <h3 className="text-md font-semibold text-gray-700 mb-4">Employee Badge</h3>
               <div className="bg-gray-50 p-6 rounded-xl inline-block">
                 <img
@@ -118,7 +118,7 @@ export const MobileLineProduction: React.FC = () => {
               </div>
               <p className="text-sm font-medium text-gray-700 mt-2">{displayConfig.empName}</p>
               <p className="text-xs text-gray-500">ID: {displayConfig.empId}</p>
-            </div>
+            </div> */}
 
             {/* Machine QR */}
             <div className="text-center">
