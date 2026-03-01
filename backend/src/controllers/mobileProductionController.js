@@ -185,20 +185,16 @@ exports.updateStatus = async (req, res, next) => {
         const prod = record[0];
         await db.query(
           `INSERT INTO machine_centre_summary 
-           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, avg_efficiency_percent, button_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, button_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
            total_output_pairs = total_output_pairs + VALUES(total_output_pairs),
            total_target_mins = total_target_mins + VALUES(total_target_mins),
            total_actual_mins = total_actual_mins + VALUES(total_actual_mins),
            total_idle_mins = total_idle_mins + VALUES(total_idle_mins),
-           avg_efficiency_percent = CASE WHEN (total_target_mins + VALUES(total_target_mins)) > 0 
-                                THEN ((total_actual_mins + VALUES(total_actual_mins)) / (total_target_mins + VALUES(total_target_mins))) * 100 
-                                ELSE 0 END,
            button_status = VALUES(button_status)`,
           [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id.toString(), 
-           prod.output_pairs || 0, prod.target_mins || 0, prod.actual_time || 0, prod.idle_mins || 0,
-           prod.target_mins > 0 ? (prod.actual_time / prod.target_mins) * 100 : 0, 2]
+           prod.output_pairs || 0, prod.target_mins || 0, prod.actual_time || 0, prod.idle_mins || 0, 2]
         );
       }
     }
