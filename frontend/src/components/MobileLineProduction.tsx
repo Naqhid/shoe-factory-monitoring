@@ -39,9 +39,11 @@ export const MobileLineProduction: React.FC = () => {
 
   // Poll for active sessions to redirect display device after QR scans
   useEffect(() => {
+    if (!displayConfig?.machineId) return;
+
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active`);
+        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active/${displayConfig.machineId}`);
         const result = await response.json();
 
         if (result.success && result.data && result.data.redirect_url) {
@@ -57,7 +59,7 @@ export const MobileLineProduction: React.FC = () => {
     }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(pollInterval);
-  }, [navigate]);
+  }, [navigate, displayConfig?.machineId]);
 
   if (!displayConfig) {
     return (
