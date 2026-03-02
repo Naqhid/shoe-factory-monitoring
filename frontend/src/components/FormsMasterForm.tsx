@@ -4,6 +4,8 @@ import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
+import { Pagination } from './Pagination';
+import { usePagination } from '../hooks/usePagination';
 
 interface FormRecord {
   id: number;
@@ -20,6 +22,9 @@ export const FormsMasterForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [nextCode, setNextCode] = React.useState('FRM001');
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(5);
+  const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
 
 
   const generateNextCode = (existingRecords: FormRecord[]) => {
@@ -34,11 +39,18 @@ export const FormsMasterForm: React.FC = () => {
 
   const fetchRecords = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/masters/forms_master`);
+      const response = await fetch(`${API_BASE}/api/masters/forms_master?page=${currentPage}&limit=${itemsPerPage}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
-        setNextCode(generateNextCode(result.data));
+        if (result.pagination) {
+          setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
+        }
+        const allResponse = await fetch(`${API_BASE}/api/masters/forms_master`);
+        const allResult = await allResponse.json();
+        if (allResult.success) {
+          setNextCode(generateNextCode(allResult.data));
+        }
       }
     } catch (error) {
       console.error('Error fetching forms:', error);
@@ -48,6 +60,10 @@ export const FormsMasterForm: React.FC = () => {
   React.useEffect(() => {
     fetchRecords();
   }, []);
+
+  React.useEffect(() => {
+    fetchRecords();
+  }, [currentPage, itemsPerPage]);
 
   const resetForm = () => {
     setFormData({ code: '', name: '' });
@@ -302,6 +318,17 @@ export const FormsMasterForm: React.FC = () => {
             </div>
           )}
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(newLimit) => {
+            setItemsPerPage(newLimit);
+            setCurrentPage(1);
+          }}
+        />
       </div>
     </div>
   );

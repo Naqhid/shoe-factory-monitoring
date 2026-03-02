@@ -4,6 +4,8 @@ import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
+import { Pagination } from './Pagination';
+import { usePagination } from '../hooks/usePagination';
 
 interface EmployeeRecord {
   id: number;
@@ -29,6 +31,8 @@ export const EmployeeMasterForm: React.FC = () => {
   const [workCentres, setWorkCentres] = React.useState<EmployeeRecord[]>([]);
   const [machineCentres, setMachineCentres] = React.useState<EmployeeRecord[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  
+  const { currentPage, setCurrentPage, paginatedData, totalPages, totalItems, itemsPerPage } = usePagination(records, 10);
 
 
   const fetchRecords = async () => {
@@ -331,7 +335,7 @@ export const EmployeeMasterForm: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {records.map((record) => (
+            {paginatedData.map((record) => (
               <tr key={record.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {record.code}
@@ -369,6 +373,14 @@ export const EmployeeMasterForm: React.FC = () => {
             No employees found
           </div>
         )}
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );

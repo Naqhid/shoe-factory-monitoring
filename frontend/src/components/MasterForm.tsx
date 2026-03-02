@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Pagination } from './Pagination';
 
 interface MasterRecord {
   id: number;
@@ -17,17 +18,38 @@ interface MasterRecord {
 interface MasterFormProps {
   title: string;
   table: string;
-  records: MasterRecord[];
-  onRefresh: () => void;
 }
 
-export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, onRefresh }) => {
+export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
+  const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<MasterRecord | null>(null);
   const [formData, setFormData] = React.useState({ code: '', name: '', work_centre_id: '', machine_id: '' });
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<MasterRecord[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(10);
+  const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
+
+  const fetchRecords = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/masters/${table}?page=${currentPage}&limit=${itemsPerPage}`);
+      const result = await response.json();
+      if (result.success) {
+        setRecords(result.data);
+        if (result.pagination) {
+          setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching records:', error);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchRecords();
+  }, [currentPage, itemsPerPage, table]);
 
 
   React.useEffect(() => {
@@ -75,7 +97,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
       if (result.success) {
         toast.success(editingRecord ? 'Record updated' : 'Record created');
         resetForm();
-        onRefresh();
+        fetchRecords();
       } else {
         toast.error(result.error || 'Operation failed');
       }
@@ -115,7 +137,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
 
       if (result.success) {
         toast.success('Record deleted');
-        onRefresh();
+        fetchRecords();
       } else {
         toast.error(result.error || 'Delete failed');
       }
@@ -363,6 +385,18 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table, records, o
             No records found
           </div>
         )}
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(newLimit) => {
+            setItemsPerPage(newLimit);
+            setCurrentPage(1);
+          }}
+        />
       </div>
     </div>
   );

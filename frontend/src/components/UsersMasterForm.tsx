@@ -4,6 +4,8 @@ import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
+import { Pagination } from './Pagination';
+import { usePagination } from '../hooks/usePagination';
 
 interface UserRecord {
   id: number;
@@ -33,14 +35,20 @@ export const UsersMasterForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<UserRecord[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(5);
+  const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
 
 
   const fetchRecords = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/masters/users`);
+      const response = await fetch(`${API_BASE}/api/masters/users?page=${currentPage}&limit=${itemsPerPage}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
+        if (result.pagination) {
+          setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
+        }
       }
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -63,6 +71,10 @@ export const UsersMasterForm: React.FC = () => {
     fetchRecords();
     fetchWorkCentres();
   }, []);
+
+  React.useEffect(() => {
+    fetchRecords();
+  }, [currentPage, itemsPerPage]);
 
   const resetForm = () => {
     setFormData({ code: '', name: '', email: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '' });
@@ -421,6 +433,18 @@ export const UsersMasterForm: React.FC = () => {
             No users found
           </div>
         )}
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(newLimit) => {
+            setItemsPerPage(newLimit);
+            setCurrentPage(1);
+          }}
+        />
       </div>
     </div>
   );

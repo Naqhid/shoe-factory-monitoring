@@ -162,7 +162,8 @@ exports.updateStatus = async (req, res, next) => {
     }
     // If starting/resuming, update start_time and idle_stop_time
     else if (button_status === 1) {
-      updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
+      // Only set start_time if it's NULL (first start)
+      updateQuery += ', start_time = COALESCE(start_time, NOW()), idle_stop_time = NOW()';
     }
     // If pausing (button_status === 3), update idle_start_time
     else if (button_status === 3) {
@@ -180,21 +181,37 @@ exports.updateStatus = async (req, res, next) => {
 
     // If finishing, update machine_centre_summary
     if (button_status === 2) {
+      // Fetch updated record with computed actual_time
       const [record] = await db.query('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
       if (record.length > 0) {
         const prod = record[0];
+        
+        // Recalculate summary for this machine/date/employee combination
+        // Note: avg_efficiency_percent and cum_avg_time might be generated columns, so we calculate them in SELECT
         await db.query(
           `INSERT INTO machine_centre_summary 
            (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, button_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           SELECT 
+             prod_date,
+             work_centre_id,
+             machine_id,
+             emp_id,
+             SUM(output_pairs) as total_output_pairs,
+             SUM(target_mins) as total_target_mins,
+             SUM(actual_time) as total_actual_mins,
+             SUM(idle_mins) as total_idle_mins,
+             MAX(button_status) as button_status
+           FROM machine_centre_production
+           WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ?
+           GROUP BY prod_date, work_centre_id, machine_id, emp_id
            ON DUPLICATE KEY UPDATE
-           total_output_pairs = total_output_pairs + VALUES(total_output_pairs),
-           total_target_mins = total_target_mins + VALUES(total_target_mins),
-           total_actual_mins = total_actual_mins + VALUES(total_actual_mins),
-           total_idle_mins = total_idle_mins + VALUES(total_idle_mins),
-           button_status = VALUES(button_status)`,
-          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id.toString(), 
-           prod.output_pairs || 0, prod.target_mins || 0, prod.actual_time || 0, prod.idle_mins || 0, 2]
+             total_output_pairs = VALUES(total_output_pairs),
+             total_target_mins = VALUES(total_target_mins),
+             total_actual_mins = VALUES(total_actual_mins),
+             total_idle_mins = VALUES(total_idle_mins),
+             button_status = VALUES(button_status),
+             updated_at = CURRENT_TIMESTAMP`,
+          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
         );
       }
     }
@@ -300,10 +317,27 @@ exports.getLiveMachineStatus = async (req, res, next) => {
 exports.getSummaryByMachineAndDate = async (req, res, next) => {
   try {
     const { machineId, date } = req.params;
+    logger.info(`Fetching summary for machine: ${machineId}, date: ${date}`);
+    
     const [rows] = await db.query(`
-      SELECT * FROM machine_centre_summary
+      SELECT 
+        machine_id,
+        prod_date,
+        SUM(total_output_pairs) as total_output_pairs,
+        SUM(total_target_mins) as total_target_mins,
+        SUM(total_actual_mins) as total_actual_mins,
+        SUM(total_idle_mins) as total_idle_mins,
+        avg_efficiency_percent,
+        cum_avg_time
+      FROM machine_centre_summary
       WHERE machine_id = ? AND prod_date = ?
+      GROUP BY machine_id, prod_date, avg_efficiency_percent, cum_avg_time
     `, [machineId, date]);
+
+    logger.info(`Found ${rows.length} summary records`);
+    if (rows.length > 0) {
+      logger.info(`Summary data: ${JSON.stringify(rows[0])}`);
+    }
 
     if (rows.length === 0) {
       return res.json({ success: true, data: null });

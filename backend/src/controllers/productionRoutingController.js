@@ -5,7 +5,11 @@ class ProductionRoutingController {
   // Get all production routings with details
   async getAll(req, res) {
     try {
-      const [rows] = await db.execute(`
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const offset = (page - 1) * limit;
+
+      const [rows] = await db.query(`
         SELECT 
           prh.*,
           c.name as customer_name,
@@ -20,9 +24,22 @@ class ProductionRoutingController {
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
         ORDER BY prh.created_on DESC
+        LIMIT ${limit} OFFSET ${offset}
       `);
+
+      const [countResult] = await db.query('SELECT COUNT(*) as total FROM production_routing_header');
+      const total = countResult[0].total;
       
-      res.json({ success: true, data: rows });
+      res.json({ 
+        success: true, 
+        data: rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      });
     } catch (error) {
       logger.error('Error getting production routings:', error);
       res.status(500).json({ success: false, error: error.message });

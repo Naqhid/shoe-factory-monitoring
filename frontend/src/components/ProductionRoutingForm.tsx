@@ -3,6 +3,7 @@ import { Plus, Trash2, Save, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Pagination } from './Pagination';
 
 interface MasterOption {
   id: number;
@@ -43,6 +44,9 @@ export const ProductionRoutingForm: React.FC = () => {
   const [refreshing, setRefreshing] = React.useState(false);
   const hasFetched = React.useRef(false);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(10);
+  const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
 
   const [headerData, setHeaderData] = React.useState<HeaderData>({
     customer_id: '',
@@ -70,15 +74,26 @@ export const ProductionRoutingForm: React.FC = () => {
     fetchMasters();
   }, []);
 
+  React.useEffect(() => {
+    if (hasFetched.current) {
+      fetchRoutings();
+    }
+  }, [currentPage, itemsPerPage]);
+
   const fetchRoutings = async () => {
     setRefreshing(true);
     try {
       const [res] = await Promise.all([
-        fetch(`${API_BASE}/api/production-routing`),
+        fetch(`${API_BASE}/api/production-routing?page=${currentPage}&limit=${itemsPerPage}`),
         new Promise(resolve => setTimeout(resolve, 500))
       ]);
       const result = await res.json();
-      if (result.success) setRoutings(result.data);
+      if (result.success) {
+        setRoutings(result.data);
+        if (result.pagination) {
+          setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
+        }
+      }
     } catch (error) {
       console.error('Error fetching routings:', error);
     } finally {
@@ -298,6 +313,17 @@ export const ProductionRoutingForm: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(newLimit) => {
+            setItemsPerPage(newLimit);
+            setCurrentPage(1);
+          }}
+        />
       </div>
 
       {showModal && (

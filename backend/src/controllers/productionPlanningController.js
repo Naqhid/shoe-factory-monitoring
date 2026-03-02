@@ -5,7 +5,11 @@ class ProductionPlanningController {
   // Get all production plans
   async getAll(req, res) {
     try {
-      const [rows] = await db.execute(`
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const offset = (page - 1) * limit;
+
+      const [rows] = await db.query(`
         SELECT 
           pp.*,
           s.name as style_name,
@@ -22,9 +26,22 @@ class ProductionPlanningController {
         LEFT JOIN colors col ON pp.color_id = col.id
         LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
         ORDER BY pp.plan_date DESC
+        LIMIT ${limit} OFFSET ${offset}
       `);
 
-      res.json({ success: true, data: rows });
+      const [countResult] = await db.query('SELECT COUNT(*) as total FROM production_plan');
+      const total = countResult[0].total;
+
+      res.json({ 
+        success: true, 
+        data: rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      });
     } catch (error) {
       logger.error('Error getting production plans:', error);
       res.status(500).json({ success: false, error: error.message });

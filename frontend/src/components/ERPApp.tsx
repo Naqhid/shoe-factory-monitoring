@@ -29,43 +29,7 @@ const masterConfigs = {
 
 export const ERPApp: React.FC = () => {
   const [activeMenu, setActiveMenu] = React.useState('customers');
-  const [records, setRecords] = React.useState<MasterRecord[]>([]);
-  const [loading, setLoading] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
-
-
-  const fetchRecords = async (table: string) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/masters/${table}`);
-      const result = await response.json();
-      if (result.success) {
-        setRecords(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching records:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  React.useEffect(() => {
-    const config = masterConfigs[activeMenu as keyof typeof masterConfigs];
-    if (config && config.key !== 'users' && config.key !== 'employees') {
-      fetchRecords(config.table);
-    }
-  }, [activeMenu]);
-
-  const handleMenuClick = (menu: string) => {
-    setActiveMenu(menu);
-  };
-
-  const handleRefresh = () => {
-    const config = masterConfigs[activeMenu as keyof typeof masterConfigs];
-    if (config && config.key !== 'users' && config.key !== 'employees') {
-      fetchRecords(config.table);
-    }
-  };
 
   const currentConfig = masterConfigs[activeMenu as keyof typeof masterConfigs];
 
@@ -78,12 +42,7 @@ export const ERPApp: React.FC = () => {
       />
 
       <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-600">Loading...</span>
-          </div>
-        ) : currentConfig ? (
+        {currentConfig ? (
           currentConfig.key === 'users' ? (
             <UsersMasterForm />
           ) : currentConfig.key === 'employees' ? (
@@ -92,8 +51,6 @@ export const ERPApp: React.FC = () => {
             <MasterForm
               title={currentConfig.title}
               table={currentConfig.table}
-              records={records}
-              onRefresh={handleRefresh}
             />
           )
         ) : (

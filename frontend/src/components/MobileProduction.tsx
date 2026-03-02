@@ -101,8 +101,10 @@ export const MobileProduction: React.FC = () => {
     const fetchSummaryData = async (machineId: string) => {
         setLoadingSummary(true);
         try {
-            const today = new Date().toISOString().split('T')[0];
-            const response = await fetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${today}`);
+            // Use local date instead of UTC
+            const today = new Date();
+            const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const response = await fetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}`);
             const result = await response.json();
             if (result.success && result.data) {
                 setTotalOutputToday(result.data.total_output_pairs || 0);
@@ -122,7 +124,7 @@ export const MobileProduction: React.FC = () => {
         if (productionData?.machine_id) {
             fetchSummaryData(productionData.machine_id);
         }
-    }, [productionData?.output_pairs, productionData?.machine_id]);
+    }, [productionData?.machine_id]);
 
     // Session Initialization and Polling
     useEffect(() => {
@@ -177,6 +179,8 @@ export const MobileProduction: React.FC = () => {
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
                         setActualTimeCounter(unfinishedRecord.actual_time * 60);
+                        // Fetch summary data immediately after setting production data
+                        await fetchSummaryData(urlMachineId);
                         toast.success('Loaded existing session');
                     } else {
                         // Create new session - use optimized endpoint
@@ -216,6 +220,8 @@ export const MobileProduction: React.FC = () => {
                             is_paused: false
                         };
                         setProductionData(defaultData);
+                        // Fetch summary data immediately after setting production data
+                        await fetchSummaryData(urlMachineId);
                         toast.success('Ready to start production');
                     }
                         })(),
@@ -436,6 +442,8 @@ export const MobileProduction: React.FC = () => {
             const result = await response.json();
             if (result.success) {
                 setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
+                // Refresh summary data after finish
+                await fetchSummaryData(productionData.machine_id);
                 toast.success('Production finished - Click RESET for next cycle');
             }
         } catch (error) {

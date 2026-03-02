@@ -3,6 +3,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
+import { Pagination } from './Pagination';
 
 interface MasterOption {
   id: number;
@@ -57,21 +58,33 @@ export const ProductionPlanningForm: React.FC = () => {
   const [refreshing, setRefreshing] = React.useState(false);
   const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(10);
+  const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
 
   React.useEffect(() => {
     fetchPlans();
     fetchMasters();
   }, []);
 
+  React.useEffect(() => {
+    fetchPlans();
+  }, [currentPage, itemsPerPage]);
+
   const fetchPlans = async () => {
     setRefreshing(true);
     try {
       const [res] = await Promise.all([
-        fetch(`${API_BASE}/api/production-planning`),
+        fetch(`${API_BASE}/api/production-planning?page=${currentPage}&limit=${itemsPerPage}`),
         new Promise(resolve => setTimeout(resolve, 500))
       ]);
       const result = await res.json();
-      if (result.success) setPlans(result.data);
+      if (result.success) {
+        setPlans(result.data);
+        if (result.pagination) {
+          setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
+        }
+      }
     } catch (error) {
       console.error('Error fetching plans:', error);
     } finally {
@@ -358,6 +371,17 @@ export const ProductionPlanningForm: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(newLimit) => {
+            setItemsPerPage(newLimit);
+            setCurrentPage(1);
+          }}
+        />
       </div>
 
       {showModal && (

@@ -6,35 +6,56 @@ class MasterController {
   async getAll(req, res) {
     try {
       const { table } = req.params;
-      let rows;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const offset = (page - 1) * limit;
+      
+      let rows, countResult;
 
       if (table === 'machine_centres') {
-        [rows] = await db.execute(
+        [rows] = await db.query(
           `SELECT mc.*, wc.name as work_centre_name 
            FROM ${table} mc 
            LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
-           ORDER BY mc.code`
+           ORDER BY mc.code
+           LIMIT ${limit} OFFSET ${offset}`
         );
+        [countResult] = await db.query(`SELECT COUNT(*) as total FROM ${table}`);
       } else if (table === 'users') {
-        [rows] = await db.execute(
+        [rows] = await db.query(
           `SELECT u.*, wc.code as work_centre_code, wc.name as work_centre_name 
            FROM users u 
            LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
-           ORDER BY u.code`
+           ORDER BY u.code
+           LIMIT ${limit} OFFSET ${offset}`
         );
+        [countResult] = await db.query(`SELECT COUNT(*) as total FROM users`);
       } else if (table === 'employees') {
-        [rows] = await db.execute(
+        [rows] = await db.query(
           `SELECT e.*, wc.name as work_centre_name, mc.name as machine_centre_name 
            FROM employees e 
            LEFT JOIN work_centres wc ON e.work_centre_id = wc.id 
            LEFT JOIN machine_centres mc ON e.machine_centre_id = mc.id 
-           ORDER BY e.code`
+           ORDER BY e.code
+           LIMIT ${limit} OFFSET ${offset}`
         );
+        [countResult] = await db.query(`SELECT COUNT(*) as total FROM employees`);
       } else {
-        [rows] = await db.execute(`SELECT * FROM ${table} ORDER BY code`);
+        [rows] = await db.query(`SELECT * FROM ${table} ORDER BY code LIMIT ${limit} OFFSET ${offset}`);
+        [countResult] = await db.query(`SELECT COUNT(*) as total FROM ${table}`);
       }
 
-      res.json({ success: true, data: rows });
+      const total = countResult[0].total;
+      res.json({ 
+        success: true, 
+        data: rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      });
     } catch (error) {
       logger.error(`Error getting ${req.params.table}:`, error);
       res.status(500).json({ success: false, error: error.message });
