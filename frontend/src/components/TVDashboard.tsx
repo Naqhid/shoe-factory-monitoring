@@ -9,8 +9,8 @@ export const TVDashboard: React.FC = () => {
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [loading, setLoading] = useState(true);
+    const [progress, setProgress] = useState(0);
 
-    // Fetch work centres on mount
     useEffect(() => {
         const fetchWorkCentres = async () => {
             try {
@@ -26,7 +26,6 @@ export const TVDashboard: React.FC = () => {
         fetchWorkCentres();
     }, []);
 
-    // Fetch dashboard data for current work centre
     useEffect(() => {
         if (workCentres.length === 0) return;
 
@@ -47,20 +46,26 @@ export const TVDashboard: React.FC = () => {
         };
 
         fetchDashboard();
-        const interval = setInterval(fetchDashboard, 10000); // Refresh every 10 seconds
+        const interval = setInterval(fetchDashboard, 10000);
         return () => clearInterval(interval);
     }, [workCentres, currentIndex]);
 
-    // Rotate work centres every 1 minute
     useEffect(() => {
         if (workCentres.length <= 1) return;
+        setProgress(0);
         const interval = setInterval(() => {
             setCurrentIndex((prev) => (prev + 1) % workCentres.length);
-        }, 60000); // 1 minute
+            setProgress(0);
+        }, 60000);
         return () => clearInterval(interval);
     }, [workCentres]);
 
-    // Update current time every second
+    useEffect(() => {
+        if (workCentres.length <= 1) return;
+        const interval = setInterval(() => setProgress((prev) => Math.min(prev + 0.167, 100)), 100);
+        return () => clearInterval(interval);
+    }, [currentIndex, workCentres]);
+
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(interval);
@@ -76,96 +81,117 @@ export const TVDashboard: React.FC = () => {
 
     const { topSection, middleSection, lowerSection } = dashboardData;
 
-    // Prepare hourly chart data
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
         output: item.output || 0
     }));
 
     return (
-        <div className="min-h-screen p-3 sm:p-6">
-            {/* Top Section */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
-                    <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white">{topSection.workCentreName}</h1>
-                    <div className="text-left sm:text-right">
-                        <div className="text-white text-lg sm:text-2xl font-semibold">
-                            {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </div>
-                        <div className="text-blue-200 text-base sm:text-xl">
-                            {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </div>
-                    </div>
+        <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-6">
+            <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full blur-3xl animate-pulse" />
+                    <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
                 </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
-                        <Target className="h-8 w-8 sm:h-12 sm:w-12 text-white mx-auto mb-2 sm:mb-3" />
-                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Target</div>
-                        <div className="text-white text-2xl sm:text-4xl font-bold">{topSection.target}</div>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
-                        <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 text-green-400 mx-auto mb-2 sm:mb-3" />
-                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Output</div>
-                        <div className="text-white text-2xl sm:text-4xl font-bold">{topSection.output}</div>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
-                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Output %</div>
-                        <div className={`text-2xl sm:text-4xl font-bold ${topSection.outputPercent >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
-                            {topSection.outputPercent}%
+                <div className="relative z-10">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
+                        <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white drop-shadow-lg">{topSection.workCentreName}</h1>
+                        <div className="text-left sm:text-right bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+                            <div className="text-white text-lg sm:text-2xl font-semibold">
+                                {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </div>
+                            <div className="text-blue-100 text-base sm:text-xl">
+                                {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </div>
                         </div>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center">
-                        <Zap className="h-8 w-8 sm:h-12 sm:w-12 text-yellow-400 mx-auto mb-2 sm:mb-3" />
-                        <div className="text-white/80 text-xs sm:text-sm mb-1 sm:mb-2">Efficiency %</div>
-                        <div className={`text-2xl sm:text-4xl font-bold ${topSection.efficiencyPercent >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
-                            {topSection.efficiencyPercent}%
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
+                        <div className="bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center hover:bg-white/30 transition-all duration-300 shadow-lg">
+                            <Target className="h-8 w-8 sm:h-12 sm:w-12 text-white mx-auto mb-2 sm:mb-3 drop-shadow-md" />
+                            <div className="text-white/90 text-xs sm:text-sm mb-1 sm:mb-2 font-medium">Target</div>
+                            <div className="text-white text-2xl sm:text-4xl font-bold drop-shadow-md">{topSection.target}</div>
                         </div>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl sm:rounded-2xl p-3 sm:p-6 flex items-center justify-center col-span-2 sm:col-span-1">
-                        {topSection.showHappyEmoji ? (
-                            <Smile className="h-16 w-16 sm:h-24 sm:w-24 text-green-400" />
-                        ) : topSection.showMediumEmoji ? (
-                            <Meh className="h-16 w-16 sm:h-24 sm:w-24 text-yellow-400" />
-                        ) : (
-                            <Frown className="h-16 w-16 sm:h-24 sm:w-24 text-red-400" />
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Middle Section */}
-            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6">
-                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 mb-4 sm:mb-6">Line Wise Output</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-blue-200">
-                        <div className="text-blue-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Target</div>
-                        <div className="text-blue-900 text-2xl sm:text-4xl font-bold">{middleSection.target}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-green-200">
-                        <div className="text-green-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output</div>
-                        <div className="text-green-900 text-2xl sm:text-4xl font-bold">{middleSection.output}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-purple-200">
-                        <div className="text-purple-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output %</div>
-                        <div className="text-purple-900 text-2xl sm:text-4xl font-bold">{middleSection.outputPercent}%</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-orange-200">
-                        <div className="text-orange-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Hourly Output</div>
-                        <div className="text-orange-900 text-2xl sm:text-4xl font-bold">{middleSection.hourlyOutput}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-indigo-200 col-span-2 sm:col-span-1">
-                        <div className="text-indigo-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Efficiency %</div>
-                        <div className="text-indigo-900 text-2xl sm:text-4xl font-bold">{middleSection.efficiencyPercent}%</div>
+                        <div className="bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center hover:bg-white/30 transition-all duration-300 shadow-lg">
+                            <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 text-green-300 mx-auto mb-2 sm:mb-3 drop-shadow-md" />
+                            <div className="text-white/90 text-xs sm:text-sm mb-1 sm:mb-2 font-medium">Output</div>
+                            <div className="text-white text-2xl sm:text-4xl font-bold drop-shadow-md">{topSection.output}</div>
+                        </div>
+                        <div className="bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center hover:bg-white/30 transition-all duration-300 shadow-lg">
+                            <div className="text-white/90 text-xs sm:text-sm mb-1 sm:mb-2 font-medium">Output %</div>
+                            <div className={`text-2xl sm:text-4xl font-bold drop-shadow-md ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                                {topSection.outputPercent}%
+                            </div>
+                        </div>
+                        <div className="bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center hover:bg-white/30 transition-all duration-300 shadow-lg">
+                            <Zap className="h-8 w-8 sm:h-12 sm:w-12 text-yellow-300 mx-auto mb-2 sm:mb-3 drop-shadow-md" />
+                            <div className="text-white/90 text-xs sm:text-sm mb-1 sm:mb-2 font-medium">Efficiency %</div>
+                            <div className={`text-2xl sm:text-4xl font-bold drop-shadow-md ${topSection.efficiencyPercent >= 90 ? 'text-green-300' : topSection.efficiencyPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                                {topSection.efficiencyPercent}%
+                            </div>
+                        </div>
+                        <div className="bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 flex items-center justify-center col-span-2 sm:col-span-1 hover:bg-white/30 transition-all duration-300 shadow-lg">
+                            {topSection.showHappyEmoji ? (
+                                <Smile className="h-16 w-16 sm:h-24 sm:w-24 text-green-300 drop-shadow-lg animate-pulse" />
+                            ) : topSection.showMediumEmoji ? (
+                                <Meh className="h-16 w-16 sm:h-24 sm:w-24 text-yellow-300 drop-shadow-lg" />
+                            ) : (
+                                <Frown className="h-16 w-16 sm:h-24 sm:w-24 text-red-300 drop-shadow-lg" />
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Lower Section */}
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6 border border-gray-100 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-100/20 to-transparent rounded-full blur-3xl" />
+                <div className="relative z-10">
+                    {workCentres.length > 1 && (
+                        <div className="mb-3 sm:mb-4">
+                            <div className="text-center mb-2">
+                                <span className="text-sm sm:text-base lg:text-lg font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-full border border-blue-200">
+                                    Line view will change when progress bar ends (Every 1 minute)
+                                </span>
+                            </div>
+                            <div className="w-full mt-6  bg-gray-200 rounded-full h-2.5">
+                                <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
+                            </div>
+                        </div>
+                    )}
+                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-4 sm:mb-6">
+                        <span className="text-blue-600">{middleSection.workCentreName}</span>
+                        <span className="text-gray-800"> - Line Wise Output</span>
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-blue-200 hover:shadow-lg transition-all duration-300">
+                            <div className="text-blue-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Target</div>
+                            <div className="text-blue-900 text-2xl sm:text-4xl font-bold">{middleSection.target}</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-green-200 hover:shadow-lg transition-all duration-300">
+                            <div className="text-green-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output</div>
+                            <div className="text-green-900 text-2xl sm:text-4xl font-bold">{middleSection.output}</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-purple-200 hover:shadow-lg transition-all duration-300">
+                            <div className="text-purple-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output %</div>
+                            <div className="text-purple-900 text-2xl sm:text-4xl font-bold">{middleSection.outputPercent}%</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-orange-200 hover:shadow-lg transition-all duration-300">
+                            <div className="text-orange-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Hourly Output</div>
+                            <div className="text-orange-900 text-2xl sm:text-4xl font-bold">{middleSection.hourlyOutput}</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-indigo-200 col-span-2 sm:col-span-1 hover:shadow-lg transition-all duration-300">
+                            <div className="text-indigo-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Efficiency %</div>
+                            <div className="text-indigo-900 text-2xl sm:text-4xl font-bold">{middleSection.efficiencyPercent}%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* Hourly Output Chart */}
-                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">Hourly Output</h3>
+                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 border border-gray-100 hover:shadow-3xl transition-shadow duration-300">
+                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
+                        <Clock className="h-6 w-6 text-blue-600" />
+                        Hourly Output
+                    </h3>
                     <ResponsiveContainer width="100%" height={250}>
                         <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" />
@@ -177,19 +203,24 @@ export const TVDashboard: React.FC = () => {
                     </ResponsiveContainer>
                 </div>
 
-                {/* Top 3 Bottlenecks */}
-                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">Top 3 Bottleneck Machines</h3>
+                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 border border-gray-100 hover:shadow-3xl transition-shadow duration-300">
+                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
+                        <TrendingUp className="h-6 w-6 text-red-600" />
+                        Top 3 Bottleneck Machines
+                    </h3>
                     {lowerSection.bottlenecks.length > 0 ? (
                         <div className="space-y-3 sm:space-y-4">
                             {lowerSection.bottlenecks.map((item: any, index: number) => (
-                                <div key={index} className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 sm:p-4">
+                                <div key={index} className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 rounded-lg p-3 sm:p-4 hover:shadow-md transition-all duration-300 hover:scale-105">
                                     <div className="flex justify-between items-center gap-2">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-gray-800 font-bold text-sm sm:text-lg truncate">{item.machine_centre_name}</div>
-                                            <div className="text-gray-600 text-xs sm:text-sm truncate">{item.work_centre_name}</div>
+                                        <div className="flex-1 min-w-0 flex items-center gap-2">
+                                            <span className="text-red-600 font-bold text-lg bg-white px-2 py-1 rounded">#{index + 1}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-gray-800 font-bold text-sm sm:text-lg truncate">{item.machine_centre_name}</div>
+                                                <div className="text-gray-600 text-xs sm:text-sm truncate">{item.work_centre_name}</div>
+                                            </div>
                                         </div>
-                                        <div className="text-red-600 text-2xl sm:text-3xl font-bold flex-shrink-0">{item.efficiency}%</div>
+                                        <div className="text-red-600 text-2xl sm:text-3xl font-bold flex-shrink-0 bg-white px-3 py-1 rounded-lg shadow-sm">{item.efficiency}%</div>
                                     </div>
                                 </div>
                             ))}

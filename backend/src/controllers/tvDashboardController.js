@@ -103,7 +103,7 @@ exports.getDashboard = async (req, res) => {
             success: true,
             data: {
                 topSection: {
-                    workCentreName: wcData[0]?.name || 'N/A',
+                    workCentreName: 'Overall Factory',
                     target: Math.round(target),
                     output: Math.round(output),
                     outputPercent: Math.round(outputPercent),
@@ -112,6 +112,7 @@ exports.getDashboard = async (req, res) => {
                     showMediumEmoji: emojiType === 'medium'
                 },
                 middleSection: {
+                    workCentreName: wcData[0]?.name || 'N/A',
                     target: Math.round(wcTarget),
                     output: Math.round(wcOutput),
                     outputPercent: Math.round(wcOutputPercent),
