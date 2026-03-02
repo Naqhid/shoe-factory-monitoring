@@ -27,15 +27,21 @@ exports.getDashboard = async (req, res) => {
             [today]
         );
         const [summaryData] = await pool.query(
-            'SELECT SUM(total_output_pairs) as total_output, AVG(avg_efficiency_percent) as avg_efficiency FROM machine_centre_summary WHERE prod_date = ?',
+            'SELECT SUM(total_output_pairs) as total_output FROM machine_centre_summary WHERE prod_date = ?',
             [today]
         );
+        const [overallEfficiency] = await pool.query(`
+            SELECT 
+                (SUM(total_target_mins) / (SUM(total_actual_mins) + SUM(total_idle_mins))) * 100 AS overall_efficiency_percent
+            FROM machine_centre_summary
+            WHERE prod_date = ?
+        `, [today]);
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
         const target = planningData[0]?.total_target || 0;
         const output = summaryData[0]?.total_output || 0;
         const outputPercent = target > 0 ? (output / target) * 100 : 0;
-        const efficiencyPercent = summaryData[0]?.avg_efficiency || 0;
+        const efficiencyPercent = overallEfficiency[0]?.overall_efficiency_percent || 0;
 
         let emojiType = 'sad';
         if (outputPercent >= 90 && efficiencyPercent >= 90) emojiType = 'happy';
@@ -56,20 +62,21 @@ exports.getDashboard = async (req, res) => {
         const wcOutputPercent = wcTarget > 0 ? (wcOutput / wcTarget) * 100 : 0;
         const wcEfficiency = wcSummaryData[0]?.avg_efficiency || 0;
 
-        // Calculate hourly output based on earliest start_time for the work centre
-        const [startTimeData] = await pool.query(
-            'SELECT MIN(start_time) as earliest_start FROM machine_centre_production WHERE work_centre_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL',
-            [workCentreId, today]
-        );
-        const earliestStart = startTimeData[0]?.earliest_start;
-        let passedHours = 1;
-        if (earliestStart) {
-            const startTime = new Date(earliestStart);
-            const now = new Date();
-            const diffMs = now.getTime() - startTime.getTime();
-            passedHours = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
-        }
-        const hourlyOutput = Math.round(wcOutput / passedHours);
+        // Calculate hourly output based on average hourly output for the work centre
+        const [avgHourlyData] = await pool.query(`
+            SELECT 
+                AVG(hourly_output) AS avg_hourly_output
+            FROM (
+                SELECT 
+                    HOUR(created_at) AS hr,
+                    SUM(output_pairs) AS hourly_output
+                FROM machine_centre_production
+                WHERE DATE(created_at) = ?
+                AND work_centre_id = ?
+                GROUP BY HOUR(created_at)
+            ) AS hourly_data
+        `, [today, workCentreId]);
+        const hourlyOutput = Math.round(avgHourlyData[0]?.avg_hourly_output || 0);
 
         // Lower Section - Hourly output graph (based on updated_at)
         const [hourlyData] = await pool.query(`
@@ -103,7 +110,7 @@ exports.getDashboard = async (req, res) => {
             success: true,
             data: {
                 topSection: {
-                    workCentreName: 'Overall Factory',
+                    workCentreName: 'Overall Performance',
                     target: Math.round(target),
                     output: Math.round(output),
                     outputPercent: Math.round(outputPercent),

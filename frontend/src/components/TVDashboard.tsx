@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smile, Frown, Meh, TrendingUp, Target, Clock, Zap } from 'lucide-react';
+import { Smile, Frown, Meh, TrendingUp, Target, Clock, Zap, Activity } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../services/api';
 
@@ -117,6 +117,7 @@ export const TVDashboard: React.FC = () => {
                             <div className="text-white text-2xl sm:text-4xl font-bold drop-shadow-md">{topSection.output}</div>
                         </div>
                         <div className="bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center hover:bg-white/30 transition-all duration-300 shadow-lg">
+                            <Activity className="h-8 w-8 sm:h-12 sm:w-12 text-purple-300 mx-auto mb-2 sm:mb-3 drop-shadow-md" />
                             <div className="text-white/90 text-xs sm:text-sm mb-1 sm:mb-2 font-medium">Output %</div>
                             <div className={`text-2xl sm:text-4xl font-bold drop-shadow-md ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {topSection.outputPercent}%
@@ -147,19 +148,13 @@ export const TVDashboard: React.FC = () => {
                 <div className="relative z-10">
                     {workCentres.length > 1 && (
                         <div className="mb-3 sm:mb-4">
-                            <div className="text-center mb-2">
-                                <span className="text-sm sm:text-base lg:text-lg font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-full border border-blue-200">
-                                    Line view will change when progress bar ends (Every 1 minute)
-                                </span>
-                            </div>
-                            <div className="w-full mt-6  bg-gray-200 rounded-full h-2.5">
+                            <div className="w-full bg-gray-200 rounded-full h-2.5">
                                 <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
                             </div>
                         </div>
                     )}
                     <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-4 sm:mb-6">
                         <span className="text-blue-600">{middleSection.workCentreName}</span>
-                        <span className="text-gray-800"> - Line Wise Output</span>
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
                         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-blue-200 hover:shadow-lg transition-all duration-300">
