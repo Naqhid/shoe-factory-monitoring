@@ -3341,3 +3341,47 @@
 {"level":"info","message":"GET /api/mobile-session/latest-active/MAC-002 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-01T19:28:16.134Z"}
 {"level":"info","message":"GET /api/mobile-session/latest-active/MAC-002 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-01T19:28:18.141Z"}
 {"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-01T19:28:34.457Z"}
+{"level":"info","message":"HTTPS enabled for backend","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:35.214Z"}
+{"level":"info","message":"Server started on port 3001 (HTTPS) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:35.253Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:35.261Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:35.273Z"}
+{"level":"info","message":"POST /api/login from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:42.130Z"}
+{"level":"info","message":"Login attempt for: user","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:42.132Z"}
+{"level":"info","message":"Login query took 168ms","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:42.300Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:42.369Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:42.392Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:42.413Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:42.578Z"}
+{"level":"info","message":"GET /api/production-planning from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:51.778Z"}
+{"level":"info","message":"GET /api/masters/styles from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:51.800Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:51.808Z"}
+{"level":"info","message":"GET /api/production-planning from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:51.943Z"}
+{"level":"info","message":"GET /api/masters/styles from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:51.948Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:51.983Z"}
+{"level":"info","message":"GET /api/production-planning/null from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:55.533Z"}
+{"level":"info","message":"GET /api/production-planning/null from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:53:59.099Z"}
+{"level":"info","message":"GET /api/production-planning/null from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:54:01.333Z"}
+{"level":"info","message":"GET /api/production-planning/null from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:54:20.810Z"}
+{"level":"info","message":"GET /api/production-planning from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:56:15.033Z"}
+{"level":"info","message":"GET /api/masters/styles from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:56:15.091Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:56:15.105Z"}
+{"level":"info","message":"GET /api/production-planning/1 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:56:30.852Z"}
+{"level":"info","message":"PUT /api/production-planning/1 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:02.604Z"}
+{"level":"info","message":"GET /api/production-planning from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:02.760Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:10.609Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:10.842Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:10.863Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:10.940Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:20.892Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:30.892Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:41.492Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:57:51.602Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:58:00.900Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:58:11.441Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:58:11.591Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:58:21.501Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:58:31.505Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:58:41.495Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:58:51.495Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-02 from 172.23.176.1 | Origin: https://172.23.176.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:59:01.514Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-02T08:59:08.794Z"}

@@ -23,7 +23,7 @@ exports.getDashboard = async (req, res) => {
 
         // Top Section - Overall metrics (all work centres)
         const [planningData] = await pool.query(
-            'SELECT SUM(target_pairs_per_tray) as total_target FROM production_plan WHERE plan_date = ?',
+            'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE plan_date = ?',
             [today]
         );
         const [summaryData] = await pool.query(
@@ -46,7 +46,7 @@ exports.getDashboard = async (req, res) => {
 
         // Middle Section - Line wise output (filtered by work centre)
         const [wcPlanningData] = await pool.query(
-            'SELECT SUM(target_pairs_per_tray) as target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
+            'SELECT SUM(total_target_per_day) as target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
             [today, workCentreId]
         );
         const [wcSummaryData] = await pool.query(

@@ -152,7 +152,7 @@ export const ProductionPlanningForm: React.FC = () => {
 
   const handleEdit = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/api/production-planning/${deleteId}`);
+      const res = await fetch(`${API_BASE}/api/production-planning/${id}`);
       const result = await res.json();
       if (result.success) {
         const plan = result.data;
