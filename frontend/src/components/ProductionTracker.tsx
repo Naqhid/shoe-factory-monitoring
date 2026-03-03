@@ -141,7 +141,7 @@ export const ProductionTracker: React.FC = () => {
               <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
                 <Users className="h-5 w-5 text-purple-600" />
                 <span className="text-2xl font-bold text-purple-600">
-                  {middleSection.present || 0} / {middleSection.target_employees || 10}
+                  {middleSection?.present || 0} / {middleSection?.target_employees || 0}
                 </span>
                 <span className="text-sm text-gray-600">Present / Target</span>
               </div>

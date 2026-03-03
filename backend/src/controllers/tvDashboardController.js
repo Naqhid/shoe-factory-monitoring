@@ -62,6 +62,21 @@ exports.getDashboard = async (req, res) => {
         const wcOutputPercent = wcTarget > 0 ? (wcOutput / wcTarget) * 100 : 0;
         const wcEfficiency = wcSummaryData[0]?.avg_efficiency || 0;
 
+        // Attendance calculation
+        const [attendanceTarget] = await pool.query(`
+            SELECT COALESCE(SUM(prl.manpower), 0) as target_employees
+            FROM production_plan pp
+            JOIN production_routing_header prh ON pp.style_id = prh.style_id
+            JOIN production_routing_lines prl ON prh.id = prl.routing_header_id
+            WHERE DATE(pp.plan_date) = DATE(?) AND pp.work_centre_id = ?
+        `, [today, workCentreId]);
+
+        const [attendancePresent] = await pool.query(`
+            SELECT COUNT(DISTINCT emp_id) as present_employees
+            FROM machine_centre_summary
+            WHERE DATE(prod_date) = DATE(?) AND work_centre_id = ? AND emp_id IS NOT NULL AND emp_id != ''
+        `, [today, workCentreId]);
+
         // Calculate hourly output based on average hourly output for the work centre
         const [avgHourlyData] = await pool.query(`
             SELECT 
@@ -124,7 +139,9 @@ exports.getDashboard = async (req, res) => {
                     output: Math.round(wcOutput),
                     outputPercent: Math.round(wcOutputPercent),
                     hourlyOutput: hourlyOutput,
-                    efficiencyPercent: Math.round(wcEfficiency)
+                    efficiencyPercent: Math.round(wcEfficiency),
+                    present: Math.round(attendancePresent[0]?.present_employees || 0),
+                    target_employees: Math.round(attendanceTarget[0]?.target_employees || 0)
                 },
                 lowerSection: {
                     hourlyData: hourlyData,
