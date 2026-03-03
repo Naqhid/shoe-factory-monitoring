@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Smile, Frown, Meh, TrendingUp, Target, Clock, Zap, Activity } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../services/api';
+import { HourlyOutputChart } from './HourlyOutputChart';
 
 export const TVDashboard: React.FC = () => {
     const [workCentres, setWorkCentres] = useState<any[]>([]);
@@ -80,6 +80,7 @@ export const TVDashboard: React.FC = () => {
     }
 
     const { topSection, middleSection, lowerSection } = dashboardData;
+    const currentWorkCentreId = workCentres[currentIndex]?.id;
 
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
@@ -181,22 +182,8 @@ export const TVDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 border border-gray-100 hover:shadow-3xl transition-shadow duration-300">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
-                        <Clock className="h-6 w-6 text-blue-600" />
-                        Hourly Output
-                    </h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <LineChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="hour" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="output" stroke="#3b82f6" strokeWidth={3} dot={{ r: 6 }} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
+            <div className="space-y-4 sm:space-y-6">
+                <HourlyOutputChart workCentreId={currentWorkCentreId} />
 
                 <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 border border-gray-100 hover:shadow-3xl transition-shadow duration-300">
                     <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">

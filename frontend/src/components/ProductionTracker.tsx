@@ -1,51 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, TrendingDown, Users, AlertCircle, Clock, RefreshCw } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE } from '../services/api';
+import { HourlyOutputChart } from './HourlyOutputChart';
 
-interface DashboardSummary {
-  actual_pairs: number;
-  target_pairs: number;
-  efficiency: number;
-  present_employees: number;
-  target_employees: number;
-  status: 'on-track' | 'moderate' | 'low';
-  yesterday_efficiency: number;
-  week_efficiency: number;
-}
 
-interface Workstation {
-  station_code: string;
-  station_name: string;
-  actual_pairs: number;
-  target_pairs: number;
-  efficiency: number;
-}
-
-interface Stoppage {
-  stoppage_reason: string;
-  total_minutes: number;
-  percentage: number;
-}
 
 export const ProductionTracker: React.FC = () => {
   const [selectedLine, setSelectedLine] = useState('all');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const [selectedDate, setSelectedDate] = useState(today.toISOString().split('T')[0]);
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [workCentres, setWorkCentres] = useState<any[]>([]);
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [hourlyData, setHourlyData] = useState<any[]>([]);
-  const [workstations, setWorkstations] = useState<Workstation[]>([]);
-  const [stoppages, setStoppages] = useState<Stoppage[]>([]);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
-  // Load work centres
   useEffect(() => {
     const loadWorkCentres = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/masters/work_centres`);
+        const response = await fetch(`${API_BASE}/api/tv-dashboard/work-centres`);
         const result = await response.json();
         if (result.success) {
           setWorkCentres(result.data);
@@ -55,37 +34,22 @@ export const ProductionTracker: React.FC = () => {
       }
     };
     loadWorkCentres();
-  }, [API_BASE]);
+  }, []);
 
   const [error, setError] = useState<string | null>(null);
 
-  // Load dashboard data
   const loadDashboardData = async () => {
-    if (!summary) setLoading(true);
+    if (!dashboardData) setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        date: selectedDate,
-        ...(selectedLine !== 'all' && { workCentreId: selectedLine })
-      });
-
-      const responses = await Promise.all([
-        fetch(`${API_BASE}/api/tracker/summary?${params}`),
-        fetch(`${API_BASE}/api/tracker/hourly?${params}`),
-        fetch(`${API_BASE}/api/tracker/workstations?${params}`),
-        fetch(`${API_BASE}/api/tracker/stoppages?${params}`)
-      ]);
-
-      const results = await Promise.all(responses.map(r => r.json()));
-
-      const [summaryData, hourlyDataRes, workstationsData, stoppagesData] = results;
-
-      if (summaryData.success) setSummary(summaryData.data);
-      if (hourlyDataRes.success) setHourlyData(hourlyDataRes.data);
-      if (workstationsData.success) setWorkstations(workstationsData.data);
-      if (stoppagesData.success) setStoppages(stoppagesData.data);
-
-      if (!summaryData.success) setError(summaryData.error || 'Failed to load summary');
+      const workCentreId = selectedLine !== 'all' ? selectedLine : (workCentres[0]?.id || 1);
+      const res = await fetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`);
+      const result = await res.json();
+      if (result.success) {
+        setDashboardData(result.data);
+      } else {
+        setError(result.error || 'Failed to load data');
+      }
     } catch (error: any) {
       console.error('Failed to load dashboard data:', error);
       setError(error.message || 'Connection error');
@@ -96,51 +60,40 @@ export const ProductionTracker: React.FC = () => {
   };
 
   useEffect(() => {
-    loadDashboardData();
-    // Auto-refresh every 2 minutes
-    const interval = setInterval(loadDashboardData, 120000);
+    if (workCentres.length > 0) {
+      loadDashboardData();
+      const interval = setInterval(loadDashboardData, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [selectedDate, selectedLine, workCentres]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
-  }, [selectedDate, selectedLine]);
+  }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'on-track': return 'bg-green-500';
-      case 'moderate': return 'bg-orange-500';
-      case 'low': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
-  };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'on-track': return '🟢 On-Track';
-      case 'moderate': return '🟠 Moderate';
-      case 'low': return '🔴 Low';
-      default: return 'Unknown';
-    }
-  };
 
-  if (error && !summary) {
+  if (error && !dashboardData) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-md p-8 max-w-sm w-full text-center">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Oops!</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Data</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={loadDashboardData}
-            className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700"
           >
-            <RefreshCw className="h-4 w-4" /> Retry
+            Retry
           </button>
         </div>
       </div>
     );
   }
 
-  if (loading && !summary) {
+  if (loading && !dashboardData) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading dashboard...</p>
@@ -149,15 +102,18 @@ export const ProductionTracker: React.FC = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-100 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Production Tracker</h1>
+  if (!dashboardData) return null;
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Line Selector */}
+  const { topSection, middleSection, lowerSection } = dashboardData;
+  const currentWorkCentreId = selectedLine !== 'all' ? parseInt(selectedLine) : (workCentres[0]?.id || 1);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header with filters */}
+        <div className="bg-white rounded-2xl shadow-md p-4 mb-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Production Tracker</h1>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Line</label>
               <select
@@ -171,8 +127,6 @@ export const ProductionTracker: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            {/* Date Picker */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
               <input
@@ -182,146 +136,123 @@ export const ProductionTracker: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Attendance</label>
+              <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                <Users className="h-5 w-5 text-purple-600" />
+                <span className="text-2xl font-bold text-purple-600">
+                  {middleSection.present || 0} / {middleSection.target_employees || 10}
+                </span>
+                <span className="text-sm text-gray-600">Present / Target</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Output Summary */}
-        {summary && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              {/* Output */}
-              <div className="bg-white rounded-lg shadow-md p-4">
-                <h3 className="text-sm font-medium text-gray-600 mb-2">Output</h3>
-                <div className="text-3xl font-bold text-blue-600">
-                  {summary.actual_pairs} <span className="text-lg text-gray-400">/ {summary.target_pairs}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Actual / Target Pairs</p>
-              </div>
-
-              {/* Efficiency */}
-              <div className="bg-white rounded-lg shadow-md p-4">
-                <h3 className="text-sm font-medium text-gray-600 mb-2">Efficiency</h3>
-                <div className="text-3xl font-bold text-green-600">{summary.efficiency}%</div>
-                <p className="text-xs text-gray-500 mt-1">Overall Performance</p>
-              </div>
-
-              {/* Attendance */}
-              <div className="bg-white rounded-lg shadow-md p-4">
-                <h3 className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Attendance
-                </h3>
-                <div className="text-3xl font-bold text-purple-600">
-                  {summary.present_employees} <span className="text-lg text-gray-400">/ {summary.target_employees}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Present / Target</p>
+        {/* Top Section - Main Metrics */}
+        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl shadow-2xl p-6 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 text-center">
+              <Target className="h-10 w-10 text-white mx-auto mb-2" />
+              <div className="text-white/90 text-sm mb-1">Target</div>
+              <div className="text-white text-3xl font-bold">{topSection.target}</div>
+            </div>
+            <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 text-center">
+              <TrendingUp className="h-10 w-10 text-green-300 mx-auto mb-2" />
+              <div className="text-white/90 text-sm mb-1">Output</div>
+              <div className="text-white text-3xl font-bold">{topSection.output}</div>
+            </div>
+            <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 text-center">
+              <Activity className="h-10 w-10 text-purple-300 mx-auto mb-2" />
+              <div className="text-white/90 text-sm mb-1">Output %</div>
+              <div className={`text-3xl font-bold ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                {topSection.outputPercent}%
               </div>
             </div>
-
-            {/* Status Indicator */}
-            <div className={`${getStatusColor(summary.status)} rounded-lg shadow-md p-4 mb-4 text-white`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold">{getStatusText(summary.status)}</h3>
-                  <p className="text-sm opacity-90">Current Production Status</p>
-                </div>
-                <AlertCircle className="h-8 w-8" />
+            <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 text-center">
+              <Zap className="h-10 w-10 text-yellow-300 mx-auto mb-2" />
+              <div className="text-white/90 text-sm mb-1">Efficiency %</div>
+              <div className={`text-3xl font-bold ${topSection.efficiencyPercent >= 90 ? 'text-green-300' : topSection.efficiencyPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                {topSection.efficiencyPercent}%
               </div>
             </div>
-
-            {/* Hourly Performance Chart */}
-            <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Hourly Performance</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={hourlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="hour" label={{ value: 'Hour', position: 'insideBottom', offset: -5 }} />
-                  <YAxis label={{ value: 'Pairs', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Bar dataKey="pairs" fill="#3B82F6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Workstation Performance */}
-            <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Lowest Efficiency Workstations</h3>
-              {workstations.length > 0 ? (
-                <div className="space-y-3">
-                  {workstations.map((ws, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-semibold text-gray-900">{ws.station_code} - {ws.station_name}</p>
-                        <p className="text-sm text-gray-600">Pairs: {ws.actual_pairs}/{ws.target_pairs}</p>
-                      </div>
-                      <div className={`text-2xl font-bold ${ws.efficiency < 70 ? 'text-red-600' : ws.efficiency < 90 ? 'text-orange-600' : 'text-green-600'}`}>
-                        {ws.efficiency}%
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 flex items-center justify-center">
+              {topSection.showHappyEmoji ? (
+                <Smile className="h-20 w-20 text-green-300 animate-pulse" />
+              ) : topSection.showMediumEmoji ? (
+                <Meh className="h-20 w-20 text-yellow-300" />
               ) : (
-                <p className="text-gray-500 text-center py-4">No workstation data available</p>
+                <Frown className="h-20 w-20 text-red-300" />
               )}
             </div>
+          </div>
+        </div>
 
-            {/* Top Stoppage Reasons */}
-            <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Top Stoppage Reasons
-              </h3>
-              {stoppages.length > 0 ? (
-                <div className="space-y-3">
-                  {stoppages.map((stop, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{stop.stoppage_reason}</p>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                          <div
-                            className="bg-red-500 h-2 rounded-full"
-                            style={{ width: `${stop.percentage}%` }}
-                          ></div>
+        {/* Middle Section */}
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mb-4">
+          <h2 className="text-2xl font-bold mb-4">
+            <span className="text-blue-600">{middleSection.workCentreName}</span>
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center border-2 border-blue-200">
+              <div className="text-blue-700 text-sm font-semibold mb-1">Target</div>
+              <div className="text-blue-900 text-3xl font-bold">{middleSection.target}</div>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center border-2 border-green-200">
+              <div className="text-green-700 text-sm font-semibold mb-1">Output</div>
+              <div className="text-green-900 text-3xl font-bold">{middleSection.output}</div>
+            </div>
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center border-2 border-purple-200">
+              <div className="text-purple-700 text-sm font-semibold mb-1">Output %</div>
+              <div className="text-purple-900 text-3xl font-bold">{middleSection.outputPercent}%</div>
+            </div>
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 text-center border-2 border-orange-200">
+              <div className="text-orange-700 text-sm font-semibold mb-1">Hourly Output</div>
+              <div className="text-orange-900 text-3xl font-bold">{middleSection.hourlyOutput}</div>
+            </div>
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4 text-center border-2 border-indigo-200">
+              <div className="text-indigo-700 text-sm font-semibold mb-1">Efficiency %</div>
+              <div className="text-indigo-900 text-3xl font-bold">{middleSection.efficiencyPercent}%</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Section - Charts */}
+        <div className="space-y-4">
+          <HourlyOutputChart workCentreId={currentWorkCentreId} />
+
+          <div className="bg-white rounded-2xl shadow-2xl p-6">
+            <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <TrendingUp className="h-6 w-6 text-red-600" />
+              Top 3 Bottleneck Machines
+            </h3>
+            {lowerSection.bottlenecks.length > 0 ? (
+              <div className="space-y-4">
+                {lowerSection.bottlenecks.map((item: any, index: number) => (
+                  <div key={index} className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="text-red-600 font-bold text-lg bg-white px-2 py-1 rounded">#{index + 1}</span>
+                        <div className="flex-1">
+                          <div className="text-gray-800 font-bold text-lg">{item.machine_centre_name}</div>
+                          <div className="text-gray-600 text-sm">{item.work_centre_name}</div>
                         </div>
                       </div>
-                      <div className="ml-4 text-right">
-                        <p className="text-xl font-bold text-red-600">{stop.total_minutes} mins</p>
-                        <p className="text-sm text-gray-600">{stop.percentage}%</p>
-                      </div>
+                      <div className="text-red-600 text-3xl font-bold bg-white px-3 py-1 rounded-lg">{item.efficiency}%</div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-4">No stoppage data available</p>
-              )}
-            </div>
-
-            {/* Summary Footer */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-md p-4 text-white">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-sm opacity-90">Today</p>
-                  <p className="text-2xl font-bold">{summary.efficiency}%</p>
-                </div>
-                <div>
-                  <p className="text-sm opacity-90">Yesterday</p>
-                  <p className="text-2xl font-bold flex items-center justify-center gap-1">
-                    {summary.yesterday_efficiency}%
-                    {summary.yesterday_efficiency < summary.efficiency ? (
-                      <TrendingUp className="h-4 w-4 text-green-300" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4 text-red-300" />
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm opacity-90">Last Week</p>
-                  <p className="text-2xl font-bold">{summary.week_efficiency}%</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-gray-400">
+                <div className="text-center">
+                  <Smile className="h-16 w-16 mx-auto mb-4 text-green-400" />
+                  <div className="text-xl">No Bottlenecks - All machines performing well!</div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
