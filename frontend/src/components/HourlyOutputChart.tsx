@@ -73,7 +73,7 @@ export const HourlyOutputChart: React.FC<Props> = ({ workCentreId }) => {
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
-      <h2 className="text-3xl font-bold mb-6 text-gray-800">Hourly Output</h2>
+      <h2 className="text-3xl font-bold mb-6 text-blue-600">Hourly Output</h2>
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={data.hourlyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />

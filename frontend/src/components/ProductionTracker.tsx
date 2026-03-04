@@ -7,7 +7,6 @@ import { HourlyOutputChart } from './HourlyOutputChart';
 
 
 export const ProductionTracker: React.FC = () => {
-  const [selectedLine, setSelectedLine] = useState('all');
   const getTodayDate = () => {
     const today = new Date();
     const year = today.getFullYear();
@@ -17,6 +16,7 @@ export const ProductionTracker: React.FC = () => {
   };
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [workCentres, setWorkCentres] = useState<any[]>([]);
+  const [selectedLine, setSelectedLine] = useState('');
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -26,8 +26,9 @@ export const ProductionTracker: React.FC = () => {
       try {
         const response = await fetch(`${API_BASE}/api/tv-dashboard/work-centres`);
         const result = await response.json();
-        if (result.success) {
+        if (result.success && result.data.length > 0) {
           setWorkCentres(result.data);
+          setSelectedLine(result.data[0].id.toString());
         }
       } catch (error) {
         console.error('Failed to load work centres:', error);
@@ -42,7 +43,7 @@ export const ProductionTracker: React.FC = () => {
     if (!dashboardData) setLoading(true);
     setError(null);
     try {
-      const workCentreId = selectedLine !== 'all' ? selectedLine : (workCentres[0]?.id || 1);
+      const workCentreId = selectedLine || workCentres[0]?.id || 1;
       const res = await fetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`);
       const result = await res.json();
       if (result.success) {
@@ -60,7 +61,7 @@ export const ProductionTracker: React.FC = () => {
   };
 
   useEffect(() => {
-    if (workCentres.length > 0) {
+    if (workCentres.length > 0 && selectedLine) {
       loadDashboardData();
       const interval = setInterval(loadDashboardData, 10000);
       return () => clearInterval(interval);
@@ -105,7 +106,7 @@ export const ProductionTracker: React.FC = () => {
   if (!dashboardData) return null;
 
   const { topSection, middleSection, lowerSection } = dashboardData;
-  const currentWorkCentreId = selectedLine !== 'all' ? parseInt(selectedLine) : (workCentres[0]?.id || 1);
+  const currentWorkCentreId = parseInt(selectedLine) || workCentres[0]?.id || 1;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-6">
@@ -121,7 +122,6 @@ export const ProductionTracker: React.FC = () => {
                 onChange={(e) => setSelectedLine(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">All</option>
                 {workCentres.map((wc) => (
                   <option key={wc.id} value={wc.id}>{wc.name}</option>
                 ))}
@@ -149,8 +149,9 @@ export const ProductionTracker: React.FC = () => {
           </div>
         </div>
 
-        {/* Top Section - Main Metrics */}
+        {/* Top Section - Overall Performance */}
         <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl shadow-2xl p-6 mb-4">
+          <h2 className="text-white text-2xl font-bold mb-4">Overall Performance</h2>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 text-center">
               <Target className="h-10 w-10 text-white mx-auto mb-2" />
@@ -188,6 +189,48 @@ export const ProductionTracker: React.FC = () => {
           </div>
         </div>
 
+        {/* LINE PERFORMANCE Section */}
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mb-4">
+          <h3 className="text-2xl font-bold text-blue-600 mb-4">LINE PERFORMANCE</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b-2 border-gray-200">
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">LINE</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET / HR</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT / HR</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lowerSection.linePerformance?.map((line: any, index: number) => {
+                  const getStatusColor = (eff: number) => {
+                    if (eff >= 95) return 'bg-green-500';
+                    if (eff >= 85) return 'bg-yellow-500';
+                    return 'bg-red-500';
+                  };
+                  return (
+                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target_per_hour}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output_per_hour}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.efficiency}%</td>
+                      <td className="px-4 py-4">
+                        <div className="flex justify-center gap-2">
+                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Middle Section */}
         <div className="bg-white rounded-2xl shadow-2xl p-6 mb-4">
           <h2 className="text-2xl font-bold mb-4">
@@ -222,7 +265,7 @@ export const ProductionTracker: React.FC = () => {
           <HourlyOutputChart workCentreId={currentWorkCentreId} />
 
           <div className="bg-white rounded-2xl shadow-2xl p-6">
-            <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <h3 className="text-2xl font-bold text-red-600 mb-4 flex items-center gap-2">
               <TrendingUp className="h-6 w-6 text-red-600" />
               Top 3 Bottleneck Machines
             </h3>

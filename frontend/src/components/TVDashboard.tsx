@@ -144,6 +144,48 @@ export const TVDashboard: React.FC = () => {
                 </div>
             </div>
 
+            {/* LINE PERFORMANCE Section */}
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6 border border-gray-100">
+                <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600 mb-4 sm:mb-6">LINE PERFORMANCE</h3>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                        <thead>
+                            <tr className="border-b-2 border-gray-200">
+                                <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">LINE</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET / HR</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT / HR</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {lowerSection.linePerformance?.map((line: any, index: number) => {
+                                const getStatusColor = (eff: number) => {
+                                    if (eff >= 95) return 'bg-green-500';
+                                    if (eff >= 85) return 'bg-yellow-500';
+                                    return 'bg-red-500';
+                                };
+                                return (
+                                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                                        <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target_per_hour}</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output_per_hour}</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.efficiency}%</td>
+                                        <td className="px-4 py-4">
+                                            <div className="flex justify-center gap-2">
+                                                <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                                                <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                                                <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6 border border-gray-100 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-100/20 to-transparent rounded-full blur-3xl" />
                 <div className="relative z-10">
@@ -186,7 +228,7 @@ export const TVDashboard: React.FC = () => {
                 <HourlyOutputChart workCentreId={currentWorkCentreId} />
 
                 <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 border border-gray-100 hover:shadow-3xl transition-shadow duration-300">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
+                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-red-600 mb-4 sm:mb-6 flex items-center gap-2">
                         <TrendingUp className="h-6 w-6 text-red-600" />
                         Top 3 Bottleneck Machines
                     </h3>

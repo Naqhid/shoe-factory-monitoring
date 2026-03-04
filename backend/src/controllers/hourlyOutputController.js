@@ -31,14 +31,24 @@ class HourlyOutputController {
         ) as hourly_totals
       `, [workCentreId, today]);
 
-      // Format hourly data with AM/PM
-      const formattedData = hourlyData.map(row => ({
-        hour: formatHour(row.hour),
-        production: parseInt(row.production) || 0
-      }));
+      // Create a map of existing data
+      const dataMap = {};
+      hourlyData.forEach(row => {
+        dataMap[row.hour] = parseInt(row.production) || 0;
+      });
+
+      // Generate all hours from 8 AM to current hour
+      const currentHour = new Date().getHours();
+      const formattedData = [];
+      for (let hour = 8; hour <= currentHour; hour++) {
+        formattedData.push({
+          hour: formatHour(hour),
+          production: dataMap[hour] || 0
+        });
+      }
 
       const average = avgResult[0]?.average ? parseFloat(avgResult[0].average).toFixed(1) : 0;
-      const target = 95; // Fixed target value
+      const target = 95;
 
       res.json({
         success: true,

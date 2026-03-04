@@ -121,6 +121,20 @@ exports.getDashboard = async (req, res) => {
             LIMIT 3
         `, [workCentreId, today]);
 
+        // Line Performance - All work centres
+        const [linePerformance] = await pool.query(`
+            SELECT 
+                wc.name as line_name,
+                COALESCE(SUM(pp.total_target_per_day), 0) as target_per_day,
+                COALESCE(SUM(mcs.total_output_pairs), 0) as output_per_day,
+                COALESCE(AVG(mcs.avg_efficiency_percent), 0) as efficiency
+            FROM work_centres wc
+            LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
+            LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
+            GROUP BY wc.id, wc.name
+            ORDER BY wc.id
+        `, [today, today]);
+
         res.json({
             success: true,
             data: {
@@ -145,7 +159,13 @@ exports.getDashboard = async (req, res) => {
                 },
                 lowerSection: {
                     hourlyData: hourlyData,
-                    bottlenecks: bottlenecks
+                    bottlenecks: bottlenecks,
+                    linePerformance: linePerformance.map(line => ({
+                        line_name: line.line_name,
+                        target_per_hour: Math.round((line.target_per_day || 0) / 8),
+                        output_per_hour: Math.round((line.output_per_day || 0) / 8),
+                        efficiency: Math.round(line.efficiency || 0)
+                    }))
                 }
             }
         });
