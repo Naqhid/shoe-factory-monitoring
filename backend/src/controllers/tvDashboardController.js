@@ -73,13 +73,9 @@ exports.getDashboard = async (req, res) => {
 
         const [attendancePresent] = await pool.query(`
             SELECT COUNT(DISTINCT emp_id) as present_employees
-            FROM machine_centre_production
-            WHERE DATE(prod_date) = DATE(?) AND work_centre_id = ? AND emp_id IS NOT NULL AND emp_id != ''
+            FROM mobile_sessions
+            WHERE DATE(activated_at) = DATE(?) AND work_centre_id = ? AND status = 'active'
         `, [today, workCentreId]);
-
-        console.log(`Attendance Debug - Work Centre: ${workCentreId}, Date: ${today}`);
-        console.log(`Present employees: ${attendancePresent[0]?.present_employees}`);
-        console.log(`Target employees: ${attendanceTarget[0]?.target_employees}`);
 
         // Calculate hourly output based on average hourly output for the work centre
         const [avgHourlyData] = await pool.query(`
