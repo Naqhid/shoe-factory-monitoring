@@ -1,0 +1,6 @@
+# Cloudflare Tunnel credentials (keep secret!)
+credentials.json
+*.json
+
+# Cloudflared executable
+cloudflared.exe

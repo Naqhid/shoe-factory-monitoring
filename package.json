@@ -1,8 +1,16 @@
 {
   "scripts": {
-    "dev": "vite --host 0.0.0.0"
+    "dev": "vite --host 0.0.0.0",
+    "tunnel:login": "cloudflared\\cloudflared.exe tunnel login",
+    "tunnel:create": "cloudflared\\cloudflared.exe tunnel create shoe-factory",
+    "tunnel:route": "cloudflared\\cloudflared.exe tunnel route dns shoe-factory shoe-factory.yourdomain.com",
+    "tunnel": "cloudflared\\cloudflared.exe tunnel --config cloudflared\\config.yml run shoe-factory",
+    "dev:tunnel": "concurrently \"npm run dev\" \"cd backend && npm start\" \"npm run tunnel\""
   },
   "dependencies": {
     "react-qr-scanner": "^1.0.0-alpha.11"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

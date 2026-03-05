@@ -1,0 +1,18 @@
+tunnel: shoe-factory
+credentials-file: ./cloudflared/credentials.json
+
+ingress:
+  # Frontend
+  - hostname: shoe-factory.yourdomain.com
+    service: https://localhost:3000
+    originServerName: localhost
+    noTLSVerify: true
+  
+  # Backend API
+  - hostname: api.shoe-factory.yourdomain.com
+    service: https://localhost:3001
+    originServerName: localhost
+    noTLSVerify: true
+  
+  # Catch-all rule
+  - service: http_status:404

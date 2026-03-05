@@ -126,11 +126,15 @@ exports.getDashboard = async (req, res) => {
             SELECT 
                 wc.name as line_name,
                 COALESCE(SUM(pp.total_target_per_day), 0) as target_per_day,
-                COALESCE(SUM(mcs.total_output_pairs), 0) as output_per_day,
-                COALESCE(AVG(mcs.avg_efficiency_percent), 0) as efficiency
+                COALESCE(SUM(mcp.output_pairs), 0) as output_per_day,
+                CASE 
+                    WHEN SUM(mcp.target_mins) > 0 THEN 
+                        ROUND((SUM(mcp.actual_time) / SUM(mcp.target_mins)) * 100, 0)
+                    ELSE 0 
+                END as efficiency
             FROM work_centres wc
             LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
-            LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
+            LEFT JOIN machine_centre_production mcp ON wc.id = mcp.work_centre_id AND DATE(mcp.prod_date) = DATE(?)
             GROUP BY wc.id, wc.name
             ORDER BY wc.id
         `, [today, today]);
