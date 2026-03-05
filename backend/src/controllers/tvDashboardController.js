@@ -77,6 +77,10 @@ exports.getDashboard = async (req, res) => {
             WHERE DATE(prod_date) = DATE(?) AND work_centre_id = ? AND emp_id IS NOT NULL AND emp_id != ''
         `, [today, workCentreId]);
 
+        console.log(`Attendance Debug - Work Centre: ${workCentreId}, Date: ${today}`);
+        console.log(`Present employees: ${attendancePresent[0]?.present_employees}`);
+        console.log(`Target employees: ${attendanceTarget[0]?.target_employees}`);
+
         // Calculate hourly output based on average hourly output for the work centre
         const [avgHourlyData] = await pool.query(`
             SELECT 
