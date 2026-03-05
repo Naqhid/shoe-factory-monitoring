@@ -77,7 +77,7 @@ const mobileSessionController = {
 
             // 1. Resolve Employee - treat emp_id as employee code
             const [empRows] = await pool.execute(
-                'SELECT id FROM employees WHERE code = ?',
+                'SELECT id, code FROM employees WHERE code = ?',
                 [emp_id]
             );
             
@@ -85,7 +85,7 @@ const mobileSessionController = {
                 return res.status(400).json({ success: false, message: `Employee Code ${emp_id} not found` });
             }
             
-            const finalEmpId = empRows[0].id;
+            const finalEmpId = empRows[0].code; // Use employee code, not numeric ID
 
             // 2. Resolve Machine
             let finalWorkCentreId = work_centre_id;
@@ -113,7 +113,7 @@ const mobileSessionController = {
                  emp_code = VALUES(emp_code),
                  status = 'active', 
                  activated_at = NOW()`,
-                [finalSessionId, machine_id, finalWorkCentreId || 1, finalEmpId, emp_id]
+                [finalSessionId, machine_id, finalWorkCentreId || 1, empRows[0].id, emp_id]
             );
 
             res.json({

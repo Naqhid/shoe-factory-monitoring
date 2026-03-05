@@ -10,7 +10,7 @@ exports.getAll = async (req, res, next) => {
              e.name as employee_name
       FROM machine_centre_production pd
       LEFT JOIN work_centres wc ON pd.work_centre_id = wc.id
-      LEFT JOIN employees e ON pd.emp_id = e.id
+      LEFT JOIN employees e ON pd.emp_id = e.code
       ORDER BY pd.prod_date DESC, pd.created_at DESC
     `);
     res.json({ success: true, data: rows });
@@ -30,7 +30,7 @@ exports.getById = async (req, res, next) => {
              e.name as employee_name
       FROM machine_centre_production pd
       LEFT JOIN work_centres wc ON pd.work_centre_id = wc.id
-      LEFT JOIN employees e ON pd.emp_id = e.id
+      LEFT JOIN employees e ON pd.emp_id = e.code
       WHERE pd.id = ?
     `, [id]);
 
@@ -55,7 +55,7 @@ exports.getByMachineAndDate = async (req, res, next) => {
              e.name as employee_name
       FROM machine_centre_production pd
       LEFT JOIN work_centres wc ON pd.work_centre_id = wc.id
-      LEFT JOIN employees e ON pd.emp_id = e.id
+      LEFT JOIN employees e ON pd.emp_id = e.code
       WHERE pd.machine_id = ? AND pd.prod_date = ?
       ORDER BY pd.created_at DESC
     `, [machineId, date]);
@@ -249,7 +249,7 @@ exports.getPivotData = async (req, res, next) => {
              e.name as employee_name
       FROM machine_centre_summary pd
       LEFT JOIN work_centres wc ON pd.work_centre_id = wc.id
-      LEFT JOIN employees e ON pd.emp_id = e.id
+      LEFT JOIN employees e ON pd.emp_id = e.code
       ORDER BY pd.prod_date DESC, pd.created_at DESC
     `);
     res.json({ success: true, data: rows });
@@ -297,7 +297,7 @@ exports.getLiveMachineStatus = async (req, res, next) => {
     const [rows] = await db.query(`
       SELECT pd.*, e.name as emp_name, e.code as emp_code
       FROM machine_centre_production pd
-      JOIN employees e ON pd.emp_id = e.id
+      JOIN employees e ON pd.emp_id = e.code
       WHERE pd.machine_id = ? AND pd.prod_date = ?
       ORDER BY pd.created_at DESC LIMIT 1
     `, [machineId, today]);
@@ -419,7 +419,7 @@ exports.getInitData = async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        employee: { id: employee.id, code: employee.code, name: employee.name },
+        employee: { id: employee.code, code: employee.code, name: employee.name }, // Use code as ID for consistency
         machine: { machine_id: machine.machine_id, name: machine.name, work_centre_id: workCentreId },
         workCentre: { id: workCentreId, name: workCentre.name },
         targetMins,
