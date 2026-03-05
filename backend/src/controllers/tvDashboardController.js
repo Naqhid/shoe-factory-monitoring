@@ -73,7 +73,7 @@ exports.getDashboard = async (req, res) => {
 
         const [attendancePresent] = await pool.query(`
             SELECT COUNT(DISTINCT emp_id) as present_employees
-            FROM machine_centre_summary
+            FROM machine_centre_production
             WHERE DATE(prod_date) = DATE(?) AND work_centre_id = ? AND emp_id IS NOT NULL AND emp_id != ''
         `, [today, workCentreId]);
 
