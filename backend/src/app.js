@@ -188,24 +188,11 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-const certPath = path.join(__dirname, '../../frontend/cert');
-const keyFile = path.join(certPath, 'key.pem');
-const certFile = path.join(certPath, 'cert.pem');
-
-const useHttps = fs.existsSync(keyFile) && fs.existsSync(certFile);
+const useHttps = false; // Force HTTP
 
 let server;
-if (useHttps) {
-  const httpsOptions = {
-    key: fs.readFileSync(keyFile),
-    cert: fs.readFileSync(certFile)
-  };
-  server = https.createServer(httpsOptions, app);
-  logger.info('HTTPS enabled for backend');
-} else {
-  server = http.createServer(app);
-  logger.info('Running on HTTP (HTTPS certificates not found)');
-}
+server = http.createServer(app);
+logger.info('Running on HTTP (HTTPS disabled for mobile compatibility)');
 
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server started on port ${PORT} (${useHttps ? 'HTTPS' : 'HTTP'}) and listening on all interfaces`);
