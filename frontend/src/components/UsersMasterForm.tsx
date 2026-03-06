@@ -34,6 +34,7 @@ export const UsersMasterForm: React.FC = () => {
   });
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<UserRecord[]>([]);
+  const [machineCentres, setMachineCentres] = React.useState<any[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(5);
@@ -67,14 +68,29 @@ export const UsersMasterForm: React.FC = () => {
     }
   };
 
+  const fetchMachineCentres = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/masters/machine_centres`);
+      const result = await response.json();
+      if (result.success) {
+        setMachineCentres(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching machine centres:', error);
+    }
+  };
+
   React.useEffect(() => {
     fetchRecords();
     fetchWorkCentres();
+    fetchMachineCentres();
   }, []);
 
   React.useEffect(() => {
     fetchRecords();
   }, [currentPage, itemsPerPage]);
+
+  const filteredMachines = machineCentres;
 
   const resetForm = () => {
     setFormData({ code: '', name: '', email: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '' });
@@ -326,13 +342,18 @@ export const UsersMasterForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Machine ID
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.machine_id}
                   onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g. MAC-001"
-                />
+                >
+                  <option value="">None</option>
+                  {machineCentres.map((machine) => (
+                    <option key={machine.id} value={machine.machine_id}>
+                      {machine.machine_id} - {machine.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex gap-2 pt-4">

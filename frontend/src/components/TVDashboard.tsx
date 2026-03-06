@@ -152,8 +152,9 @@ export const TVDashboard: React.FC = () => {
                         <thead>
                             <tr className="border-b-2 border-gray-200">
                                 <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">LINE</th>
-                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET / HR</th>
-                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT / HR</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT %</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
                             </tr>
@@ -168,12 +169,12 @@ export const TVDashboard: React.FC = () => {
                                 return (
                                     <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                                         <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
-                                        <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target_per_hour}</td>
-                                        <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output_per_hour}</td>
-                                        <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.efficiency}%</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
                                         <td className="px-4 py-4">
                                             <div className="flex justify-center gap-2">
-                                                <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
                                                 <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
                                                 <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
                                             </div>
@@ -186,46 +187,13 @@ export const TVDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6 border border-gray-100 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-100/20 to-transparent rounded-full blur-3xl" />
-                <div className="relative z-10">
-                    {workCentres.length > 1 && (
-                        <div className="mb-3 sm:mb-4">
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
-                            </div>
-                        </div>
-                    )}
-                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-4 sm:mb-6">
-                        <span className="text-blue-600">{middleSection.workCentreName}</span>
-                    </h2>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
-                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-blue-200 hover:shadow-lg transition-all duration-300">
-                            <div className="text-blue-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Target</div>
-                            <div className="text-blue-900 text-2xl sm:text-4xl font-bold">{middleSection.target}</div>
-                        </div>
-                        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-green-200 hover:shadow-lg transition-all duration-300">
-                            <div className="text-green-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output</div>
-                            <div className="text-green-900 text-2xl sm:text-4xl font-bold">{middleSection.output}</div>
-                        </div>
-                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-purple-200 hover:shadow-lg transition-all duration-300">
-                            <div className="text-purple-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Output %</div>
-                            <div className="text-purple-900 text-2xl sm:text-4xl font-bold">{middleSection.outputPercent}%</div>
-                        </div>
-                        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-orange-200 hover:shadow-lg transition-all duration-300">
-                            <div className="text-orange-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Hourly Output</div>
-                            <div className="text-orange-900 text-2xl sm:text-4xl font-bold">{middleSection.hourlyOutput}</div>
-                        </div>
-                        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center border-2 border-indigo-200 col-span-2 sm:col-span-1 hover:shadow-lg transition-all duration-300">
-                            <div className="text-indigo-700 text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Efficiency %</div>
-                            <div className="text-indigo-900 text-2xl sm:text-4xl font-bold">{middleSection.efficiencyPercent}%</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div className="space-y-4 sm:space-y-6">
-                <HourlyOutputChart workCentreId={currentWorkCentreId} />
+                <HourlyOutputChart 
+                    workCentreId={currentWorkCentreId} 
+                    workCentreName={lowerSection.workCentreName}
+                    showProgress={workCentres.length > 1}
+                    progress={progress}
+                />
 
                 <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 border border-gray-100 hover:shadow-3xl transition-shadow duration-300">
                     <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-red-600 mb-4 sm:mb-6 flex items-center gap-2">

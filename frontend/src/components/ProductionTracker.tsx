@@ -197,8 +197,9 @@ export const ProductionTracker: React.FC = () => {
               <thead>
                 <tr className="border-b-2 border-gray-200">
                   <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">LINE</th>
-                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET / HR</th>
-                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT / HR</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT %</th>
                   <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY</th>
                   <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
                 </tr>
@@ -213,12 +214,12 @@ export const ProductionTracker: React.FC = () => {
                   return (
                     <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target_per_hour}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output_per_hour}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.efficiency}%</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
                       <td className="px-4 py-4">
                         <div className="flex justify-center gap-2">
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
                           <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
                           <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
                         </div>
@@ -231,38 +232,14 @@ export const ProductionTracker: React.FC = () => {
           </div>
         </div>
 
-        {/* Middle Section */}
-        <div className="bg-white rounded-2xl shadow-2xl p-6 mb-4">
-          <h2 className="text-2xl font-bold mb-4">
-            <span className="text-blue-600">{middleSection.workCentreName}</span>
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center border-2 border-blue-200">
-              <div className="text-blue-700 text-sm font-semibold mb-1">Target</div>
-              <div className="text-blue-900 text-3xl font-bold">{middleSection.target}</div>
-            </div>
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center border-2 border-green-200">
-              <div className="text-green-700 text-sm font-semibold mb-1">Output</div>
-              <div className="text-green-900 text-3xl font-bold">{middleSection.output}</div>
-            </div>
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center border-2 border-purple-200">
-              <div className="text-purple-700 text-sm font-semibold mb-1">Output %</div>
-              <div className="text-purple-900 text-3xl font-bold">{middleSection.outputPercent}%</div>
-            </div>
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 text-center border-2 border-orange-200">
-              <div className="text-orange-700 text-sm font-semibold mb-1">Hourly Output</div>
-              <div className="text-orange-900 text-3xl font-bold">{middleSection.hourlyOutput}</div>
-            </div>
-            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4 text-center border-2 border-indigo-200">
-              <div className="text-indigo-700 text-sm font-semibold mb-1">Efficiency %</div>
-              <div className="text-indigo-900 text-3xl font-bold">{middleSection.efficiencyPercent}%</div>
-            </div>
-          </div>
-        </div>
-
         {/* Bottom Section - Charts */}
         <div className="space-y-4">
-          <HourlyOutputChart workCentreId={currentWorkCentreId} />
+          <HourlyOutputChart 
+            workCentreId={currentWorkCentreId} 
+            workCentreName={workCentres.find(wc => wc.id == selectedLine)?.name || 'Unknown Line'}
+            showProgress={false}
+            progress={0}
+          />
 
           <div className="bg-white rounded-2xl shadow-2xl p-6">
             <h3 className="text-2xl font-bold text-red-600 mb-4 flex items-center gap-2">

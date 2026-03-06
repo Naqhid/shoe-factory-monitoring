@@ -15,9 +15,17 @@ interface HourlyOutputData {
 
 interface Props {
   workCentreId: number;
+  workCentreName?: string;
+  showProgress?: boolean;
+  progress?: number;
 }
 
-export const HourlyOutputChart: React.FC<Props> = ({ workCentreId }) => {
+export const HourlyOutputChart: React.FC<Props> = ({ 
+  workCentreId, 
+  workCentreName, 
+  showProgress = false, 
+  progress = 0 
+}) => {
   const [data, setData] = useState<HourlyOutputData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -73,7 +81,16 @@ export const HourlyOutputChart: React.FC<Props> = ({ workCentreId }) => {
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
-      <h2 className="text-3xl font-bold mb-6 text-blue-600">Hourly Output</h2>
+      {showProgress && (
+        <div className="mb-3 sm:mb-4">
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
+      <h2 className="text-3xl font-bold mb-6 text-blue-600">
+        {workCentreName ? `${workCentreName} - Hourly Output` : 'Hourly Output'}
+      </h2>
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={data.hourlyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
