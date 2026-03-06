@@ -125,16 +125,17 @@ exports.getDashboard = async (req, res) => {
         const [linePerformance] = await pool.query(`
             SELECT 
                 wc.name as line_name,
-                COALESCE(SUM(pp.total_target_per_day), 0) as target_per_day,
-                COALESCE(SUM(mcp.output_pairs), 0) as output_per_day,
+                COALESCE(SUM(pp.total_target_per_day), 0) as target,
+                COALESCE(SUM(mcs.total_output_pairs), 0) as output,
                 CASE 
-                    WHEN SUM(mcp.target_mins) > 0 THEN 
-                        ROUND((SUM(mcp.actual_time) / SUM(mcp.target_mins)) * 100, 0)
+                    WHEN SUM(pp.total_target_per_day) > 0 THEN 
+                        ROUND((SUM(mcs.total_output_pairs) / SUM(pp.total_target_per_day)) * 100, 0)
                     ELSE 0 
-                END as efficiency
+                END as output_percentage,
+                ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency
             FROM work_centres wc
             LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
-            LEFT JOIN machine_centre_production mcp ON wc.id = mcp.work_centre_id AND DATE(mcp.prod_date) = DATE(?)
+            LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
             GROUP BY wc.id, wc.name
             ORDER BY wc.id
         `, [today, today]);
@@ -166,10 +167,12 @@ exports.getDashboard = async (req, res) => {
                     bottlenecks: bottlenecks,
                     linePerformance: linePerformance.map(line => ({
                         line_name: line.line_name,
-                        target_per_hour: Math.round((line.target_per_day || 0) / 8),
-                        output_per_hour: Math.round((line.output_per_day || 0) / 8),
+                        target: Math.round(line.target || 0),
+                        output: Math.round(line.output || 0),
+                        output_percentage: Math.round(line.output_percentage || 0),
                         efficiency: Math.round(line.efficiency || 0)
-                    }))
+                    })),
+                    workCentreName: wcData[0]?.name || 'N/A'
                 }
             }
         });

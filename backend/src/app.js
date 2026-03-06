@@ -161,6 +161,7 @@ app.get('/api/tracker/summary', productionTrackerController.getSummary);
 app.get('/api/tracker/hourly', productionTrackerController.getHourlyPerformance);
 app.get('/api/tracker/workstations', productionTrackerController.getWorkstationPerformance);
 app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons);
+app.get('/api/tracker/line-performance', productionTrackerController.getLinePerformance);
 
 // Machine Centre routes
 app.post('/api/machine-centre/start', machineCentreController.startProduction);
