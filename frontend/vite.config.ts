@@ -34,10 +34,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
-    https: useHttps ? {
-      key: fs.readFileSync(keyFile),
-      cert: fs.readFileSync(certFile),
-    } : undefined,
+    https: false,
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'react-query'],

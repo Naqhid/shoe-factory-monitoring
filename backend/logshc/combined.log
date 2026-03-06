@@ -7475,3 +7475,8 @@
 {"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-06 from 172.30.208.1 | Origin: https://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-06T09:52:19.438Z"}
 {"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-06 from 172.30.208.1 | Origin: https://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-06T09:52:29.433Z"}
 {"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-06T09:52:43.360Z"}
+{"level":"info","message":"Running on HTTP (HTTPS certificates not found)","service":"shoe-factory-monitoring","timestamp":"2026-03-06T10:24:25.060Z"}
+{"level":"info","message":"Server started on port 3001 (HTTP) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-03-06T10:24:25.129Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-03-06T10:24:25.135Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-03-06T10:24:25.147Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-06T10:26:59.306Z"}
