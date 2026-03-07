@@ -155,7 +155,7 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT %</th>
-                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY %</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
                             </tr>
                         </thead>

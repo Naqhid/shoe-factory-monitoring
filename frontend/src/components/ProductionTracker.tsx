@@ -18,6 +18,7 @@ export const ProductionTracker: React.FC = () => {
   const [workCentres, setWorkCentres] = useState<any[]>([]);
   const [selectedLine, setSelectedLine] = useState('');
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [attendanceData, setAttendanceData] = useState({ present: 0, target: 0 });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -38,6 +39,22 @@ export const ProductionTracker: React.FC = () => {
   }, []);
 
   const [error, setError] = useState<string | null>(null);
+
+  const loadAttendanceData = async () => {
+    try {
+      const workCentreId = selectedLine || workCentres[0]?.id || 1;
+      const response = await fetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`);
+      const result = await response.json();
+      if (result.success) {
+        setAttendanceData({
+          present: result.data.middleSection?.present || 0,
+          target_employees: result.data.middleSection?.target_employees || 0
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load attendance data:', error);
+    }
+  };
 
   const loadDashboardData = async () => {
     if (!dashboardData) setLoading(true);
@@ -63,7 +80,11 @@ export const ProductionTracker: React.FC = () => {
   useEffect(() => {
     if (workCentres.length > 0 && selectedLine) {
       loadDashboardData();
-      const interval = setInterval(loadDashboardData, 10000);
+      loadAttendanceData();
+      const interval = setInterval(() => {
+        loadDashboardData();
+        loadAttendanceData();
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [selectedDate, selectedLine, workCentres]);
@@ -141,7 +162,7 @@ export const ProductionTracker: React.FC = () => {
               <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
                 <Users className="h-5 w-5 text-purple-600" />
                 <span className="text-2xl font-bold text-purple-600">
-                  {middleSection?.present || 0} / {middleSection?.target_employees || 0}
+                  {attendanceData.present} / {attendanceData.target_employees}
                 </span>
                 <span className="text-sm text-gray-600">Present / Target</span>
               </div>
@@ -200,7 +221,7 @@ export const ProductionTracker: React.FC = () => {
                   <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET</th>
                   <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT</th>
                   <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT %</th>
-                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY %</th>
                   <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
                 </tr>
               </thead>
