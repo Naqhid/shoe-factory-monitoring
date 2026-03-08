@@ -88,9 +88,9 @@ exports.create = async (req, res, next) => {
       `INSERT INTO machine_centre_production 
        (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins, 
         start_time, finish_time, idle_start_time, idle_stop_time, button_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
       [prod_date, work_centre_id, machine_id, emp_id, output_pairs !== undefined ? output_pairs : 0, target_mins || 0,
-        start_time, finish_time, idle_start_time, idle_stop_time, button_status || 1]
+        finish_time, idle_start_time, idle_stop_time, button_status || 1]
     );
 
     res.status(201).json({

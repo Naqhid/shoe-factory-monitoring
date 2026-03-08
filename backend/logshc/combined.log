@@ -7564,3 +7564,36 @@
 {"level":"info","message":"GET /api/mobile-session/latest-active/MAC-001 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-07T10:28:27.031Z"}
 {"level":"info","message":"GET /api/mobile-session/latest-active/MAC-001 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-07T10:29:27.032Z"}
 {"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-07T10:29:35.726Z"}
+{"level":"info","message":"Running on HTTP (HTTPS disabled for mobile compatibility)","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:24:24.828Z"}
+{"level":"info","message":"Server started on port 3001 (HTTP) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:24:24.867Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:24:24.873Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:24:24.882Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:17.076Z"}
+{"level":"info","message":"Running on HTTP (HTTPS disabled for mobile compatibility)","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:20.202Z"}
+{"level":"info","message":"Server started on port 3001 (HTTP) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:20.235Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:20.242Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:20.250Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:42.275Z"}
+{"level":"info","message":"Running on HTTP (HTTPS disabled for mobile compatibility)","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:45.436Z"}
+{"level":"info","message":"Server started on port 3001 (HTTP) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:45.469Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:45.477Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:31:45.489Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:32:16.243Z"}
+{"level":"info","message":"Running on HTTP (HTTPS disabled for mobile compatibility)","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:50:50.406Z"}
+{"level":"info","message":"Server started on port 3001 (HTTP) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:50:50.441Z"}
+{"level":"info","message":"Starting file watcher on directory: H:\\Florence-IOT\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:50:50.443Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:50:50.454Z"}
+{"level":"info","message":"POST /api/login from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:10.151Z"}
+{"level":"info","message":"Login attempt for: admin","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:10.154Z"}
+{"level":"info","message":"Login query took 351ms","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:10.505Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:10.577Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:10.601Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:10.611Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:11.011Z"}
+{"level":"info","message":"GET /api/hourly-output/1 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:11.038Z"}
+{"level":"info","message":"GET /api/hourly-output/1 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:11.097Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:20.624Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:30.633Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:40.625Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 172.30.208.1 | Origin: http://172.30.208.1:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:51:50.633Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-08T18:53:43.996Z"}
