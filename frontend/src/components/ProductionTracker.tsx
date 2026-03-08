@@ -19,6 +19,7 @@ export const ProductionTracker: React.FC = () => {
   const [selectedLine, setSelectedLine] = useState('');
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [attendanceData, setAttendanceData] = useState({ present: 0, target: 0 });
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -41,6 +42,7 @@ export const ProductionTracker: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const loadAttendanceData = async () => {
+    setAttendanceLoading(true);
     try {
       const workCentreId = selectedLine || workCentres[0]?.id || 1;
       console.log('Loading attendance for work centre:', workCentreId, 'date:', selectedDate);
@@ -71,6 +73,8 @@ export const ProductionTracker: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load attendance data:', error);
+    } finally {
+      setAttendanceLoading(false);
     }
   };
 
@@ -179,10 +183,19 @@ export const ProductionTracker: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Attendance</label>
               <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
                 <Users className="h-5 w-5 text-purple-600" />
-                <span className="text-2xl font-bold text-purple-600">
-                  {attendanceData.present} / {attendanceData.target_employees}
-                </span>
-                <span className="text-sm text-gray-600">Present / Target</span>
+                {attendanceLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                    <span className="text-sm text-gray-600">Loading...</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-2xl font-bold text-purple-600">
+                      {attendanceData.present} / {attendanceData.target_employees}
+                    </span>
+                    <span className="text-sm text-gray-600">Present / Target</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
