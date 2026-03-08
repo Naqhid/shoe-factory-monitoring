@@ -10,6 +10,13 @@ export const TVDashboard: React.FC = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [loading, setLoading] = useState(true);
     const [progress, setProgress] = useState(0);
+    const [currentDate, setCurrentDate] = useState('');
+
+    useEffect(() => {
+        const now = new Date();
+        const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        setCurrentDate(localDate);
+    }, []);
 
     useEffect(() => {
         const fetchWorkCentres = async () => {
@@ -27,14 +34,12 @@ export const TVDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (workCentres.length === 0) return;
+        if (workCentres.length === 0 || !currentDate) return;
 
         const fetchDashboard = async () => {
             try {
                 const workCentreId = workCentres[currentIndex].id;
-                const now = new Date();
-                const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                const res = await fetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${localDate}`);
+                const res = await fetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`);
                 const result = await res.json();
                 if (result.success) {
                     setDashboardData(result.data);
@@ -48,7 +53,7 @@ export const TVDashboard: React.FC = () => {
         fetchDashboard();
         const interval = setInterval(fetchDashboard, 10000);
         return () => clearInterval(interval);
-    }, [workCentres, currentIndex]);
+    }, [workCentres, currentIndex, currentDate]);
 
     useEffect(() => {
         if (workCentres.length <= 1) return;
@@ -195,6 +200,7 @@ export const TVDashboard: React.FC = () => {
                     workCentreName={lowerSection.workCentreName}
                     showProgress={workCentres.length > 1}
                     progress={progress}
+                    date={currentDate}
                 />
 
                 <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 border border-gray-100 hover:shadow-3xl transition-shadow duration-300">

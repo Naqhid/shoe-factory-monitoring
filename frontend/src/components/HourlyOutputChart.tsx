@@ -18,13 +18,15 @@ interface Props {
   workCentreName?: string;
   showProgress?: boolean;
   progress?: number;
+  date?: string;
 }
 
 export const HourlyOutputChart: React.FC<Props> = ({ 
   workCentreId, 
   workCentreName, 
   showProgress = false, 
-  progress = 0 
+  progress = 0,
+  date
 }) => {
   const [data, setData] = useState<HourlyOutputData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,12 +35,15 @@ export const HourlyOutputChart: React.FC<Props> = ({
     fetchData();
     const interval = setInterval(fetchData, 60000); // Refresh every minute
     return () => clearInterval(interval);
-  }, [workCentreId]);
+  }, [workCentreId, date]);
 
   const fetchData = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/hourly-output/${workCentreId}`);
+      const dateParam = date || new Date().toISOString().split('T')[0];
+      console.log('Fetching hourly data for:', { workCentreId, dateParam });
+      const response = await fetch(`${API_BASE_URL}/api/hourly-output/${workCentreId}?date=${dateParam}`);
       const result = await response.json();
+      console.log('Hourly output API response:', result);
       if (result.success) {
         setData(result.data);
       }
@@ -64,6 +69,46 @@ export const HourlyOutputChart: React.FC<Props> = ({
       </div>
     );
   }
+
+  const CustomTick = ({ x, y, payload }: any) => {
+    const text = payload.value;
+    if (text && text.includes(' - ')) {
+      const [timePart, numberPart] = text.split(' - ');
+      return (
+        <g transform={`translate(${x},${y})`}>
+          <text 
+            x={0} 
+            y={0} 
+            dy={16} 
+            textAnchor="end" 
+            fontSize={14}
+            fontWeight={600}
+            transform="rotate(-45)"
+          >
+            <tspan fill="#3b82f6">{timePart}</tspan>
+            <tspan fill="#dc2626"> - {numberPart}</tspan>
+          </text>
+        </g>
+      );
+    }
+    
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text 
+          x={0} 
+          y={0} 
+          dy={16} 
+          textAnchor="end" 
+          fill="#3b82f6"
+          fontSize={14}
+          fontWeight={600}
+          transform="rotate(-45)"
+        >
+          {text}
+        </text>
+      </g>
+    );
+  };
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -92,17 +137,19 @@ export const HourlyOutputChart: React.FC<Props> = ({
         {workCentreName ? `${workCentreName} - Hourly Output` : 'Hourly Output'}
       </h2>
       <ResponsiveContainer width="100%" height={400}>
-        <LineChart data={data.hourlyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+        <LineChart data={data.hourlyData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
           <XAxis 
             dataKey="hour" 
-            tick={{ fontSize: 16, fontWeight: 600 }}
-            stroke="#666"
+            tick={<CustomTick />}
+            stroke="#3b82f6"
+            height={80}
+            interval={0}
           />
           <YAxis 
-            tick={{ fontSize: 16, fontWeight: 600 }}
-            stroke="#666"
-            label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 16, fontWeight: 600 } }}
+            tick={{ fontSize: 14, fontWeight: 600, fill: '#22c55e' }}
+            stroke="#22c55e"
+            label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 16, fontWeight: 600, fill: '#22c55e' } }}
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend 
@@ -136,9 +183,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             dot={{ fill: '#3b82f6', r: 6 }}
             activeDot={{ r: 8 }}
             name="Hourly Production"
-          >
-            <LabelList dataKey="production" position="top" style={{ fontSize: '12px', fontWeight: 'bold', fill: '#3b82f6' }} />
-          </Line>
+          />
         </LineChart>
       </ResponsiveContainer>
       

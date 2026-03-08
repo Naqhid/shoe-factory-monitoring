@@ -293,6 +293,7 @@ export const ProductionTracker: React.FC = () => {
             workCentreName={workCentres.find(wc => wc.id == selectedLine)?.name || 'Unknown Line'}
             showProgress={false}
             progress={0}
+            date={selectedDate}
           />
 
           <div className="bg-white rounded-2xl shadow-2xl p-6">

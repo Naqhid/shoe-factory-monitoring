@@ -660,7 +660,7 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Metrics Section */}
                     <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
-                        <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Metrics</h2>
+                        <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Status</h2>
                         
                         {/* Progress Bar */}
                         {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (

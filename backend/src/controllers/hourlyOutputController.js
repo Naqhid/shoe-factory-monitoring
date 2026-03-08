@@ -5,19 +5,51 @@ class HourlyOutputController {
   async getHourlyOutput(req, res) {
     try {
       const { workCentreId } = req.params;
-      const today = new Date().toISOString().split('T')[0];
+      const requestedDate = req.query.date || new Date().toISOString().split('T')[0];
+      
+      logger.info(`Fetching hourly output for work centre: ${workCentreId}, date: ${requestedDate}`);
+      
+      // First, check if any data exists for this work centre and date
+      const [checkData] = await db.query(`
+        SELECT COUNT(*) as count, MIN(start_time) as min_start, MAX(finish_time) as max_finish
+        FROM machine_centre_production
+        WHERE work_centre_id = ? AND DATE(prod_date) = ?
+      `, [workCentreId, requestedDate]);
+      
+      logger.info(`Data check result:`, checkData[0]);
 
-      // Get hourly output data
-      const [hourlyData] = await db.query(`
+      // Get hourly output data - use start_time for better hourly distribution
+      let [hourlyData] = await db.query(`
         SELECT 
-          HOUR(created_at) as hour,
+          HOUR(start_time) as hour,
           SUM(output_pairs) as production
         FROM machine_centre_production
         WHERE work_centre_id = ?
-          AND DATE(created_at) = ?
-        GROUP BY HOUR(created_at)
+          AND DATE(prod_date) = ?
+          AND start_time IS NOT NULL
+        GROUP BY HOUR(start_time)
         ORDER BY hour
-      `, [workCentreId, today]);
+      `, [workCentreId, requestedDate]);
+      
+      logger.info(`Found ${hourlyData.length} hourly records:`, hourlyData);
+
+      // If no data found, try with finish_time
+      if (hourlyData.length === 0) {
+        const [altHourlyData] = await db.query(`
+          SELECT 
+            HOUR(finish_time) as hour,
+            SUM(output_pairs) as production
+          FROM machine_centre_production
+          WHERE work_centre_id = ?
+            AND DATE(prod_date) = ?
+            AND finish_time IS NOT NULL
+          GROUP BY HOUR(finish_time)
+          ORDER BY hour
+        `, [workCentreId, requestedDate]);
+        
+        logger.info(`Alternative query found ${altHourlyData.length} records:`, altHourlyData);
+        hourlyData = altHourlyData;
+      }
 
       // Calculate average hourly output
       const [avgResult] = await db.query(`
@@ -26,10 +58,10 @@ class HourlyOutputController {
           SELECT SUM(output_pairs) as hourly_sum
           FROM machine_centre_production
           WHERE work_centre_id = ?
-            AND DATE(created_at) = ?
-          GROUP BY HOUR(created_at)
+            AND DATE(prod_date) = ?
+          GROUP BY HOUR(start_time)
         ) as hourly_totals
-      `, [workCentreId, today]);
+      `, [workCentreId, requestedDate]);
 
       // Create a map of existing data
       const dataMap = {};
@@ -37,15 +69,12 @@ class HourlyOutputController {
         dataMap[row.hour] = parseInt(row.production) || 0;
       });
 
-      // Generate all hours from 8 AM to current hour
-      const currentHour = new Date().getHours();
-      const formattedData = [];
-      for (let hour = 8; hour <= currentHour; hour++) {
-        formattedData.push({
-          hour: formatHour(hour),
-          production: dataMap[hour] || 0
-        });
-      }
+      // Generate hours based on available data, not hardcoded range
+      const availableHours = Object.keys(dataMap).map(h => parseInt(h)).sort((a, b) => a - b);
+      const formattedData = availableHours.map(hour => ({
+        hour: `${formatHour(hour)} - ${dataMap[hour]}`,
+        production: dataMap[hour] || 0
+      }));
 
       const average = avgResult[0]?.average ? parseFloat(avgResult[0].average).toFixed(1) : 0;
       const target = 95;

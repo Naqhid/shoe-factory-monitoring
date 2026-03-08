@@ -295,7 +295,7 @@ export const MachineCentreProduction: React.FC = () => {
 
         {/* Metrics Section */}
         <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
-          <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Metrics</h2>
+          <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Status</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
               <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
