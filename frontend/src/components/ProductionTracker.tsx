@@ -43,9 +43,27 @@ export const ProductionTracker: React.FC = () => {
   const loadAttendanceData = async () => {
     try {
       const workCentreId = selectedLine || workCentres[0]?.id || 1;
+      console.log('Loading attendance for work centre:', workCentreId, 'date:', selectedDate);
+      
+      // Get attendance directly from mobile sessions
+      const attendanceResponse = await fetch(`${API_BASE}/api/mobile-sessions/attendance/${workCentreId}?date=${selectedDate}`);
+      if (attendanceResponse.ok) {
+        const attendanceResult = await attendanceResponse.json();
+        console.log('Direct attendance result:', attendanceResult);
+        if (attendanceResult.success) {
+          setAttendanceData({
+            present: attendanceResult.data.present || 0,
+            target_employees: attendanceResult.data.target || 3
+          });
+          return;
+        }
+      }
+      
+      // Fallback to TV dashboard API
       const response = await fetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`);
       const result = await response.json();
       if (result.success) {
+        console.log('Attendance API response:', result.data.middleSection);
         setAttendanceData({
           present: result.data.middleSection?.present || 0,
           target_employees: result.data.middleSection?.target_employees || 0

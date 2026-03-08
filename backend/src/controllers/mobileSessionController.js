@@ -218,6 +218,33 @@ const mobileSessionController = {
         } catch (error) {
             next(error);
         }
+    },
+
+    // 7. Get attendance for work centre
+    getAttendance: async (req, res, next) => {
+        try {
+            const { workCentreId } = req.params;
+            const { date } = req.query;
+            const targetDate = date || new Date().toISOString().split('T')[0];
+
+            const [rows] = await pool.execute(
+                `SELECT COUNT(DISTINCT emp_id) as present
+                 FROM mobile_sessions
+                 WHERE work_centre_id = ? AND status = 'active'
+                 AND DATE(activated_at) = DATE(?)`,
+                [workCentreId, targetDate]
+            );
+
+            res.json({
+                success: true,
+                data: {
+                    present: rows[0]?.present || 0,
+                    target: 3 // Default target
+                }
+            });
+        } catch (error) {
+            next(error);
+        }
     }
 };
 

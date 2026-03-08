@@ -137,6 +137,7 @@ app.post('/api/mobile-session/activate', mobileSessionController.activateSession
 app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.findActiveSession);
 app.get('/api/mobile-session/waiting-for/:machine_id', mobileSessionController.findWaitingSession);
 app.get('/api/mobile-session/latest-active/:machineId?', mobileSessionController.getLatestActiveSession);
+app.get('/api/mobile-sessions/attendance/:workCentreId', mobileSessionController.getAttendance);
 app.get('/api/mobile-session/test', (req, res) => res.json({ test: 'working' }));
 app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionStatus);
 
