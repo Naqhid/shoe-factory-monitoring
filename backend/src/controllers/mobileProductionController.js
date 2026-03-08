@@ -162,8 +162,8 @@ exports.updateStatus = async (req, res, next) => {
     }
     // If starting/resuming, update start_time and idle_stop_time
     else if (button_status === 1) {
-      // Only set start_time if it's NULL (first start)
-      updateQuery += ', start_time = COALESCE(start_time, NOW()), idle_stop_time = NOW()';
+      // Always set start_time when starting (button_status = 1)
+      updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
     }
     // If pausing (button_status === 3), update idle_start_time
     else if (button_status === 3) {

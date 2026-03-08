@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
 import { API_BASE_URL } from '../services/api';
 
 interface HourlyData {
@@ -136,7 +136,9 @@ export const HourlyOutputChart: React.FC<Props> = ({
             dot={{ fill: '#3b82f6', r: 6 }}
             activeDot={{ r: 8 }}
             name="Hourly Production"
-          />
+          >
+            <LabelList dataKey="production" position="top" style={{ fontSize: '12px', fontWeight: 'bold', fill: '#3b82f6' }} />
+          </Line>
         </LineChart>
       </ResponsiveContainer>
       

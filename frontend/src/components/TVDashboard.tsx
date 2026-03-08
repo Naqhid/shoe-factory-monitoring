@@ -156,6 +156,7 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT %</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY %</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">WIP</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
                             </tr>
                         </thead>
@@ -173,6 +174,7 @@ export const TVDashboard: React.FC = () => {
                                         <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{line.wip || 0}</td>
                                         <td className="px-4 py-4">
                                             <div className="flex justify-center gap-2">
                                                 <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>

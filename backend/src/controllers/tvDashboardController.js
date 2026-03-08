@@ -110,16 +110,18 @@ exports.getDashboard = async (req, res) => {
             SELECT 
                 mc.name as machine_centre_name,
                 wc.name as work_centre_name,
-                ROUND(mcs.avg_efficiency_percent, 1) as efficiency
+                ROUND(mcs.avg_efficiency_percent, 1) as efficiency,
+                GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(mcs.total_output_pairs, 0)) as wip
             FROM machine_centre_summary mcs
             JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
             JOIN work_centres wc ON mcs.work_centre_id = wc.id
+            LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
             WHERE mcs.work_centre_id = ?
             AND mcs.prod_date = ?
             AND mcs.avg_efficiency_percent < 70
             ORDER BY mcs.avg_efficiency_percent ASC
             LIMIT 3
-        `, [workCentreId, today]);
+        `, [today, workCentreId, today]);
 
         // Line Performance - All work centres
         const [linePerformance] = await pool.query(`
@@ -132,7 +134,8 @@ exports.getDashboard = async (req, res) => {
                         ROUND((SUM(mcs.total_output_pairs) / SUM(pp.total_target_per_day)) * 100, 0)
                     ELSE 0 
                 END as output_percentage,
-                ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency
+                ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency,
+                GREATEST(0, COALESCE(SUM(pp.total_target_per_day), 0) - COALESCE(SUM(mcs.total_output_pairs), 0)) as wip
             FROM work_centres wc
             LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
             LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
@@ -170,7 +173,8 @@ exports.getDashboard = async (req, res) => {
                         target: Math.round(line.target || 0),
                         output: Math.round(line.output || 0),
                         output_percentage: Math.round(line.output_percentage || 0),
-                        efficiency: Math.round(line.efficiency || 0)
+                        efficiency: Math.round(line.efficiency || 0),
+                        wip: Math.round(line.wip || 0)
                     })),
                     workCentreName: wcData[0]?.name || 'N/A'
                 }

@@ -154,7 +154,7 @@ class ProductionTrackerController {
           mcs.total_output_pairs as actual_pairs,
           pp.total_target_per_day as target_pairs,
           ROUND(mcs.avg_efficiency_percent) as efficiency,
-          COALESCE(pp.total_target_per_day - mcs.total_output_pairs, 0) as wip
+          GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(mcs.total_output_pairs, 0)) as wip
         FROM machine_centre_summary mcs
         JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
         LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
@@ -232,7 +232,8 @@ class ProductionTrackerController {
               ROUND((SUM(mcs.total_output_pairs) / SUM(pp.total_target_per_day)) * 100, 0)
             ELSE 0 
           END as output_percentage,
-          ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency
+          ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency,
+          GREATEST(0, COALESCE(SUM(pp.total_target_per_day), 0) - COALESCE(SUM(mcs.total_output_pairs), 0)) as wip
         FROM work_centres wc
         LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
         LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
