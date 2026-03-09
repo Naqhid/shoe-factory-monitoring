@@ -34,6 +34,7 @@ const setupMenus = [
   { key: 'users', label: 'Users', icon: User },
   { key: 'forms_master', label: 'Forms Master', icon: FileText },
   { key: 'user_rights', label: 'User Rights', icon: Shield },
+  { key: 'roles', label: 'Roles', icon: Shield },
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {

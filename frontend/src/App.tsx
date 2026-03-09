@@ -24,6 +24,7 @@ import { ProductionTracker } from './components/ProductionTracker';
 import { UsersMasterForm } from './components/UsersMasterForm';
 import { FormsMasterForm } from './components/FormsMasterForm';
 import { UserRightsForm } from './components/UserRightsForm';
+import { RolesMasterForm } from './components/RolesMasterForm';
 import { TVDashboard } from './components/TVDashboard';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { API_BASE_URL } from './services/api';
@@ -191,6 +192,7 @@ function App() {
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';
   const isUserRights = activeMenu === 'user_rights';
+  const isRoles = activeMenu === 'roles';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
@@ -262,6 +264,8 @@ function App() {
           <FormsMasterForm />
         ) : isUserRights ? (
           <UserRightsForm />
+        ) : isRoles ? (
+          <RolesMasterForm />
         ) : isMasterView ? (
           loading ? (
             <div className="flex items-center justify-center h-full">
