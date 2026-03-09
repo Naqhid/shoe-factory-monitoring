@@ -685,7 +685,7 @@ export const MobileProduction: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
                                 <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{(productionData.target_mins || 0).toFixed(1)}</p>
+                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{Number(productionData.target_mins || 0).toFixed(1)}</p>
                                 <p className="text-xs text-blue-600 mt-1">mins</p>
                             </div>
                             <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm relative">
@@ -737,20 +737,20 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Control Buttons */}
                     <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                        <div className="flex gap-3 md:gap-4">
                             {productionData.button_status === 3 || productionData.button_status === 2 ? (
                                 <>
                                     <button
                                         onClick={handleStart}
                                         disabled={loading || productionData.button_status === 2}
-                                        className="md:col-span-2 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />START</>}
                                     </button>
                                     <button
                                         onClick={handleReset}
                                         disabled={loading}
-                                        className="bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         <RotateCcw className="h-5 w-5" />RESET
                                     </button>
@@ -760,21 +760,21 @@ export const MobileProduction: React.FC = () => {
                                     <button
                                         onClick={handlePause}
                                         disabled={loading}
-                                        className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Pause className="h-5 w-5" />PAUSE</>}
                                     </button>
                                     <button
                                         onClick={handleFinish}
                                         disabled={loading}
-                                        className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" />FINISH</>}
                                     </button>
                                     <button
                                         onClick={handleReset}
                                         disabled={loading}
-                                        className="bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         <RotateCcw className="h-5 w-5" />RESET
                                     </button>
@@ -784,14 +784,14 @@ export const MobileProduction: React.FC = () => {
                                     <button
                                         onClick={handleStart}
                                         disabled={loading}
-                                        className="md:col-span-2 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />RESUME</>}
                                     </button>
                                     <button
                                         onClick={handleReset}
                                         disabled={loading}
-                                        className="bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         <RotateCcw className="h-5 w-5" />RESET
                                     </button>
