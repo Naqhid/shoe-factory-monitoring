@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Factory, Users } from 'lucide-react';
 
 const lines = [
@@ -8,6 +8,39 @@ const lines = [
 ];
 
 export const MobileLineSelector: React.FC = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const userInfo = sessionStorage.getItem('user_info');
+    if (userInfo) {
+      const user = JSON.parse(userInfo);
+      
+      // If not admin, redirect based on machine_id
+      if (user.role !== 'Admin') {
+        if (user.machine_id === 'MAC-001') {
+          navigate('/mobile/line1', { replace: true });
+          return;
+        } else if (user.machine_id === 'MAC-002') {
+          navigate('/mobile/line2', { replace: true });
+          return;
+        }
+      }
+    }
+  }, [navigate]);
+
+  // Get user info to check if admin
+  const userInfo = sessionStorage.getItem('user_info');
+  const user = userInfo ? JSON.parse(userInfo) : null;
+  const isAdmin = user?.role === 'Admin';
+
+  // If not admin, show loading while redirecting
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-xl text-gray-600">Redirecting...</div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto">
