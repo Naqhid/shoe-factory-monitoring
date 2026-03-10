@@ -10061,3 +10061,587 @@
 {"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:35:40.222Z"}
 {"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:35:40.224Z"}
 {"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:35:40.228Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.196Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.197Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.199Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.199Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.201Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.202Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.914Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.981Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.997Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:27.998Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.055Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.059Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.094Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.107Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.109Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.110Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.163Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.164Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.165Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:28.166Z"}
+{"level":"info","message":"GET /api/masters/groups_master?page=1&limit=10 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:29.352Z"}
+{"level":"info","message":"GET /api/masters/groups_master from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:29.353Z"}
+{"level":"info","message":"GET /api/masters/groups_master?page=1&limit=10 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:29.360Z"}
+{"level":"info","message":"GET /api/masters/groups_master from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:29.396Z"}
+{"level":"info","message":"GET /api/masters/groups_master?page=1&limit=10 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:29.413Z"}
+{"level":"info","message":"GET /api/masters/groups_master?page=1&limit=10 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:29.438Z"}
+{"level":"info","message":"GET /api/production-routing?page=1&limit=10 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:34.770Z"}
+{"level":"info","message":"GET /api/production-routing/masters from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:34.772Z"}
+{"level":"info","message":"GET /api/production-routing?page=1&limit=10 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:34.790Z"}
+{"level":"info","message":"GET /api/production-routing?page=1&limit=10 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:42:34.831Z"}
+{"level":"info","message":"GET /api/production-routing/1 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:43:47.808Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.187Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.202Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.211Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.224Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.263Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.263Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.265Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.266Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.279Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.280Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.281Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:04.282Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.895Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.904Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.913Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.933Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.937Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.941Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.957Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.958Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.959Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.961Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.976Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.977Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.979Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:10.982Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:20.931Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:20.958Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.512Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.520Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.521Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.538Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.543Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.544Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.545Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.546Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.554Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-09","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.556Z"}
+{"count":2,"level":"info","max_finish":"2026-03-09T11:32:36.000Z","message":"Data check result:","min_start":"2026-03-09T11:20:49.000Z","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.557Z"}
+{"0":{"hour":16,"production":"12"},"1":{"hour":17,"production":"12"},"level":"info","message":"Found 2 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:22.558Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:32.581Z"}
+{"level":"info","message":"GET /api/reports/efficiency?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:40.035Z"}
+{"level":"info","message":"GET /api/reports/hourly?date=2026-03-09 from 192.168.5.63 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-09T11:44:58.704Z"}
+{"level":"info","message":"Running on HTTP (HTTPS disabled for mobile compatibility)","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:03:13.783Z"}
+{"level":"info","message":"Server started on port 3001 (HTTP) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:03:13.789Z"}
+{"level":"info","message":"Starting file watcher on directory: C:\\Software\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:03:13.790Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:03:13.795Z"}
+{"level":"info","message":"POST /api/login from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.003Z"}
+{"level":"info","message":"Login attempt for: admin","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.004Z"}
+{"level":"info","message":"Login query took 96ms","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.100Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.140Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.150Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.183Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.555Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.558Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.562Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.628Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.634Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.656Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.657Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.659Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.661Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:00.662Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:03.963Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:04.006Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:04.008Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:04.010Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:04.017Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:04.022Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:04.024Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:04.027Z"}
+{"level":"info","message":"GET /api/production-planning/1 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:04:21.449Z"}
+{"level":"info","message":"GET /api/production-planning/1 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:06:52.168Z"}
+{"level":"info","message":"GET /api/production-planning/1 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:08:16.213Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.962Z"}
+{"level":"info","message":"GET /api/masters/machine_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.965Z"}
+{"level":"info","message":"GET /api/masters/users?page=1&limit=5 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.973Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.975Z"}
+{"level":"info","message":"GET /api/masters/machine_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.977Z"}
+{"level":"info","message":"GET /api/masters/users?page=1&limit=5 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.990Z"}
+{"level":"info","message":"GET /api/masters/users?page=1&limit=5 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.995Z"}
+{"level":"info","message":"GET /api/masters/users?page=1&limit=5 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:10:33.999Z"}
+{"level":"info","message":"POST /api/login from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:17.515Z"}
+{"level":"info","message":"Login attempt for: Plan1","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:17.517Z"}
+{"level":"info","message":"Login query took 4ms","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:17.521Z"}
+{"level":"info","message":"POST /api/login from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:22.655Z"}
+{"level":"info","message":"Login attempt for: Plan1","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:22.658Z"}
+{"level":"info","message":"Login query took 4ms","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:22.662Z"}
+{"level":"info","message":"POST /api/login from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.463Z"}
+{"level":"info","message":"Login attempt for: Plan1","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.465Z"}
+{"level":"info","message":"Login query took 5ms","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.470Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.530Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.536Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.540Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.551Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.567Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.568Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.569Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.570Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.571Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.576Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.577Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.578Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.579Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:33.581Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.468Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.470Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.471Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.477Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.483Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.484Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.487Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:11:38.494Z"}
+{"level":"info","message":"PUT /api/masters/users/4 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:29.957Z"}
+{"level":"info","message":"GET /api/masters/users?page=1&limit=5 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:30.060Z"}
+{"level":"info","message":"POST /api/login from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.917Z"}
+{"level":"info","message":"Login attempt for: Planner","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.920Z"}
+{"level":"info","message":"Login query took 5ms","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.925Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.957Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.960Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.965Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.976Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.981Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.982Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.983Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.986Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.987Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.990Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.990Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.992Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.994Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:37.996Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.792Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.794Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.797Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.801Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.804Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.805Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.809Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:39.814Z"}
+{"level":"info","message":"GET /api/production-planning/1 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:12:44.951Z"}
+{"level":"info","message":"POST /api/login from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.121Z"}
+{"level":"info","message":"Login attempt for: Planner","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.123Z"}
+{"level":"info","message":"Login query took 4ms","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.127Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.198Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.207Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.210Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.222Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.232Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.233Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.234Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.235Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.236Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.246Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.246Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.248Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.250Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:42.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:52.219Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.775Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.779Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.784Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.794Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.799Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.802Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.806Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:15:53.810Z"}
+{"level":"info","message":"GET /api/production-planning/1 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:17:35.874Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.814Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.819Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.826Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.832Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.838Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.850Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.860Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.861Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.862Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.864Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.871Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.874Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.876Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.877Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.878Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:27.879Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.928Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.949Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.952Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.958Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.960Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.963Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.969Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:29.975Z"}
+{"level":"info","message":"GET /api/reports/efficiency?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:31.450Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.264Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.287Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.291Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.304Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.310Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.311Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.314Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.316Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.317Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.322Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.333Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.334Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.335Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:32.337Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.251Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.256Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.258Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.262Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.265Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.266Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.270Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:34.275Z"}
+{"level":"info","message":"GET /api/reports/efficiency?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:23:59.735Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.334Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.339Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.348Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.354Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.357Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.359Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.367Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:07.374Z"}
+{"level":"info","message":"GET /api/reports/efficiency?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:09.163Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.584Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.591Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.596Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.621Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.626Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.628Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.630Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.632Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.634Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.639Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.642Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.644Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.647Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:10.649Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:20.619Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:30.621Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:41.170Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:24:51.023Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:25:01.063Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:27:55.111Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:27:55.204Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:27:55.205Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:27:55.206Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:27:55.207Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:27:55.209Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:27:55.210Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:06.023Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:11.019Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:11.022Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:11.026Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:11.037Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:11.045Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:11.046Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:21.210Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:32.013Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:41.036Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:28:53.645Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:02.021Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:11.020Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:11.024Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:11.026Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:11.030Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:11.062Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:11.065Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:21.024Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:32.037Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:41.163Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:29:52.049Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:02.059Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:11.021Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:11.026Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:11.033Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:11.040Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:11.042Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:11.043Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:22.028Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:32.016Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:42.197Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:30:52.022Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:01.077Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:11.008Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:11.011Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:11.014Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:11.017Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:11.021Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:11.024Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:21.048Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:32.003Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:41.527Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:31:51.212Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:01.014Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:11.021Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:11.023Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:11.026Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:11.031Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:11.035Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:11.036Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:21.024Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:32.418Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:41.052Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:32:51.026Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:03.348Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.613Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.616Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.620Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.623Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.625Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.628Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.631Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.637Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.640Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.643Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.643Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:13.644Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:24.005Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:34.784Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:44.053Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:33:54.093Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:04.021Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:12.150Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:12.153Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:12.156Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:12.159Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:12.163Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:12.166Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:23.045Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:33.018Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:43.338Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:34:53.039Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:03.037Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:12.051Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:12.054Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:12.057Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:12.060Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:12.063Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:12.067Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:23.016Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:33.041Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:43.027Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:35:53.016Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:03.125Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:12.031Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:12.033Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:12.036Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:12.039Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:12.043Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:12.046Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:23.045Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:33.095Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:43.011Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:36:53.026Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:02.070Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.032Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.037Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.038Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.039Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.040Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.040Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.041Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.042Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.043Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.043Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.044Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:12.045Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:23.026Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:33.033Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:43.066Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:37:52.999Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:03.000Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:12.011Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:12.012Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:12.013Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:12.014Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:12.015Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:12.015Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:22.013Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:33.012Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:43.104Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:53.047Z"}
+{"level":"info","message":"GET /api/reports/efficiency?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:38:58.582Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.482Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.488Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.524Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.535Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.539Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.554Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.555Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.557Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.558Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.562Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.563Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.565Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.566Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:03.567Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:05.904Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:05.908Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:05.912Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:05.940Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:05.942Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:05.970Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:05.973Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:06.007Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.436Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.445Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.469Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.472Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.477Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.513Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.518Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.543Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.544Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.545Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.547Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.553Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.576Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.577Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.578Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:07.579Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:17.486Z"}
+{"level":"info","message":"GET /api/mobile-sessions/attendance/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:17.487Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.565Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.578Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.598Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.631Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.655Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.667Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.670Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.672Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.725Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.733Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.750Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.752Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.754Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:23.757Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.616Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.621Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.626Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.642Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.643Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.644Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.651Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:39:32.657Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.346Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.356Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.361Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.381Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.389Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.390Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.392Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.393Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.394Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.425Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.426Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.427Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.428Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:14.429Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:24.387Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:35.071Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:45.013Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:40:55.026Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:05.031Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.031Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.035Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.035Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.036Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.037Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.038Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.039Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.040Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.041Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.041Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.042Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:15.042Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:25.081Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:36.119Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:46.089Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:41:56.021Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:06.017Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:15.051Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:15.059Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:15.063Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:15.086Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:15.087Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:15.088Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:25.137Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:36.045Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:46.029Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:42:56.064Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:06.028Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:15.064Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:15.067Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:15.070Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:15.074Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:15.077Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:15.080Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:25.936Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:36.023Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:46.148Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:43:56.154Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:06.053Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:15.042Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:15.044Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:15.047Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:15.050Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:15.054Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:15.057Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:26.004Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:36.005Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:46.005Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:44:56.209Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:06.005Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:15.019Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:15.020Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:15.021Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:15.022Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:15.024Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:15.025Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:26.037Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:36.023Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:46.008Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:45:56.012Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:06.009Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:15.075Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:15.078Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:15.081Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:15.084Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:15.087Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:15.088Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:25.034Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:35.070Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:46.175Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:46:56.013Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:47:06.014Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:47:16.025Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:47:16.026Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:47:16.026Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:47:16.027Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:47:16.028Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:47:16.030Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:12.032Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-03-10","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:12.034Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:12.037Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:12.041Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:12.045Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:12.050Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:22.050Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-03-10 from 192.168.5.109 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:32.039Z"}
+{"level":"info","message":"Received SIGINT. Starting graceful shutdown...","service":"shoe-factory-monitoring","timestamp":"2026-03-10T10:48:33.699Z"}
