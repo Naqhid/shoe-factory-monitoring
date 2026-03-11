@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn } from 'lucide-react';
+import { LogIn, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -56,7 +56,15 @@ export const LoginForm: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        <h1 className="text-3xl font-bold text-center text-gray-900 mb-8">Login</h1>
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Activity className="h-12 w-12 text-blue-600" />
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">ProdPulse</h1>
+              <p className="text-sm text-gray-600">Smart Production Tracking System</p>
+            </div>
+          </div>
+        </div>
         <div className="bg-white rounded-lg shadow-md p-6">
           <form onSubmit={handleLogin} className="space-y-4">
             <div>

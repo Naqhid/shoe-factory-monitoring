@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigation } from './Navigation';
+import { Layout } from './Layout';
 import { MasterForm } from './MasterForm';
 import { UsersMasterForm } from './UsersMasterForm';
 import { EmployeeMasterForm } from './EmployeeMasterForm';
@@ -29,36 +29,27 @@ const masterConfigs = {
 
 export const ERPApp: React.FC = () => {
   const [activeMenu, setActiveMenu] = React.useState('customers');
-  const [sidebarOpen, setSidebarOpen] = React.useState(true);
 
   const currentConfig = masterConfigs[activeMenu as keyof typeof masterConfigs];
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
-      <Navigation
-        activeMenu={activeMenu}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-      />
-
-      <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
-        {currentConfig ? (
-          currentConfig.key === 'users' ? (
-            <UsersMasterForm />
-          ) : currentConfig.key === 'employees' ? (
-            <EmployeeMasterForm />
-          ) : (
-            <MasterForm
-              title={currentConfig.title}
-              table={currentConfig.table}
-            />
-          )
+    <Layout activeMenu={activeMenu}>
+      {currentConfig ? (
+        currentConfig.key === 'users' ? (
+          <UsersMasterForm />
+        ) : currentConfig.key === 'employees' ? (
+          <EmployeeMasterForm />
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">Select a menu item</p>
-          </div>
-        )}
-      </div>
-    </div>
+          <MasterForm
+            title={currentConfig.title}
+            table={currentConfig.table}
+          />
+        )
+      ) : (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-gray-500">Select a menu item</p>
+        </div>
+      )}
+    </Layout>
   );
 };
