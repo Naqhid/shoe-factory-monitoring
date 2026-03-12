@@ -12,11 +12,11 @@ interface NavigationProps {
 const processMenus = [
   { key: 'overview', label: 'TV Dashboard', icon: Tv },
   { key: 'reports', label: 'Reports', icon: TrendingUp },
-  { key: 'production_routing', label: 'Production Routing', icon: Route },
-  { key: 'production_planning', label: 'Production Planning', icon: Calendar },
-  { key: 'line_setup_form', label: 'Line Setup Form', icon: UserCheck },
-  { key: 'production_tracker', label: 'Production Tracker', icon: Smartphone },
-  { key: 'mobile', label: 'Mobile', icon: Smartphone },
+  { key: 'production_routing', label: 'Routing', icon: Route },
+  { key: 'production_planning', label: 'Planning', icon: Calendar },
+  { key: 'line_setup_form', label: 'Line Setup ', icon: UserCheck },
+  { key: 'production_tracker', label: 'Process Tracker', icon: Smartphone },
+  { key: 'mobile', label: 'Line Monitor', icon: Smartphone },
 ];
 
 const masterMenus = [
