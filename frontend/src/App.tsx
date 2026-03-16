@@ -7,7 +7,7 @@ import { StatsPanel } from './components/StatsPanel';
 import { MachineCard } from './components/MachineCard';
 import { EfficiencyChart } from './components/EfficiencyChart';
 import { MachineDetailModal } from './components/MachineDetailModal';
-import { Navigation } from './components/Navigation';
+import { Layout } from './components/Layout';
 import { MasterForm } from './components/MasterForm';
 import { ProductionPlanningForm } from './components/ProductionPlanningForm';
 import { Reports } from './components/Reports';
@@ -78,7 +78,6 @@ function App() {
     }
   }, [isAuthenticated, activeMenu, navigate]);
 
-  const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [selectedDate] = React.useState(new Date());
   const [selectedMachine, setSelectedMachine] = React.useState<MachineStatus | null>(null);
   const [lastRefresh, setLastRefresh] = React.useState<Date>(new Date());
@@ -226,66 +225,58 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Navigation
-        activeMenu={activeMenu}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-      />
-
-      <div className={`flex-1 overflow-auto ${sidebarOpen ? 'lg:ml-64' : ''}`}>
-        {isProductionDashboard ? (
-          <TVDashboard />
-        ) : isReports ? (
-          <Reports />
-        ) : isProductionRouting ? (
-          <ProductionRoutingForm />
-        ) : isProductionPlanning ? (
-          <ProductionPlanningForm />
-        ) : isLineSetupForm ? (
-          <MobileLineSetupForm />
-        ) : isMobileLiveDashboard ? (
-          <MobileLiveDashboard />
-        ) : isMobileLineSelector ? (
-          <MobileLineSelector />
-        ) : isMobileLineProduction ? (
-          <MobileLineProduction />
-        ) : isMobileProduction ? (
-          <MobileProduction />
-        ) : activeMenu === 'mobile-remote-setup' ? (
-          <MobileRemoteSetup />
-        ) : isTrackerApp ? (
-          <TrackerApp />
-        ) : isProductionTracker ? (
-          <ProductionTracker />
-        ) : isUsers ? (
-          <UsersMasterForm />
-        ) : isFormsMaster ? (
-          <FormsMasterForm />
-        ) : isUserRights ? (
-          <UserRightsForm />
-        ) : isRoles ? (
-          <RolesMasterForm />
-        ) : isMasterView ? (
-          loading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-              <span className="ml-2 text-gray-600">Loading...</span>
-            </div>
-          ) : (
-            <MasterForm
-              title={currentConfig!.title}
-              table={currentConfig!.table}
-              records={records}
-              onRefresh={handleRefresh}
-            />
-          )
-        ) : (
+    <Layout activeMenu={activeMenu}>
+      {isProductionDashboard ? (
+        <TVDashboard />
+      ) : isReports ? (
+        <Reports />
+      ) : isProductionRouting ? (
+        <ProductionRoutingForm />
+      ) : isProductionPlanning ? (
+        <ProductionPlanningForm />
+      ) : isLineSetupForm ? (
+        <MobileLineSetupForm />
+      ) : isMobileLiveDashboard ? (
+        <MobileLiveDashboard />
+      ) : isMobileLineSelector ? (
+        <MobileLineSelector />
+      ) : isMobileLineProduction ? (
+        <MobileLineProduction />
+      ) : isMobileProduction ? (
+        <MobileProduction />
+      ) : activeMenu === 'mobile-remote-setup' ? (
+        <MobileRemoteSetup />
+      ) : isTrackerApp ? (
+        <TrackerApp />
+      ) : isProductionTracker ? (
+        <ProductionTracker />
+      ) : isUsers ? (
+        <UsersMasterForm />
+      ) : isFormsMaster ? (
+        <FormsMasterForm />
+      ) : isUserRights ? (
+        <UserRightsForm />
+      ) : isRoles ? (
+        <RolesMasterForm />
+      ) : isMasterView ? (
+        loading ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">Select a menu item</p>
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Loading...</span>
           </div>
-        )}
-      </div>
+        ) : (
+          <MasterForm
+            title={currentConfig!.title}
+            table={currentConfig!.table}
+            records={records}
+            onRefresh={handleRefresh}
+          />
+        )
+      ) : (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-gray-500">Select a menu item</p>
+        </div>
+      )}
 
       {selectedMachine && (
         <MachineDetailModal
@@ -295,7 +286,7 @@ function App() {
           onClose={handleCloseModal}
         />
       )}
-    </div>
+    </Layout>
   );
 }
 

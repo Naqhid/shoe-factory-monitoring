@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity } from 'lucide-react';
 import { isMenuAllowed } from '../utils/roleConfig';
 
 interface NavigationProps {
@@ -12,11 +12,11 @@ interface NavigationProps {
 const processMenus = [
   { key: 'overview', label: 'TV Dashboard', icon: Tv },
   { key: 'reports', label: 'Reports', icon: TrendingUp },
-  { key: 'production_routing', label: 'Production Routing', icon: Route },
-  { key: 'production_planning', label: 'Production Planning', icon: Calendar },
-  { key: 'line_setup_form', label: 'Line Setup Form', icon: UserCheck },
-  { key: 'production_tracker', label: 'Production Tracker', icon: Smartphone },
-  { key: 'mobile', label: 'Mobile', icon: Smartphone },
+  { key: 'production_routing', label: 'Routing', icon: Route },
+  { key: 'production_planning', label: 'Planning', icon: Calendar },
+  { key: 'line_setup_form', label: 'Line Setup ', icon: UserCheck },
+  { key: 'production_tracker', label: 'Process Tracker', icon: Smartphone },
+  { key: 'mobile', label: 'Line Monitor', icon: Smartphone },
 ];
 
 const masterMenus = [
@@ -54,7 +54,18 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
     return 'Admin';
   };
   
+  const getUserInfo = () => {
+    if (typeof sessionStorage !== 'undefined') {
+      const userInfo = sessionStorage.getItem('user_info');
+      if (userInfo) {
+        return JSON.parse(userInfo);
+      }
+    }
+    return null;
+  };
+  
   const userRole = getUserRoleFromSession();
+  const user = getUserInfo();
 
   const filteredProcessMenus = processMenus.filter(menu => isMenuAllowed(menu.key, userRole));
   const filteredMasterMenus = masterMenus.filter(menu => isMenuAllowed(menu.key, userRole));
@@ -82,11 +93,31 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
 
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-800">ERP System</h2>
+          <div className="flex items-center gap-2">
+            <Activity className="h-6 w-6 text-blue-600" />
+            <div>
+              <h2 className="text-lg font-bold text-gray-800">ProdPulse</h2>
+              <p className="text-xs text-gray-500">Smart Production Tracking</p>
+            </div>
+          </div>
           <button onClick={onToggleSidebar} className="p-1"><X className="h-5 w-5" /></button>
         </div>
 
         <nav className="p-4 h-[calc(100vh-73px)] overflow-y-auto">
+          {/* User info section */}
+          {user && (
+            <div className="mb-6 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2 mb-2">
+                <User className="h-5 w-5 text-blue-600" />
+                <span className="font-semibold text-gray-800">{user.name}</span>
+              </div>
+              <div className="text-sm text-gray-600">
+                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                  {user.role || 'Admin'}
+                </span>
+              </div>
+            </div>
+          )}
           {filteredMasterMenus.length > 0 && (
             <div className="mb-4">
               <button onClick={() => setMastersExpanded(!mastersExpanded)} className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md">

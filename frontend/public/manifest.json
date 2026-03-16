@@ -1,7 +1,7 @@
 {
-  "name": "Shoe Factory Monitoring",
-  "short_name": "Factory Monitor",
-  "description": "Real-time production monitoring system for shoe manufacturing",
+  "name": "ProdPulse - Smart Production Tracking System",
+  "short_name": "ProdPulse",
+  "description": "Smart production tracking system for real-time manufacturing monitoring",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "portrait",
