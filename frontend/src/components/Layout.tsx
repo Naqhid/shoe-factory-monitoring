@@ -9,7 +9,7 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => {
-  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [sidebarOpen, setSidebarOpen] = React.useState(() => window.innerWidth >= 1024);
   const navigate = useNavigate();
 
   const getUserInfo = () => {
@@ -48,10 +48,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
           
           {/* User info and logout */}
           {user && (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-lg border">
-                <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
-                  <User className="h-4 w-4 text-blue-600" />
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
+                <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full">
+                  <User className="h-3 w-3 text-blue-600" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold text-gray-800">{user.name}</span>
@@ -60,11 +60,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm"
+                className="flex items-center gap-1 px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm"
                 title="Logout"
               >
                 <LogOut className="h-4 w-4" />
-                <span>Logout</span>
+                <span className="hidden sm:inline">Logout</span>
               </button>
             </div>
           )}
@@ -79,12 +79,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
         />
 
         {/* Main content area */}
-        <div className={`flex-1 flex flex-col ${sidebarOpen ? 'lg:ml-64' : ''}`}>
+        <div className={`flex-1 flex flex-col min-w-0 ${sidebarOpen ? 'lg:ml-64' : ''}`}>
           {/* Spacer for fixed header when sidebar is closed */}
           {!sidebarOpen && <div className="h-20 flex-shrink-0"></div>}
           
           {/* Content wrapper */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto min-h-0">
             {children}
           </div>
         </div>
