@@ -17,11 +17,9 @@ export const MobileLineSelector: React.FC = () => {
       
       // If not admin, redirect based on machine_id
       if (user.role !== 'Admin') {
-        if (user.machine_id === 'MAC-001') {
-          navigate('/mobile/line1', { replace: true });
-          return;
-        } else if (user.machine_id === 'MAC-002') {
-          navigate('/mobile/line2', { replace: true });
+        if (user.machine_id) {
+          // Redirect to mobile production with machine_id and emp_id
+          navigate(`/mobile/${encodeURIComponent(user.machine_id)}/${encodeURIComponent(user.code)}`, { replace: true });
           return;
         }
       }

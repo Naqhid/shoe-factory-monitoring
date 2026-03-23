@@ -119,15 +119,9 @@ export const ProductionPlanningForm: React.FC = () => {
   const handleStyleChange = async (idx: number, styleId: string) => {
     updateLine(idx, {
       style_id: styleId,
-      customer_id: '',
-      group_id: '',
-      leather_id: '',
-      color_id: '',
-      customer_name: '',
-      group_name: '',
-      leather_name: '',
-      color_name: '',
-      smv_per_pair: '',
+      customer_id: '', group_id: '', leather_id: '', color_id: '',
+      customer_name: '', group_name: '', leather_name: '', color_name: '',
+      smv_per_pair: '', total_target_per_day: '', man_hours_minutes: '',
     });
     if (!styleId) return;
 
@@ -136,6 +130,18 @@ export const ProductionPlanningForm: React.FC = () => {
       const result = await res.json();
       if (result.success && result.data) {
         const r = result.data;
+        // Calculate man hours: sum of (std_time_secs_pr * manpower) across all lines, converted to minutes
+        let manHoursMins = '';
+        if (r.lines && r.lines.length > 0) {
+          const totalSecs = r.lines.reduce((sum: number, l: any) => {
+            const obs = parseFloat(l.observed_time) || 0;
+            const rf = parseFloat(l.rating_factor) || 0;
+            const mp = parseFloat(l.manpower) || 0;
+            const stdTime = (obs * rf / 100) * 1.15;
+            return sum + stdTime * mp;
+          }, 0);
+          manHoursMins = String(Math.round(totalSecs / 60));
+        }
         updateLine(idx, {
           style_id: styleId,
           customer_id: String(r.customer_id ?? ''),
@@ -147,6 +153,8 @@ export const ProductionPlanningForm: React.FC = () => {
           leather_name: r.leather_name || '',
           color_name: r.color_name || '',
           smv_per_pair: String(r.tot_smv ?? ''),
+          total_target_per_day: String(r.target_per_day ?? ''),
+          man_hours_minutes: manHoursMins,
         });
       } else {
         toast.error('No routing found for this style');
@@ -472,16 +480,26 @@ export const ProductionPlanningForm: React.FC = () => {
                             </select>
                           </td>
                           <td className="py-1 px-2">
-                            <input type="number" value={line.total_target_per_day} onChange={(e) => updateLine(idx, { total_target_per_day: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                            <input type="number" value={line.total_target_per_day} onChange={(e) => {
+                              const val = e.target.value;
+                              const tray = line.target_pairs_per_tray;
+                              const trayCount = val && tray ? String(Math.ceil(parseInt(val) / parseInt(tray))) : line.tray_count;
+                              updateLine(idx, { total_target_per_day: val, tray_count: trayCount });
+                            }} className="w-20 border border-gray-300 rounded px-2 py-1" />
                           </td>
                           <td className="py-1 px-2">
-                            <input type="number" value={line.target_pairs_per_tray} onChange={(e) => updateLine(idx, { target_pairs_per_tray: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                            <input type="number" value={line.target_pairs_per_tray} onChange={(e) => {
+                              const val = e.target.value;
+                              const target = line.total_target_per_day;
+                              const trayCount = val && target ? String(Math.ceil(parseInt(target) / parseInt(val))) : line.tray_count;
+                              updateLine(idx, { target_pairs_per_tray: val, tray_count: trayCount });
+                            }} className="w-20 border border-gray-300 rounded px-2 py-1" />
                           </td>
                           <td className="py-1 px-2">
-                            <input type="number" value={line.tray_count} onChange={(e) => updateLine(idx, { tray_count: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                            <input readOnly value={line.tray_count} className="w-20 border border-gray-200 rounded px-2 py-1 bg-gray-50" />
                           </td>
                           <td className="py-1 px-2">
-                            <input type="number" value={line.man_hours_minutes} onChange={(e) => updateLine(idx, { man_hours_minutes: e.target.value })} className="w-24 border border-gray-300 rounded px-2 py-1" />
+                            <input readOnly value={line.man_hours_minutes} className="w-24 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
                           </td>
                           <td className="py-1 px-2">
                             <input readOnly value={line.smv_per_pair} className="w-16 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
