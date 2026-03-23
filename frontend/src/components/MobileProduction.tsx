@@ -54,6 +54,13 @@ export const MobileProduction: React.FC = () => {
     const queryParams = new URLSearchParams(location.search);
     let urlMachineId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[2]) : null;
     let urlEmpId = pathParts.length >= 4 && pathParts[1] === 'mobile' ? decodeURIComponent(pathParts[3]) : null;
+    
+    // Handle /mobile/MAC-001 case (machine only, no employee)
+    if (pathParts.length === 3 && pathParts[1] === 'mobile' && !pathParts[2].startsWith('line')) {
+        urlMachineId = decodeURIComponent(pathParts[2]);
+        urlEmpId = null;
+    }
+    
     if (!urlMachineId) urlMachineId = queryParams.get('machine');
     if (!urlEmpId) urlEmpId = queryParams.get('employee');
 
@@ -172,7 +179,17 @@ export const MobileProduction: React.FC = () => {
                         setSessionStatus('active');
                         setQrData(urlMachineId);
                         setEmployeeName(employee?.name || employee?.emp_name || '');
-                        setMachineName(machine?.name || urlMachineId);
+                        // Get machine centre name from machine centres data
+                        const machineRes = await fetch(`${API_BASE}/api/masters/machine_centres`);
+                        const machineData = await machineRes.json();
+                        let machineCentreName = machine?.name || urlMachineId;
+                        if (machineData.success) {
+                            const machineRecord = machineData.data.find((m: any) => m.machine_id === urlMachineId);
+                            if (machineRecord) {
+                                machineCentreName = machineRecord.name;
+                            }
+                        }
+                        setMachineName(machineCentreName);
                         setProductionData({
                             ...unfinishedRecord,
                             target_pairs: targetPairs,
@@ -197,7 +214,17 @@ export const MobileProduction: React.FC = () => {
                         setSessionStatus('active');
                         setQrData(urlMachineId);
                         setEmployeeName(employee.name);
-                        setMachineName(machine.name);
+                        // Get machine centre name from machine centres data
+                        const machineRes = await fetch(`${API_BASE}/api/masters/machine_centres`);
+                        const machineData = await machineRes.json();
+                        let machineCentreName = machine.name;
+                        if (machineData.success) {
+                            const machineRecord = machineData.data.find((m: any) => m.machine_id === urlMachineId);
+                            if (machineRecord) {
+                                machineCentreName = machineRecord.name;
+                            }
+                        }
+                        setMachineName(machineCentreName);
 
                         // Don't create record on page load - just set up UI
                         // Record will be created when START is clicked

@@ -13,11 +13,11 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   },
   'Line Supervisor': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'mobile', 'reports']
+    allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'reports']
   },
   'Machine Centre User': {
     defaultRoute: '/mobile',
-    allowedMenus: ['mobile']
+    allowedMenus: ['mobile', 'line1', 'line2']
   },
   'IED': {
     defaultRoute: '/overview',
@@ -39,7 +39,20 @@ export const isMenuAllowed = (menuKey: string, role: UserRole | string | null): 
   return config?.allowedMenus.includes(menuKey) || false;
 };
 
-export const getDefaultRoute = (role: UserRole | string | null): string => {
+export const getDefaultRoute = (role: UserRole | string | null, userInfo?: any): string => {
   if (!role) return '/overview';
+  
+  // Special handling for Machine Centre Users - redirect to their assigned line
+  if (role === 'Machine Centre User' && userInfo?.machine_id) {
+    const machineId = userInfo.machine_id;
+    if (machineId === 'MAC-001') {
+      return '/mobile/line1';
+    } else if (machineId === 'MAC-002') {
+      return '/mobile/line2';
+    }
+    // Fallback to general mobile if machine not recognized
+    return '/mobile';
+  }
+  
   return roleConfigs[role as UserRole]?.defaultRoute || '/overview';
 };
