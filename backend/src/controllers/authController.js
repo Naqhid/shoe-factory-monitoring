@@ -15,11 +15,11 @@ class AuthController {
 
             // In production, password should be hashed (e.g., bcrypt).
             const [rows] = await db.execute(
-                `SELECT u.id, u.code, u.name, u.role, u.email, u.machine_id, wc.code as work_centre_code 
+                `SELECT u.id, u.code, u.name, u.role, u.machine_id, wc.code as work_centre_code 
                  FROM users u 
                  LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
-                 WHERE (u.code = ? OR u.email = ?) AND u.password = ?`,
-                [login, login, password]
+                 WHERE u.code = ? AND u.password = ?`,
+                [login, password]
             );
 
             const queryTime = Date.now() - startTime;
