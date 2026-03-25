@@ -9,11 +9,11 @@ export interface RoleConfig {
 export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Admin': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'reports', 'production_routing', 'production_planning', 'line_setup_form', 'production_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles']
+    allowedMenus: ['overview', 'reports', 'production_routing', 'production_planning', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles']
   },
   'Line Supervisor': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'reports']
+    allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'reports']
   },
   'Machine Centre User': {
     defaultRoute: '/mobile',
