@@ -15,11 +15,7 @@ class AuthController {
 
             // In production, password should be hashed (e.g., bcrypt).
             const [rows] = await db.execute(
-<<<<<<< HEAD
-                `SELECT u.id, u.code, u.name, u.role, u.machine_id, wc.code as work_centre_code 
-=======
                 `SELECT u.id, u.code, u.name, u.role, u.machine_id, u.machine_centre_name, wc.code as work_centre_code 
->>>>>>> 8218d66a6069aaef5bb608451369677aed4e2bc7
                  FROM users u 
                  LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
                  WHERE u.code = ? AND u.password = ?`,
