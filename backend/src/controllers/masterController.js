@@ -14,10 +14,8 @@ class MasterController {
 
       if (table === 'machine_centres') {
         [rows] = await db.query(
-          `SELECT mc.*, wc.name as work_centre_name 
-           FROM ${table} mc 
-           LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
-           ORDER BY mc.code
+          `SELECT * FROM ${table} 
+           ORDER BY code
            LIMIT ${limit} OFFSET ${offset}`
         );
         [countResult] = await db.query(`SELECT COUNT(*) as total FROM ${table}`);
@@ -68,10 +66,7 @@ class MasterController {
       let query;
 
       if (table === 'machine_centres') {
-        query = `SELECT mc.*, wc.name as work_centre_name 
-                 FROM machine_centres mc 
-                 LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
-                 WHERE mc.id = ?`;
+        query = `SELECT * FROM machine_centres WHERE id = ?`;
       } else if (table === 'users') {
         query = `SELECT u.*, wc.name as work_centre_name 
                  FROM users u 
@@ -105,10 +100,7 @@ class MasterController {
       let params = [code];
 
       if (table === 'machine_centres') {
-        query = `SELECT mc.*, wc.name as work_centre_name 
-                 FROM machine_centres mc 
-                 LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
-                 WHERE mc.code = ? OR mc.machine_id = ?`;
+        query = `SELECT * FROM machine_centres WHERE code = ? OR machine_id = ?`;
         params = [code, code];
       } else if (table === 'users') {
         query = `SELECT u.*, wc.name as work_centre_name 
@@ -166,17 +158,17 @@ class MasterController {
       }
 
       // Generic create for other tables
-      const { code, name, work_centre_id, machine_id } = data;
+      const { code, name, machine_id } = data;
 
       if (!code || !name) {
         return res.status(400).json({ success: false, error: 'Code and name are required' });
       }
 
       let result;
-      if (table === 'machine_centres' && work_centre_id) {
+      if (table === 'machine_centres' && machine_id) {
         [result] = await db.execute(
-          `INSERT INTO ${table} (code, name, work_centre_id, machine_id) VALUES (?, ?, ?, ?)`,
-          [code, name, work_centre_id, machine_id]
+          `INSERT INTO ${table} (code, name, machine_id) VALUES (?, ?, ?)`,
+          [code, name, machine_id]
         );
       } else {
         [result] = await db.execute(
@@ -187,7 +179,7 @@ class MasterController {
 
       res.status(201).json({
         success: true,
-        data: { id: result.insertId, code, name, work_centre_id, machine_id }
+        data: { id: result.insertId, code, name, machine_id }
       });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
@@ -255,17 +247,17 @@ class MasterController {
       }
 
       // Generic update for other tables
-      const { code, name, work_centre_id, machine_id } = data;
+      const { code, name, machine_id } = data;
 
       if (!code || !name) {
         return res.status(400).json({ success: false, error: 'Code and name are required' });
       }
 
       let result;
-      if (table === 'machine_centres' && work_centre_id) {
+      if (table === 'machine_centres' && machine_id) {
         [result] = await db.execute(
-          `UPDATE ${table} SET code = ?, name = ?, work_centre_id = ?, machine_id = ? WHERE id = ?`,
-          [code, name, work_centre_id, machine_id, id]
+          `UPDATE ${table} SET code = ?, name = ?, machine_id = ? WHERE id = ?`,
+          [code, name, machine_id, id]
         );
       } else {
         [result] = await db.execute(
@@ -278,7 +270,7 @@ class MasterController {
         return res.status(404).json({ success: false, error: 'Record not found' });
       }
 
-      res.json({ success: true, data: { id, code, name, work_centre_id, machine_id } });
+      res.json({ success: true, data: { id, code, name, machine_id } });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
         return res.status(400).json({ success: false, error: 'Code already exists' });
@@ -310,10 +302,7 @@ class MasterController {
   async getByMachineId(req, res) {
     try {
       const { machineId } = req.params;
-      const query = `SELECT mc.*, wc.name as work_centre_name 
-                     FROM machine_centres mc 
-                     LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id 
-                     WHERE mc.machine_id = ?`;
+      const query = `SELECT * FROM machine_centres WHERE machine_id = ?`;
       const [rows] = await db.execute(query, [machineId]);
       if (rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Machine not found' });
