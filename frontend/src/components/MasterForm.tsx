@@ -241,7 +241,9 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     type="text"
                     value={formData.machine_id}
                     onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    disabled={editingRecord !== null}
+                    placeholder={editingRecord ? "Machine ID cannot be changed" : "Enter machine ID"}
                   />
                 </div>
               )}

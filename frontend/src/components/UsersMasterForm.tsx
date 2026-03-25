@@ -11,12 +11,12 @@ interface UserRecord {
   id: number;
   code: string;
   name: string;
-  email?: string;
   role: string;
   work_centre_id?: number;
   work_centre_code?: string;
   work_centre_name?: string;
   machine_id?: string;
+  machine_centre_name?: string;
 }
 
 export const UsersMasterForm: React.FC = () => {
@@ -26,11 +26,11 @@ export const UsersMasterForm: React.FC = () => {
   const [formData, setFormData] = React.useState({
     code: '',
     name: '',
-    email: '',
     password: '',
     role: 'Admin',
     work_centre_id: '',
-    machine_id: ''
+    machine_id: '',
+    machine_centre_name: ''
   });
   const [loading, setLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<UserRecord[]>([]);
@@ -93,7 +93,7 @@ export const UsersMasterForm: React.FC = () => {
   const filteredMachines = machineCentres;
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', email: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '' });
+    setFormData({ code: '', name: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '', machine_centre_name: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -140,11 +140,11 @@ export const UsersMasterForm: React.FC = () => {
     setFormData({
       code: record.code,
       name: record.name,
-      email: record.email || '',
       password: '', // Don't populate password for security
       role: record.role,
       work_centre_id: record.work_centre_id?.toString() || '',
-      machine_id: record.machine_id || ''
+      machine_id: record.machine_id || '',
+      machine_centre_name: record.machine_centre_name || ''
     });
     setShowForm(true);
   };
@@ -183,11 +183,11 @@ export const UsersMasterForm: React.FC = () => {
     const exportData = records.map(record => ({
       'Login': record.code,
       'Name': record.name,
-      'Email': record.email || '',
       'Role': record.role,
       'Work Centre Code': record.work_centre_code || '',
       'Work Centre Name': record.work_centre_name || '',
-      'Machine ID': record.machine_id || ''
+      'Machine ID': record.machine_id || '',
+      'Machine Centre Name': record.machine_centre_name || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -278,13 +278,14 @@ export const UsersMasterForm: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
+                  Machine Centre Name
                 </label>
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  type="text"
+                  value={formData.machine_centre_name}
+                  onChange={(e) => setFormData({ ...formData, machine_centre_name: e.target.value })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter machine centre name"
                 />
               </div>
 
@@ -389,8 +390,8 @@ export const UsersMasterForm: React.FC = () => {
                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Name
                 </th>
-                <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Machine Centre Name
                 </th>
                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Role
@@ -415,8 +416,8 @@ export const UsersMasterForm: React.FC = () => {
                   <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {record.name}
                   </td>
-                  <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {record.email || 'N/A'}
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {record.machine_centre_name || 'N/A'}
                   </td>
                   <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
                     {record.role}

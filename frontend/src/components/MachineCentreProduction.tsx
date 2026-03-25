@@ -116,10 +116,25 @@ export const MachineCentreProduction: React.FC = () => {
       });
 
       if (res.data.success) {
-        setSessionId(res.data.id);
-        setEmpScanning(false);
-        navigate(`/mobile/machine-centre/${machineData.machineId}`);
-        fetchStatus();
+        // Create mobile session for QR scanner flow
+        try {
+          const sessionRes = await axios.post(`${API_BASE}/mobile-session/activate`, {
+            machine_id: machineData.machineId,
+            work_centre_id: machineData.workCentreId,
+            emp_id: empData.emp_id
+          });
+          
+          if (sessionRes.data.success) {
+            toast.success('Session created - Redirecting to mobile interface');
+            // Redirect to mobile QR scanner which will auto-detect the session
+            navigate('/mobile');
+          } else {
+            toast.error('Failed to create mobile session');
+          }
+        } catch (sessionError) {
+          console.error('Session creation error:', sessionError);
+          toast.error('Failed to create mobile session');
+        }
       }
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to start production');

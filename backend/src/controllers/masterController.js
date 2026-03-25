@@ -142,13 +142,13 @@ class MasterController {
       const data = req.body;
 
       if (table === 'users') {
-        const { code, name, email, password, role, work_centre_id, machine_id } = data;
+        const { code, name, password, role, work_centre_id, machine_id, machine_centre_name } = data;
         if (!code || !name || !password) {
           return res.status(400).json({ success: false, error: 'Code, name and password are required' });
         }
         const [result] = await db.execute(
-          `INSERT INTO users (code, name, email, password, role, work_centre_id, machine_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [code, name, email || null, password, role || 'user', work_centre_id || null, machine_id || null]
+          `INSERT INTO users (code, name, password, role, work_centre_id, machine_id, machine_centre_name) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [code, name, password, role || 'user', work_centre_id || null, machine_id || null, machine_centre_name || null]
         );
         return res.status(201).json({ success: true, data: { id: result.insertId } });
       }
@@ -191,10 +191,6 @@ class MasterController {
       });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
-        const msg = error.message.toLowerCase();
-        if (msg.includes('email')) {
-          return res.status(400).json({ success: false, error: 'Email already exists' });
-        }
         return res.status(400).json({ success: false, error: 'Code already exists' });
       }
       logger.error(`Error creating ${req.params.table}:`, error);
@@ -208,12 +204,12 @@ class MasterController {
       const data = req.body;
 
       if (table === 'users') {
-        const { code, name, email, password, role, work_centre_id, machine_id } = data;
+        const { code, name, password, role, work_centre_id, machine_id, machine_centre_name } = data;
         if (!code || !name) {
           return res.status(400).json({ success: false, error: 'Code and name are required' });
         }
-        let query = `UPDATE users SET code = ?, name = ?, email = ?, role = ?, work_centre_id = ?, machine_id = ?`;
-        let params = [code, name, email || null, role || 'user', work_centre_id || null, machine_id || null];
+        let query = `UPDATE users SET code = ?, name = ?, role = ?, work_centre_id = ?, machine_id = ?, machine_centre_name = ?`;
+        let params = [code, name, role || 'user', work_centre_id || null, machine_id || null, machine_centre_name || null];
         if (password) {
           query += `, password = ?`;
           params.push(password);
@@ -285,10 +281,6 @@ class MasterController {
       res.json({ success: true, data: { id, code, name, work_centre_id, machine_id } });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
-        const msg = error.message.toLowerCase();
-        if (msg.includes('email')) {
-          return res.status(400).json({ success: false, error: 'Email already exists' });
-        }
         return res.status(400).json({ success: false, error: 'Code already exists' });
       }
       logger.error(`Error updating ${req.params.table}:`, error);

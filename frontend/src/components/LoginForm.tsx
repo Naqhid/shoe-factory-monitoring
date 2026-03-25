@@ -30,7 +30,7 @@ export const LoginForm: React.FC = () => {
         toast.success(`Welcome, ${user.name}`);
 
         const userRole = (user.role || 'Admin') as UserRole;
-        const defaultRoute = getDefaultRoute(userRole);
+        const defaultRoute = getDefaultRoute(userRole, user);
         navigate(defaultRoute);
       } else {
         toast.error(data.message || 'Login failed');

@@ -410,6 +410,7 @@ export const ProductionRoutingForm: React.FC = () => {
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre ID</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
@@ -427,6 +428,9 @@ export const ProductionRoutingForm: React.FC = () => {
                         const calc = calculateLineValues(line);
                         return (
                           <tr key={index}>
+                            <td className="px-2 py-2 text-gray-700 font-mono text-sm">
+                              {line.machine_centre_id || 'N/A'}
+                            </td>
                             <td className="px-2 py-2">
                               <select value={line.machine_centre_id} onChange={(e) => updateLine(index, 'machine_centre_id', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1" required>
                                 <option value="">Select</option>

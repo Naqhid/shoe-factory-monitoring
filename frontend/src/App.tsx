@@ -88,7 +88,8 @@ function App() {
   const isMobile = activeMenu === 'mobile' || pathParts[0] === 'mobile';
   const isMobileLineSelector = activeMenu === 'mobile' && pathParts.length === 1;
   const isMobileLineProduction = isLineRoute;
-  const isMobileProduction = pathParts[0] === 'mobile' && pathParts.length >= 3 && !isLineRoute;
+  const isMobileProduction = pathParts[0] === 'mobile' && pathParts.length >= 2 && !isLineRoute;
+  const isMobileQRScanner = pathParts[0] === 'mobile' && pathParts.length === 2 && !isLineRoute;
 
   const {
     data: machines = [],
@@ -242,6 +243,8 @@ function App() {
         <MobileLineSelector />
       ) : isMobileLineProduction ? (
         <MobileLineProduction />
+      ) : isMobileQRScanner ? (
+        <MobileProduction />
       ) : isMobileProduction ? (
         <MobileProduction />
       ) : activeMenu === 'mobile-remote-setup' ? (

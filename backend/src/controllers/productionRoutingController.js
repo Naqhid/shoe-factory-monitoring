@@ -287,8 +287,13 @@ class ProductionRoutingController {
       if (rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Routing not found for this style' });
       }
+
+      const [lines] = await db.execute(
+        'SELECT observed_time, rating_factor, manpower FROM production_routing_lines WHERE routing_header_id = ?',
+        [rows[0].id]
+      );
       
-      res.json({ success: true, data: rows[0] });
+      res.json({ success: true, data: { ...rows[0], lines } });
     } catch (error) {
       logger.error('Error getting routing by style:', error);
       res.status(500).json({ success: false, error: error.message });

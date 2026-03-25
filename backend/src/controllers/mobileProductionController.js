@@ -381,14 +381,25 @@ exports.getInitData = async (req, res, next) => {
     const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE id = ?', [workCentreId]);
     const workCentre = wcRows[0] || { id: workCentreId, name: `WC-${workCentreId}` };
 
-    // Get target mins from routing (default 16.6)
+    // Get target mins from routing for this specific machine (default 16.6)
     let targetMins = 16.6;
     try {
-      const [routingRows] = await db.query('SELECT id FROM production_routing_header ORDER BY created_on DESC LIMIT 1');
-      if (routingRows[0]) {
-        const [linesRows] = await db.query('SELECT mins_12_prs_box FROM production_routing_lines WHERE routing_header_id = ?', [routingRows[0].id]);
-        if (linesRows.length > 0) {
-          targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
+      // First, get the machine centre ID for this machine
+      const [machineRows] = await db.query('SELECT id FROM machine_centres WHERE machine_id = ?', [machineId]);
+      if (machineRows.length > 0) {
+        const machineCentreId = machineRows[0].id;
+        
+        // Get routing data for this specific machine centre
+        const [routingRows] = await db.query('SELECT id FROM production_routing_header ORDER BY created_on DESC LIMIT 1');
+        if (routingRows[0]) {
+          const [linesRows] = await db.query(
+            'SELECT mins_12_prs_box FROM production_routing_lines WHERE routing_header_id = ? AND machine_centre_id = ?', 
+            [routingRows[0].id, machineCentreId]
+          );
+          if (linesRows.length > 0) {
+            // Sum only the lines for this specific machine centre
+            targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
+          }
         }
       }
     } catch (err) {
