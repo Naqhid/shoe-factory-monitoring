@@ -26,6 +26,7 @@ import { FormsMasterForm } from './components/FormsMasterForm';
 import { UserRightsForm } from './components/UserRightsForm';
 import { RolesMasterForm } from './components/RolesMasterForm';
 import { TVDashboard } from './components/TVDashboard';
+import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerPage';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { API_BASE_URL } from './services/api';
 import { MachineStatus } from './types';
@@ -189,6 +190,7 @@ function App() {
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
   const isTrackerApp = activeMenu === 'tracker_app';
   const isProductionTracker = activeMenu === 'production_tracker';
+  const isReworkRejectionTracker = activeMenu === 'rework_rejection_tracker';
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';
   const isUserRights = activeMenu === 'user_rights';
@@ -253,6 +255,8 @@ function App() {
         <TrackerApp />
       ) : isProductionTracker ? (
         <ProductionTracker />
+      ) : isReworkRejectionTracker ? (
+        <ReworkRejectionTrackerPage />
       ) : isUsers ? (
         <UsersMasterForm />
       ) : isFormsMaster ? (

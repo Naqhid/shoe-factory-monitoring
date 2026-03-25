@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList } from 'lucide-react';
 import { isMenuAllowed } from '../utils/roleConfig';
 
 interface NavigationProps {
@@ -16,6 +16,7 @@ const processMenus = [
   { key: 'production_planning', label: 'Planning', icon: Calendar },
   { key: 'line_setup_form', label: 'Line Setup ', icon: UserCheck },
   { key: 'production_tracker', label: 'Process Tracker', icon: Smartphone },
+  { key: 'rework_rejection_tracker', label: 'Rework / Rejection Tracker', icon: ClipboardList },
   { key: 'mobile', label: 'Line Monitor', icon: Smartphone },
 ];
 
