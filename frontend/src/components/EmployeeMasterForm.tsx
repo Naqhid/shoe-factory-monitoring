@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
@@ -28,6 +28,7 @@ export const EmployeeMasterForm: React.FC = () => {
     machine_centre_id: ''
   });
   const [loading, setLoading] = React.useState(false);
+  const [fetchLoading, setFetchLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<EmployeeRecord[]>([]);
   const [machineCentres, setMachineCentres] = React.useState<EmployeeRecord[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
@@ -36,6 +37,7 @@ export const EmployeeMasterForm: React.FC = () => {
 
 
   const fetchRecords = async () => {
+    setFetchLoading(true);
     try {
       const response = await fetch(`${API_BASE}/api/masters/employees`);
       const result = await response.json();
@@ -44,6 +46,8 @@ export const EmployeeMasterForm: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching employees:', error);
+    } finally {
+      setFetchLoading(false);
     }
   };
 
@@ -314,7 +318,14 @@ export const EmployeeMasterForm: React.FC = () => {
 
       {/* Records Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
+        {fetchLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <span className="ml-3 text-gray-600 text-lg">Loading data...</span>
+          </div>
+        ) : (
+          <>
+            <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -381,6 +392,8 @@ export const EmployeeMasterForm: React.FC = () => {
           itemsPerPage={itemsPerPage}
           onPageChange={setCurrentPage}
         />
+          </>
+        )}
       </div>
     </div>
   );

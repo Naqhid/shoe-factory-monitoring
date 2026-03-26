@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Plus, Edit, Trash2, X, Download } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
@@ -16,7 +16,6 @@ interface UserRecord {
   work_centre_code?: string;
   work_centre_name?: string;
   machine_id?: string;
-  machine_centre_name?: string;
 }
 
 export const UsersMasterForm: React.FC = () => {
@@ -29,10 +28,10 @@ export const UsersMasterForm: React.FC = () => {
     password: '',
     role: 'Admin',
     work_centre_id: '',
-    machine_id: '',
-    machine_centre_name: ''
+    machine_id: ''
   });
   const [loading, setLoading] = React.useState(false);
+  const [fetchLoading, setFetchLoading] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<UserRecord[]>([]);
   const [machineCentres, setMachineCentres] = React.useState<any[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
@@ -42,6 +41,7 @@ export const UsersMasterForm: React.FC = () => {
 
 
   const fetchRecords = async () => {
+    setFetchLoading(true);
     try {
       const response = await fetch(`${API_BASE}/api/masters/users?page=${currentPage}&limit=${itemsPerPage}`);
       const result = await response.json();
@@ -53,6 +53,8 @@ export const UsersMasterForm: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching users:', error);
+    } finally {
+      setFetchLoading(false);
     }
   };
 
@@ -93,7 +95,7 @@ export const UsersMasterForm: React.FC = () => {
   const filteredMachines = machineCentres;
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '', machine_centre_name: '' });
+    setFormData({ code: '', name: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -143,8 +145,7 @@ export const UsersMasterForm: React.FC = () => {
       password: '', // Don't populate password for security
       role: record.role,
       work_centre_id: record.work_centre_id?.toString() || '',
-      machine_id: record.machine_id || '',
-      machine_centre_name: record.machine_centre_name || ''
+      machine_id: record.machine_id || ''
     });
     setShowForm(true);
   };
@@ -187,7 +188,7 @@ export const UsersMasterForm: React.FC = () => {
       'Work Centre Code': record.work_centre_code || '',
       'Work Centre Name': record.work_centre_name || '',
       'Machine ID': record.machine_id || '',
-      'Machine Centre Name': record.machine_centre_name || ''
+      'Machine ID': record.machine_id || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -278,19 +279,6 @@ export const UsersMasterForm: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Machine Centre Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.machine_centre_name}
-                  onChange={(e) => setFormData({ ...formData, machine_centre_name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter machine centre name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password {editingRecord ? '(leave blank to keep current)' : '*'}
                 </label>
                 <input
@@ -341,7 +329,7 @@ export const UsersMasterForm: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Machine ID
+                  Machine Centre
                 </label>
                 <select
                   value={formData.machine_id}
@@ -380,7 +368,14 @@ export const UsersMasterForm: React.FC = () => {
 
       {/* Records Table */}
       <div className="bg-white rounded-lg shadow">
-        <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {fetchLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <span className="ml-3 text-gray-600 text-lg">Loading data...</span>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -389,9 +384,6 @@ export const UsersMasterForm: React.FC = () => {
                 </th>
                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Name
-                </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Machine Centre Name
                 </th>
                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Role
@@ -415,9 +407,6 @@ export const UsersMasterForm: React.FC = () => {
                   </td>
                   <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {record.name}
-                  </td>
-                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {record.machine_centre_name || 'N/A'}
                   </td>
                   <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
                     {record.role}
@@ -467,6 +456,8 @@ export const UsersMasterForm: React.FC = () => {
             setCurrentPage(1);
           }}
         />
+          </>
+        )}
       </div>
     </div>
   );

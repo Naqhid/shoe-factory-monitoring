@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -42,17 +42,21 @@ export const RolesMasterForm: React.FC = () => {
     default_route: '/overview',
     allowed_menus: [],
   });
+  const [fetchLoading, setFetchLoading] = useState(false);
 
   useEffect(() => {
     fetchRoles();
   }, []);
 
   const fetchRoles = async () => {
+    setFetchLoading(true);
     try {
       const response = await axios.get(`${API_URL}/roles`);
       setRoles(response.data);
     } catch (error) {
       toast.error('Failed to fetch roles');
+    } finally {
+      setFetchLoading(false);
     }
   };
 
@@ -153,33 +157,40 @@ export const RolesMasterForm: React.FC = () => {
       )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Default Route</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Menus Count</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {roles.map(role => (
-              <tr key={role.id}>
-                <td className="px-6 py-4">{role.role_name}</td>
-                <td className="px-6 py-4">{role.default_route}</td>
-                <td className="px-6 py-4">{role.allowed_menus.length}</td>
-                <td className="px-6 py-4 flex gap-2">
-                  <button onClick={() => handleEdit(role)} className="text-blue-600 hover:text-blue-800">
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => handleDelete(role.id!)} className="text-red-600 hover:text-red-800">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </td>
+        {fetchLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <span className="ml-3 text-gray-600 text-lg">Loading data...</span>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Default Route</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Menus Count</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {roles.map(role => (
+                <tr key={role.id}>
+                  <td className="px-6 py-4">{role.role_name}</td>
+                  <td className="px-6 py-4">{role.default_route}</td>
+                  <td className="px-6 py-4">{role.allowed_menus.length}</td>
+                  <td className="px-6 py-4 flex gap-2">
+                    <button onClick={() => handleEdit(role)} className="text-blue-600 hover:text-blue-800">
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => handleDelete(role.id!)} className="text-red-600 hover:text-red-800">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

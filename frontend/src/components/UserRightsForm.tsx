@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Save, Plus, Trash2, Download } from 'lucide-react';
+import { Save, Plus, Trash2, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE } from '../services/api';
@@ -47,6 +46,7 @@ export const UserRightsForm: React.FC = () => {
   const [users, setUsers] = React.useState<UserOption[]>([]);
   const [forms, setForms] = React.useState<FormOption[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [fetchLoading, setFetchLoading] = React.useState(false);
   const [existingRecords, setExistingRecords] = React.useState<UserRightRecord[]>([]);
 
   // Header
@@ -59,41 +59,28 @@ export const UserRightsForm: React.FC = () => {
 
   // Fetch users and forms on mount
   React.useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchAll = async () => {
+      setFetchLoading(true);
       try {
-        const response = await fetch(`${API_BASE}/api/masters/users`);
-        const result = await response.json();
-        if (result.success) setUsers(result.data);
+        const [usersRes, formsRes, rightsRes] = await Promise.all([
+          fetch(`${API_BASE}/api/masters/users`),
+          fetch(`${API_BASE}/api/masters/forms_master`),
+          fetch(`${API_BASE}/api/user-rights`),
+        ]);
+        const [usersResult, formsResult, rightsResult] = await Promise.all([
+          usersRes.json(), formsRes.json(), rightsRes.json(),
+        ]);
+        if (usersResult.success) setUsers(usersResult.data);
+        if (formsResult.success) setForms(formsResult.data);
+        if (rightsResult.success) setExistingRecords(rightsResult.data);
       } catch (error) {
-        toast.error('Error loading users');
+        toast.error('Error loading data');
         console.error(error);
+      } finally {
+        setFetchLoading(false);
       }
     };
-
-    const fetchForms = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/masters/forms_master`);
-        const result = await response.json();
-        if (result.success) setForms(result.data);
-      } catch (error) {
-        toast.error('Error loading forms');
-        console.error(error);
-      }
-    };
-
-    const fetchExistingRecords = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/user-rights`);
-        const result = await response.json();
-        if (result.success) setExistingRecords(result.data);
-      } catch (error) {
-        console.error('Error loading existing records:', error);
-      }
-    };
-
-    fetchUsers();
-    fetchForms();
-    fetchExistingRecords();
+    fetchAll();
   }, []);
 
   // When user is selected, populate User ID and load existing rights
@@ -404,7 +391,12 @@ export const UserRightsForm: React.FC = () => {
       </form>
 
       {/* Existing Records Table */}
-      {existingRecords.length > 0 && (
+      {fetchLoading ? (
+        <div className="mt-8 flex items-center justify-center py-16">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+          <span className="ml-3 text-gray-600 text-lg">Loading data...</span>
+        </div>
+      ) : existingRecords.length > 0 && (
         <div className="mt-8">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">All User Rights</h2>
           <div className="bg-white rounded-lg shadow overflow-hidden">
