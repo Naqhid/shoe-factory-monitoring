@@ -15,7 +15,7 @@ class AuthController {
 
             // In production, password should be hashed (e.g., bcrypt).
             const [rows] = await db.execute(
-                `SELECT u.id, u.code, u.name, u.role, u.machine_id, wc.code as work_centre_code 
+                `SELECT u.id, u.code, u.name, u.role, u.machine_id, u.work_centre_id, wc.code as work_centre_code, wc.name as work_centre_name 
                  FROM users u 
                  LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
                  WHERE u.code = ? AND u.password = ?`,
@@ -39,7 +39,9 @@ class AuthController {
                     name: user.name,
                     role: user.role,
                     machine_id: user.machine_id,
-                    work_centre_code: user.work_centre_code
+                    work_centre_id: user.work_centre_id,
+                    work_centre_code: user.work_centre_code,
+                    work_centre_name: user.work_centre_name
                 }
             });
         } catch (error) {

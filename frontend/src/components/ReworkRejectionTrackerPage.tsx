@@ -239,7 +239,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
               <input
                 type="text"
                 readOnly
-                value={workCentres.find(wc => String(wc.id) === supervisorWorkCentreId)?.name || supervisorWorkCentreId}
+                value={userInfo?.work_centre_name || supervisorWorkCentreId}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-700 cursor-not-allowed"
               />
             ) : (
