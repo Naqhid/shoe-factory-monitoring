@@ -123,7 +123,38 @@ exports.getDashboard = async (req, res) => {
             LIMIT 3
         `, [today, workCentreId, today]);
 
-        // Line Performance - All work centres
+        // Machine centres for rework/rejection (reused query)
+exports.getMachineCentresByWorkCentre = async (req, res) => {
+    try {
+        const { workCentreId } = req.params;
+        const date = req.query.date || new Date().toISOString().split('T')[0];
+
+        const [rows] = await pool.query(`
+            SELECT
+                mc.id              AS machine_centre_id,
+                mc.name            AS machine_centre_name,
+                mc.machine_id,
+                COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
+                COALESCE(pp.total_target_per_day, 0) AS target_pairs
+            FROM machine_centres mc
+            JOIN machine_centre_summary mcs
+                ON mcs.machine_id = mc.machine_id
+                AND DATE(mcs.prod_date) = ?
+                AND mcs.work_centre_id = ?
+            LEFT JOIN production_plan pp
+                ON pp.work_centre_id = mcs.work_centre_id
+                AND DATE(pp.plan_date) = ?
+            ORDER BY mc.code
+        `, [date, workCentreId, date]);
+
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Error fetching machine centres for work centre:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Line Performance - All work centres
         const [linePerformance] = await pool.query(`
             SELECT 
                 wc.name as line_name,
