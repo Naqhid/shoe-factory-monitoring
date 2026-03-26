@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Calendar, Building, Cpu } from 'lucide-react';
+import { Save, Calendar, Building, Cpu, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../services/api';
 
@@ -27,25 +27,36 @@ interface MachineCentre {
   machine_id: string;
 }
 
+const REASON_OPTIONS: Record<string, string[]> = {
+  MAN: ['Skill', 'Handling', 'Spec Awareness', 'Inspection'],
+  MACHINE: ['Settings', 'Needle/Foot', 'Skiving/Folding', 'Alignment'],
+  MATERIAL: ['Quality/Thickness', 'Thread/Accessories', 'Component Accuracy', 'Defects'],
+  METHOD: ['Sequence', 'SOP', 'Marking', 'QC Checks'],
+};
+
 export const ReworkRejectionTrackerPage: React.FC = () => {
+  const userInfo = JSON.parse(sessionStorage.getItem('user_info') || '{}');
+  const isSupervisor = userInfo?.role === 'Line Supervisor';
+  const supervisorWorkCentreId = userInfo?.work_centre_id ? String(userInfo.work_centre_id) : '';
+
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   });
-  
+
   const [workCentres, setWorkCentres] = useState<WorkCentre[]>([]);
   const [machineCentres, setMachineCentres] = useState<MachineCentre[]>([]);
-  const [selectedWorkCentre, setSelectedWorkCentre] = useState('');
+  const [selectedWorkCentre, setSelectedWorkCentre] = useState(isSupervisor ? supervisorWorkCentreId : '');
   const [selectedMachineCentre, setSelectedMachineCentre] = useState('');
   const [reworkData, setReworkData] = useState<ReworkData[]>([]);
   const [loading, setLoading] = useState(false);
 
   const reasonCategories = [
     { value: '', label: 'Select Category' },
-    { value: 'M1', label: 'M1 - Man' },
-    { value: 'M2', label: 'M2 - Machine' },
-    { value: 'M3', label: 'M3 - Method' },
-    { value: 'M4', label: 'M4 - Material' },
+    { value: 'MAN', label: 'MAN' },
+    { value: 'MACHINE', label: 'MACHINE' },
+    { value: 'MATERIAL', label: 'MATERIAL' },
+    { value: 'METHOD', label: 'METHOD' },
   ];
 
   // Fetch work centres on component mount
@@ -63,6 +74,13 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
     };
     fetchWorkCentres();
   }, []);
+
+  // Auto-load data for supervisor on mount
+  useEffect(() => {
+    if (isSupervisor && supervisorWorkCentreId) {
+      fetchProductionData();
+    }
+  }, [workCentres]);
 
   // Fetch machine centres when work centre changes
   useEffect(() => {
@@ -156,6 +174,8 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
         return;
       }
       updatedData[index] = { ...item, [field]: numValue };
+    } else if (field === 'reason_category') {
+      updatedData[index] = { ...item, reason_category: value as string, reason: '' };
     } else {
       updatedData[index] = { ...item, [field]: value };
     }
@@ -215,38 +235,30 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
               <Building className="h-4 w-4 inline mr-1" />
               Work Centre
             </label>
-            <select
-              value={selectedWorkCentre}
-              onChange={(e) => setSelectedWorkCentre(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select Work Centre</option>
-              {workCentres.map((wc) => (
-                <option key={wc.id} value={wc.id}>
-                  {wc.name}
-                </option>
-              ))}
-            </select>
+            {isSupervisor ? (
+              <input
+                type="text"
+                readOnly
+                value={workCentres.find(wc => String(wc.id) === supervisorWorkCentreId)?.name || supervisorWorkCentreId}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-700 cursor-not-allowed"
+              />
+            ) : (
+              <select
+                value={selectedWorkCentre}
+                onChange={(e) => setSelectedWorkCentre(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select Work Centre</option>
+                {workCentres.map((wc) => (
+                  <option key={wc.id} value={wc.id}>
+                    {wc.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Cpu className="h-4 w-4 inline mr-1" />
-              Machine Centre
-            </label>
-            <select
-              value={selectedMachineCentre}
-              onChange={(e) => setSelectedMachineCentre(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Machine Centres</option>
-              {machineCentres.map((mc) => (
-                <option key={mc.id} value={mc.id}>
-                  {mc.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        
 
           <div className="flex items-end">
             <button
@@ -260,8 +272,16 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Spinner while loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+          <span className="ml-3 text-gray-600 text-lg">Loading data...</span>
+        </div>
+      )}
+
       {/* Data Table */}
-      {reworkData.length > 0 && (
+      {!loading && reworkData.length > 0 && (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-900">Production Data</h2>
@@ -278,12 +298,6 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Emp ID
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Employee Name
-                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Machine Centre
                   </th>
@@ -310,12 +324,6 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {reworkData.map((row, index) => (
                   <tr key={row.emp_id} className={`hover:bg-gray-50 ${row.rejection_qty > 10 ? 'bg-red-50' : ''}`}>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {row.emp_id}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {row.employee_name}
-                    </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {row.machine_centre_name}
                     </td>
@@ -359,13 +367,17 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
                       </select>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm">
-                      <input
-                        type="text"
+                      <select
                         value={row.reason}
                         onChange={(e) => updateReworkData(index, 'reason', e.target.value)}
-                        placeholder="Enter reason..."
-                        className="w-40 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                        className="w-44 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={!row.reason_category}
+                      >
+                        <option value="">Select Reason</option>
+                        {(REASON_OPTIONS[row.reason_category] || []).map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                 ))}
@@ -376,7 +388,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
       )}
 
       {/* Empty State */}
-      {reworkData.length === 0 && !loading && (
+      {!loading && reworkData.length === 0 && (
         <div className="bg-white rounded-lg shadow-md p-12 text-center">
           <div className="text-gray-400 mb-4">
             <Cpu className="h-16 w-16 mx-auto" />
