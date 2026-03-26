@@ -188,7 +188,7 @@ export const UsersMasterForm: React.FC = () => {
       'Work Centre Code': record.work_centre_code || '',
       'Work Centre Name': record.work_centre_name || '',
       'Machine ID': record.machine_id || '',
-      'Machine ID': record.machine_id || ''
+    
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
