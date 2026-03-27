@@ -21,6 +21,7 @@ const productionTrackerController = require('./controllers/productionTrackerCont
 const machineCentreController = require('./controllers/machineCentreController');
 const tvDashboardController = require('./controllers/tvDashboardController');
 const hourlyOutputController = require('./controllers/hourlyOutputController');
+const reworkRejectionController = require('./controllers/reworkRejectionController');
 const roleController = require('./controllers/roleController');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -28,7 +29,6 @@ const errorHandler = require('./middleware/errorHandler');
 const getAbsolutePath = (dirPath) => {
   if (!dirPath) return null;
   if (path.isAbsolute(dirPath)) return dirPath;
-  // Resolve relative to the backend root (one level up from src)
   return path.resolve(__dirname, '..', dirPath);
 };
 
@@ -39,15 +39,12 @@ const createDirectories = () => {
   const failureDir = getAbsolutePath(process.env.FAILURE_DIR || './data/error');
   const logsDir = getAbsolutePath(process.env.LOGS_DIR || './logs');
 
-  // Update process.env so other services get the absolute path
   process.env.INCOMING_DIR = incomingDir;
   process.env.SUCCESS_DIR = successDir;
   process.env.FAILURE_DIR = failureDir;
   process.env.LOGS_DIR = logsDir;
 
-  const dirs = [incomingDir, successDir, failureDir, logsDir];
-
-  dirs.forEach(dir => {
+  [incomingDir, successDir, failureDir, logsDir].forEach(dir => {
     if (dir && !fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
       logger.info(`Created directory: ${dir}`);
@@ -55,11 +52,37 @@ const createDirectories = () => {
   });
 };
 
+// Auto-create rework_rejection table
+const initDb = async () => {
+  try {
+    const db = require('../config/database');
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS rework_rejection (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        work_centre_id INT NOT NULL,
+        production_date DATE NOT NULL,
+        machine_centre_name VARCHAR(100),
+        total_output_pairs INT DEFAULT 0,
+        bins_completed INT DEFAULT 0,
+        rework_qty INT DEFAULT 0,
+        rejection_qty INT DEFAULT 0,
+        reason_category VARCHAR(20),
+        reason VARCHAR(100),
+        saved_at DATETIME NOT NULL,
+        INDEX idx_wc_date (work_centre_id, production_date)
+      )
+    `);
+    logger.info('rework_rejection table ready');
+  } catch (e) {
+    logger.error('Failed to init rework_rejection table:', e.message);
+  }
+};
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Create directories on startup
 createDirectories();
+initDb();
 
 // Middleware
 app.use(compression());
@@ -71,7 +94,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Request logging for debugging
 app.use((req, res, next) => {
   logger.info(`${req.method} ${req.url} from ${req.ip} | Origin: ${req.get('Origin') || 'None'}`);
   next();
@@ -120,8 +142,6 @@ app.get('/api/line-setup/:id', lineSetupController.getById);
 app.post('/api/line-setup', lineSetupController.create);
 app.put('/api/line-setup/:id', lineSetupController.update);
 app.delete('/api/line-setup/:id', lineSetupController.delete);
-
-// Shift start route
 app.post('/api/shift-start', lineSetupController.createShift);
 
 // User rights routes
@@ -181,6 +201,11 @@ app.get('/api/tv-dashboard/dashboard/:workCentreId', tvDashboardController.getDa
 // Hourly Output routes
 app.get('/api/hourly-output/:workCentreId', hourlyOutputController.getHourlyOutput);
 
+// Rework Rejection routes
+app.get('/api/rework-rejection/summary', reworkRejectionController.getSummaryByWorkCentre);
+app.get('/api/rework-rejection', reworkRejectionController.getAll);
+app.post('/api/rework-rejection', reworkRejectionController.save);
+
 // Role routes
 app.get('/api/roles', roleController.getAll);
 app.get('/api/roles/:id', roleController.getById);
@@ -193,35 +218,25 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Error handling
 app.use(errorHandler);
 
-// Start server
-const useHttps = false; // Force HTTP
-
+const useHttps = false;
 let server;
 server = http.createServer(app);
 logger.info('Running on HTTP (HTTPS disabled for mobile compatibility)');
 
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server started on port ${PORT} (${useHttps ? 'HTTPS' : 'HTTP'}) and listening on all interfaces`);
-
-  // Start file watcher
   fileWatcherService.start();
 });
 
-// Graceful shutdown
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
-
   fileWatcherService.stop();
-
   server.close(() => {
     logger.info('HTTP server closed');
     process.exit(0);
   });
-
-  // Force close after 10 seconds
   setTimeout(() => {
     logger.error('Could not close connections in time, forcefully shutting down');
     process.exit(1);

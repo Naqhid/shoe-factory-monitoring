@@ -11,6 +11,7 @@ export const TVDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [progress, setProgress] = useState(0);
     const [currentDate, setCurrentDate] = useState('');
+    const [reworkSummary, setReworkSummary] = useState<Record<number, { total_rework: number; total_rejection: number }>>({});
 
     useEffect(() => {
         const now = new Date();
@@ -39,11 +40,17 @@ export const TVDashboard: React.FC = () => {
         const fetchDashboard = async () => {
             try {
                 const workCentreId = workCentres[currentIndex].id;
-                const res = await fetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`);
-                const result = await res.json();
-                if (result.success) {
-                    setDashboardData(result.data);
-                    setLoading(false);
+                const [dashRes, reworkRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`),
+                    fetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`),
+                ]);
+                const dashResult = await dashRes.json();
+                const reworkResult = await reworkRes.json();
+                if (dashResult.success) { setDashboardData(dashResult.data); setLoading(false); }
+                if (reworkResult.success) {
+                    const map: Record<number, { total_rework: number; total_rejection: number }> = {};
+                    reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
+                    setReworkSummary(map);
                 }
             } catch (error) {
                 console.error('Error fetching dashboard:', error);
@@ -162,6 +169,8 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT %</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EFFICIENCY %</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">WIP</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-yellow-600">REWORK</th>
+                                <th className="px-4 py-3 text-center text-sm font-bold text-red-600">REJECTION</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
                             </tr>
                         </thead>
@@ -172,6 +181,7 @@ export const TVDashboard: React.FC = () => {
                                     if (eff >= 85) return 'bg-yellow-500';
                                     return 'bg-red-500';
                                 };
+                                const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
                                 return (
                                     <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                                         <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
@@ -180,6 +190,8 @@ export const TVDashboard: React.FC = () => {
                                         <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{line.wip || 0}</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-yellow-600">{rw.total_rework}</td>
+                                        <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{rw.total_rejection}</td>
                                         <td className="px-4 py-4">
                                             <div className="flex justify-center gap-2">
                                                 <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>

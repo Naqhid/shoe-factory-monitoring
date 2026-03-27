@@ -15,7 +15,7 @@ const processMenus = [
   { key: 'production_routing', label: 'Routing', icon: Route },
   { key: 'production_planning', label: 'Planning', icon: Calendar },
   { key: 'line_setup_form', label: 'Line Setup ', icon: UserCheck },
-  { key: 'production_tracker', label: 'Process Tracker', icon: Smartphone },
+  { key: 'production_tracker', label: 'Production Tracker', icon: Smartphone },
   { key: 'rework_rejection_tracker', label: 'Rework / Rejection Tracker', icon: ClipboardList },
   { key: 'mobile', label: 'Line Monitor', icon: Smartphone },
 ];
