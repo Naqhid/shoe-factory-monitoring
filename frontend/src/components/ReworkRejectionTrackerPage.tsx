@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Calendar, Building, Cpu, Loader2, Edit, Trash2, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../services/api';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface ReworkData {
   emp_id: string;
@@ -67,6 +68,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRow, setEditRow] = useState<Partial<SavedRecord>>({});
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const reasonCategories = [
     { value: '', label: 'Select Category' },
@@ -258,9 +260,13 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this record?')) return;
+    setDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rework-rejection/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}/api/rework-rejection/${deleteId}`, { method: 'DELETE' });
       const result = await response.json();
       if (result.success) {
         toast.success('Record deleted');
@@ -270,11 +276,21 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
       }
     } catch {
       toast.error('Failed to delete record');
+    } finally {
+      setDeleteId(null);
     }
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <ConfirmDialog
+        isOpen={deleteId !== null}
+        title="Delete Record"
+        message="Are you sure you want to delete this record? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+        confirmText="Delete"
+      />
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Rework / Rejection Tracker</h1>
         <p className="text-gray-600">Track and manage rework and rejection quantities for production</p>
