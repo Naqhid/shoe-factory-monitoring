@@ -50,6 +50,34 @@ class ReworkRejectionController {
     }
   }
 
+  async update(req, res) {
+    try {
+      const { id } = req.params;
+      const { rework_qty, rejection_qty, reason_category, reason } = req.body;
+      const [result] = await db.execute(
+        `UPDATE rework_rejection SET rework_qty = ?, rejection_qty = ?, reason_category = ?, reason = ? WHERE id = ?`,
+        [rework_qty ?? 0, rejection_qty ?? 0, reason_category || null, reason || null, id]
+      );
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, error: 'Record not found' });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error updating rework rejection:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+      const [result] = await db.execute(`DELETE FROM rework_rejection WHERE id = ?`, [id]);
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, error: 'Record not found' });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error deleting rework rejection:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   async getSummaryByWorkCentre(req, res) {
     try {
       const { date } = req.query;

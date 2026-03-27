@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Calendar, Building, Cpu, Loader2 } from 'lucide-react';
+import { Save, Calendar, Building, Cpu, Loader2, Edit, Trash2, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../services/api';
 
@@ -65,6 +65,8 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const [savedRecords, setSavedRecords] = useState<SavedRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editRow, setEditRow] = useState<Partial<SavedRecord>>({});
 
   const reasonCategories = [
     { value: '', label: 'Select Category' },
@@ -230,6 +232,47 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
     return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
+  const handleEditStart = (rec: SavedRecord) => {
+    setEditingId(rec.id);
+    setEditRow({ rework_qty: rec.rework_qty, rejection_qty: rec.rejection_qty, reason_category: rec.reason_category, reason: rec.reason });
+  };
+
+  const handleEditSave = async (rec: SavedRecord) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/rework-rejection/${rec.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editRow),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success('Record updated');
+        setEditingId(null);
+        await fetchSavedRecords();
+      } else {
+        toast.error(result.error || 'Update failed');
+      }
+    } catch {
+      toast.error('Failed to update record');
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Delete this record?')) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/rework-rejection/${id}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (result.success) {
+        toast.success('Record deleted');
+        await fetchSavedRecords();
+      } else {
+        toast.error(result.error || 'Delete failed');
+      }
+    } catch {
+      toast.error('Failed to delete record');
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
@@ -279,22 +322,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Cpu className="h-4 w-4 inline mr-1" />
-              Machine Centre
-            </label>
-            <select
-              value={selectedMachineCentre}
-              onChange={(e) => setSelectedMachineCentre(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Machine Centres</option>
-              {machineCentres.map((mc) => (
-                <option key={mc.id} value={mc.id}>{mc.name}</option>
-              ))}
-            </select>
-          </div>
+        
 
           <div className="flex items-end">
             <button
@@ -416,25 +444,86 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Rejection</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {savedRecords.map((rec) => (
-                  <tr key={rec.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDateTime(rec.saved_at)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{rec.machine_centre_name}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-900">{rec.total_output_pairs}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-900">{rec.bins_completed}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                      <span className={`font-semibold ${rec.rework_qty > 0 ? 'text-yellow-600' : 'text-gray-500'}`}>{rec.rework_qty}</span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                      <span className={`font-semibold ${rec.rejection_qty > 0 ? 'text-red-600' : 'text-gray-500'}`}>{rec.rejection_qty}</span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{rec.reason_category || '—'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{rec.reason || '—'}</td>
-                  </tr>
-                ))}
+                {savedRecords.map((rec) => {
+                  const isEditing = editingId === rec.id;
+                  return (
+                    <tr key={rec.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{formatDateTime(rec.saved_at)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{rec.machine_centre_name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-900">{rec.total_output_pairs}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-900">{rec.bins_completed}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        {isEditing ? (
+                          <input type="number" min="0" value={editRow.rework_qty ?? 0}
+                            onChange={(e) => setEditRow(p => ({ ...p, rework_qty: Number(e.target.value) }))}
+                            className="w-16 px-1 py-1 border border-blue-400 rounded text-center text-sm focus:outline-none" />
+                        ) : (
+                          <span className={`font-semibold ${rec.rework_qty > 0 ? 'text-yellow-600' : 'text-gray-500'}`}>{rec.rework_qty}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        {isEditing ? (
+                          <input type="number" min="0" value={editRow.rejection_qty ?? 0}
+                            onChange={(e) => setEditRow(p => ({ ...p, rejection_qty: Number(e.target.value) }))}
+                            className="w-16 px-1 py-1 border border-blue-400 rounded text-center text-sm focus:outline-none" />
+                        ) : (
+                          <span className={`font-semibold ${rec.rejection_qty > 0 ? 'text-red-600' : 'text-gray-500'}`}>{rec.rejection_qty}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {isEditing ? (
+                          <select value={editRow.reason_category || ''}
+                            onChange={(e) => setEditRow(p => ({ ...p, reason_category: e.target.value, reason: '' }))}
+                            className="w-28 px-1 py-1 border border-blue-400 rounded text-sm focus:outline-none">
+                            {reasonCategories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                          </select>
+                        ) : (
+                          <span>{rec.reason_category || '—'}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {isEditing ? (
+                          <select value={editRow.reason || ''}
+                            onChange={(e) => setEditRow(p => ({ ...p, reason: e.target.value }))}
+                            disabled={!editRow.reason_category}
+                            className="w-40 px-1 py-1 border border-blue-400 rounded text-sm focus:outline-none">
+                            <option value="">Select Reason</option>
+                            {(REASON_OPTIONS[editRow.reason_category || ''] || []).map((r) => <option key={r} value={r}>{r}</option>)}
+                          </select>
+                        ) : (
+                          <span>{rec.reason || '—'}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <div className="flex items-center justify-center gap-2">
+                          {isEditing ? (
+                            <>
+                              <button onClick={() => handleEditSave(rec)} className="text-green-600 hover:text-green-800" title="Save">
+                                <Check className="h-4 w-4" />
+                              </button>
+                              <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-gray-700" title="Cancel">
+                                <X className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => handleEditStart(rec)} className="text-blue-600 hover:text-blue-800" title="Edit">
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button onClick={() => handleDelete(rec.id)} className="text-red-600 hover:text-red-800" title="Delete">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot className="bg-gray-50">
                 <tr>
@@ -445,7 +534,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
                   <td className="px-4 py-3 text-sm font-bold text-red-600 text-center">
                     {savedRecords.reduce((s, r) => s + r.rejection_qty, 0)}
                   </td>
-                  <td colSpan={2} />
+                  <td colSpan={3} />
                 </tr>
               </tfoot>
             </table>

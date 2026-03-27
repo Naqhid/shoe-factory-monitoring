@@ -206,6 +206,8 @@ app.get('/api/hourly-output/:workCentreId', hourlyOutputController.getHourlyOutp
 app.get('/api/rework-rejection/summary', reworkRejectionController.getSummaryByWorkCentre);
 app.get('/api/rework-rejection', reworkRejectionController.getAll);
 app.post('/api/rework-rejection', reworkRejectionController.save);
+app.put('/api/rework-rejection/:id', reworkRejectionController.update);
+app.delete('/api/rework-rejection/:id', reworkRejectionController.delete);
 
 // Role routes
 app.get('/api/roles', roleController.getAll);
