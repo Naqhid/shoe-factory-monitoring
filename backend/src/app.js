@@ -196,6 +196,7 @@ app.get('/api/machine-centre/plan/:workCentreId/:machineId', machineCentreContro
 
 // TV Dashboard routes
 app.get('/api/tv-dashboard/work-centres', tvDashboardController.getWorkCentres);
+app.get('/api/tv-dashboard/machine-centres/:workCentreId', tvDashboardController.getMachineCentresByWorkCentre);
 app.get('/api/tv-dashboard/dashboard/:workCentreId', tvDashboardController.getDashboard);
 
 // Hourly Output routes

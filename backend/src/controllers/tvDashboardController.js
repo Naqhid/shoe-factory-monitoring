@@ -1,13 +1,8 @@
-const express = require('express');
-const router = express.Router();
 const pool = require('../../config/database');
 
-// Get all work centres for rotation
 exports.getWorkCentres = async (req, res) => {
     try {
-        const [workCentres] = await pool.query(
-            'SELECT id, name FROM work_centres ORDER BY id'
-        );
+        const [workCentres] = await pool.query('SELECT id, name FROM work_centres ORDER BY id');
         res.json({ success: true, data: workCentres });
     } catch (error) {
         console.error('Error fetching work centres:', error);
@@ -15,13 +10,42 @@ exports.getWorkCentres = async (req, res) => {
     }
 };
 
-// Get TV dashboard data for a specific work centre
+exports.getMachineCentresByWorkCentre = async (req, res) => {
+    try {
+        const { workCentreId } = req.params;
+        const date = req.query.date || new Date().toISOString().split('T')[0];
+
+        const [rows] = await pool.query(`
+            SELECT
+                mc.id              AS machine_centre_id,
+                mc.name            AS machine_centre_name,
+                mc.machine_id,
+                COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
+                COALESCE(pp.total_target_per_day, 12) AS target_pairs
+            FROM machine_centres mc
+            LEFT JOIN machine_centre_summary mcs
+                ON mcs.machine_id = mc.machine_id
+                AND DATE(mcs.prod_date) = ?
+                AND mcs.work_centre_id = ?
+            LEFT JOIN production_plan pp
+                ON pp.work_centre_id = ?
+                AND DATE(pp.plan_date) = ?
+            WHERE mc.work_centre_id = ?
+            ORDER BY mc.code
+        `, [date, workCentreId, workCentreId, date, workCentreId]);
+
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Error fetching machine centres for work centre:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 exports.getDashboard = async (req, res) => {
     try {
         const { workCentreId } = req.params;
         const today = req.query.date || new Date().toISOString().split('T')[0];
 
-        // Top Section - Overall metrics (all work centres)
         const [planningData] = await pool.query(
             'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE plan_date = ?',
             [today]
@@ -31,10 +55,8 @@ exports.getDashboard = async (req, res) => {
             [today]
         );
         const [overallEfficiency] = await pool.query(`
-            SELECT 
-                (SUM(total_target_mins) / (SUM(total_actual_mins) + SUM(total_idle_mins))) * 100 AS overall_efficiency_percent
-            FROM machine_centre_summary
-            WHERE prod_date = ?
+            SELECT (SUM(total_target_mins) / (SUM(total_actual_mins) + SUM(total_idle_mins))) * 100 AS overall_efficiency_percent
+            FROM machine_centre_summary WHERE prod_date = ?
         `, [today]);
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
@@ -47,7 +69,6 @@ exports.getDashboard = async (req, res) => {
         if (outputPercent >= 90 && efficiencyPercent >= 90) emojiType = 'happy';
         else if (outputPercent >= 70 && efficiencyPercent >= 70) emojiType = 'medium';
 
-        // Middle Section - Line wise output (filtered by work centre)
         const [wcPlanningData] = await pool.query(
             'SELECT SUM(total_target_per_day) as target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
             [today, workCentreId]
@@ -62,7 +83,6 @@ exports.getDashboard = async (req, res) => {
         const wcOutputPercent = wcTarget > 0 ? (wcOutput / wcTarget) * 100 : 0;
         const wcEfficiency = wcSummaryData[0]?.avg_efficiency || 0;
 
-        // Attendance calculation
         const [attendanceTarget] = await pool.query(`
             SELECT COALESCE(SUM(prl.manpower), 0) as target_employees
             FROM production_plan pp
@@ -77,35 +97,25 @@ exports.getDashboard = async (req, res) => {
             WHERE DATE(activated_at) = DATE(?) AND status = 'active'
         `, [today]);
 
-        // Calculate hourly output based on average hourly output for the work centre
         const [avgHourlyData] = await pool.query(`
-            SELECT 
-                AVG(hourly_output) AS avg_hourly_output
+            SELECT AVG(hourly_output) AS avg_hourly_output
             FROM (
-                SELECT 
-                    HOUR(created_at) AS hr,
-                    SUM(output_pairs) AS hourly_output
+                SELECT HOUR(created_at) AS hr, SUM(output_pairs) AS hourly_output
                 FROM machine_centre_production
-                WHERE DATE(created_at) = ?
-                AND work_centre_id = ?
+                WHERE DATE(created_at) = ? AND work_centre_id = ?
                 GROUP BY HOUR(created_at)
             ) AS hourly_data
         `, [today, workCentreId]);
         const hourlyOutput = Math.round(avgHourlyData[0]?.avg_hourly_output || 0);
 
-        // Lower Section - Hourly output graph (based on updated_at)
         const [hourlyData] = await pool.query(`
-            SELECT 
-                HOUR(updated_at) as hour,
-                SUM(output_pairs) as output
+            SELECT HOUR(updated_at) as hour, SUM(output_pairs) as output
             FROM machine_centre_production
-            WHERE work_centre_id = ? 
-            AND DATE(prod_date) = ?
+            WHERE work_centre_id = ? AND DATE(prod_date) = ?
             GROUP BY HOUR(updated_at)
             ORDER BY hour
         `, [workCentreId, today]);
 
-        // Lower Section - Top 3 bottleneck machine centres
         const [bottlenecks] = await pool.query(`
             SELECT 
                 mc.name as machine_centre_name,
@@ -116,55 +126,18 @@ exports.getDashboard = async (req, res) => {
             JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
             JOIN work_centres wc ON mcs.work_centre_id = wc.id
             LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
-            WHERE mcs.work_centre_id = ?
-            AND mcs.prod_date = ?
-            AND mcs.avg_efficiency_percent < 70
+            WHERE mcs.work_centre_id = ? AND mcs.prod_date = ? AND mcs.avg_efficiency_percent < 70
             ORDER BY mcs.avg_efficiency_percent ASC
             LIMIT 3
         `, [today, workCentreId, today]);
 
-        // Machine centres for rework/rejection (reused query)
-exports.getMachineCentresByWorkCentre = async (req, res) => {
-    try {
-        const { workCentreId } = req.params;
-        const date = req.query.date || new Date().toISOString().split('T')[0];
-
-        const [rows] = await pool.query(`
-            SELECT
-                mc.id              AS machine_centre_id,
-                mc.name            AS machine_centre_name,
-                mc.machine_id,
-                COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
-                COALESCE(pp.total_target_per_day, 0) AS target_pairs
-            FROM machine_centres mc
-            JOIN machine_centre_summary mcs
-                ON mcs.machine_id = mc.machine_id
-                AND DATE(mcs.prod_date) = ?
-                AND mcs.work_centre_id = ?
-            LEFT JOIN production_plan pp
-                ON pp.work_centre_id = mcs.work_centre_id
-                AND DATE(pp.plan_date) = ?
-            ORDER BY mc.code
-        `, [date, workCentreId, date]);
-
-        res.json({ success: true, data: rows });
-    } catch (error) {
-        console.error('Error fetching machine centres for work centre:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-// Line Performance - All work centres
         const [linePerformance] = await pool.query(`
             SELECT 
+                wc.id as work_centre_id,
                 wc.name as line_name,
                 COALESCE(SUM(pp.total_target_per_day), 0) as target,
                 COALESCE(SUM(mcs.total_output_pairs), 0) as output,
-                CASE 
-                    WHEN SUM(pp.total_target_per_day) > 0 THEN 
-                        ROUND((SUM(mcs.total_output_pairs) / SUM(pp.total_target_per_day)) * 100, 0)
-                    ELSE 0 
-                END as output_percentage,
+                CASE WHEN SUM(pp.total_target_per_day) > 0 THEN ROUND((SUM(mcs.total_output_pairs) / SUM(pp.total_target_per_day)) * 100, 0) ELSE 0 END as output_percentage,
                 ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency,
                 GREATEST(0, COALESCE(SUM(pp.total_target_per_day), 0) - COALESCE(SUM(mcs.total_output_pairs), 0)) as wip
             FROM work_centres wc
@@ -200,6 +173,7 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                     hourlyData: hourlyData,
                     bottlenecks: bottlenecks,
                     linePerformance: linePerformance.map(line => ({
+                        work_centre_id: line.work_centre_id,
                         line_name: line.line_name,
                         target: Math.round(line.target || 0),
                         output: Math.round(line.output || 0),

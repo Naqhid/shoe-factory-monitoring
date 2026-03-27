@@ -88,11 +88,17 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isSupervisor && supervisorWorkCentreId) {
+    if (isSupervisor && supervisorWorkCentreId && workCentres.length > 0) {
+      setSelectedWorkCentre(supervisorWorkCentreId);
+    }
+  }, [workCentres]);
+
+  useEffect(() => {
+    if (isSupervisor && supervisorWorkCentreId && selectedWorkCentre) {
       fetchProductionData();
       fetchSavedRecords();
     }
-  }, [workCentres]);
+  }, [selectedWorkCentre]);
 
   useEffect(() => {
     const fetchMachineCentres = async () => {
@@ -129,13 +135,27 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      const mockData: ReworkData[] = [
-        { emp_id: 'EMP-1001', employee_name: 'John Doe', machine_centre_name: 'Stitching Machine 1', total_output_pairs: 120, target_pairs: 12, bins_completed: 10, rework_qty: 0, rejection_qty: 0, reason_category: '', reason: '' },
-        { emp_id: 'EMP-1002', employee_name: 'Jane Smith', machine_centre_name: 'Stitching Machine 2', total_output_pairs: 96, target_pairs: 12, bins_completed: 8, rework_qty: 0, rejection_qty: 0, reason_category: '', reason: '' },
-        { emp_id: 'EMP-1003', employee_name: 'Mike Johnson', machine_centre_name: 'Cutting Machine 1', total_output_pairs: 144, target_pairs: 12, bins_completed: 12, rework_qty: 0, rejection_qty: 0, reason_category: '', reason: '' },
-      ];
-      setReworkData(mockData);
-      toast.success('Data loaded successfully');
+      const wcId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
+      const response = await fetch(`${API_BASE_URL}/api/tv-dashboard/machine-centres/${wcId}?date=${selectedDate}`);
+      const result = await response.json();
+      if (result.success && result.data.length > 0) {
+        setReworkData(result.data.map((row: any) => ({
+          emp_id: row.machine_id,
+          employee_name: '',
+          machine_centre_name: row.machine_centre_name,
+          total_output_pairs: row.total_output_pairs,
+          target_pairs: row.target_pairs || 12,
+          bins_completed: row.target_pairs > 0 ? Math.floor(row.total_output_pairs / row.target_pairs) : 0,
+          rework_qty: 0,
+          rejection_qty: 0,
+          reason_category: '',
+          reason: '',
+        })));
+        toast.success('Data loaded successfully');
+      } else {
+        setReworkData([]);
+        toast.error('No production data found for selected date and work centre');
+      }
       await fetchSavedRecords();
     } catch (error) {
       toast.error('Failed to load production data');
