@@ -21,7 +21,7 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   },
   'IED': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'production_routing', 'production_tracker','reports']
+    allowedMenus: ['overview', 'production_routing', 'production_tracker', 'rework_rejection_tracker', 'reports']
   },
   'Planner': {
     defaultRoute: '/overview',
