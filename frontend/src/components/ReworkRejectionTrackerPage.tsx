@@ -51,6 +51,7 @@ const REASON_OPTIONS: Record<string, string[]> = {
 export const ReworkRejectionTrackerPage: React.FC = () => {
   const userInfo = JSON.parse(sessionStorage.getItem('user_info') || '{}');
   const isSupervisor = userInfo?.role === 'Line Supervisor';
+  const canEditDelete = ['Admin', 'IED'].includes(userInfo?.role);
   const supervisorWorkCentreId = userInfo?.work_centre_id ? String(userInfo.work_centre_id) : '';
 
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -393,13 +394,17 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-900">{row.total_output_pairs}</td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-900">{Math.floor(row.total_output_pairs / row.target_pairs)}</td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-center">
-                      <input type="number" min="0" max={row.total_output_pairs} value={row.rework_qty}
-                        onChange={(e) => updateReworkData(index, 'rework_qty', e.target.value)}
+                      <input type="number" min="0" max={row.total_output_pairs}
+                        value={row.rework_qty === 0 ? '' : row.rework_qty}
+                        onChange={(e) => updateReworkData(index, 'rework_qty', e.target.value === '' ? 0 : e.target.value)}
+                        placeholder="0"
                         className="w-20 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-center">
-                      <input type="number" min="0" max={row.total_output_pairs} value={row.rejection_qty}
-                        onChange={(e) => updateReworkData(index, 'rejection_qty', e.target.value)}
+                      <input type="number" min="0" max={row.total_output_pairs}
+                        value={row.rejection_qty === 0 ? '' : row.rejection_qty}
+                        onChange={(e) => updateReworkData(index, 'rejection_qty', e.target.value === '' ? 0 : e.target.value)}
+                        placeholder="0"
                         className="w-20 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm">
@@ -460,7 +465,9 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Rejection</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  {canEditDelete && (
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -514,29 +521,31 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
                           <span>{rec.reason || '—'}</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <div className="flex items-center justify-center gap-2">
-                          {isEditing ? (
-                            <>
-                              <button onClick={() => handleEditSave(rec)} className="text-green-600 hover:text-green-800" title="Save">
-                                <Check className="h-4 w-4" />
-                              </button>
-                              <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-gray-700" title="Cancel">
-                                <X className="h-4 w-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={() => handleEditStart(rec)} className="text-blue-600 hover:text-blue-800" title="Edit">
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button onClick={() => handleDelete(rec.id)} className="text-red-600 hover:text-red-800" title="Delete">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
+                      {canEditDelete && (
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <div className="flex items-center justify-center gap-2">
+                            {isEditing ? (
+                              <>
+                                <button onClick={() => handleEditSave(rec)} className="text-green-600 hover:text-green-800" title="Save">
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-gray-700" title="Cancel">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => handleEditStart(rec)} className="text-blue-600 hover:text-blue-800" title="Edit">
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => handleDelete(rec.id)} className="text-red-600 hover:text-red-800" title="Delete">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -550,7 +559,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
                   <td className="px-4 py-3 text-sm font-bold text-red-600 text-center">
                     {savedRecords.reduce((s, r) => s + r.rejection_qty, 0)}
                   </td>
-                  <td colSpan={3} />
+                  <td colSpan={canEditDelete ? 3 : 2} />
                 </tr>
               </tfoot>
             </table>
