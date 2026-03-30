@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="256" fill="#2563eb"/>
+  <!-- Factory building -->
+  <rect x="100" y="280" width="312" height="160" rx="8" fill="#ffffff"/>
+  <!-- Roof / top bar -->
+  <rect x="100" y="260" width="312" height="28" rx="4" fill="#e2e8f0"/>
+  <!-- Chimney left -->
+  <rect x="140" y="180" width="36" height="100" rx="4" fill="#ffffff"/>
+  <!-- Chimney right -->
+  <rect x="220" y="200" width="36" height="80" rx="4" fill="#ffffff"/>
+  <!-- Smoke puffs -->
+  <circle cx="158" cy="168" r="18" fill="#bfdbfe" opacity="0.8"/>
+  <circle cx="172" cy="152" r="14" fill="#bfdbfe" opacity="0.6"/>
+  <circle cx="238" cy="188" r="16" fill="#bfdbfe" opacity="0.8"/>
+  <circle cx="250" cy="174" r="12" fill="#bfdbfe" opacity="0.6"/>
+  <!-- Windows -->
+  <rect x="130" y="310" width="50" height="40" rx="4" fill="#2563eb"/>
+  <rect x="231" y="310" width="50" height="40" rx="4" fill="#2563eb"/>
+  <rect x="332" y="310" width="50" height="40" rx="4" fill="#2563eb"/>
+  <!-- Door -->
+  <rect x="216" y="370" width="80" height="70" rx="4" fill="#1d4ed8"/>
+  <!-- Activity pulse line -->
+  <polyline points="108,240 148,240 168,200 188,270 208,220 228,240 320,240 340,210 360,255 380,240 404,240"
+    fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

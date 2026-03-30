@@ -1,3 +1,16 @@
 # SSL Certificates (generated locally)
 cert/
 *.pem
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+
+# PWA generated files
+dev-dist/
+public/sw.js
+public/workbox-*.js
