@@ -52,7 +52,7 @@ const createDirectories = () => {
   });
 };
 
-// Auto-create rework_rejection table
+// Auto-create rework_rejection table and archive old data
 const initDb = async () => {
   try {
     const db = require('../config/database');
@@ -73,8 +73,21 @@ const initDb = async () => {
       )
     `);
     logger.info('rework_rejection table ready');
+    
+    // Archive old machine centre summary data on startup
+    try {
+      await db.execute('CALL ArchiveSummaryData()');
+      logger.info('Old machine centre summary data archived on startup');
+    } catch (archiveError) {
+      // If stored procedure doesn't exist, log but don't fail startup
+      if (archiveError.code === 'ER_SP_DOES_NOT_EXIST') {
+        logger.warn('ArchiveSummaryData procedure not found - skipping archive on startup');
+      } else {
+        logger.error('Failed to archive old data on startup:', archiveError.message);
+      }
+    }
   } catch (e) {
-    logger.error('Failed to init rework_rejection table:', e.message);
+    logger.error('Failed to init database:', e.message);
   }
 };
 
@@ -86,12 +99,14 @@ initDb();
 
 // Middleware
 app.use(compression());
-app.use(cors({
+const corsOptions = {
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   optionsSuccessStatus: 200
-}));
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -100,14 +115,8 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.get('/api/machines/status', apiController.getMachineStatus);
-app.get('/api/reports/run-idle', apiController.getRunIdleReport);
-app.get('/api/reports/hourly', apiController.getHourlyReport);
-app.get('/api/reports/efficiency', apiController.getEfficiencyReport);
-app.get('/api/reports/overall-efficiency', apiController.getOverallEfficiency);
-app.get('/api/dashboard/daily', apiController.getDailyDashboardData);
-app.get('/api/dashboard/overall-daily', apiController.getOverallDailyData);
-app.post('/api/manual-event', apiController.createManualEvent);
+app.get('/api/reports/hourly-production', apiController.getHourlyProductionStatus);
+app.get('/api/reports/line-efficiency', apiController.getLineProcessEfficiency);
 app.post('/api/login', authController.login);
 
 // Master routes

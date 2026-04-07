@@ -55,7 +55,7 @@ class StitchingEventRepository {
     return rows;
   }
 
-  async getRunIdleReport(date) {
+  async getRunIdleReportRange(fromDate, toDate) {
     const query = `
       SELECT 
         machine_id,
@@ -63,34 +63,35 @@ class StitchingEventRepository {
         SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as idle_minutes,
         COUNT(*) as total_events
       FROM stitching_events
-      WHERE DATE(event_time) = ?
+      WHERE DATE(event_time) BETWEEN ? AND ?
       GROUP BY machine_id
       ORDER BY machine_id
     `;
     
-    const [rows] = await pool.execute(query, [date]);
+    const [rows] = await pool.execute(query, [fromDate, toDate]);
     return rows;
   }
 
-  async getHourlyReport(date) {
+  async getHourlyReportRange(fromDate, toDate) {
     const query = `
       SELECT 
         machine_id,
+        DATE(event_time) as date,
         HOUR(event_time) as hour,
         COUNT(*) as event_count,
         SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as run_events,
         SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as idle_events
       FROM stitching_events
-      WHERE DATE(event_time) = ?
-      GROUP BY machine_id, HOUR(event_time)
-      ORDER BY machine_id, hour
+      WHERE DATE(event_time) BETWEEN ? AND ?
+      GROUP BY machine_id, DATE(event_time), HOUR(event_time)
+      ORDER BY machine_id, date, hour
     `;
     
-    const [rows] = await pool.execute(query, [date]);
+    const [rows] = await pool.execute(query, [fromDate, toDate]);
     return rows;
   }
 
-  async getEfficiencyReport(date) {
+  async getEfficiencyReportRange(fromDate, toDate) {
     const query = `
       SELECT 
         machine_id,
@@ -101,12 +102,12 @@ class StitchingEventRepository {
           (SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2
         ) as efficiency_percentage
       FROM stitching_events
-      WHERE DATE(event_time) = ?
+      WHERE DATE(event_time) BETWEEN ? AND ?
       GROUP BY machine_id
       ORDER BY efficiency_percentage DESC
     `;
     
-    const [rows] = await pool.execute(query, [date]);
+    const [rows] = await pool.execute(query, [fromDate, toDate]);
     return rows;
   }
 

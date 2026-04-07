@@ -40,10 +40,8 @@ export const HourlyOutputChart: React.FC<Props> = ({
   const fetchData = async () => {
     try {
       const dateParam = date || new Date().toISOString().split('T')[0];
-      console.log('Fetching hourly data for:', { workCentreId, dateParam });
       const response = await fetch(`${API_BASE_URL}/api/hourly-output/${workCentreId}?date=${dateParam}`);
       const result = await response.json();
-      console.log('Hourly output API response:', result);
       if (result.success) {
         setData(result.data);
       }
