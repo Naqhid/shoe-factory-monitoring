@@ -1,0 +1,14 @@
+{
+  "name": "save-daily-report",
+  "version": "1.0.0",
+  "description": "Simple node cron job to download daily report",
+  "main": "save-daily-report-node.js",
+  "scripts": {
+    "start": "node save-daily-report-node.js"
+  },
+  "dependencies": {
+    "axios": "^1.4.0",
+    "node-cron": "^3.0.2",
+    "puppeteer": "^21.0.1"
+  }
+}
