@@ -30,7 +30,7 @@ import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerP
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { API_BASE_URL } from './services/api';
 import { MachineStatus } from './types';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Download, X, Smartphone, Monitor } from 'lucide-react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -297,11 +297,158 @@ function App() {
   );
 }
 
+// PWA Install Prompt Component
+const PWAInstallPrompt: React.FC = () => {
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+  const [showPrompt, setShowPrompt] = React.useState(false);
+  const [isIOS, setIsIOS] = React.useState(false);
+  const [isAndroid, setIsAndroid] = React.useState(false);
+  const [isStandalone, setIsStandalone] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const android = /Android/.test(navigator.userAgent);
+    const mobile = /Mobi|Android/i.test(navigator.userAgent);
+    
+    setIsIOS(iOS);
+    setIsAndroid(android);
+    setIsMobile(mobile);
+
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || 
+                      (window.navigator as any).standalone === true ||
+                      window.matchMedia('(display-mode: minimal-ui)').matches;
+    setIsStandalone(standalone);
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      
+      const dismissed = localStorage.getItem('pwa-install-dismissed');
+      const dismissedTime = dismissed ? parseInt(dismissed) : 0;
+      const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
+      
+      if (!dismissed || daysSinceDismissed > 3) {
+        setTimeout(() => setShowPrompt(true), 2000);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // For mobile devices (iOS and Android) show prompt if not installed
+    if (mobile && !standalone) {
+      const dismissedKey = iOS ? 'pwa-install-dismissed-ios' : 'pwa-install-dismissed-android';
+      const dismissed = localStorage.getItem(dismissedKey);
+      const dismissedTime = dismissed ? parseInt(dismissed) : 0;
+      const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
+      
+      if (!dismissed || daysSinceDismissed > 3) {
+        setTimeout(() => setShowPrompt(true), 5000); // Show after 5 seconds on mobile
+      }
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setShowPrompt(false);
+      }
+    }
+  };
+
+  const handleDismiss = () => {
+    setShowPrompt(false);
+    if (isIOS) {
+      localStorage.setItem('pwa-install-dismissed-ios', Date.now().toString());
+    } else if (isAndroid) {
+      localStorage.setItem('pwa-install-dismissed-android', Date.now().toString());
+    } else {
+      localStorage.setItem('pwa-install-dismissed', Date.now().toString());
+    }
+  };
+
+  if (isStandalone || !showPrompt) return null;
+
+  return (
+    <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-sm">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg shadow-2xl p-4 border border-blue-500">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {isMobile ? <Smartphone className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
+            <h3 className="font-semibold text-sm">Install ProdPulse</h3>
+          </div>
+          <button
+            onClick={handleDismiss}
+            className="text-blue-200 hover:text-white transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        
+        <p className="text-blue-100 text-xs mb-3 leading-relaxed">
+          Install our app for faster access, offline support, and a better experience!
+        </p>
+
+        {isIOS ? (
+          <div className="space-y-2">
+            <div className="text-xs text-blue-100">
+              <p className="mb-1 font-semibold">To install on iPhone/iPad:</p>
+              <ol className="list-decimal list-inside space-y-1 text-blue-200">
+                <li>Tap the Share button <span className="inline-block w-5 h-5 bg-blue-500 rounded text-center text-xs leading-5">⬆️</span></li>
+                <li>Scroll down and tap "Add to Home Screen"</li>
+                <li>Tap "Add" to confirm</li>
+              </ol>
+            </div>
+          </div>
+        ) : isAndroid ? (
+          <div className="space-y-2">
+            {deferredPrompt ? (
+              <button
+                onClick={handleInstallClick}
+                className="w-full bg-white text-blue-600 font-semibold py-2 px-4 rounded-md hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <Download className="h-4 w-4" />
+                Install App
+              </button>
+            ) : (
+              <div className="text-xs text-blue-100">
+                <p className="mb-1 font-semibold">To install on Android Chrome:</p>
+                <ol className="list-decimal list-inside space-y-1 text-blue-200">
+                  <li>Tap the menu button <span className="inline-block w-5 h-5 bg-blue-500 rounded text-center text-xs leading-5">⋮</span> (3 dots)</li>
+                  <li>Tap "Add to Home screen" or "Install app"</li>
+                  <li>Tap "Add" or "Install" to confirm</li>
+                </ol>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={handleInstallClick}
+            className="w-full bg-white text-blue-600 font-semibold py-2 px-4 rounded-md hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 text-sm"
+          >
+            <Download className="h-4 w-4" />
+            Install App
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 function AppWithProvider() {
   return (
     <QueryClientProvider client={queryClient}>
       <App />
       <Toaster position="top-right" />
+      <PWAInstallPrompt />
     </QueryClientProvider>
   );
 }

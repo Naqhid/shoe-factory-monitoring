@@ -3,16 +3,30 @@
   "short_name": "ProdPulse",
   "description": "Smart production tracking system for real-time manufacturing monitoring",
   "start_url": "/",
-  "display": "fullscreen",
-  "orientation": "portrait",
+  "display": "standalone",
+  "orientation": "any",
   "theme_color": "#2563eb",
   "background_color": "#ffffff",
+  "scope": "/",
+  "categories": ["productivity", "business"],
   "icons": [
     {
       "src": "/icon.svg",
       "type": "image/svg+xml",
       "sizes": "any",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml", 
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512", 
+      "purpose": "maskable"
     },
     {
       "src": "/favicon.ico",

@@ -15,16 +15,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['favicon.ico', 'icon.svg'],
       manifest: {
         name: 'ProdPulse - Smart Production Tracking System',
         short_name: 'ProdPulse',
         description: 'Smart production tracking system for real-time manufacturing monitoring',
         start_url: '/',
-        display: 'fullscreen',
-        orientation: 'portrait',
+        display: 'standalone',
+        orientation: 'any',
         theme_color: '#2563eb',
         background_color: '#ffffff',
+        scope: '/',
+        categories: ['productivity', 'business'],
         icons: [
           {
             src: '/favicon.ico',
@@ -32,14 +34,9 @@ export default defineConfig({
             type: 'image/x-icon',
           },
           {
-            src: '/icon-192.png',
-            type: 'image/png',
-            sizes: '192x192',
-          },
-          {
-            src: '/icon-512.png',
-            type: 'image/png',
-            sizes: '512x512',
+            src: '/icon.svg',
+            type: 'image/svg+xml',
+            sizes: 'any',
             purpose: 'any maskable',
           },
         ],

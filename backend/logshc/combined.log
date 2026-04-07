@@ -584,3 +584,17 @@
 {"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-07 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T06:59:59.792Z"}
 {"level":"info","message":"GET /api/mobile-sessions/attendance/4?date=2026-04-07 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T06:59:59.793Z"}
 {"level":"info","message":"GET /api/reports/hourly-production?fromDate=2026-04-07&toDate=2026-04-07 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:00:09.498Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:01.335Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:03.236Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:04.086Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:04.353Z"}
+{"level":"info","message":"GET /api/masters/styles from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:04.355Z"}
+{"level":"info","message":"GET /api/masters/work_centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:04.459Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:04.897Z"}
+{"level":"info","message":"GET /api/production-planning?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-07T07:15:05.063Z"}
+{"level":"info","message":"Running on HTTP (HTTPS disabled for mobile compatibility)","service":"shoe-factory-monitoring","timestamp":"2026-04-07T09:00:15.209Z"}
+{"level":"info","message":"Server started on port 3001 (HTTP) and listening on all interfaces","service":"shoe-factory-monitoring","timestamp":"2026-04-07T09:00:15.560Z"}
+{"level":"info","message":"Starting file watcher on directory: C:\\Software\\shoe-factory-monitoring\\backend\\data\\incoming","service":"shoe-factory-monitoring","timestamp":"2026-04-07T09:00:15.561Z"}
+{"level":"info","message":"File watcher started successfully","service":"shoe-factory-monitoring","timestamp":"2026-04-07T09:00:15.566Z"}
+{"level":"info","message":"rework_rejection table ready","service":"shoe-factory-monitoring","timestamp":"2026-04-07T09:00:16.552Z"}
+{"level":"info","message":"Old machine centre summary data archived on startup","service":"shoe-factory-monitoring","timestamp":"2026-04-07T09:00:17.138Z"}
