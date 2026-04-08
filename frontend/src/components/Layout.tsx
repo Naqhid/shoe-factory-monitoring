@@ -13,8 +13,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
   const navigate = useNavigate();
 
   const getUserInfo = () => {
-    if (typeof sessionStorage !== 'undefined') {
-      const userInfo = sessionStorage.getItem('user_info');
+    if (typeof localStorage !== 'undefined') {
+      const userInfo = localStorage.getItem('user_info');
       if (userInfo) {
         return JSON.parse(userInfo);
       }
@@ -23,10 +23,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
   };
 
   const handleLogout = () => {
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.removeItem('app_authenticated');
-      sessionStorage.removeItem('mobile_authenticated');
-      sessionStorage.removeItem('user_info');
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('app_authenticated');
+      localStorage.removeItem('mobile_authenticated');
+      localStorage.removeItem('user_info');
     }
     navigate('/');
   };

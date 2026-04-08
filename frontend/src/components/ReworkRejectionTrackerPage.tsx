@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Calendar, Building, Cpu, Loader2, Edit, Trash2, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_BASE_URL } from '../services/api';
+import { API_BASE_URL, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface ReworkData {
@@ -49,7 +49,7 @@ const REASON_OPTIONS: Record<string, string[]> = {
 };
 
 export const ReworkRejectionTrackerPage: React.FC = () => {
-  const userInfo = JSON.parse(sessionStorage.getItem('user_info') || '{}');
+  const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
   const isSupervisor = userInfo?.role === 'Line Supervisor';
   const canEditDelete = ['Admin', 'IED'].includes(userInfo?.role);
   const supervisorWorkCentreId = userInfo?.work_centre_id ? String(userInfo.work_centre_id) : '';
@@ -82,7 +82,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   useEffect(() => {
     const fetchWorkCentres = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/masters/work_centres`);
+        const response = await apiFetch(`${API_BASE_URL}/api/masters/work_centres`);
         const result = await response.json();
         if (result.success) setWorkCentres(result.data);
       } catch (error) {
@@ -108,7 +108,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   useEffect(() => {
     const fetchMachineCentres = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/masters/machine_centres`);
+        const response = await apiFetch(`${API_BASE_URL}/api/masters/machine_centres`);
         const result = await response.json();
         if (result.success) setMachineCentres(result.data);
       } catch (error) {
@@ -123,7 +123,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
     if (!wcId || !selectedDate) return;
     setHistoryLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rework-rejection?work_centre_id=${wcId}&date=${selectedDate}`);
+      const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection?work_centre_id=${wcId}&date=${selectedDate}`);
       const result = await response.json();
       if (result.success) setSavedRecords(result.data);
     } catch (error) {
@@ -141,7 +141,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
     setLoading(true);
     try {
       const wcId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
-      const response = await fetch(`${API_BASE_URL}/api/tv-dashboard/machine-centres/${wcId}?date=${selectedDate}`);
+      const response = await apiFetch(`${API_BASE_URL}/api/tv-dashboard/machine-centres/${wcId}?date=${selectedDate}`);
       const result = await response.json();
       if (result.success && result.data.length > 0) {
         setReworkData(result.data.map((row: any) => ({
@@ -201,7 +201,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
 
     const wcId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rework-rejection`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -242,7 +242,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
 
   const handleEditSave = async (rec: SavedRecord) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rework-rejection/${rec.id}`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection/${rec.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editRow),
@@ -267,7 +267,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const confirmDelete = async () => {
     if (!deleteId) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rework-rejection/${deleteId}`, { method: 'DELETE' });
+      const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection/${deleteId}`, { method: 'DELETE' });
       const result = await response.json();
       if (result.success) {
         toast.success('Record deleted');

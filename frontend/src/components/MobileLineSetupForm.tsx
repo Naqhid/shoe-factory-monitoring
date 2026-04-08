@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { ModernScanner } from './ModernScanner';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 interface FormData {
   employee_id: string; // The code (e.g. EMP-1001)
@@ -64,7 +64,7 @@ export const MobileLineSetupForm: React.FC = () => {
       const loadingToast = toast.loading(`Fetching employee ${empId}...`);
 
       try {
-        const response = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empId}`);
+        const response = await apiFetch(`${API_BASE}/api/masters/employees/emp_id/${empId}`);
         const result = await response.json();
 
         if (result.success && result.data) {
@@ -96,7 +96,7 @@ export const MobileLineSetupForm: React.FC = () => {
       const loadingToast = toast.loading(`Fetching machine ${machId}...`);
 
       try {
-        const response = await fetch(`${API_BASE}/api/masters/machine_centres/machine_id/${machId}`);
+        const response = await apiFetch(`${API_BASE}/api/masters/machine_centres/machine_id/${machId}`);
         const result = await response.json();
 
         if (result.success && result.data) {
@@ -146,7 +146,7 @@ export const MobileLineSetupForm: React.FC = () => {
       };
 
       const loadingToast = toast.loading('Synchronizing with display...');
-      const response = await fetch(`${API_BASE}/api/mobile-session/activate`, {
+      const response = await apiFetch(`${API_BASE}/api/mobile-session/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -197,7 +197,7 @@ export const MobileLineSetupForm: React.FC = () => {
                 REMOTE
               </div>
             )}
-            <button onClick={() => { sessionStorage.clear(); navigate('/'); }} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+            <button onClick={() => { localStorage.clear(); navigate('/'); }} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
               <LogOut className="h-6 w-6 text-gray-700" />
             </button>
           </div>

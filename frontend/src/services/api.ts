@@ -1,15 +1,50 @@
 import axios from 'axios';
 import { MachineStatus, RunIdleData, HourlyData, OverallEfficiency, ApiResponse } from '../types';
 
-// API Base URL configuration
 export const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:3001`;
-
 const API_BASE = `${API_BASE_URL}/api`;
+
+// Central fetch wrapper — attaches JWT and handles 401 redirect
+export const apiFetch = async (input: string, init: RequestInit = {}): Promise<Response> => {
+  const token = localStorage.getItem('jwt_token');
+  const headers = new Headers(init.headers || {});
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (!headers.has('Content-Type') && !(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const response = await fetch(input, { ...init, headers });
+  if (response.status === 401) {
+    localStorage.clear();
+    window.location.href = `${window.location.origin}/`;
+  }
+  return response;
+};
 
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 30000,
 });
+
+// Attach JWT to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('jwt_token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On 401, clear session and redirect to login
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.clear();
+      window.location.href = `${window.location.origin}/`;
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const apiService = {
   async getMachineStatus(): Promise<MachineStatus[]> {

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { QrCode, Play, Pause, CheckCircle, Loader2, X, RefreshCw, RotateCcw } from 'lucide-react';
+import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 interface ProductionData {
     id?: number;
@@ -90,7 +90,7 @@ export const MobileProduction: React.FC = () => {
         const syncInterval = setInterval(async () => {
             const actualMins = Math.floor(actualTimeCounter / 60);
             try {
-                await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ actual_time: actualMins })
@@ -111,7 +111,7 @@ export const MobileProduction: React.FC = () => {
             // Use local date instead of UTC
             const today = new Date();
             const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const response = await fetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}`);
+            const response = await apiFetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}`);
             const result = await response.json();
             if (result.success && result.data) {
                 setTotalOutputToday(result.data.total_output_pairs || 0);
@@ -146,7 +146,7 @@ export const MobileProduction: React.FC = () => {
                             // Check for existing production record for today that's not finished
                     const today = new Date();
                     const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                    const existingRes = await fetch(`${API_BASE}/api/mobile-production/machine/${urlMachineId}/date/${localDate}`);
+                    const existingRes = await apiFetch(`${API_BASE}/api/mobile-production/machine/${urlMachineId}/date/${localDate}`);
                     const existingData = await existingRes.json();
                     
                     // Find the most recent unfinished record (button_status !== 2)
@@ -156,10 +156,10 @@ export const MobileProduction: React.FC = () => {
                         // Use the unfinished record ONLY if it's truly in progress (button_status = 1 or 3)
                         // If button_status = 2 (finished), create new record instead
                         const [empRes, macRes, wcRes, planningRes] = await Promise.all([
-                            fetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
-                            fetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
-                            fetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
-                            fetch(`${API_BASE}/api/production-planning`).then(r => r.json())
+                            apiFetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
+                            apiFetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
+                            apiFetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
+                            apiFetch(`${API_BASE}/api/production-planning`).then(r => r.json())
                         ]);
 
                         const employee = empRes.data?.find((e: any) => e.id === parseInt(unfinishedRecord.emp_id));
@@ -180,7 +180,7 @@ export const MobileProduction: React.FC = () => {
                         setQrData(urlMachineId);
                         setEmployeeName(employee?.name || employee?.emp_name || '');
                         // Get machine centre name from machine centres data
-                        const machineRes = await fetch(`${API_BASE}/api/masters/machine_centres`);
+                        const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
                         const machineData = await machineRes.json();
                         let machineCentreName = machine?.name || urlMachineId;
                         if (machineData.success) {
@@ -201,7 +201,7 @@ export const MobileProduction: React.FC = () => {
                         toast.success('Loaded existing session');
                     } else {
                         // Create new session - use optimized endpoint
-                        const response = await fetch(`${API_BASE}/api/mobile-production/init/${urlMachineId}/${urlEmpId}`);
+                        const response = await apiFetch(`${API_BASE}/api/mobile-production/init/${urlMachineId}/${urlEmpId}`);
                         const result = await response.json();
 
                         if (!result.success) {
@@ -215,7 +215,7 @@ export const MobileProduction: React.FC = () => {
                         setQrData(urlMachineId);
                         setEmployeeName(employee.name);
                         // Get machine centre name from machine centres data
-                        const machineRes = await fetch(`${API_BASE}/api/masters/machine_centres`);
+                        const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
                         const machineData = await machineRes.json();
                         let machineCentreName = machine.name;
                         if (machineData.success) {
@@ -270,7 +270,7 @@ export const MobileProduction: React.FC = () => {
             setQrData(urlMachineId);
             const syncInterval = setInterval(async () => {
                 try {
-                    const sessionRes = await fetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
+                    const sessionRes = await apiFetch(`${API_BASE}/api/mobile-session/active-for/${urlMachineId}`);
                     const sessionJson = await sessionRes.json();
 
                     if (sessionJson.success && sessionJson.data && sessionJson.data.emp_id) {
@@ -287,7 +287,7 @@ export const MobileProduction: React.FC = () => {
         if (!urlMachineId && !urlEmpId) {
             const globalSyncInterval = setInterval(async () => {
                 try {
-                    const sessionRes = await fetch(`${API_BASE}/api/mobile-session/latest-active`);
+                    const sessionRes = await apiFetch(`${API_BASE}/api/mobile-session/latest-active`);
                     const sessionJson = await sessionRes.json();
 
                     if (sessionJson.success && sessionJson.data && sessionJson.data.redirect_url) {
@@ -310,7 +310,7 @@ export const MobileProduction: React.FC = () => {
         setLoading(true);
         try {
             // Always fetch from optimized endpoint to get latest data
-            const initResponse = await fetch(`${API_BASE}/api/mobile-production/init/${machineId}/${empCode}`);
+            const initResponse = await apiFetch(`${API_BASE}/api/mobile-production/init/${machineId}/${empCode}`);
             const initResult = await initResponse.json();
             if (!initResult.success) {
                 toast.error(initResult.message || 'Failed to initialize');
@@ -322,7 +322,7 @@ export const MobileProduction: React.FC = () => {
             workCentreName = workCentreName || initResult.data.workCentre.name;
             workCentreId = initResult.data.machine.work_centre_id || workCentreId;
 
-            const empRes = await fetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
+            const empRes = await apiFetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
             const empData = await empRes.json();
             if (!empData.success || !empData.data) {
                 toast.error(`Employee ${empCode} not found`);
@@ -348,7 +348,7 @@ export const MobileProduction: React.FC = () => {
                 is_paused: false
             };
 
-            const response = await fetch(`${API_BASE}/api/mobile-production`, {
+            const response = await apiFetch(`${API_BASE}/api/mobile-production`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newData)
@@ -380,7 +380,7 @@ export const MobileProduction: React.FC = () => {
             setLoading(true);
             try {
                 // Create new production record in database
-                const response = await fetch(`${API_BASE}/api/mobile-production`, {
+                const response = await apiFetch(`${API_BASE}/api/mobile-production`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -409,7 +409,7 @@ export const MobileProduction: React.FC = () => {
         
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+            const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ button_status: 1 })
@@ -430,7 +430,7 @@ export const MobileProduction: React.FC = () => {
         if (!productionData?.id) return;
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+            const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ button_status: 3 })
@@ -458,7 +458,7 @@ export const MobileProduction: React.FC = () => {
         setLoading(true);
         try {
             const outputPairs = productionData.target_pairs || 0;
-            const response = await fetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+            const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -785,35 +785,11 @@ export const MobileProduction: React.FC = () => {
                             ) : productionData.button_status === 1 && !productionData.is_paused ? (
                                 <>
                                     <button
-                                        onClick={handlePause}
-                                        disabled={loading}
-                                        className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-yellow-600 hover:to-yellow-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Pause className="h-5 w-5" />PAUSE</>}
-                                    </button>
-                                    <button
                                         onClick={handleFinish}
                                         disabled={loading}
                                         className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" />FINISH</>}
-                                    </button>
-                                    <button
-                                        onClick={handleReset}
-                                        disabled={loading}
-                                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        <RotateCcw className="h-5 w-5" />RESET
-                                    </button>
-                                </>
-                            ) : productionData.is_paused ? (
-                                <>
-                                    <button
-                                        onClick={handleStart}
-                                        disabled={loading}
-                                        className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />RESUME</>}
                                     </button>
                                     <button
                                         onClick={handleReset}

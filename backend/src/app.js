@@ -24,6 +24,7 @@ const hourlyOutputController = require('./controllers/hourlyOutputController');
 const reworkRejectionController = require('./controllers/reworkRejectionController');
 const roleController = require('./controllers/roleController');
 const errorHandler = require('./middleware/errorHandler');
+const authenticate = require('./middleware/authenticate');
 
 // Path resolution helper
 const getAbsolutePath = (dirPath) => {
@@ -115,9 +116,12 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.get('/api/reports/hourly-production', apiController.getHourlyProductionStatus);
-app.get('/api/reports/line-efficiency', apiController.getLineProcessEfficiency);
 app.post('/api/login', authController.login);
+
+// Protect all other /api routes with JWT
+app.use('/api', authenticate);
+
+app.get('/api/reports/hourly-production', apiController.getHourlyProductionStatus);
 
 // Master routes
 app.get('/api/masters/:table', masterController.getAll);

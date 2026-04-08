@@ -60,9 +60,9 @@ export const MobileLiveDashboard: React.FC = () => {
             </button>
             <button
               onClick={() => {
-                if (typeof sessionStorage !== 'undefined') {
-                  sessionStorage.removeItem('app_authenticated');
-                  sessionStorage.removeItem('mobile_authenticated');
+                if (typeof localStorage !== 'undefined') {
+                  localStorage.removeItem('app_authenticated');
+                  localStorage.removeItem('mobile_authenticated');
                 }
                 navigate('/');
                 toast.success('Logged out');

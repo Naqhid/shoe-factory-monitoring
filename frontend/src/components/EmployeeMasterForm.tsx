@@ -3,7 +3,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Plus, Edit, Trash2, X, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import { usePagination } from '../hooks/usePagination';
 
@@ -39,7 +39,7 @@ export const EmployeeMasterForm: React.FC = () => {
   const fetchRecords = async () => {
     setFetchLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/masters/employees`);
+      const response = await apiFetch(`${API_BASE}/api/masters/employees`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
@@ -53,7 +53,7 @@ export const EmployeeMasterForm: React.FC = () => {
 
   const fetchWorkCentres = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/masters/work_centres`);
+      const response = await apiFetch(`${API_BASE}/api/masters/work_centres`);
       const result = await response.json();
       if (result.success) {
         setWorkCentres(result.data);
@@ -65,7 +65,7 @@ export const EmployeeMasterForm: React.FC = () => {
 
   const fetchMachineCentres = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/masters/machine_centres`);
+      const response = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
       const result = await response.json();
       if (result.success) {
         setMachineCentres(result.data);
@@ -102,7 +102,7 @@ export const EmployeeMasterForm: React.FC = () => {
 
       const method = editingRecord ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -143,7 +143,7 @@ export const EmployeeMasterForm: React.FC = () => {
     if (!deleteId) return;
     setDeleteId(null);
     try {
-      const response = await fetch(`${API_BASE}/api/masters/employees/${deleteId}`, {
+      const response = await apiFetch(`${API_BASE}/api/masters/employees/${deleteId}`, {
         method: 'DELETE',
       });
 

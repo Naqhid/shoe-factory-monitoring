@@ -11,7 +11,7 @@ export const MobileLineSelector: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const userInfo = sessionStorage.getItem('user_info');
+    const userInfo = localStorage.getItem('user_info');
     if (userInfo) {
       const user = JSON.parse(userInfo);
       
@@ -27,7 +27,7 @@ export const MobileLineSelector: React.FC = () => {
   }, [navigate]);
 
   // Get user info to check if admin
-  const userInfo = sessionStorage.getItem('user_info');
+  const userInfo = localStorage.getItem('user_info');
   const user = userInfo ? JSON.parse(userInfo) : null;
   const isAdmin = user?.role === 'Admin';
 

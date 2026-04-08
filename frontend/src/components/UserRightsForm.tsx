@@ -2,7 +2,7 @@ import React from 'react';
 import { Save, Plus, Trash2, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 interface UserOption {
   id: number;
@@ -63,9 +63,9 @@ export const UserRightsForm: React.FC = () => {
       setFetchLoading(true);
       try {
         const [usersRes, formsRes, rightsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/masters/users`),
-          fetch(`${API_BASE}/api/masters/forms_master`),
-          fetch(`${API_BASE}/api/user-rights`),
+          apiFetch(`${API_BASE}/api/masters/users`),
+          apiFetch(`${API_BASE}/api/masters/forms_master`),
+          apiFetch(`${API_BASE}/api/user-rights`),
         ]);
         const [usersResult, formsResult, rightsResult] = await Promise.all([
           usersRes.json(), formsRes.json(), rightsRes.json(),
@@ -98,7 +98,7 @@ export const UserRightsForm: React.FC = () => {
 
     // Load existing rights for this user
     try {
-      const response = await fetch(`${API_BASE}/api/user-rights/user/${userId}`);
+      const response = await apiFetch(`${API_BASE}/api/user-rights/user/${userId}`);
       const result = await response.json();
       if (result.success && result.data.length > 0) {
         const existingLines: LineItem[] = result.data.map((r: UserRightRecord) => ({
@@ -161,7 +161,7 @@ export const UserRightsForm: React.FC = () => {
     setLoading(true);
     try {
       // Delete existing rights for this user first
-      await fetch(`${API_BASE}/api/user-rights/user/${selectedUserId}`, {
+      await apiFetch(`${API_BASE}/api/user-rights/user/${selectedUserId}`, {
         method: 'DELETE',
       });
 
@@ -178,7 +178,7 @@ export const UserRightsForm: React.FC = () => {
             write_permission: line.write_permission,
           };
 
-          const response = await fetch(`${API_BASE}/api/user-rights`, {
+          const response = await apiFetch(`${API_BASE}/api/user-rights`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -195,7 +195,7 @@ export const UserRightsForm: React.FC = () => {
       if (successCount > 0) {
         toast.success(`Saved ${successCount} permission(s)${errorCount ? `, ${errorCount} failed` : ''}`);
         // Refresh existing records
-        const response = await fetch(`${API_BASE}/api/user-rights`);
+        const response = await apiFetch(`${API_BASE}/api/user-rights`);
         const result = await response.json();
         if (result.success) setExistingRecords(result.data);
       } else {

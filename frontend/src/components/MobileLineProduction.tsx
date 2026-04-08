@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 
 const lineConfigs = {
@@ -43,7 +43,7 @@ export const MobileLineProduction: React.FC = () => {
 
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/mobile-session/latest-active/${displayConfig.machineId}`);
+        const response = await apiFetch(`${API_BASE}/api/mobile-session/latest-active/${displayConfig.machineId}`);
         const result = await response.json();
 
         if (result.success && result.data && result.data.redirect_url) {

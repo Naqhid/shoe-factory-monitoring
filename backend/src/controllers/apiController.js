@@ -22,6 +22,7 @@ class ApiController {
           col.name as color,
           l.name as leather,
           g.name as \`group\`,
+          pp.total_target_per_day as total_planned_qty,
           SUM(mcp.output_pairs) as total_output,
           ROUND(AVG(mcp.output_pairs), 1) as avg_hourly_output,
           SUM(CASE WHEN HOUR(mcp.start_time) = 9 THEN mcp.output_pairs ELSE 0 END) as \`9_10\`,
@@ -41,7 +42,7 @@ class ApiController {
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN groups_master g ON pp.group_id = g.id
         WHERE DATE(mcp.prod_date) BETWEEN ? AND ?
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, c.name, s.name, col.name, l.name, g.name
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, pp.total_target_per_day, c.name, s.name, col.name, l.name, g.name
         ORDER BY date, wc.name
       `, [fromDate, toDate]);
 

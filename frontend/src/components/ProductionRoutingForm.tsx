@@ -1,7 +1,7 @@
 import React from 'react';
 import { Plus, Trash2, Save, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Pagination } from './Pagination';
 
@@ -84,7 +84,7 @@ export const ProductionRoutingForm: React.FC = () => {
     setRefreshing(true);
     try {
       const [res] = await Promise.all([
-        fetch(`${API_BASE}/api/production-routing?page=${currentPage}&limit=${itemsPerPage}`),
+        apiFetch(`${API_BASE}/api/production-routing?page=${currentPage}&limit=${itemsPerPage}`),
         new Promise(resolve => setTimeout(resolve, 500))
       ]);
       const result = await res.json();
@@ -103,7 +103,7 @@ export const ProductionRoutingForm: React.FC = () => {
 
   const fetchMasters = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/production-routing/masters`);
+      const res = await apiFetch(`${API_BASE}/api/production-routing/masters`);
       const result = await res.json();
       
       if (result.success) {
@@ -153,7 +153,7 @@ export const ProductionRoutingForm: React.FC = () => {
 
   const handleEdit = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/api/production-routing/${id}`);
+      const res = await apiFetch(`${API_BASE}/api/production-routing/${id}`);
       const result = await res.json();
       if (result.success) {
         setEditingId(id);
@@ -186,7 +186,7 @@ export const ProductionRoutingForm: React.FC = () => {
     if (!deleteId) return;
     setDeleteId(null);
     try {
-      const res = await fetch(`${API_BASE}/api/production-routing/${deleteId}`, { method: 'DELETE' });
+      const res = await apiFetch(`${API_BASE}/api/production-routing/${deleteId}`, { method: 'DELETE' });
       const result = await res.json();
       if (result.success) {
         toast.success('Routing deleted');
@@ -220,7 +220,7 @@ export const ProductionRoutingForm: React.FC = () => {
       const url = editingId ? `${API_BASE}/api/production-routing/${editingId}` : `${API_BASE}/api/production-routing`;
       const method = editingId ? 'PUT' : 'POST';
 
-      const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const result = await response.json();
 
       if (result.success) {

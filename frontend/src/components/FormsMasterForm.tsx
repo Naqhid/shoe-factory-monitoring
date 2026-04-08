@@ -3,7 +3,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Plus, Edit, Trash2, X, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import { usePagination } from '../hooks/usePagination';
 
@@ -41,14 +41,14 @@ export const FormsMasterForm: React.FC = () => {
   const fetchRecords = async () => {
     setFetchLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/masters/forms_master?page=${currentPage}&limit=${itemsPerPage}`);
+      const response = await apiFetch(`${API_BASE}/api/masters/forms_master?page=${currentPage}&limit=${itemsPerPage}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
         if (result.pagination) {
           setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
         }
-        const allResponse = await fetch(`${API_BASE}/api/masters/forms_master`);
+        const allResponse = await apiFetch(`${API_BASE}/api/masters/forms_master`);
         const allResult = await allResponse.json();
         if (allResult.success) {
           setNextCode(generateNextCode(allResult.data));
@@ -99,7 +99,7 @@ export const FormsMasterForm: React.FC = () => {
         ? { name: formData.name }
         : { code: formData.code, name: formData.name };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -135,7 +135,7 @@ export const FormsMasterForm: React.FC = () => {
     if (!deleteId) return;
     setDeleteId(null);
     try {
-      const response = await fetch(`${API_BASE}/api/masters/forms_master/${deleteId}`, {
+      const response = await apiFetch(`${API_BASE}/api/masters/forms_master/${deleteId}`, {
         method: 'DELETE',
       });
 

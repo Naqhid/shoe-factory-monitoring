@@ -45,8 +45,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
   const [setupExpanded, setSetupExpanded] = React.useState(false);
   
   const getUserRoleFromSession = () => {
-    if (typeof sessionStorage !== 'undefined') {
-      const userInfo = sessionStorage.getItem('user_info');
+    if (typeof localStorage !== 'undefined') {
+      const userInfo = localStorage.getItem('user_info');
       if (userInfo) {
         const user = JSON.parse(userInfo);
         return user.role || 'Admin';
@@ -56,8 +56,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
   };
   
   const getUserInfo = () => {
-    if (typeof sessionStorage !== 'undefined') {
-      const userInfo = sessionStorage.getItem('user_info');
+    if (typeof localStorage !== 'undefined') {
+      const userInfo = localStorage.getItem('user_info');
       if (userInfo) {
         return JSON.parse(userInfo);
       }
@@ -73,10 +73,10 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
   const filteredSetupMenus = setupMenus.filter(menu => isMenuAllowed(menu.key, userRole));
 
   const handleLogout = () => {
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.removeItem('app_authenticated');
-      sessionStorage.removeItem('mobile_authenticated');
-      sessionStorage.removeItem('user_info');
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('app_authenticated');
+      localStorage.removeItem('mobile_authenticated');
+      localStorage.removeItem('user_info');
     }
     navigate('/');
     if (window.innerWidth < 1024) onToggleSidebar();

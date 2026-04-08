@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2, AlertCircle, Download, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 interface HourlyProductionData {
   date: string;
@@ -11,6 +11,7 @@ interface HourlyProductionData {
   color: string;
   leather: string;
   group: string;
+  total_planned_qty: number;
   total_output: number;
   avg_hourly_output: number;
   '9_10': number;
@@ -37,11 +38,7 @@ interface LineEfficiencyData {
   output_percent: number;
   total_standard_mins_value: number;
   total_produced_mins_value: number;
-  total_idle_mins: number;
-  threshold_limit_percent: number;
-  idle_mins_percent: number;
   targeted_output_smv: number;
-  achieved_output: number;
   efficiency_percent: number;
 }
 
@@ -58,7 +55,7 @@ export const Reports: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/reports/${reportType}?fromDate=${fromDate}&toDate=${toDate}`);
+      const response = await apiFetch(`${API_BASE}/api/reports/${reportType}?fromDate=${fromDate}&toDate=${toDate}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.error);
       setData(result.data);
@@ -120,6 +117,8 @@ export const Reports: React.FC = () => {
 
 
 
+  const r = (val: number) => Math.round(val ?? 0);
+
   const renderHourlyProductionTable = (data: HourlyProductionData[]) => (
     <div className="overflow-x-auto">
       <h3 className="text-lg font-semibold mb-4 p-4 bg-blue-50">HOURLY PRODUCTION STATUS</h3>
@@ -133,8 +132,10 @@ export const Reports: React.FC = () => {
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Color</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Leather</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Group</th>
+            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Total Planned</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Total Output</th>
-            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Avg hourly output</th>
+            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">WIP</th>
+            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Avg Hourly Output</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">9-10</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">10-11</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">11-12</th>
@@ -146,30 +147,35 @@ export const Reports: React.FC = () => {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row, index) => (
-            <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.date}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.line}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.customer}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.article_no}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.color}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.leather}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.group}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.total_output}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.avg_hourly_output}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['9_10']}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['10_11']}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['11_12']}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['12_1']}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['2_3']}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['3_4']}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['4_5']}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row['5_6']}</td>
-            </tr>
-          ))}
+          {data.map((row, index) => {
+            const wip = r(row.total_planned_qty) - r(row.total_output);
+            return (
+              <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                <td className="px-2 py-2 text-sm text-gray-900">{row.date}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{row.line}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{row.customer}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{row.article_no}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{row.color}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{row.leather}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{row.group}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row.total_planned_qty)}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row.total_output)}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{wip}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row.avg_hourly_output)}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['9_10'])}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['10_11'])}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['11_12'])}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['12_1'])}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['2_3'])}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['3_4'])}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['4_5'])}</td>
+                <td className="px-2 py-2 text-sm text-gray-900">{r(row['5_6'])}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-         </div>
+    </div>
   );
 
   const renderLineEfficiencyTable = (data: LineEfficiencyData[]) => (
@@ -191,11 +197,7 @@ export const Reports: React.FC = () => {
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Output %</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Total Standard Mins Value</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Total Produced Mins Value</th>
-            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Total Idle Mins</th>
-            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Threshold limit % of SMV</th>
-            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Idle Mins %</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Targeted Output @ SMV</th>
-            <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Achieved Output</th>
             <th className="px-2 py-2 text-left font-medium text-gray-500 uppercase">Efficiency %</th>
           </tr>
         </thead>
@@ -210,17 +212,13 @@ export const Reports: React.FC = () => {
               <td className="px-2 py-2 text-sm text-gray-900">{row.color}</td>
               <td className="px-2 py-2 text-sm text-gray-900">{row.leather}</td>
               <td className="px-2 py-2 text-sm text-gray-900">{row.group}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.total_planned_qty}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.total_output}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.output_percent}%</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.total_standard_mins_value}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.total_produced_mins_value}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.total_idle_mins}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.threshold_limit_percent}%</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.idle_mins_percent}%</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.targeted_output_smv}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.achieved_output}</td>
-              <td className="px-2 py-2 text-sm text-gray-900">{row.efficiency_percent}%</td>
+              <td className="px-2 py-2 text-sm text-gray-900">{r(row.total_planned_qty)}</td>
+              <td className="px-2 py-2 text-sm text-gray-900">{r(row.total_output)}</td>
+              <td className="px-2 py-2 text-sm text-gray-900">{r(row.output_percent)}%</td>
+              <td className="px-2 py-2 text-sm text-gray-900">{r(row.total_standard_mins_value)}</td>
+              <td className="px-2 py-2 text-sm text-gray-900">{r(row.total_produced_mins_value)}</td>
+              <td className="px-2 py-2 text-sm text-gray-900">{r(row.targeted_output_smv)}</td>
+              <td className="px-2 py-2 text-sm text-gray-900">{r(row.efficiency_percent)}%</td>
             </tr>
           ))}
         </tbody>

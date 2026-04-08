@@ -22,9 +22,13 @@ export const LoginForm: React.FC = () => {
       const data = await apiService.login({ login, password });
 
       if (data.success) {
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.setItem('app_authenticated', '1');
-          sessionStorage.setItem('user_info', JSON.stringify(data.data));
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('app_authenticated', '1');
+          localStorage.setItem('user_info', JSON.stringify(data.data));
+          if (data.token) {
+            localStorage.setItem('jwt_token', data.token);
+            localStorage.setItem('last_activity', Date.now().toString());
+          }
         }
         const user = data.data;
         toast.success(`Welcome, ${user.name}`);

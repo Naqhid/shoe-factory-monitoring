@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
-import { API_BASE_URL } from '../services/api';
+import { API_BASE_URL, apiFetch } from '../services/api';
 
 interface HourlyData {
   hour: string;
@@ -40,7 +40,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
   const fetchData = async () => {
     try {
       const dateParam = date || new Date().toISOString().split('T')[0];
-      const response = await fetch(`${API_BASE_URL}/api/hourly-output/${workCentreId}?date=${dateParam}`);
+      const response = await apiFetch(`${API_BASE_URL}/api/hourly-output/${workCentreId}?date=${dateParam}`);
       const result = await response.json();
       if (result.success) {
         setData(result.data);

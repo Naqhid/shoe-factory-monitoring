@@ -1,67 +1,128 @@
 ## Daily Software Monitoring Tasks
 
-Purpose: Provide a concise, repeatable daily checklist for software monitoring across multiple production lines. Each production line will have one tab-separated row (a "tab" between columns) so records can be copied into spreadsheets or logs.
+Purpose: concise, repeatable daily checklist for monitoring software across multiple production lines. Each active line gets one tab-separated row so records can be pasted into spreadsheets or logs.
 
-How to use:
-- Run these checks once at shift start and once mid-shift (or as required).
-- Fill one row per line using the template below. Use short values and freeform notes for actions taken.
+🎯 Recommended line monitoring frequency
 
-Per-line tab-separated template (header):
+🌅 1) Morning line check → DAILY (most important)
 
-Line	Date	Time	Checker	System Health	Data Flow	APIs	DB Sync	Incoming Files	Processed Files	Logs Checked	Disk Usage	Services Running	Alerts	Action Required	Notes
+Visit each active line once in the morning.
 
-Example row (tabs between values):
+Time: 15–30 mins total (per full round for ~6 lines)
 
-Line-01	2026-04-07	08:15	A. Kumar	OK	OK	OK	OK	3 files	3 files	app.log,db.log	45% used	pm2,node,cloudflared	None	None	All good
+Check (physical or remote as applicable):
+- tablets ON and shortcuts present
+- ProdPulse shortcut / app reachable
+- line assigned correctly in planner
+- Wi‑Fi / LAN reachable and stable
+- TV dashboard live and showing current data
+- planner screen active and shift reset done
+- supervisor login OK
+- tablets charging / cables present
+- tablet mount and charger secure
+- any frozen or unresponsive screens
 
-Daily checklist (per line):
+Why: prevents full-day issues and gives early warning of systemic problems.
 
-1. System health
-   - Check server CPU, memory and disk usage; ensure no runaway processes.
-   - Command examples: `top`/Task Manager, `df -h` or Windows Explorer disk view.
+🕛 2) Mid-shift quick check → ONCE (recommended)
 
-2. Services & processes
-   - Verify backend services are running: Node app(s), queue workers, `cloudflared` tunnel (if used), PM2 or systemd units.
-   - Restart any failed services and record the reason.
+Around lunch / middle of shift. Quick 10–15 mins round.
 
-3. Logs
-   - Tail or inspect last 24h of relevant logs: backend logs, machine-centre summary logs, incoming/processed handlers.
-   - Look for repeated errors, stack traces, or failing API calls.
+Quick checks:
+- hourly output updating on dashboards
+- tablets still responsive and charging
+- any screen frozen or operator on wrong tab
+- line target mismatches or planner desync
+- report generation/export working
+- queued/incoming files being processed
 
-4. Data flow (incoming -> processing -> processed)
-   - Confirm files arrive in `incoming/` for the line and get moved to `processed/` within expected time.
-   - Check for backlog or stuck files; inspect `logs/error/` and `logs/` for issues.
+🌆 3) End-of-day report validation → DAILY
 
-5. API & Database checks
-   - Ping key API endpoints used by the line; ensure responses are within expected latency.
-   - Verify the DB connection and recent writes for the line's records; look for replication lag or failed transactions.
+No need to visit the line physically unless indicated. Check from PC/server.
 
-6. Performance & thresholds
-   - Check line-specific thresholds: output %, idle minutes, SMV thresholds. Note any breaches and expected cause.
+Validate:
+- all lines sent data for the day
+- no missing hours in machine summaries
+- report export completed and stored
+- planner totals match reported production
+- shared folder / archive updated (TV/exports)
+- TV dashboard data archived if required
 
-7. Alerts & notifications
-   - Review monitoring alerts (if present) and acknowledge or escalate as needed.
-   - Record alert ID, time, and action taken in the Notes column.
+🚨 4) On-demand visit → ONLY when issue requires
 
-8. Backup & persistence checks
-   - Ensure daily backups or export processes completed (if applicable).
+Visit physically only if:
+- tablet dead or unresponsive
+- charger or mount broken
+- TV blank or showing wrong data
+- Wi‑Fi/LAN outage localized to line
+- line wrong mapping in system
+- operator reports data not saving
+- scanner / barcode reader fails
 
-9. Cleanup & housekeeping
-   - Trim large logs, free disk if above threshold, and rotate logs if needed.
+If physical visit occurs, record root cause and corrective action in `Notes`.
 
-10. Post-check summary
-   - If any issues were found, record an `Action Required` short tag (e.g., `Restart Service`, `Investigate DB`), owner, and ETA in `Notes`.
+📊 Practical frequency for 6 lines (example)
 
-Escalation and contacts
-- Primary: Site IT / Dev on-call (add phone/Slack/email here).
-- Secondary: Lead engineer / Operations manager.
+For Florence (6 lines):
+- Morning full round → once daily
+- Mid-shift quick round → once daily
+- End-of-day validation → once daily
+- On-demand visits → as needed
 
-Notes and best practices
-- Keep entries short — use the tab-separated columns for automated import.
-- Save each day’s sheet to a known location (central monitoring folder) for audit and trend analysis.
-- If a recurring issue appears on multiple lines, create a dedicated incident ticket and link the IDs in the Notes column.
+🚀 As system stabilizes
 
-Optional fields (for teams that track more details)
-- `Patch Level`, `Node Version`, `App Commit`, `Restart Count` — add as extra columns to the template if useful.
+After ~2–3 weeks of stable usage you may reduce physical visits to:
+- Morning round only + on-demand visits
+
+⭐ My concise recommendation
+
+- ✅ Morning full line round once daily
+- ✅ One quick mid-shift check
+- ✅ Rest remote monitoring from PC/server
+- ✅ Physical visit only on issue
+
+This balances system ownership with avoiding being the floor support person.
+
+Per-line tab-separated template (header)
+
+Line	Date	Time	Checker	CheckType	SystemHealth	Tablets	Charging	Planner	TV	Network	APIs	DB	Incoming	Processed	Logs	Disk	Services	Alerts	ActionRequired	Notes
+
+Example row:
+
+Line-01	2026-04-07	08:15	A. Kumar	Morning	OK	ON	Yes	Assigned	Live	OK	OK	OK	2 files	2 files	app.log,db.log	45% used	pm2,node,cloudflared	None	Restart Service	Tablet mount loose, replaced
+
+Additional checks to include (missing items added):
+- Device health: battery %, charging status, overheating
+- App version / Node version / App commit (for debugging)
+- PM2 / systemd service status and restart counts
+- `cloudflared` tunnel or VPN connectivity
+- File processing queue lengths and backlogs
+- Recent errors from `logs/error/` and exception counts
+- Disk space and inode availability
+- Time sync / NTP drift on devices and server
+- SSL cert expiry and connection issues for HTTPS endpoints
+- DB replication lag or failed transactions
+- Scheduled task status (cron, Windows Task Scheduler)
+- Backup/export completion and location
+- Scanner / barcode reader status and connectivity
+
+Escalation & contacts (fill with your team details)
+- Primary: Site IT / Dev on-call — [name / phone / Slack]
+- Secondary: Lead engineer — [name / phone / Slack]
+- Ops manager — [name / phone / Slack]
+
+Best practices
+- Record short entries; keep the tab-separated row for easy import.
+- Keep a central daily folder for logs and CSV exports for trend analysis.
+- If the same issue repeats across multiple lines, create an incident ticket and reference it in `Notes`.
+- Consider automating repetitive server checks (disk, services, API pings) and surfacing results to the morning checklist.
+
+Optional columns (add if you want more telemetry):
+- PatchLevel	NodeVersion	AppCommit	RestartCount	BatteryPct	TabletModel
+
+If you want, I can:
+- add contact details into this doc,
+- generate a simple CSV header + sample import/export script,
+- or create a one-page printable checklist for floor supervisors.
 
 End of document.

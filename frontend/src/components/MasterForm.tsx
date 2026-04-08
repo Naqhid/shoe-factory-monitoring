@@ -2,7 +2,7 @@ import React from 'react';
 import { Plus, Edit, Trash2, X, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Pagination } from './Pagination';
 
@@ -33,7 +33,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   const fetchRecords = async () => {
     setFetchLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/masters/${table}?page=${currentPage}&limit=${itemsPerPage}`);
+      const response = await apiFetch(`${API_BASE}/api/masters/${table}?page=${currentPage}&limit=${itemsPerPage}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
@@ -73,7 +73,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
 
       const method = editingRecord ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -115,7 +115,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
     setDeleteId(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/masters/${table}/${id}`, {
+      const response = await apiFetch(`${API_BASE}/api/masters/${table}/${id}`, {
         method: 'DELETE',
       });
 

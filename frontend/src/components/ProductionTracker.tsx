@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 
 
@@ -27,7 +27,7 @@ export const ProductionTracker: React.FC = () => {
   useEffect(() => {
     const loadWorkCentres = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/tv-dashboard/work-centres`);
+        const response = await apiFetch(`${API_BASE}/api/tv-dashboard/work-centres`);
         const result = await response.json();
         if (result.success && result.data.length > 0) {
           setWorkCentres(result.data);
@@ -47,7 +47,7 @@ export const ProductionTracker: React.FC = () => {
     try {
       const workCentreId = selectedLine || workCentres[0]?.id || 1;
       // Get attendance directly from mobile sessions
-      const attendanceResponse = await fetch(`${API_BASE}/api/mobile-sessions/attendance/${workCentreId}?date=${selectedDate}`);
+      const attendanceResponse = await apiFetch(`${API_BASE}/api/mobile-sessions/attendance/${workCentreId}?date=${selectedDate}`);
       if (attendanceResponse.ok) {
         const attendanceResult = await attendanceResponse.json();
         if (attendanceResult.success) {
@@ -60,7 +60,7 @@ export const ProductionTracker: React.FC = () => {
       }
       
       // Fallback to TV dashboard API
-      const response = await fetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`);
+      const response = await apiFetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`);
       const result = await response.json();
       if (result.success) {
         setAttendanceData({
@@ -81,8 +81,8 @@ export const ProductionTracker: React.FC = () => {
     try {
       const workCentreId = selectedLine || workCentres[0]?.id || 1;
       const [res, reworkRes] = await Promise.all([
-        fetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`),
-        fetch(`${API_BASE}/api/rework-rejection/summary?date=${selectedDate}`),
+        apiFetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`),
+        apiFetch(`${API_BASE}/api/rework-rejection/summary?date=${selectedDate}`),
       ]);
       const result = await res.json();
       const reworkResult = await reworkRes.json();

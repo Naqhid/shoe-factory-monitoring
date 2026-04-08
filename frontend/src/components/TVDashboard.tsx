@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Smile, Frown, Meh, TrendingUp, Target, Clock, Zap, Activity } from 'lucide-react';
-import { API_BASE_URL } from '../services/api';
+import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 
 export const TVDashboard: React.FC = () => {
@@ -22,7 +22,7 @@ export const TVDashboard: React.FC = () => {
     useEffect(() => {
         const fetchWorkCentres = async () => {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/tv-dashboard/work-centres`);
+                const res = await apiFetch(`${API_BASE_URL}/api/tv-dashboard/work-centres`);
                 const result = await res.json();
                 if (result.success && result.data.length > 0) {
                     setWorkCentres(result.data);
@@ -41,8 +41,8 @@ export const TVDashboard: React.FC = () => {
             try {
                 const workCentreId = workCentres[currentIndex].id;
                 const [dashRes, reworkRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`),
-                    fetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`),
+                    apiFetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`),
+                    apiFetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`),
                 ]);
                 const dashResult = await dashRes.json();
                 const reworkResult = await reworkRes.json();

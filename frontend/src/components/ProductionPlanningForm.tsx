@@ -2,7 +2,7 @@ import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 
 interface MasterOption {
@@ -75,7 +75,7 @@ export const ProductionPlanningForm: React.FC = () => {
     setRefreshing(true);
     try {
       const [res] = await Promise.all([
-        fetch(`${API_BASE}/api/production-planning?page=${currentPage}&limit=${itemsPerPage}`),
+        apiFetch(`${API_BASE}/api/production-planning?page=${currentPage}&limit=${itemsPerPage}`),
         new Promise(resolve => setTimeout(resolve, 500))
       ]);
       const result = await res.json();
@@ -95,8 +95,8 @@ export const ProductionPlanningForm: React.FC = () => {
   const fetchMasters = async () => {
     try {
       const [stylesRes, wcRes] = await Promise.all([
-        fetch(`${API_BASE}/api/masters/styles`),
-        fetch(`${API_BASE}/api/masters/work_centres`)
+        apiFetch(`${API_BASE}/api/masters/styles`),
+        apiFetch(`${API_BASE}/api/masters/work_centres`)
       ]);
       const [stylesData, wcData] = await Promise.all([stylesRes.json(), wcRes.json()]);
       if (stylesData.success) setStyles(stylesData.data);
@@ -126,7 +126,7 @@ export const ProductionPlanningForm: React.FC = () => {
     if (!styleId) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/production-routing/style/${styleId}`);
+      const res = await apiFetch(`${API_BASE}/api/production-routing/style/${styleId}`);
       const result = await res.json();
       if (result.success && result.data) {
         const r = result.data;
@@ -173,7 +173,7 @@ export const ProductionPlanningForm: React.FC = () => {
 
   const handleEdit = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/api/production-planning/${id}`);
+      const res = await apiFetch(`${API_BASE}/api/production-planning/${id}`);
       const result = await res.json();
       if (result.success) {
         const plan = result.data;
@@ -211,7 +211,7 @@ export const ProductionPlanningForm: React.FC = () => {
     if (!deleteId) return;
     setDeleteId(null);
     try {
-      const res = await fetch(`${API_BASE}/api/production-planning/${deleteId}`, { method: 'DELETE' });
+      const res = await apiFetch(`${API_BASE}/api/production-planning/${deleteId}`, { method: 'DELETE' });
       const result = await res.json();
       if (result.success) {
         toast.success('Plan deleted');
@@ -256,7 +256,7 @@ export const ProductionPlanningForm: React.FC = () => {
           man_hours_minutes: parseInt(l.man_hours_minutes),
           smv_per_pair: parseFloat(l.smv_per_pair),
         };
-        const res = await fetch(`${API_BASE}/api/production-planning/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await apiFetch(`${API_BASE}/api/production-planning/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const result = await res.json();
         if (result.success) {
           toast.success('Plan updated');
@@ -288,7 +288,7 @@ export const ProductionPlanningForm: React.FC = () => {
             man_hours_minutes: parseInt(l.man_hours_minutes),
             smv_per_pair: parseFloat(l.smv_per_pair),
           };
-          const res = await fetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          const res = await apiFetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           const j = await res.json();
           if (j.success) ok++; else { err++; toast.error(j.error || 'Failed to save line'); }
         } catch (e) {

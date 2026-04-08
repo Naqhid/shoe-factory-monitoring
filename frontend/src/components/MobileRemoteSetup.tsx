@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { ModernScanner } from './ModernScanner';
 import { Loader2, Camera, CheckCircle, X } from 'lucide-react';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 export const MobileRemoteSetup: React.FC = () => {
     const navigate = useNavigate();
@@ -63,7 +63,7 @@ export const MobileRemoteSetup: React.FC = () => {
             const empIdForRemote = 'EMP-1001';
 
             // Call activate
-            const res = await fetch(`${API_BASE}/api/mobile-session/activate`, {
+            const res = await apiFetch(`${API_BASE}/api/mobile-session/activate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

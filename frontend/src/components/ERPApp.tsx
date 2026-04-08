@@ -4,7 +4,7 @@ import { MasterForm } from './MasterForm';
 import { UsersMasterForm } from './UsersMasterForm';
 import { EmployeeMasterForm } from './EmployeeMasterForm';
 import { Loader2 } from 'lucide-react';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 interface MasterRecord {
   id: number;

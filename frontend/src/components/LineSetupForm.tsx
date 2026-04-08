@@ -1,7 +1,7 @@
 import React from 'react';
 import { Save } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 interface MasterOption {
   id: number;
@@ -38,7 +38,7 @@ export const LineSetupForm: React.FC = () => {
   React.useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/masters/employees`);
+        const response = await apiFetch(`${API_BASE}/api/masters/employees`);
         const result = await response.json();
         if (result.success) {
           setEmployees(result.data);
@@ -51,7 +51,7 @@ export const LineSetupForm: React.FC = () => {
 
     const fetchWorkCentres = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/masters/work_centres`);
+        const response = await apiFetch(`${API_BASE}/api/masters/work_centres`);
         const result = await response.json();
         if (result.success) {
           setWorkCentres(result.data);
@@ -64,7 +64,7 @@ export const LineSetupForm: React.FC = () => {
 
     const fetchMachineCentres = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/masters/machine_centres`);
+        const response = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
         const result = await response.json();
         if (result.success) {
           setMachineCentres(result.data);
@@ -100,7 +100,7 @@ export const LineSetupForm: React.FC = () => {
         smv_per_pair: parseFloat(formData.smv_per_pair),
       };
 
-      const response = await fetch(`${API_BASE}/api/line-setup`, {
+      const response = await apiFetch(`${API_BASE}/api/line-setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

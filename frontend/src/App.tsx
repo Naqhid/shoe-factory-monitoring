@@ -28,7 +28,8 @@ import { RolesMasterForm } from './components/RolesMasterForm';
 import { TVDashboard } from './components/TVDashboard';
 import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerPage';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
-import { API_BASE_URL } from './services/api';
+import { useSessionTimeout } from './hooks/useSessionTimeout';
+import { API_BASE_URL, apiFetch } from './services/api';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw, Download, X, Smartphone, Monitor } from 'lucide-react';
 
@@ -70,14 +71,16 @@ function App() {
   const isLineRoute = pathParts.length >= 2 && pathParts[0] === 'mobile' && (pathParts[1] === 'line1' || pathParts[1] === 'line2');
 
   // App-wide login: show LoginForm first when not authenticated
-  const isAuthenticated = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('app_authenticated');
+  const isAuthenticated = typeof localStorage !== 'undefined' && !!localStorage.getItem('app_authenticated');
 
-  // Redirect /login to overview when authenticated
-  React.useEffect(() => {
-    if (isAuthenticated && activeMenu === 'login') {
-      navigate('/overview', { replace: true });
-    }
-  }, [isAuthenticated, activeMenu, navigate]);
+  // Auto-logout after 30 minutes of inactivity
+  const handleSessionTimeout = React.useCallback(() => {
+    localStorage.clear();
+    toast.error('Session expired due to inactivity. Please log in again.');
+    navigate('/', { replace: true });
+  }, [navigate]);
+
+  useSessionTimeout(handleSessionTimeout, isAuthenticated);
 
   const [selectedDate] = React.useState(new Date());
   const [selectedMachine, setSelectedMachine] = React.useState<MachineStatus | null>(null);
@@ -113,7 +116,7 @@ function App() {
   const fetchRecords = async (table: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/masters/${table}`);
+      const response = await apiFetch(`${API_BASE_URL}/api/masters/${table}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);

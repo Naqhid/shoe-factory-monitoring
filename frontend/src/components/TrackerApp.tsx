@@ -2,7 +2,7 @@ import React from 'react';
 import { Play, Square, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL as API_BASE } from '../services/api';
+import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 export const TrackerApp: React.FC = () => {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export const TrackerApp: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/manual-event`, {
+      const response = await apiFetch(`${API_BASE}/api/manual-event`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

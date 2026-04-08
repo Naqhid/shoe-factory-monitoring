@@ -1,5 +1,9 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const jwt = require('jsonwebtoken');
+
+const SECRET = process.env.JWT_SECRET || 'prodpulse_jwt_secret_key_2026';
+const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30m';
 
 class AuthController {
     async login(req, res) {
@@ -30,9 +34,17 @@ class AuthController {
             }
 
             const user = rows[0];
+            const payload = {
+                id: user.id,
+                code: user.code,
+                name: user.name,
+                role: user.role,
+            };
+            const token = jwt.sign(payload, SECRET, { expiresIn: EXPIRES_IN });
 
             res.json({
                 success: true,
+                token,
                 data: {
                     id: user.id,
                     code: user.code,
