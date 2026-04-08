@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const { withTransaction } = require('../utils/transaction');
 
 // Get all production data
 exports.getAll = async (req, res, next) => {
@@ -149,58 +150,35 @@ exports.updateStatus = async (req, res, next) => {
     const { id } = req.params;
     const { button_status, output_pairs, actual_time } = req.body;
 
-    let updateQuery = 'UPDATE machine_centre_production SET button_status = ?';
-    let params = [button_status];
+    await withTransaction(async (conn) => {
+      // Verify record exists
+      const [existing] = await conn.execute('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
+      if (existing.length === 0) throw Object.assign(new Error('Production data not found'), { status: 404 });
 
-    // If finishing, update finish_time and output_pairs
-    if (button_status === 2) {
-      updateQuery += ', finish_time = NOW()';
-      if (output_pairs !== undefined) {
-        updateQuery += ', output_pairs = ?';
-        params.push(output_pairs);
+      let updateQuery = 'UPDATE machine_centre_production SET button_status = ?';
+      let params = [button_status];
+
+      if (button_status === 2) {
+        updateQuery += ', finish_time = NOW()';
+        if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
+      } else if (button_status === 1) {
+        updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
+      } else if (button_status === 3) {
+        updateQuery += ', idle_start_time = NOW()';
       }
-    }
-    // If starting/resuming, update start_time and idle_stop_time
-    else if (button_status === 1) {
-      // Always set start_time when starting (button_status = 1)
-      updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
-    }
-    // If pausing (button_status === 3), update idle_start_time
-    else if (button_status === 3) {
-      updateQuery += ', idle_start_time = NOW()';
-    }
 
-    updateQuery += ' WHERE id = ?';
-    params.push(id);
+      updateQuery += ' WHERE id = ?';
+      params.push(id);
+      await conn.execute(updateQuery, params);
 
-    const [result] = await db.query(updateQuery, params);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: 'Production data not found' });
-    }
-
-    // If finishing, update machine_centre_summary
-    if (button_status === 2) {
-      // Fetch updated record with computed actual_time
-      const [record] = await db.query('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
-      if (record.length > 0) {
-        const prod = record[0];
-        
-        // Recalculate summary for this machine/date/employee combination
-        // Note: avg_efficiency_percent and cum_avg_time might be generated columns, so we calculate them in SELECT
-        await db.query(
+      // On finish: update summary table atomically in same transaction
+      if (button_status === 2) {
+        const prod = existing[0];
+        await conn.execute(
           `INSERT INTO machine_centre_summary 
            (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, button_status)
-           SELECT 
-             prod_date,
-             work_centre_id,
-             machine_id,
-             emp_id,
-             SUM(output_pairs) as total_output_pairs,
-             SUM(target_mins) as total_target_mins,
-             SUM(actual_time) as total_actual_mins,
-             SUM(idle_mins) as total_idle_mins,
-             MAX(button_status) as button_status
+           SELECT prod_date, work_centre_id, machine_id, emp_id,
+             SUM(output_pairs), SUM(target_mins), SUM(actual_time), SUM(idle_mins), MAX(button_status)
            FROM machine_centre_production
            WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ?
            GROUP BY prod_date, work_centre_id, machine_id, emp_id
@@ -214,7 +192,7 @@ exports.updateStatus = async (req, res, next) => {
           [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
         );
       }
-    }
+    });
 
     res.json({ success: true, message: 'Status updated successfully' });
   } catch (error) {

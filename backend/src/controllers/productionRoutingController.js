@@ -24,8 +24,8 @@ class ProductionRoutingController {
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
         ORDER BY prh.created_on DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
+        LIMIT ? OFFSET ?
+      `, [limit, offset]);
 
       const [countResult] = await db.query('SELECT COUNT(*) as total FROM production_routing_header');
       const total = countResult[0].total;
@@ -158,6 +158,9 @@ class ProductionRoutingController {
     } catch (error) {
       await connection.rollback();
       logger.error('Error creating production routing:', error);
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(400).json({ success: false, error: 'A routing already exists for this style on this date. Please edit the existing one or choose a different date.' });
+      }
       res.status(500).json({ success: false, error: error.message });
     } finally {
       connection.release();
@@ -264,7 +267,9 @@ class ProductionRoutingController {
   async getByStyleId(req, res) {
     try {
       const { styleId } = req.params;
-      
+
+      // Pick the routing whose created_on is <= today, closest to today
+      // Falls back to the latest future-dated one if none exist for today or earlier
       const [rows] = await db.execute(`
         SELECT 
           prh.*,
@@ -279,11 +284,11 @@ class ProductionRoutingController {
         LEFT JOIN leather l ON prh.leather_id = l.id
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
-        WHERE prh.style_id = ?
-        ORDER BY prh.created_on DESC
+        WHERE prh.style_id = ? AND prh.created_on = CURDATE()
+        ORDER BY prh.id DESC
         LIMIT 1
       `, [styleId]);
-      
+
       if (rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Routing not found for this style' });
       }
@@ -292,7 +297,7 @@ class ProductionRoutingController {
         'SELECT observed_time, rating_factor, manpower FROM production_routing_lines WHERE routing_header_id = ?',
         [rows[0].id]
       );
-      
+
       res.json({ success: true, data: { ...rows[0], lines } });
     } catch (error) {
       logger.error('Error getting routing by style:', error);

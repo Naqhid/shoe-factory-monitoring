@@ -26,6 +26,8 @@ const roleController = require('./controllers/roleController');
 const errorHandler = require('./middleware/errorHandler');
 const authenticate = require('./middleware/authenticate');
 const requestLogger = require('./middleware/requestLogger');
+const sanitize = require('./middleware/sanitize');
+const validate = require('./middleware/validate');
 const healthController = require('./controllers/healthController');
 
 // Path resolution helper
@@ -110,7 +112,11 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Sanitize all inputs globally
+app.use(sanitize);
 
 // Request logging with metrics
 app.use(requestLogger);
@@ -121,38 +127,39 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.post('/api/login', authController.login);
+app.post('/api/login', validate(validate.schemas.login), authController.login);
 
 // Protect all other /api routes with JWT
 app.use('/api', authenticate);
 
-app.get('/api/reports/hourly-production', apiController.getHourlyProductionStatus);
+app.get('/api/reports/hourly-production', validate(validate.schemas.dateQuery), apiController.getHourlyProductionStatus);
+app.get('/api/reports/line-efficiency', validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency);
 
-// Master routes
-app.get('/api/masters/:table', masterController.getAll);
-app.get('/api/masters/:table/:id', masterController.getById);
-app.get('/api/masters/:table/code/:code', masterController.getByCode);
+// Master routes — table whitelist on all master endpoints
+app.get('/api/masters/:table', validate.allowedTable, validate.pagination, masterController.getAll);
+app.get('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.getById);
+app.get('/api/masters/:table/code/:code', validate.allowedTable, masterController.getByCode);
 app.get('/api/masters/employees/emp_id/:empId', masterController.getByEmpId);
 app.get('/api/masters/machine_centres/machine_id/:machineId', masterController.getByMachineId);
-app.post('/api/masters/:table', masterController.create);
-app.put('/api/masters/:table/:id', masterController.update);
-app.delete('/api/masters/:table/:id', masterController.delete);
+app.post('/api/masters/:table', validate.allowedTable, masterController.create);
+app.put('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.update);
+app.delete('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.delete);
 
 // Production routing routes
-app.get('/api/production-routing', productionRoutingController.getAll);
+app.get('/api/production-routing', validate.pagination, productionRoutingController.getAll);
 app.get('/api/production-routing/masters', productionRoutingController.getMastersData);
-app.get('/api/production-routing/:id', productionRoutingController.getById);
+app.get('/api/production-routing/:id', validate.numericId, productionRoutingController.getById);
 app.get('/api/production-routing/style/:styleId', productionRoutingController.getByStyleId);
 app.post('/api/production-routing', productionRoutingController.create);
-app.put('/api/production-routing/:id', productionRoutingController.update);
-app.delete('/api/production-routing/:id', productionRoutingController.delete);
+app.put('/api/production-routing/:id', validate.numericId, productionRoutingController.update);
+app.delete('/api/production-routing/:id', validate.numericId, productionRoutingController.delete);
 
 // Production planning routes
-app.get('/api/production-planning', productionPlanningController.getAll);
-app.get('/api/production-planning/:id', productionPlanningController.getById);
-app.post('/api/production-planning', productionPlanningController.create);
-app.put('/api/production-planning/:id', productionPlanningController.update);
-app.delete('/api/production-planning/:id', productionPlanningController.delete);
+app.get('/api/production-planning', validate.pagination, productionPlanningController.getAll);
+app.get('/api/production-planning/:id', validate.numericId, productionPlanningController.getById);
+app.post('/api/production-planning', validate(validate.schemas.productionPlan), productionPlanningController.create);
+app.put('/api/production-planning/:id', validate.numericId, validate(validate.schemas.productionPlan), productionPlanningController.update);
+app.delete('/api/production-planning/:id', validate.numericId, productionPlanningController.delete);
 
 // Line setup routes
 app.get('/api/line-setup', lineSetupController.getAll);
@@ -223,9 +230,9 @@ app.get('/api/hourly-output/:workCentreId', hourlyOutputController.getHourlyOutp
 // Rework Rejection routes
 app.get('/api/rework-rejection/summary', reworkRejectionController.getSummaryByWorkCentre);
 app.get('/api/rework-rejection', reworkRejectionController.getAll);
-app.post('/api/rework-rejection', reworkRejectionController.save);
-app.put('/api/rework-rejection/:id', reworkRejectionController.update);
-app.delete('/api/rework-rejection/:id', reworkRejectionController.delete);
+app.post('/api/rework-rejection', validate(validate.schemas.reworkRejection), reworkRejectionController.save);
+app.put('/api/rework-rejection/:id', validate.numericId, reworkRejectionController.update);
+app.delete('/api/rework-rejection/:id', validate.numericId, reworkRejectionController.delete);
 
 // Role routes
 app.get('/api/roles', roleController.getAll);

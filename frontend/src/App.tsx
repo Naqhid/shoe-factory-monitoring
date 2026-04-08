@@ -204,12 +204,7 @@ function App() {
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
-  // Show login first when app opens; after login, show the main app
-  if (!isAuthenticated) {
-    return <LoginForm />;
-  }
-
-  // Role-based access control - redirect if user doesn't have access to current route
+  // Role-based access control - must be before any early returns
   React.useEffect(() => {
     if (isAuthenticated) {
       const userInfo = localStorage.getItem('user_info');
@@ -224,6 +219,11 @@ function App() {
       }
     }
   }, [isAuthenticated, activeMenu, navigate]);
+
+  // Show login first when app opens; after login, show the main app
+  if (!isAuthenticated) {
+    return <LoginForm />;
+  }
 
   if (machinesError) {
     return (

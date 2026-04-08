@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const { withTransaction } = require('../utils/transaction');
 
 class MasterController {
   // Generic CRUD operations for all master tables
@@ -14,9 +15,8 @@ class MasterController {
 
       if (table === 'machine_centres') {
         [rows] = await db.query(
-          `SELECT * FROM ${table} 
-           ORDER BY code
-           LIMIT ${limit} OFFSET ${offset}`
+          `SELECT * FROM ${table} ORDER BY code LIMIT ? OFFSET ?`,
+          [limit, offset]
         );
         [countResult] = await db.query(`SELECT COUNT(*) as total FROM ${table}`);
       } else if (table === 'users') {
@@ -24,8 +24,8 @@ class MasterController {
           `SELECT u.*, wc.code as work_centre_code, wc.name as work_centre_name 
            FROM users u 
            LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
-           ORDER BY u.code
-           LIMIT ${limit} OFFSET ${offset}`
+           ORDER BY u.code LIMIT ? OFFSET ?`,
+          [limit, offset]
         );
         [countResult] = await db.query(`SELECT COUNT(*) as total FROM users`);
       } else if (table === 'employees') {
@@ -34,12 +34,12 @@ class MasterController {
            FROM employees e 
            LEFT JOIN work_centres wc ON e.work_centre_id = wc.id 
            LEFT JOIN machine_centres mc ON e.machine_centre_id = mc.id 
-           ORDER BY e.code
-           LIMIT ${limit} OFFSET ${offset}`
+           ORDER BY e.code LIMIT ? OFFSET ?`,
+          [limit, offset]
         );
         [countResult] = await db.query(`SELECT COUNT(*) as total FROM employees`);
       } else {
-        [rows] = await db.query(`SELECT * FROM ${table} ORDER BY code LIMIT ${limit} OFFSET ${offset}`);
+        [rows] = await db.query(`SELECT * FROM ${table} ORDER BY code LIMIT ? OFFSET ?`, [limit, offset]);
         [countResult] = await db.query(`SELECT COUNT(*) as total FROM ${table}`);
       }
 
@@ -133,60 +133,53 @@ class MasterController {
       const { table } = req.params;
       const data = req.body;
 
-      if (table === 'users') {
-        const { code, name, password, role, work_centre_id, machine_id } = data;
-        if (!code || !name || !password) {
-          return res.status(400).json({ success: false, error: 'Code, name and password are required' });
+      const result = await withTransaction(async (conn) => {
+        if (table === 'users') {
+          const { code, name, password, role, work_centre_id, machine_id } = data;
+          if (!code || !name || !password) throw Object.assign(new Error('Code, name and password are required'), { status: 400 });
+          // Integrity: validate work_centre_id if provided
+          if (work_centre_id) {
+            const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
+            if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          }
+          const [r] = await conn.execute(
+            `INSERT INTO users (code, name, password, role, work_centre_id, machine_id) VALUES (?, ?, ?, ?, ?, ?)`,
+            [code, name, password, role || 'user', work_centre_id || null, machine_id || null]
+          );
+          return { id: r.insertId };
         }
-        const [result] = await db.execute(
-          `INSERT INTO users (code, name, password, role, work_centre_id, machine_id) VALUES (?, ?, ?, ?, ?, ?)`,
-          [code, name, password, role || 'user', work_centre_id || null, machine_id || null]
-        );
-        return res.status(201).json({ success: true, data: { id: result.insertId } });
-      }
 
-      if (table === 'employees') {
-        const { code, name, work_centre_id, machine_centre_id } = data;
-        if (!code || !name) {
-          return res.status(400).json({ success: false, error: 'Code and name are required' });
+        if (table === 'employees') {
+          const { code, name, work_centre_id, machine_centre_id } = data;
+          if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+          if (work_centre_id) {
+            const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
+            if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          }
+          const [r] = await conn.execute(
+            `INSERT INTO employees (code, name, work_centre_id, machine_centre_id) VALUES (?, ?, ?, ?)`,
+            [code, name, work_centre_id || null, machine_centre_id || null]
+          );
+          return { id: r.insertId };
         }
-        const [result] = await db.execute(
-          `INSERT INTO employees (code, name, work_centre_id, machine_centre_id) VALUES (?, ?, ?, ?)`,
-          [code, name, work_centre_id || null, machine_centre_id || null]
-        );
-        return res.status(201).json({ success: true, data: { id: result.insertId } });
-      }
 
-      // Generic create for other tables
-      const { code, name, machine_id } = data;
+        const { code, name, machine_id } = data;
+        if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
 
-      if (!code || !name) {
-        return res.status(400).json({ success: false, error: 'Code and name are required' });
-      }
-
-      let result;
-      if (table === 'machine_centres' && machine_id) {
-        [result] = await db.execute(
-          `INSERT INTO ${table} (code, name, machine_id) VALUES (?, ?, ?)`,
-          [code, name, machine_id]
-        );
-      } else {
-        [result] = await db.execute(
-          `INSERT INTO ${table} (code, name) VALUES (?, ?)`,
-          [code, name]
-        );
-      }
-
-      res.status(201).json({
-        success: true,
-        data: { id: result.insertId, code, name, machine_id }
+        let r;
+        if (table === 'machine_centres' && machine_id) {
+          [r] = await conn.execute(`INSERT INTO ${table} (code, name, machine_id) VALUES (?, ?, ?)`, [code, name, machine_id]);
+        } else {
+          [r] = await conn.execute(`INSERT INTO ${table} (code, name) VALUES (?, ?)`, [code, name]);
+        }
+        return { id: r.insertId, code, name, machine_id };
       });
+
+      res.status(201).json({ success: true, data: result });
     } catch (error) {
-      if (error.code === 'ER_DUP_ENTRY') {
-        return res.status(400).json({ success: false, error: 'Code already exists' });
-      }
+      if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ success: false, error: 'Code already exists' });
       logger.error(`Error creating ${req.params.table}:`, error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }
 
@@ -195,88 +188,58 @@ class MasterController {
       const { table, id } = req.params;
       const data = req.body;
 
-      if (table === 'users') {
-        const { code, name, password, role, work_centre_id, machine_id } = data;
-        if (!code || !name) {
-          return res.status(400).json({ success: false, error: 'Code and name are required' });
-        }
-        let query = `UPDATE users SET code = ?, name = ?, role = ?, work_centre_id = ?, machine_id = ?`;
-        let params = [code, name, role || 'user', work_centre_id || null, machine_id || null];
-        if (password) {
-          query += `, password = ?`;
-          params.push(password);
-        }
-        query += ` WHERE id = ?`;
-        params.push(id);
-        const [result] = await db.execute(query, params);
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ success: false, error: 'User not found' });
-        }
-        return res.json({ success: true, data: { id } });
-      }
+      await withTransaction(async (conn) => {
+        // Verify record exists
+        const [existing] = await conn.execute(`SELECT id FROM ${table} WHERE id = ?`, [id]);
+        if (existing.length === 0) throw Object.assign(new Error('Record not found'), { status: 404 });
 
-      if (table === 'employees') {
-        const { code, name, work_centre_id, machine_centre_id } = data;
-        if (!code || !name) {
-          return res.status(400).json({ success: false, error: 'Code and name are required' });
+        if (table === 'users') {
+          const { code, name, password, role, work_centre_id, machine_id } = data;
+          if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+          if (work_centre_id) {
+            const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
+            if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          }
+          let query = `UPDATE users SET code = ?, name = ?, role = ?, work_centre_id = ?, machine_id = ?`;
+          let params = [code, name, role || 'user', work_centre_id || null, machine_id || null];
+          if (password) { query += `, password = ?`; params.push(password); }
+          query += ` WHERE id = ?`;
+          params.push(id);
+          await conn.execute(query, params);
+          return;
         }
-        const [result] = await db.execute(
-          `UPDATE employees SET code = ?, name = ?, work_centre_id = ?, machine_centre_id = ? WHERE id = ?`,
-          [code, name, work_centre_id || null, machine_centre_id || null, id]
-        );
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ success: false, error: 'Employee not found' });
+
+        if (table === 'employees') {
+          const { code, name, work_centre_id, machine_centre_id } = data;
+          if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+          await conn.execute(
+            `UPDATE employees SET code = ?, name = ?, work_centre_id = ?, machine_centre_id = ? WHERE id = ?`,
+            [code, name, work_centre_id || null, machine_centre_id || null, id]
+          );
+          return;
         }
-        return res.json({ success: true, data: { id } });
-      }
 
-      // Forms Master - only update name (code is auto-generated and read-only)
-      if (table === 'forms_master') {
-        const { name } = data;
-        if (!name) {
-          return res.status(400).json({ success: false, error: 'Name is required' });
+        if (table === 'forms_master') {
+          const { name } = data;
+          if (!name) throw Object.assign(new Error('Name is required'), { status: 400 });
+          await conn.execute(`UPDATE forms_master SET name = ? WHERE id = ?`, [name, id]);
+          return;
         }
-        const [result] = await db.execute(
-          `UPDATE forms_master SET name = ? WHERE id = ?`,
-          [name, id]
-        );
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ success: false, error: 'Form not found' });
+
+        const { code, name, machine_id } = data;
+        if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+        if (table === 'machine_centres' && machine_id) {
+          await conn.execute(`UPDATE ${table} SET code = ?, name = ?, machine_id = ? WHERE id = ?`, [code, name, machine_id, id]);
+        } else {
+          await conn.execute(`UPDATE ${table} SET code = ?, name = ? WHERE id = ?`, [code, name, id]);
         }
-        return res.json({ success: true, data: { id } });
-      }
+      });
 
-      // Generic update for other tables
-      const { code, name, machine_id } = data;
-
-      if (!code || !name) {
-        return res.status(400).json({ success: false, error: 'Code and name are required' });
-      }
-
-      let result;
-      if (table === 'machine_centres' && machine_id) {
-        [result] = await db.execute(
-          `UPDATE ${table} SET code = ?, name = ?, machine_id = ? WHERE id = ?`,
-          [code, name, machine_id, id]
-        );
-      } else {
-        [result] = await db.execute(
-          `UPDATE ${table} SET code = ?, name = ? WHERE id = ?`,
-          [code, name, id]
-        );
-      }
-
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, error: 'Record not found' });
-      }
-
-      res.json({ success: true, data: { id, code, name, machine_id } });
+      res.json({ success: true, data: { id } });
     } catch (error) {
-      if (error.code === 'ER_DUP_ENTRY') {
-        return res.status(400).json({ success: false, error: 'Code already exists' });
-      }
+      if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ success: false, error: 'Code already exists' });
       logger.error(`Error updating ${req.params.table}:`, error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }
 

@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const { withTransaction, assertExists } = require('../utils/transaction');
 
 class ProductionPlanningController {
   // Get all production plans
@@ -26,8 +27,8 @@ class ProductionPlanningController {
         LEFT JOIN colors col ON pp.color_id = col.id
         LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
         ORDER BY pp.plan_date DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
+        LIMIT ? OFFSET ?
+      `, [limit, offset]);
 
       const [countResult] = await db.query('SELECT COUNT(*) as total FROM production_plan');
       const total = countResult[0].total;
@@ -86,42 +87,36 @@ class ProductionPlanningController {
   // Create production plan
   async create(req, res) {
     try {
-      const {
-        plan_date,
-        style_id,
-        customer_id,
-        group_id,
-        leather_id,
-        color_id,
-        work_centre_id,
-        total_target_per_day,
-        target_pairs_per_tray,
-        tray_count,
-        man_hours_minutes,
-        smv_per_pair
-      } = req.body;
+      const { plan_date, style_id, customer_id, group_id, leather_id, color_id,
+              work_centre_id, total_target_per_day, target_pairs_per_tray,
+              tray_count, man_hours_minutes, smv_per_pair } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_tray || !tray_count || !man_hours_minutes || !smv_per_pair) {
-        return res.status(400).json({
-          success: false,
-          error: 'Required fields are missing'
-        });
+      if (!plan_date || !style_id || !customer_id || !work_centre_id ||
+          !total_target_per_day || !target_pairs_per_tray || !man_hours_minutes || !smv_per_pair) {
+        return res.status(400).json({ success: false, error: 'Required fields are missing' });
       }
 
-      const [result] = await db.execute(
-        `INSERT INTO production_plan 
-        (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0, man_hours_minutes, smv_per_pair]
-      );
+      const result = await withTransaction(async (conn) => {
+        // Integrity checks
+        await assertExists(conn, 'styles', style_id, 'Style');
+        await assertExists(conn, 'customers', customer_id, 'Customer');
+        await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
 
-      res.status(201).json({
-        success: true,
-        data: { id: result.insertId }
+        const [r] = await conn.execute(
+          `INSERT INTO production_plan 
+          (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id,
+           total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [plan_date, style_id, customer_id, group_id || null, leather_id || null, color_id || null,
+           work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0, man_hours_minutes, smv_per_pair]
+        );
+        return { id: r.insertId };
       });
+
+      res.status(201).json({ success: true, data: result });
     } catch (error) {
       logger.error('Error creating production plan:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }
 
@@ -129,44 +124,38 @@ class ProductionPlanningController {
   async update(req, res) {
     try {
       const { id } = req.params;
-      const {
-        plan_date,
-        style_id,
-        customer_id,
-        group_id,
-        leather_id,
-        color_id,
-        work_centre_id,
-        total_target_per_day,
-        target_pairs_per_tray,
-        tray_count,
-        man_hours_minutes,
-        smv_per_pair
-      } = req.body;
+      const { plan_date, style_id, customer_id, group_id, leather_id, color_id,
+              work_centre_id, total_target_per_day, target_pairs_per_tray,
+              tray_count, man_hours_minutes, smv_per_pair } = req.body;
 
-      if (!plan_date || !style_id || !customer_id || !work_centre_id || !total_target_per_day || !target_pairs_per_tray || !tray_count || !man_hours_minutes || !smv_per_pair) {
-        return res.status(400).json({
-          success: false,
-          error: 'Required fields are missing'
-        });
+      if (!plan_date || !style_id || !customer_id || !work_centre_id ||
+          !total_target_per_day || !target_pairs_per_tray || !man_hours_minutes || !smv_per_pair) {
+        return res.status(400).json({ success: false, error: 'Required fields are missing' });
       }
 
-      const [result] = await db.execute(
-        `UPDATE production_plan 
-        SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?, 
-            leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?, target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
-        WHERE id = ?`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0, man_hours_minutes, smv_per_pair, id]
-      );
+      await withTransaction(async (conn) => {
+        await assertExists(conn, 'production_plan', id, 'Plan');
+        await assertExists(conn, 'styles', style_id, 'Style');
+        await assertExists(conn, 'customers', customer_id, 'Customer');
+        await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, error: 'Plan not found' });
-      }
+        const [r] = await conn.execute(
+          `UPDATE production_plan 
+          SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?,
+              leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?,
+              target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
+          WHERE id = ?`,
+          [plan_date, style_id, customer_id, group_id || null, leather_id || null, color_id || null,
+           work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0,
+           man_hours_minutes, smv_per_pair, id]
+        );
+        if (r.affectedRows === 0) throw Object.assign(new Error('Plan not found'), { status: 404 });
+      });
 
       res.json({ success: true, data: { id } });
     } catch (error) {
       logger.error('Error updating production plan:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }
 
@@ -174,19 +163,16 @@ class ProductionPlanningController {
   async delete(req, res) {
     try {
       const { id } = req.params;
-      const [result] = await db.execute(
-        'DELETE FROM production_plan WHERE id = ?',
-        [id]
-      );
 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, error: 'Plan not found' });
-      }
+      await withTransaction(async (conn) => {
+        await assertExists(conn, 'production_plan', id, 'Plan');
+        await conn.execute('DELETE FROM production_plan WHERE id = ?', [id]);
+      });
 
       res.json({ success: true, message: 'Plan deleted successfully' });
     } catch (error) {
       logger.error('Error deleting production plan:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }
 }

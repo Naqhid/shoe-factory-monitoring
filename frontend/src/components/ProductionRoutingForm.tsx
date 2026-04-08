@@ -11,6 +11,72 @@ interface MasterOption {
   name: string;
 }
 
+// Searchable dropdown component
+const SearchableSelect: React.FC<{
+  value: string;
+  options: MasterOption[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+}> = ({ value, options, onChange, placeholder = 'Select' }) => {
+  const [search, setSearch] = React.useState('');
+
+  const filtered = options.filter(o =>
+    o.name.toLowerCase().includes(search.toLowerCase()) ||
+    o.code?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selected = options.find(o => String(o.id) === value);
+
+  return (
+    <div className="flex flex-col min-w-[190px] rounded-lg border border-gray-200 shadow-sm overflow-hidden bg-white">
+      {/* Search input */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
+        <svg className="h-3 w-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+        </svg>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search machine..."
+          className="flex-1 bg-transparent text-xs text-gray-700 placeholder-gray-400 focus:outline-none"
+        />
+        {search && (
+          <button type="button" onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+      {/* Dropdown */}
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="px-2 py-1 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400 cursor-pointer"
+        size={Math.min(5, Math.max(2, filtered.length + 1))}
+      >
+        <option value="" className="text-gray-400">{placeholder}</option>
+        {filtered.map(opt => (
+          <option key={opt.id} value={String(opt.id)} className="py-1">
+            {opt.name}
+          </option>
+        ))}
+      </select>
+      {/* Selected badge */}
+      {selected && (
+        <div className="px-2 py-1 bg-blue-50 border-t border-blue-100 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+          <span className="text-xs text-blue-700 font-medium truncate">{selected.name}</span>
+        </div>
+      )}
+      {filtered.length === 0 && (
+        <div className="px-2 py-2 text-xs text-gray-400 text-center">No results</div>
+      )}
+    </div>
+  );
+};
+
 interface RoutingLine {
   machine_centre_id: string;
   observed_time: string;
@@ -432,10 +498,12 @@ export const ProductionRoutingForm: React.FC = () => {
                               {line.machine_centre_id || 'N/A'}
                             </td>
                             <td className="px-2 py-2">
-                              <select value={line.machine_centre_id} onChange={(e) => updateLine(index, 'machine_centre_id', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1" required>
-                                <option value="">Select</option>
-                                {machineCentres.map((mc) => <option key={mc.id} value={mc.id}>{mc.name}</option>)}
-                              </select>
+                              <SearchableSelect
+                                value={line.machine_centre_id}
+                                options={machineCentres}
+                                onChange={(val) => updateLine(index, 'machine_centre_id', val)}
+                                placeholder="Select Machine"
+                              />
                             </td>
                             <td className="px-2 py-2">
                               <input type="number" step="0.01" value={line.observed_time} onChange={(e) => updateLine(index, 'observed_time', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
