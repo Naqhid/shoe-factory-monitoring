@@ -1951,3 +1951,454 @@
 {"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:00.254Z"}
 {"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:04.246Z"}
 {"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:04.250Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:10.260Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:10.262Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:13.249Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:13.250Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:13.251Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:13.253Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:13.255Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:13.256Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:13.258Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:20.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:20.247Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:24.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:24.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:30.250Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:30.254Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:34.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:34.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:40.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:40.253Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:44.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:44.250Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:49.247Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:49.248Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:49.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:49.249Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:49.251Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:49.253Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:49.254Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:54.251Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:44:54.255Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:00.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:00.253Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:04.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:04.250Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:10.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:10.246Z"}
+{"level":"info","message":"GET /api/hourly-output/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:13.258Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 4, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:13.262Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:13.265Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:13.269Z"}
+{"count":1,"level":"info","max_finish":"2026-04-08T05:35:40.000Z","message":"Data check result:","min_start":"2026-04-08T05:35:31.000Z","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:13.293Z"}
+{"0":{"hour":11,"production":"12"},"level":"info","message":"Found 1 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:13.295Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:20.247Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:20.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:24.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:24.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:30.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:30.253Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:34.248Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:34.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:40.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:40.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:44.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:44.254Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:49.245Z"}
+{"level":"info","message":"GET /api/hourly-output/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:49.247Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 4, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:49.248Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:49.249Z"}
+{"count":1,"level":"info","max_finish":"2026-04-08T05:35:40.000Z","message":"Data check result:","min_start":"2026-04-08T05:35:31.000Z","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:49.250Z"}
+{"0":{"hour":11,"production":"12"},"level":"info","message":"Found 1 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:49.251Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:54.245Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:45:54.246Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:00.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:00.258Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:04.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:04.250Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:10.250Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:10.253Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:13.254Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:13.255Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:13.256Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:13.257Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:13.258Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:13.259Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:13.260Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:20.251Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:20.256Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:24.244Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:24.245Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:30.252Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:30.256Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:34.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:34.250Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:40.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:40.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:44.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:44.245Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:49.254Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:49.255Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:49.255Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:49.257Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:49.258Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:49.259Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:49.260Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:54.247Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:46:54.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:00.250Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:00.254Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:04.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:04.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:10.250Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:10.263Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.922Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.924Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.935Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.936Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.939Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.941Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.944Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.945Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.946Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.947Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.948Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.951Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.953Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:13.954Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:20.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:20.252Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:24.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:24.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:30.248Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:30.251Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:34.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:34.245Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:40.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:40.248Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:44.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:44.251Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:49.256Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:49.259Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:49.261Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:49.265Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:49.268Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:49.374Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:49.375Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:54.263Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:47:54.267Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:00.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:00.245Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:04.253Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:04.254Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:10.250Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:10.254Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:13.255Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:13.258Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:13.272Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:13.277Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:13.280Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:13.283Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:13.287Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:20.250Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:20.253Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:24.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:24.244Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:30.251Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:30.254Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:34.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:34.241Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:40.240Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:40.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:44.238Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:44.242Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:49.246Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:49.250Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:49.253Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:49.258Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:49.261Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:49.265Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:49.268Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:54.249Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:48:54.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:00.233Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:00.234Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:04.237Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:04.241Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:10.239Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:10.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:14.238Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:14.242Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:14.276Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:14.279Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:14.283Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:14.286Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:14.289Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:20.234Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:20.235Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:30.240Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:30.244Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:40.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:40.244Z"}
+{"level":"info","message":"GET /api/hourly-output/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.247Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 4, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.248Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.250Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.251Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.252Z"}
+{"count":1,"level":"info","max_finish":"2026-04-08T05:35:40.000Z","message":"Data check result:","min_start":"2026-04-08T05:35:31.000Z","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.253Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.253Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.255Z"}
+{"0":{"hour":11,"production":"12"},"level":"info","message":"Found 1 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.255Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.256Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.257Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.258Z"}
+{"level":"info","message":"GET /api/hourly-output/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.260Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 4, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.260Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.318Z"}
+{"count":1,"level":"info","max_finish":"2026-04-08T05:35:40.000Z","message":"Data check result:","min_start":"2026-04-08T05:35:31.000Z","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.320Z"}
+{"0":{"hour":11,"production":"12"},"level":"info","message":"Found 1 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.322Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:49:50.327Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:01.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:01.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:01.249Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:01.264Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:11.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:11.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:11.248Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:11.254Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:21.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:21.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:21.248Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:21.253Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:31.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:31.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:31.248Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:31.253Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:41.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:41.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:41.256Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:41.257Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.253Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.254Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.255Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.256Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.257Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.258Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.259Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.261Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.263Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.264Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.265Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.266Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.267Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:50:50.270Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:01.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:01.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:01.330Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:01.335Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:11.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:11.307Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:11.316Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:11.334Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:21.257Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:21.259Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:21.261Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:21.325Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:31.249Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:31.387Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:31.509Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:31.635Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:41.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:41.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:41.275Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:41.287Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.245Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.246Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.247Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.248Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.249Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.250Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.251Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.252Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.254Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.255Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.278Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.290Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.292Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:51:50.315Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:01.245Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:01.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:01.771Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:02.846Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:11.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:14.106Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:14.109Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:14.195Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:21.405Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:21.406Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:21.409Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:21.416Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:31.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:31.335Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:31.407Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:31.413Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:41.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:41.284Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:41.519Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:41.528Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:49.245Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:49.246Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:49.247Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:49.264Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:49.265Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:49.267Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:49.268Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:50.246Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:50.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:50.248Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:50.249Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:50.291Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:50.292Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:52:50.312Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:00.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:00.245Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:01.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:01.243Z"}
+{"level":"info","message":"POST /api/login from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:04.840Z"}
+{"level":"info","message":"Login attempt for: IED","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:04.857Z"}
+{"level":"info","message":"Login query took 82ms","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:04.939Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.103Z"}
+{"level":"info","message":"GET /api/tv-dashboard/work-centres from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.119Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.121Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.122Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.125Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.194Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.198Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.199Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.201Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.203Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.205Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.209Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.210Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.213Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.214Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:05.215Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:10.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:10.264Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:11.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:11.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:15.127Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:15.128Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:19.460Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:19.462Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:21.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:21.244Z"}
+{"level":"info","message":"GET /api/masters/leather from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:21.334Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:21.412Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:21.647Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:21.657Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:21.668Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:31.276Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:31.279Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:32.397Z"}
+{"level":"info","message":"GET /api/masters/leather from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:32.399Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:32.401Z"}
+{"level":"info","message":"GET /api/masters/leather from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:32.403Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:32.425Z"}
+{"level":"info","message":"GET /api/masters/leather?page=1&limit=10 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:32.471Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:41.256Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:41.258Z"}
+{"level":"info","message":"GET /api/hourly-output/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:50.246Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 4, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:50.247Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:50.247Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:50.248Z"}
+{"count":1,"level":"info","max_finish":"2026-04-08T05:35:40.000Z","message":"Data check result:","min_start":"2026-04-08T05:35:31.000Z","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:50.250Z"}
+{"0":{"hour":11,"production":"12"},"level":"info","message":"Found 1 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:53:50.267Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:01.244Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:01.246Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:11.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:11.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:21.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:21.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:31.240Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:31.241Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:41.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:41.242Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:50.253Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:50.254Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:50.254Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:50.255Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:50.256Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:50.258Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:54:50.259Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:01.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:01.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:11.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:11.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:21.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:21.244Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:31.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:31.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:41.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:41.244Z"}
+{"level":"info","message":"GET /api/hourly-output/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:50.245Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 2, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:50.246Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:50.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:50.248Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:50.249Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:50.250Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:55:50.251Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:01.240Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:01.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:11.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:11.269Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:21.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:21.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:31.240Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:31.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/2?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:41.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:41.242Z"}
+{"level":"info","message":"GET /api/hourly-output/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:50.244Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 3, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:50.245Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:50.246Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:50.247Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:50.260Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:50.261Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:56:50.263Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:01.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:01.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:11.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:11.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:21.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:21.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:31.240Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:31.242Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/3?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:41.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:41.243Z"}
+{"level":"info","message":"GET /api/hourly-output/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:50.244Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 4, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:50.245Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:50.306Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:50.307Z"}
+{"count":1,"level":"info","max_finish":"2026-04-08T05:35:40.000Z","message":"Data check result:","min_start":"2026-04-08T05:35:31.000Z","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:50.308Z"}
+{"0":{"hour":11,"production":"12"},"level":"info","message":"Found 1 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:57:50.323Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:01.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:01.244Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:11.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:11.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:21.242Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:21.243Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:31.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:31.244Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/4?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:41.241Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:41.243Z"}
+{"level":"info","message":"GET /api/hourly-output/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:50.252Z"}
+{"level":"info","message":"Fetching hourly output for work centre: 1, date: 2026-04-08","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:50.253Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:50.254Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:50.255Z"}
+{"count":0,"level":"info","max_finish":null,"message":"Data check result:","min_start":null,"service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:50.256Z"}
+{"level":"info","message":"Found 0 hourly records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:50.258Z"}
+{"level":"info","message":"Alternative query found 0 records:","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:58:50.259Z"}
+{"level":"info","message":"GET /api/tv-dashboard/dashboard/1?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:59:01.243Z"}
+{"level":"info","message":"GET /api/rework-rejection/summary?date=2026-04-08 from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"shoe-factory-monitoring","timestamp":"2026-04-08T06:59:01.244Z"}

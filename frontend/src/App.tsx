@@ -29,6 +29,7 @@ import { TVDashboard } from './components/TVDashboard';
 import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerPage';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
+import { isMenuAllowed, getDefaultRoute } from './utils/roleConfig';
 import { API_BASE_URL, apiFetch } from './services/api';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw, Download, X, Smartphone, Monitor } from 'lucide-react';
@@ -205,6 +206,22 @@ function App() {
   if (!isAuthenticated) {
     return <LoginForm />;
   }
+
+  // Role-based access control - redirect if user doesn't have access to current route
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      const userInfo = localStorage.getItem('user_info');
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        const userRole = user.role || 'Admin';
+        if (activeMenu && !isMenuAllowed(activeMenu, userRole)) {
+          const defaultRoute = getDefaultRoute(userRole, user);
+          toast.error(`Access denied. You don't have permission to view this page.`);
+          navigate(defaultRoute, { replace: true });
+        }
+      }
+    }
+  }, [isAuthenticated, activeMenu, navigate]);
 
   if (machinesError) {
     return (
