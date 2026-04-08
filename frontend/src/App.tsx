@@ -27,6 +27,7 @@ import { UserRightsForm } from './components/UserRightsForm';
 import { RolesMasterForm } from './components/RolesMasterForm';
 import { TVDashboard } from './components/TVDashboard';
 import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerPage';
+import { MonitoringDashboard } from './components/MonitoringDashboard';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { isMenuAllowed, getDefaultRoute } from './utils/roleConfig';
@@ -199,6 +200,7 @@ function App() {
   const isFormsMaster = activeMenu === 'forms_master';
   const isUserRights = activeMenu === 'user_rights';
   const isRoles = activeMenu === 'roles';
+  const isMonitoring = activeMenu === 'monitoring';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
@@ -285,6 +287,8 @@ function App() {
         <UserRightsForm />
       ) : isRoles ? (
         <RolesMasterForm />
+      ) : isMonitoring ? (
+        <MonitoringDashboard />
       ) : isMasterView ? (
         loading ? (
           <div className="flex items-center justify-center h-full">

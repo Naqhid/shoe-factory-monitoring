@@ -25,6 +25,8 @@ const reworkRejectionController = require('./controllers/reworkRejectionControll
 const roleController = require('./controllers/roleController');
 const errorHandler = require('./middleware/errorHandler');
 const authenticate = require('./middleware/authenticate');
+const requestLogger = require('./middleware/requestLogger');
+const healthController = require('./controllers/healthController');
 
 // Path resolution helper
 const getAbsolutePath = (dirPath) => {
@@ -109,6 +111,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json());
+
+// Request logging with metrics
+app.use(requestLogger);
 
 app.use((req, res, next) => {
   logger.info(`${req.method} ${req.url} from ${req.ip} | Origin: ${req.get('Origin') || 'None'}`);
@@ -229,10 +234,10 @@ app.post('/api/roles', roleController.create);
 app.put('/api/roles/:id', roleController.update);
 app.delete('/api/roles/:id', roleController.delete);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
+// Health check endpoints (no auth required)
+app.get('/health', healthController.basic.bind(healthController));
+app.get('/health/detailed', healthController.detailed.bind(healthController));
+app.get('/health/metrics', healthController.metrics.bind(healthController));
 
 app.use(errorHandler);
 

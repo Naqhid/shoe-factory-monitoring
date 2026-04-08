@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList, MonitorDot } from 'lucide-react';
 import { isMenuAllowed } from '../utils/roleConfig';
 
 interface NavigationProps {
@@ -36,6 +36,7 @@ const setupMenus = [
   { key: 'forms_master', label: 'Forms Master', icon: FileText },
   { key: 'user_rights', label: 'User Rights', icon: Shield },
   { key: 'roles', label: 'Roles', icon: Shield },
+  { key: 'monitoring', label: 'Monitoring', icon: MonitorDot },
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {
