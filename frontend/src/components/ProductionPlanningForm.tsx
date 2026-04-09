@@ -157,7 +157,8 @@ export const ProductionPlanningForm: React.FC = () => {
           man_hours_minutes: manHoursMins,
         });
       } else {
-        toast.error('No routing found for this style');
+        toast.error('No routing found for this style today. Please create a routing first.');
+        updateLine(idx, { style_id: styleId });
       }
     } catch (e) {
       toast.error('Error fetching routing');
@@ -233,6 +234,13 @@ export const ProductionPlanningForm: React.FC = () => {
     );
     if (toSave.length === 0) {
       toast.error('Add at least one complete line');
+      return;
+    }
+
+    // Block save if any line is missing routing data
+    const missingRouting = lines.filter(l => l.style_id && !l.smv_per_pair);
+    if (missingRouting.length > 0) {
+      toast.error('Some styles have no routing defined for today. Please create routing first.');
       return;
     }
 
@@ -450,13 +458,16 @@ export const ProductionPlanningForm: React.FC = () => {
                             <select
                               value={line.style_id}
                               onChange={(e) => handleStyleChange(idx, e.target.value)}
-                              className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
+                              className={`w-full min-w-[120px] border rounded px-2 py-1 ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                             >
                               <option value="">Style</option>
                               {styles.map((s) => (
                                 <option key={s.id} value={s.id}>{s.name}</option>
                               ))}
                             </select>
+                            {line.style_id && !line.smv_per_pair && (
+                              <p className="text-xs text-red-500 mt-0.5">No routing for today</p>
+                            )}
                           </td>
                           <td className="py-1 px-2">
                             <input readOnly value={line.leather_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />

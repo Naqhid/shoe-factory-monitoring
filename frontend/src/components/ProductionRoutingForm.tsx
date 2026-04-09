@@ -476,7 +476,7 @@ export const ProductionRoutingForm: React.FC = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre ID</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Process Name</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Process</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>

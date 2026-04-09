@@ -187,20 +187,29 @@ export const ProductionTracker: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Attendance</label>
-              <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
-                <Users className="h-5 w-5 text-purple-600" />
+              <div className={`flex items-center gap-2 px-3 py-2 border rounded-lg ${
+                !attendanceLoading && attendanceData.present < (attendanceData as any).target_employees
+                  ? 'bg-red-50 border-red-300'
+                  : 'bg-purple-50 border-purple-200'
+              }`}>
+                <Users className={`h-5 w-5 ${!attendanceLoading && attendanceData.present < (attendanceData as any).target_employees ? 'text-red-600' : 'text-purple-600'}`} />
                 {attendanceLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
                     <span className="text-sm text-gray-600">Loading...</span>
                   </div>
                 ) : (
-                  <>
-                    <span className="text-2xl font-bold text-purple-600">
-                      {attendanceData.present} / {attendanceData.target_employees}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-2xl font-bold ${attendanceData.present < (attendanceData as any).target_employees ? 'text-red-600' : 'text-purple-600'}`}>
+                      {attendanceData.present} / {(attendanceData as any).target_employees}
                     </span>
                     <span className="text-sm text-gray-600">Present / Target</span>
-                  </>
+                    {attendanceData.present < (attendanceData as any).target_employees && (
+                      <span className="text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                        ⚠ {(attendanceData as any).target_employees - attendanceData.present} absent
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
