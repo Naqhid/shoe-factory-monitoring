@@ -9,6 +9,7 @@ interface MasterOption {
   id: number;
   code: string;
   name: string;
+  machine_id?: string;
 }
 
 // Searchable dropdown component
@@ -25,7 +26,7 @@ const SearchableSelect: React.FC<{
     o.code?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const selected = options.find(o => String(o.id) === value);
+  const selected = options.find(o => o.machine_id === value || String(o.id) === value);
 
   return (
     <div className="flex flex-col min-w-[190px] rounded-lg border border-gray-200 shadow-sm overflow-hidden bg-white">
@@ -58,7 +59,7 @@ const SearchableSelect: React.FC<{
       >
         <option value="" className="text-gray-400">{placeholder}</option>
         {filtered.map(opt => (
-          <option key={opt.id} value={String(opt.id)} className="py-1">
+          <option key={opt.id} value={opt.machine_id || String(opt.id)} className="py-1">
             {opt.name}
           </option>
         ))}
@@ -79,6 +80,7 @@ const SearchableSelect: React.FC<{
 
 interface RoutingLine {
   machine_centre_id: string;
+  process: string;
   observed_time: string;
   rating_factor: string;
   manpower: string;
@@ -127,10 +129,7 @@ export const ProductionRoutingForm: React.FC = () => {
   });
 
   const [lines, setLines] = React.useState<RoutingLine[]>([{
-    machine_centre_id: '',
-    observed_time: '',
-    rating_factor: '',
-    manpower: '',
+    machine_centre_id: '', process: '', observed_time: '', rating_factor: '', manpower: '',
   }]);
 
   React.useEffect(() => {
@@ -202,7 +201,7 @@ export const ProductionRoutingForm: React.FC = () => {
     return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_12_prs_box: mins12Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
   };
 
-  const addLine = () => setLines([...lines, { machine_centre_id: '', observed_time: '', rating_factor: '', manpower: '' }]);
+  const addLine = () => setLines([...lines, { machine_centre_id: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
   const removeLine = (index: number) => lines.length > 1 ? setLines(lines.filter((_, i) => i !== index)) : toast.error('At least one line required');
   const updateLine = (index: number, field: keyof RoutingLine, value: string) => {
     const newLines = [...lines];
@@ -213,7 +212,7 @@ export const ProductionRoutingForm: React.FC = () => {
   const handleAdd = () => {
     setEditingId(null);
     setHeaderData({ customer_id: '', group_id: '', leather_id: '', style_id: '', color_id: '', created_on: new Date().toISOString().split('T')[0], category: '', target_per_day: '', tot_smv: '' });
-    setLines([{ machine_centre_id: '', observed_time: '', rating_factor: '', manpower: '' }]);
+    setLines([{ machine_centre_id: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
     setShowModal(true);
   };
 
@@ -236,7 +235,7 @@ export const ProductionRoutingForm: React.FC = () => {
           target_per_day: String(header.target_per_day),
           tot_smv: String(header.tot_smv)
         });
-        setLines(result.data.lines.map((l: any) => ({ machine_centre_id: String(l.machine_centre_id), observed_time: String(l.observed_time), rating_factor: String(l.rating_factor), manpower: String(l.manpower) })));
+        setLines(result.data.lines.map((l: any) => ({ machine_centre_id: String(l.machine_centre_id), process: l.process || '', observed_time: String(l.observed_time), rating_factor: String(l.rating_factor), manpower: String(l.manpower) })));
         setShowModal(true);
       }
     } catch (error) {
@@ -280,7 +279,7 @@ export const ProductionRoutingForm: React.FC = () => {
     try {
       const payload = {
         header: headerData,
-        lines: lines.map(line => ({ machine_centre_id: parseInt(line.machine_centre_id), observed_time: parseFloat(line.observed_time), rating_factor: parseFloat(line.rating_factor), manpower: parseFloat(line.manpower) })),
+        lines: lines.map(line => ({ machine_centre_id: line.machine_centre_id, process: line.process || null, observed_time: parseFloat(line.observed_time), rating_factor: parseFloat(line.rating_factor), manpower: parseFloat(line.manpower) })),
       };
 
       const url = editingId ? `${API_BASE}/api/production-routing/${editingId}` : `${API_BASE}/api/production-routing`;
@@ -478,6 +477,7 @@ export const ProductionRoutingForm: React.FC = () => {
                       <tr>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre ID</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Process</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Normal Time</th>
@@ -503,6 +503,15 @@ export const ProductionRoutingForm: React.FC = () => {
                                 options={machineCentres}
                                 onChange={(val) => updateLine(index, 'machine_centre_id', val)}
                                 placeholder="Select Machine"
+                              />
+                            </td>
+                            <td className="px-2 py-2">
+                              <textarea
+                                value={line.process}
+                                onChange={(e) => updateLine(index, 'process', e.target.value)}
+                                placeholder="Enter process..."
+                                rows={2}
+                                className="w-full min-w-[160px] border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
                               />
                             </td>
                             <td className="px-2 py-2">

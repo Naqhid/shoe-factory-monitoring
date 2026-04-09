@@ -137,15 +137,9 @@ class ProductionRoutingController {
       for (const line of lines) {
         await connection.execute(
           `INSERT INTO production_routing_lines 
-          (routing_header_id, machine_centre_id, observed_time, rating_factor, manpower) 
-          VALUES (?, ?, ?, ?, ?)`,
-          [
-            headerId,
-            line.machine_centre_id,
-            line.observed_time,
-            line.rating_factor,
-            line.manpower
-          ]
+          (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower) 
+          VALUES (?, ?, ?, ?, ?, ?)`,
+          [headerId, line.machine_centre_id, line.process || null, line.observed_time, line.rating_factor, line.manpower]
         );
       }
       
@@ -159,7 +153,7 @@ class ProductionRoutingController {
       await connection.rollback();
       logger.error('Error creating production routing:', error);
       if (error.code === 'ER_DUP_ENTRY') {
-        return res.status(400).json({ success: false, error: 'A routing already exists for this style on this date. Please edit the existing one or choose a different date.' });
+        return res.status(400).json({ success: false, error: 'A routing already exists for this style in the selected machine centre. Please edit the existing one or choose a different machine centre.' });
       }
       res.status(500).json({ success: false, error: error.message });
     } finally {
@@ -219,18 +213,12 @@ class ProductionRoutingController {
       for (const line of lines) {
         await connection.execute(
           `INSERT INTO production_routing_lines 
-          (routing_header_id, machine_centre_id, observed_time, rating_factor, manpower) 
-          VALUES (?, ?, ?, ?, ?)`,
-          [
-            id,
-            line.machine_centre_id,
-            line.observed_time,
-            line.rating_factor,
-            line.manpower
-          ]
+          (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower) 
+          VALUES (?, ?, ?, ?, ?, ?)`,
+          [id, line.machine_centre_id, line.process || null, line.observed_time, line.rating_factor, line.manpower]
         );
       }
-      
+
       await connection.commit();
       
       res.json({ success: true, data: { id } });
@@ -314,7 +302,7 @@ class ProductionRoutingController {
         db.execute('SELECT id, code, name FROM leather ORDER BY name'),
         db.execute('SELECT id, code, name FROM styles ORDER BY name'),
         db.execute('SELECT id, code, name FROM colors ORDER BY name'),
-        db.execute('SELECT id, code, name FROM machine_centres ORDER BY name')
+        db.execute('SELECT id, code, name, machine_id FROM machine_centres ORDER BY machine_id')
       ]);
 
       res.json({
