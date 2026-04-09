@@ -11,6 +11,7 @@ interface MasterRecord {
   code: string;
   name: string;
   machine_id?: string;
+  machine_name?: string;
 }
 
 interface MasterFormProps {
@@ -22,7 +23,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<MasterRecord | null>(null);
-  const [formData, setFormData] = React.useState({ code: '', name: '', machine_id: '' });
+  const [formData, setFormData] = React.useState({ code: '', name: '', machine_id: '', machine_name: '' });
   const [loading, setLoading] = React.useState(false);
   const [fetchLoading, setFetchLoading] = React.useState(false);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
@@ -53,7 +54,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   }, [currentPage, itemsPerPage, table]);
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', machine_id: '' });
+    setFormData({ code: '', name: '', machine_id: '', machine_name: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -100,7 +101,8 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
     setFormData({
       code: record.code,
       name: record.name,
-      machine_id: record.machine_id || ''
+      machine_id: record.machine_id || '',
+      machine_name: record.machine_name || ''
     });
     setShowForm(true);
   };
@@ -243,20 +245,37 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {title} Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
+              {table !== 'machine_centres' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {title} Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              )}
 
-              <div className="flex gap-2 pt-4">
+              {table === 'machine_centres' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Machine Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.machine_name || ''}
+                    onChange={(e) => setFormData({ ...formData, machine_name: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Attaching, Stitching"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
                 <button
                   type="submit"
                   disabled={loading}
@@ -298,9 +317,16 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Code
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
+                {table !== 'machine_centres' && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+                )}
+                {table === 'machine_centres' && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Machine Name
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -317,10 +343,16 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {record.code}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {record.name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  {table !== 'machine_centres' && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {record.name}
+                    </td>
+                  )}
+                  {table === 'machine_centres' && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {record.machine_name || 'N/A'}
+                    </td>
+                  )}                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
                       onClick={() => handleEdit(record)}
                       className="text-blue-600 hover:text-blue-900 mr-3"

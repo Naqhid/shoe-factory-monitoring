@@ -163,12 +163,12 @@ class MasterController {
           return { id: r.insertId };
         }
 
-        const { code, name, machine_id } = data;
+        const { code, name, machine_id, machine_name } = data;
         if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
 
         let r;
         if (table === 'machine_centres' && machine_id) {
-          [r] = await conn.execute(`INSERT INTO ${table} (code, name, machine_id) VALUES (?, ?, ?)`, [code, name, machine_id]);
+          [r] = await conn.execute(`INSERT INTO ${table} (code, name, machine_id, machine_name) VALUES (?, ?, ?, ?)`, [code, name, machine_id, machine_name || null]);
         } else {
           [r] = await conn.execute(`INSERT INTO ${table} (code, name) VALUES (?, ?)`, [code, name]);
         }
@@ -226,10 +226,10 @@ class MasterController {
           return;
         }
 
-        const { code, name, machine_id } = data;
+        const { code, name, machine_id, machine_name } = data;
         if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
         if (table === 'machine_centres' && machine_id) {
-          await conn.execute(`UPDATE ${table} SET code = ?, name = ?, machine_id = ? WHERE id = ?`, [code, name, machine_id, id]);
+          await conn.execute(`UPDATE ${table} SET code = ?, name = ?, machine_id = ?, machine_name = ? WHERE id = ?`, [code, name, machine_id, machine_name || null, id]);
         } else {
           await conn.execute(`UPDATE ${table} SET code = ?, name = ? WHERE id = ?`, [code, name, id]);
         }

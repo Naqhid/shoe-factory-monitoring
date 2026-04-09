@@ -77,7 +77,35 @@ export const MobileLineSelector: React.FC = () => {
               </div>
             </Link>
           ))}
+
+          <Link
+            to="/mobile/stitching-01"
+            className="block bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow border border-gray-200"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="bg-green-100 p-3 rounded-full">
+                  <Factory className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-lg font-semibold text-gray-900">Stitching Line</h3>
+                  <p className="text-sm text-gray-500">Machine: 01</p>
+                  <div className="flex items-center mt-1">
+                    <Users className="h-4 w-4 text-gray-400 mr-1" />
+                    <span className="text-sm text-gray-600">Sample Employee</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-green-600">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+          </Link>
         </div>
+
+        
       </div>
     </div>
   );

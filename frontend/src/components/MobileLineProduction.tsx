@@ -20,6 +20,14 @@ const lineConfigs = {
     machineQR: 'qrcode-MAC-002.jpeg',
     empQR: 'qrcode-EMP-1002.jpeg'
   },
+  'stitching-01': {
+    name: 'Stitching Line',
+    machineId: '01',
+    empId: '',
+    empName: 'Sample Employee',
+    machineQR: 'qrcode-Stitching-line-01.jpeg',
+    empQR: ''
+  },
 };
 
 export const MobileLineProduction: React.FC = () => {

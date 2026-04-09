@@ -75,33 +75,51 @@ const mobileSessionController = {
                 return res.status(400).json({ success: false, message: 'Missing machine or employee info' });
             }
 
-            // 1. Resolve Employee - treat emp_id as employee code
+            // Parse QR format: "work_centre_code|machine_id" e.g. "Stitching-line|01"
+            let parsedMachineId = machine_id;
+            let parsedWorkCentreId = work_centre_id;
+
+            if (machine_id.includes('|')) {
+                const [wcCode, mcId] = machine_id.split('|');
+                parsedMachineId = mcId.trim();
+
+                // Resolve work centre by code
+                const [wcRows] = await pool.execute(
+                    'SELECT id FROM work_centres WHERE code = ? OR name = ?',
+                    [wcCode.trim(), wcCode.trim()]
+                );
+                if (wcRows.length === 0) {
+                    return res.status(400).json({ success: false, message: `Work centre "${wcCode}" not found` });
+                }
+                parsedWorkCentreId = wcRows[0].id;
+            }
+
+            // 1. Resolve Employee
             const [empRows] = await pool.execute(
                 'SELECT id, code FROM employees WHERE code = ?',
                 [emp_id]
             );
-            
             if (empRows.length === 0) {
                 return res.status(400).json({ success: false, message: `Employee Code ${emp_id} not found` });
             }
-            
-            const finalEmpId = empRows[0].code; // Use employee code, not numeric ID
+            const finalEmpId = empRows[0].code;
 
-            // 2. Resolve Machine
-            let finalWorkCentreId = work_centre_id;
-            const [machineRows] = await pool.execute(
-                'SELECT machine_id, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?',
-                [machine_id, machine_id]
-            );
-
-            if (machineRows.length > 0) {
-                finalWorkCentreId = machineRows[0].work_centre_id;
-            } else if (machine_id !== 'DEMO-MACHINE-01') {
-                return res.status(400).json({ success: false, message: `Machine ${machine_id} not found` });
+            // 2. Resolve Machine — if not parsed from QR, fall back to machine_centres lookup
+            let finalWorkCentreId = parsedWorkCentreId;
+            if (!finalWorkCentreId) {
+                const [machineRows] = await pool.execute(
+                    'SELECT machine_id, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?',
+                    [parsedMachineId, parsedMachineId]
+                );
+                if (machineRows.length > 0) {
+                    finalWorkCentreId = machineRows[0].work_centre_id;
+                } else if (parsedMachineId !== 'DEMO-MACHINE-01') {
+                    return res.status(400).json({ success: false, message: `Machine ${parsedMachineId} not found` });
+                }
             }
 
-            // 3. Upsert session by machine_id (This is the anchor for sync)
-            const [existing] = await pool.execute('SELECT session_id FROM mobile_sessions WHERE machine_id = ?', [machine_id]);
+            // 3. Upsert session by machine_id
+            const [existing] = await pool.execute('SELECT session_id FROM mobile_sessions WHERE machine_id = ?', [parsedMachineId]);
             const finalSessionId = existing.length > 0 ? existing[0].session_id : randomUUID();
 
             await pool.execute(
@@ -113,7 +131,7 @@ const mobileSessionController = {
                  emp_code = VALUES(emp_code),
                  status = 'active', 
                  activated_at = NOW()`,
-                [finalSessionId, machine_id, finalWorkCentreId || 1, empRows[0].id, emp_id]
+                [finalSessionId, parsedMachineId, finalWorkCentreId || 1, empRows[0].id, emp_id]
             );
 
             res.json({

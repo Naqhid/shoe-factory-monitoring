@@ -355,9 +355,16 @@ exports.getInitData = async (req, res, next) => {
 
     const workCentreId = machine.work_centre_id || 1;
     
+    // Override with session work_centre_id if available (set from QR scan)
+    const [sessionRows] = await db.query(
+      'SELECT work_centre_id FROM mobile_sessions WHERE machine_id = ? AND status = ? ORDER BY activated_at DESC LIMIT 1',
+      [machineId, 'active']
+    );
+    const finalWorkCentreId = (sessionRows[0]?.work_centre_id) || workCentreId;
+
     // Get work centre
-    const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE id = ?', [workCentreId]);
-    const workCentre = wcRows[0] || { id: workCentreId, name: `WC-${workCentreId}` };
+    const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE id = ?', [finalWorkCentreId]);
+    const workCentre = wcRows[0] || { id: finalWorkCentreId, name: `WC-${finalWorkCentreId}` };
 
     // Get target mins from routing for this specific machine (default 16.6)
     let targetMins = 16.6;
@@ -388,17 +395,17 @@ exports.getInitData = async (req, res, next) => {
     let targetPairs = 0;
     try {
       const [planningRows] = await db.query('SELECT work_centre_id, target_pairs_per_tray, plan_date FROM production_plan ORDER BY plan_date DESC');
-      logger.info(`Found ${planningRows.length} planning records. Looking for work_centre_id: ${workCentreId}`);
+      logger.info(`Found ${planningRows.length} planning records. Looking for work_centre_id: ${finalWorkCentreId}`);
       if (planningRows.length > 0) {
         // Find matching work centre or use the latest plan
-        const matchingPlan = planningRows.find((p) => p.work_centre_id === workCentreId);
+        const matchingPlan = planningRows.find((p) => p.work_centre_id === finalWorkCentreId);
         if (matchingPlan) {
           targetPairs = matchingPlan.target_pairs_per_tray || 0;
-          logger.info(`Found matching plan for work_centre_id ${workCentreId}: target_pairs = ${targetPairs}`);
+          logger.info(`Found matching plan for work_centre_id ${finalWorkCentreId}: target_pairs = ${targetPairs}`);
         } else {
           // Use latest plan if no exact match
           targetPairs = planningRows[0].target_pairs_per_tray || 0;
-          logger.info(`No matching plan for work_centre_id ${workCentreId}, using latest plan: target_pairs = ${targetPairs}`);
+          logger.info(`No matching plan for work_centre_id ${finalWorkCentreId}, using latest plan: target_pairs = ${targetPairs}`);
         }
       }
     } catch (err) {
@@ -409,8 +416,8 @@ exports.getInitData = async (req, res, next) => {
       success: true,
       data: {
         employee: { id: employee.code, code: employee.code, name: employee.name }, // Use code as ID for consistency
-        machine: { machine_id: machine.machine_id, name: machine.name, work_centre_id: workCentreId },
-        workCentre: { id: workCentreId, name: workCentre.name },
+        machine: { machine_id: machine.machine_id, name: machine.name, machine_name: machine.machine_name, work_centre_id: finalWorkCentreId },
+        workCentre: { id: finalWorkCentreId, name: workCentre.name },
         targetMins,
         targetPairs,
         existingRecord
