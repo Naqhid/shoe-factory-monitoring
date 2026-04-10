@@ -366,26 +366,23 @@ exports.getInitData = async (req, res, next) => {
     const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE id = ?', [finalWorkCentreId]);
     const workCentre = wcRows[0] || { id: finalWorkCentreId, name: `WC-${finalWorkCentreId}` };
 
-    // Get target mins from routing for this specific machine (default 16.6)
+    // Get target mins from routing — match to today's production plan style
     let targetMins = 16.6;
     try {
-      // First, get the machine centre ID for this machine
-      const [machineRows] = await db.query('SELECT id FROM machine_centres WHERE machine_id = ?', [machineId]);
-      if (machineRows.length > 0) {
-        const machineCentreId = machineRows[0].id;
-        
-        // Get routing data for this specific machine centre
-        const [routingRows] = await db.query('SELECT id FROM production_routing_header ORDER BY created_on DESC LIMIT 1');
-        if (routingRows[0]) {
-          const [linesRows] = await db.query(
-            'SELECT mins_12_prs_box FROM production_routing_lines WHERE routing_header_id = ? AND machine_centre_id = ?', 
-            [routingRows[0].id, machineCentreId]
-          );
-          if (linesRows.length > 0) {
-            // Sum only the lines for this specific machine centre
-            targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
-          }
-        }
+      const [linesRows] = await db.query(
+        `SELECT prl.mins_12_prs_box 
+         FROM production_routing_lines prl
+         JOIN production_routing_header prh ON prl.routing_header_id = prh.id
+         JOIN production_plan pp ON prh.style_id = pp.style_id
+         WHERE prl.machine_centre_id = ?
+           AND pp.work_centre_id = ?
+           AND DATE(pp.plan_date) = CURDATE()
+           AND DATE(prh.created_on) = CURDATE()
+         LIMIT 10`,
+        [machineId, finalWorkCentreId]
+      );
+      if (linesRows.length > 0) {
+        targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
       }
     } catch (err) {
       logger.warn('Could not fetch routing data, using default target mins:', err.message);

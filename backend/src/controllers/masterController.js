@@ -15,7 +15,7 @@ class MasterController {
 
       if (table === 'machine_centres') {
         [rows] = await db.query(
-          `SELECT * FROM ${table} ORDER BY code LIMIT ? OFFSET ?`,
+          `SELECT mc.*, wc.name as work_centre_name FROM machine_centres mc LEFT JOIN work_centres wc ON mc.work_centre_id = wc.id ORDER BY mc.machine_id LIMIT ? OFFSET ?`,
           [limit, offset]
         );
         [countResult] = await db.query(`SELECT COUNT(*) as total FROM ${table}`);

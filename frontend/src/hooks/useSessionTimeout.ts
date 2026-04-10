@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
 
 export const useSessionTimeout = (onTimeout: () => void, enabled: boolean) => {

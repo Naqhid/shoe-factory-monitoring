@@ -128,6 +128,7 @@ app.use((req, res, next) => {
 
 // Routes
 app.post('/api/login', validate(validate.schemas.login), authController.login);
+app.post('/api/auth/refresh', authController.refresh.bind(authController));
 
 // Protect all other /api routes with JWT
 app.use('/api', authenticate);

@@ -24,6 +24,57 @@ interface ProductionData {
     is_paused?: boolean;
 }
 
+// Tries each candidate URL in order, shows first one that loads
+const QRImageWithFallback: React.FC<{ candidates: string[]; machineId: string }> = ({ candidates, machineId }) => {
+    const [idx, setIdx] = React.useState(0);
+    if (idx >= candidates.length) {
+        return <p className="text-gray-400 text-sm">No QR image found for machine {machineId}</p>;
+    }
+    return (
+        <img
+            src={candidates[idx]}
+            alt={`QR Code Machine ${machineId}`}
+            className="mx-auto max-w-xs rounded-lg"
+            onError={() => setIdx(i => i + 1)}
+        />
+    );
+};
+
+// Shows QR and polls for active session
+const QRWaitScreen: React.FC<{
+    machineId: string;
+    urlMachineId: string;
+    qrCandidates: string[];
+    onSessionActive: (empCode: string) => void;
+}> = ({ machineId, urlMachineId, qrCandidates, onSessionActive }) => {
+    const API_BASE = `${window.location.protocol}//${window.location.hostname}:3001`;
+
+    React.useEffect(() => {
+        const interval = setInterval(async () => {
+            try {
+                const res = await apiFetch(`${API_BASE}/api/mobile-session/active-for/${machineId}`);
+                const json = await res.json();
+                if (json.success && json.data?.emp_code) {
+                    clearInterval(interval);
+                    onSessionActive(json.data.emp_code);
+                }
+            } catch {}
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [machineId, onSessionActive]);
+
+    return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-md p-6 text-center max-w-sm w-full">
+                <h1 className="text-xl font-bold text-gray-900 mb-1">Machine {machineId}</h1>
+                <p className="text-sm text-gray-500 mb-4">Scan QR code to start production</p>
+                <QRImageWithFallback candidates={qrCandidates} machineId={machineId} />
+                <p className="text-xs text-gray-400 mt-4 animate-pulse">Waiting for employee scan...</p>
+            </div>
+        </div>
+    );
+};
+
 export const MobileProduction: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -272,24 +323,6 @@ export const MobileProduction: React.FC = () => {
             };
             resolveAndInitialize();
             return;
-        }
-
-        // AUTO-DETECTION / POLLING MODE for specific machine
-        if (urlMachineId && !urlEmpId) {
-            setQrData(resolvedMachineId);
-            const syncInterval = setInterval(async () => {
-                try {
-                    const sessionRes = await apiFetch(`${API_BASE}/api/mobile-session/active-for/${resolvedMachineId}`);
-                    const sessionJson = await sessionRes.json();
-
-                    if (sessionJson.success && sessionJson.data && sessionJson.data.emp_id) {
-                        clearInterval(syncInterval);
-                        toast.success(`Session Active: ${sessionJson.data.emp_name}`);
-                        navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(sessionJson.data.emp_code)}`);
-                    }
-                } catch (e) { }
-            }, 1000); // 1 second polling
-            return () => clearInterval(syncInterval);
         }
 
         // GLOBAL POLLING MODE - WhatsApp Web style (when no machine/employee specified)
@@ -554,15 +587,20 @@ export const MobileProduction: React.FC = () => {
 
     // --- RENDER ---
 
-    // Special handling for QR code display pages (must be before waiting state check)
-    if (urlMachineId === 'stitching-01' && !urlEmpId) {
+    // Show QR code when machine is selected but no employee yet — poll for session in background
+    if (urlMachineId && !urlEmpId) {
+        const qrCandidates = [
+            `/assets/qrcode-Stitching-line-${resolvedMachineId}.jpeg`,
+            `/assets/qrcode-${resolvedMachineId}.jpeg`,
+            `/assets/qrcode-${urlMachineId}.jpeg`,
+        ];
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-md p-6 text-center">
-                    <h1 className="text-2xl font-bold text-gray-900 mb-4">Stitching Line QR Code</h1>
-                    <img src="/assets/qrcode-Stitching-line-01.jpeg" alt="Machine QR Code" className="mx-auto max-w-xs" />
-                </div>
-            </div>
+            <QRWaitScreen
+                machineId={resolvedMachineId}
+                urlMachineId={urlMachineId}
+                qrCandidates={qrCandidates}
+                onSessionActive={(empCode) => navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(empCode)}`)}
+            />
         );
     }
 

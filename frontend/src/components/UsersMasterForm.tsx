@@ -339,7 +339,7 @@ export const UsersMasterForm: React.FC = () => {
                   <option value="">None</option>
                   {machineCentres.map((machine) => (
                     <option key={machine.id} value={machine.machine_id}>
-                      {machine.machine_id} - {machine.name}
+                      {machine.machine_id} - {machine.machine_name || machine.name}
                     </option>
                   ))}
                 </select>

@@ -72,12 +72,20 @@ class HourlyOutputController {
       // Generate hours based on available data, not hardcoded range
       const availableHours = Object.keys(dataMap).map(h => parseInt(h)).sort((a, b) => a - b);
       const formattedData = availableHours.map(hour => ({
-        hour: `${formatHour(hour)} - ${dataMap[hour]}`,
+        hour: `${formatHour(hour)} - ${formatHour(hour + 1)}`,
         production: dataMap[hour] || 0
       }));
 
       const average = avgResult[0]?.average ? parseFloat(avgResult[0].average).toFixed(1) : 0;
-      const target = 95;
+
+      // Get target from production plan: target_per_day / 8 hours
+      const [planData] = await db.query(
+        'SELECT total_target_per_day FROM production_plan WHERE work_centre_id = ? AND plan_date = ? LIMIT 1',
+        [workCentreId, requestedDate]
+      );
+      const target = planData[0]?.total_target_per_day
+        ? Math.ceil(planData[0].total_target_per_day / 8)
+        : 0;
 
       res.json({
         success: true,

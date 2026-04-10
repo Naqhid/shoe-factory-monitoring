@@ -47,17 +47,19 @@ exports.getDashboard = async (req, res) => {
         const today = req.query.date || new Date().toISOString().split('T')[0];
 
         const [planningData] = await pool.query(
-            'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE plan_date = ?',
-            [today]
+            'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
+            [today, workCentreId]
         );
         const [summaryData] = await pool.query(
-            'SELECT SUM(total_output_pairs) as total_output FROM machine_centre_summary WHERE prod_date = ?',
-            [today]
+            'SELECT SUM(total_output_pairs) as total_output FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?',
+            [today, workCentreId]
         );
         const [overallEfficiency] = await pool.query(`
-            SELECT (SUM(total_target_mins) / (SUM(total_actual_mins) + SUM(total_idle_mins))) * 100 AS overall_efficiency_percent
-            FROM machine_centre_summary WHERE prod_date = ?
-        `, [today]);
+            SELECT CASE WHEN SUM(total_actual_mins) > 0 
+                THEN (SUM(total_target_mins) / SUM(total_actual_mins)) * 100 
+                ELSE 0 END AS overall_efficiency_percent
+            FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?
+        `, [today, workCentreId]);
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
         const target = planningData[0]?.total_target || 0;
@@ -74,7 +76,9 @@ exports.getDashboard = async (req, res) => {
             [today, workCentreId]
         );
         const [wcSummaryData] = await pool.query(
-            'SELECT SUM(total_output_pairs) as output, AVG(avg_efficiency_percent) as avg_efficiency FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?',
+            `SELECT SUM(total_output_pairs) as output,
+             CASE WHEN SUM(total_actual_mins) > 0 THEN (SUM(total_target_mins) / SUM(total_actual_mins)) * 100 ELSE 0 END as avg_efficiency
+             FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?`,
             [today, workCentreId]
         );
 
@@ -138,7 +142,7 @@ exports.getDashboard = async (req, res) => {
                 COALESCE(SUM(pp.total_target_per_day), 0) as target,
                 COALESCE(SUM(mcs.total_output_pairs), 0) as output,
                 CASE WHEN SUM(pp.total_target_per_day) > 0 THEN ROUND((SUM(mcs.total_output_pairs) / SUM(pp.total_target_per_day)) * 100, 0) ELSE 0 END as output_percentage,
-                ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency,
+                CASE WHEN SUM(mcs.total_actual_mins) > 0 THEN ROUND((SUM(mcs.total_target_mins) / SUM(mcs.total_actual_mins)) * 100, 0) ELSE 0 END as efficiency,
                 GREATEST(0, COALESCE(SUM(pp.total_target_per_day), 0) - COALESCE(SUM(mcs.total_output_pairs), 0)) as wip
             FROM work_centres wc
             LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)

@@ -1,111 +1,103 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Factory, Users } from 'lucide-react';
+import { Factory, Users, Loader2 } from 'lucide-react';
+import { API_BASE_URL, apiFetch } from '../services/api';
 
-const lines = [
-  { id: 'line1', name: 'Line 1', machineId: 'MAC-001', empId: 'EMP-1001', empName: 'John Doe' },
-  { id: 'line2', name: 'Line 2', machineId: 'MAC-002', empId: 'EMP-1002', empName: 'Jane Smith' },
-];
+interface MachineEntry {
+  id: number;
+  machine_id: string;
+  name: string;
+  machine_name: string | null;
+  work_centre_name: string | null;
+}
 
 export const MobileLineSelector: React.FC = () => {
   const navigate = useNavigate();
+  const [machines, setMachines] = useState<MachineEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const userInfo = localStorage.getItem('user_info');
     if (userInfo) {
       const user = JSON.parse(userInfo);
-      
-      // If not admin, redirect based on machine_id
       if (user.role !== 'Admin') {
         if (user.machine_id) {
-          // Redirect to mobile production with machine_id and emp_id
           navigate(`/mobile/${encodeURIComponent(user.machine_id)}/${encodeURIComponent(user.code)}`, { replace: true });
           return;
         }
       }
     }
+
+    // Fetch all machines
+    apiFetch(`${API_BASE_URL}/api/masters/machine_centres?limit=100`)
+      .then(r => r.json())
+      .then(result => {
+        if (result.success) {
+          // Only show machines that have a machine_id set, sorted by machine_id
+          const valid = result.data
+            .filter((m: any) => m.machine_id)
+            .sort((a: any, b: any) => a.machine_id.localeCompare(b.machine_id));
+          setMachines(valid);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [navigate]);
 
-  // Get user info to check if admin
   const userInfo = localStorage.getItem('user_info');
   const user = userInfo ? JSON.parse(userInfo) : null;
-  const isAdmin = user?.role === 'Admin';
-
-  // If not admin, show loading while redirecting
-  if (!isAdmin) {
+  if (user?.role !== 'Admin') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-xl text-gray-600">Redirecting...</div>
       </div>
     );
   }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-8 text-center mb-6">
           <Factory className="h-16 w-16 text-blue-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Select Production Line</h1>
-          <p className="text-gray-500">Choose a line to access mobile production dashboard</p>
+          <p className="text-gray-500">Choose a machine to access mobile production</p>
         </div>
 
-        <div className="space-y-4">
-          {lines.map((line) => (
-            <Link
-              key={line.id}
-              to={`/mobile/${line.id}`}
-              className="block bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow border border-gray-200"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="bg-blue-100 p-3 rounded-full">
-                    <Factory className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="text-lg font-semibold text-gray-900">{line.name}</h3>
-                    <p className="text-sm text-gray-500">Machine: {line.machineId}</p>
-                    <div className="flex items-center mt-1">
-                      <Users className="h-4 w-4 text-gray-400 mr-1" />
-                      <span className="text-sm text-gray-600">{line.empName}</span>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {machines.map((machine) => (
+              <Link
+                key={machine.id}
+                to={`/mobile/${encodeURIComponent(machine.machine_id)}`}
+                className="block bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition-shadow border border-gray-200"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-blue-100 p-3 rounded-full">
+                      <Factory className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="text-base font-semibold text-gray-900">
+                        {machine.machine_name || machine.name}
+                      </h3>
+                      <p className="text-sm text-gray-500">Machine: {machine.machine_id}</p>
+                      {machine.work_centre_name && (
+                        <p className="text-xs text-gray-400">{machine.work_centre_name}</p>
+                      )}
                     </div>
                   </div>
-                </div>
-                <div className="text-blue-600">
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
-              </div>
-            </Link>
-          ))}
-
-          <Link
-            to="/mobile/stitching-01"
-            className="block bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow border border-gray-200"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="bg-green-100 p-3 rounded-full">
-                  <Factory className="h-6 w-6 text-green-600" />
-                </div>
-                <div className="text-left">
-                  <h3 className="text-lg font-semibold text-gray-900">Stitching Line</h3>
-                  <p className="text-sm text-gray-500">Machine: 01</p>
-                  <div className="flex items-center mt-1">
-                    <Users className="h-4 w-4 text-gray-400 mr-1" />
-                    <span className="text-sm text-gray-600">Sample Employee</span>
-                  </div>
-                </div>
-              </div>
-              <div className="text-green-600">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

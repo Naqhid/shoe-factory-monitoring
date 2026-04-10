@@ -29,6 +29,9 @@ export const LoginForm: React.FC = () => {
             localStorage.setItem('jwt_token', data.token);
             localStorage.setItem('last_activity', Date.now().toString());
           }
+          if (data.refreshToken) {
+            localStorage.setItem('refresh_token', data.refreshToken);
+          }
         }
         const user = data.data;
         toast.success(`Welcome, ${user.name}`);
