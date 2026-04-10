@@ -23,6 +23,8 @@ export const ProductionTracker: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [reworkSummary, setReworkSummary] = useState<Record<number, { total_rework: number; total_rejection: number }>>({});
+  const [expandedLines, setExpandedLines] = useState<Record<number, boolean>>({});
+  const [machineData, setMachineData] = useState<Record<number, any[]>>({});
 
   useEffect(() => {
     const loadWorkCentres = async () => {
@@ -41,6 +43,18 @@ export const ProductionTracker: React.FC = () => {
   }, []);
 
   const [error, setError] = useState<string | null>(null);
+
+  const toggleLine = async (workCentreId: number) => {
+    const isOpen = expandedLines[workCentreId];
+    setExpandedLines(prev => ({ ...prev, [workCentreId]: !isOpen }));
+    if (!isOpen && !machineData[workCentreId]) {
+      try {
+        const res = await apiFetch(`${API_BASE}/api/tv-dashboard/machine-centres/${workCentreId}?date=${selectedDate}`);
+        const result = await res.json();
+        if (result.success) setMachineData(prev => ({ ...prev, [workCentreId]: result.data }));
+      } catch {}
+    }
+  };
 
   const loadAttendanceData = async () => {
     setAttendanceLoading(true);
@@ -107,6 +121,8 @@ export const ProductionTracker: React.FC = () => {
 
   useEffect(() => {
     if (workCentres.length > 0 && selectedLine) {
+      setExpandedLines({});
+      setMachineData({});
       loadDashboardData();
       loadAttendanceData();
       const interval = setInterval(() => {
@@ -282,23 +298,62 @@ export const ProductionTracker: React.FC = () => {
                     return 'bg-red-500';
                   };
                   const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
+                  const isExpanded = expandedLines[line.work_centre_id];
+                  const machines = machineData[line.work_centre_id] || [];
                   return (
-                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{line.wip || 0}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-yellow-600">{rw.total_rework}</td>
-                      <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{rw.total_rejection}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex justify-center gap-2">
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
-                        </div>
-                      </td>
-                    </tr>
+                    <>
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => toggleLine(line.work_centre_id)}>
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-800 flex items-center gap-2">
+                          <span className={`transition-transform ${isExpanded ? 'rotate-90' : ''} text-gray-400 text-xs`}>▶</span>
+                          {line.line_name}
+                        </td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{line.wip || 0}</td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-yellow-600">{rw.total_rework}</td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{rw.total_rejection}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex justify-center gap-2">
+                            <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                            <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${index}-machines`}>
+                          <td colSpan={9} className="px-0 py-0 bg-blue-50">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-blue-100 text-blue-800">
+                                  <th className="px-8 py-2 text-left font-semibold">Machine</th>
+                                  <th className="px-4 py-2 text-center font-semibold">Machine ID</th>
+                                  <th className="px-4 py-2 text-center font-semibold">Output (pairs)</th>
+                                  <th className="px-4 py-2 text-center font-semibold">Target (mins/box)</th>
+                                  <th className="px-4 py-2 text-center font-semibold">Output %</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {machines.length === 0 ? (
+                                  <tr><td colSpan={5} className="px-8 py-3 text-gray-400 text-center">No machine data</td></tr>
+                                ) : machines.map((m: any, mi: number) => (
+                                    <tr key={mi} className="border-t border-blue-100 hover:bg-blue-50">
+                                      <td className="px-8 py-2 font-medium text-gray-700">{m.machine_centre_name}</td>
+                                      <td className="px-4 py-2 text-center text-gray-500 font-mono">{m.machine_id}</td>
+                                      <td className="px-4 py-2 text-center font-bold text-green-600">{m.total_output_pairs}</td>
+                                      <td className="px-4 py-2 text-center font-bold text-blue-600">
+                                        {m.target_mins_per_box > 0 ? `${m.target_mins_per_box} mins` : '—'}
+                                      </td>
+                                      <td className="px-4 py-2 text-center text-gray-400 text-sm">—</td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   );
                 })}
               </tbody>

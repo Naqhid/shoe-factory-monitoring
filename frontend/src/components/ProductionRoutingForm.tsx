@@ -10,6 +10,7 @@ interface MasterOption {
   code: string;
   name: string;
   machine_id?: string;
+  machine_name?: string;
 }
 
 // Searchable dropdown component
@@ -21,9 +22,13 @@ const SearchableSelect: React.FC<{
 }> = ({ value, options, onChange, placeholder = 'Select' }) => {
   const [search, setSearch] = React.useState('');
 
+  const getLabel = (o: MasterOption) =>
+    o.machine_id ? `${o.machine_id} - ${o.machine_name ?? o.name}` : (o.machine_name ?? o.name);
+
   const filtered = options.filter(o =>
-    o.name.toLowerCase().includes(search.toLowerCase()) ||
-    o.code?.toLowerCase().includes(search.toLowerCase())
+    getLabel(o).toLowerCase().includes(search.toLowerCase()) ||
+    o.machine_id?.toLowerCase().includes(search.toLowerCase()) ||
+    (o.machine_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const selected = options.find(o => o.machine_id === value || String(o.id) === value);
@@ -60,7 +65,7 @@ const SearchableSelect: React.FC<{
         <option value="" className="text-gray-400">{placeholder}</option>
         {filtered.map(opt => (
           <option key={opt.id} value={opt.machine_id || String(opt.id)} className="py-1">
-            {opt.name}
+            {getLabel(opt)}
           </option>
         ))}
       </select>
@@ -68,7 +73,7 @@ const SearchableSelect: React.FC<{
       {selected && (
         <div className="px-2 py-1 bg-blue-50 border-t border-blue-100 flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-          <span className="text-xs text-blue-700 font-medium truncate">{selected.name}</span>
+          <span className="text-xs text-blue-700 font-medium truncate">{getLabel(selected)}</span>
         </div>
       )}
       {filtered.length === 0 && (
@@ -80,6 +85,7 @@ const SearchableSelect: React.FC<{
 
 interface RoutingLine {
   machine_centre_id: string;
+  machine_name: string;
   process: string;
   observed_time: string;
   rating_factor: string;
@@ -93,7 +99,7 @@ interface HeaderData {
   style_id: string;
   color_id: string;
   created_on: string;
-  category: string;
+  machine_centre_id: string;
   target_per_day: string;
   tot_smv: string;
 }
@@ -123,7 +129,7 @@ export const ProductionRoutingForm: React.FC = () => {
     style_id: '',
     color_id: '',
     created_on: new Date().toISOString().split('T')[0],
-    category: '',
+    machine_centre_id: '',
     target_per_day: '',
     tot_smv: '',
   });
@@ -211,7 +217,7 @@ export const ProductionRoutingForm: React.FC = () => {
 
   const handleAdd = () => {
     setEditingId(null);
-    setHeaderData({ customer_id: '', group_id: '', leather_id: '', style_id: '', color_id: '', created_on: new Date().toISOString().split('T')[0], category: '', target_per_day: '', tot_smv: '' });
+    setHeaderData({ customer_id: '', group_id: '', leather_id: '', style_id: '', color_id: '', created_on: new Date().toISOString().split('T')[0], target_per_day: '', tot_smv: '' });
     setLines([{ machine_centre_id: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
     setShowModal(true);
   };
@@ -231,7 +237,6 @@ export const ProductionRoutingForm: React.FC = () => {
           style_id: String(header.style_id),
           color_id: String(header.color_id),
           created_on: header.created_on ? new Date(header.created_on).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          category: header.category || '',
           target_per_day: String(header.target_per_day),
           tot_smv: String(header.tot_smv)
         });
@@ -345,6 +350,7 @@ export const ProductionRoutingForm: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Color</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target/Day</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total SMV</th>
+                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Lines</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
@@ -357,6 +363,11 @@ export const ProductionRoutingForm: React.FC = () => {
                   <td className="px-4 py-2 text-sm">{r.color_name}</td>
                   <td className="px-4 py-2 text-sm">{r.target_per_day}</td>
                   <td className="px-4 py-2 text-sm font-mono">{r.tot_smv}</td>
+                  <td className="px-4 py-2 text-center">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.line_count > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                      {r.line_count} {r.line_count === 1 ? 'machine' : 'machines'}
+                    </span>
+                  </td>
                   <td className="px-4 py-2 text-sm">{new Date(r.created_on).toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-sm">
                     <div className="flex gap-2">
@@ -372,7 +383,7 @@ export const ProductionRoutingForm: React.FC = () => {
               ))}
               {routings.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
                 </tr>
               )}
             </tbody>
@@ -403,7 +414,10 @@ export const ProductionRoutingForm: React.FC = () => {
 
             <form onSubmit={handleSubmit} className="p-6">
               <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-4">Header Information</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Header Information</h3>
+                  <span className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-full">One routing covers all machines for this style</span>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Customer <span className="text-red-500">*</span></label>
@@ -445,10 +459,6 @@ export const ProductionRoutingForm: React.FC = () => {
                     <input type="date" value={headerData.created_on} onChange={(e) => setHeaderData({ ...headerData, created_on: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                    <input type="text" value={headerData.category} onChange={(e) => setHeaderData({ ...headerData, category: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" />
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Target per Day <span className="text-red-500">*</span></label>
                     <input type="number" value={headerData.target_per_day} onChange={(e) => setHeaderData({ ...headerData, target_per_day: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
                   </div>
@@ -475,8 +485,7 @@ export const ProductionRoutingForm: React.FC = () => {
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre ID</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Process Name</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Process</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
@@ -494,9 +503,6 @@ export const ProductionRoutingForm: React.FC = () => {
                         const calc = calculateLineValues(line);
                         return (
                           <tr key={index}>
-                            <td className="px-2 py-2 text-gray-700 font-mono text-sm">
-                              {line.machine_centre_id || 'N/A'}
-                            </td>
                             <td className="px-2 py-2">
                               <SearchableSelect
                                 value={line.machine_centre_id}

@@ -149,8 +149,8 @@ app.delete('/api/masters/:table/:id', validate.allowedTable, validate.numericId,
 // Production routing routes
 app.get('/api/production-routing', validate.pagination, productionRoutingController.getAll);
 app.get('/api/production-routing/masters', productionRoutingController.getMastersData);
-app.get('/api/production-routing/:id', validate.numericId, productionRoutingController.getById);
 app.get('/api/production-routing/style/:styleId', productionRoutingController.getByStyleId);
+app.get('/api/production-routing/:id', validate.numericId, productionRoutingController.getById);
 app.post('/api/production-routing', productionRoutingController.create);
 app.put('/api/production-routing/:id', validate.numericId, productionRoutingController.update);
 app.delete('/api/production-routing/:id', validate.numericId, productionRoutingController.delete);

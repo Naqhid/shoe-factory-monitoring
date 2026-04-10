@@ -16,13 +16,16 @@ class ProductionRoutingController {
           g.name as group_name,
           l.name as leather_name,
           s.name as style_name,
-          col.name as color_name
+          col.name as color_name,
+          COUNT(prl.id) as line_count
         FROM production_routing_header prh
         LEFT JOIN customers c ON prh.customer_id = c.id
         LEFT JOIN groups_master g ON prh.group_id = g.id
         LEFT JOIN leather l ON prh.leather_id = l.id
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
+        LEFT JOIN production_routing_lines prl ON prl.routing_header_id = prh.id
+        GROUP BY prh.id
         ORDER BY prh.created_on DESC
         LIMIT ? OFFSET ?
       `, [limit, offset]);
@@ -79,7 +82,7 @@ class ProductionRoutingController {
           prl.*,
           mc.name as machine_centre_name
         FROM production_routing_lines prl
-        LEFT JOIN machine_centres mc ON prl.machine_centre_id = mc.id
+        LEFT JOIN machine_centres mc ON prl.machine_centre_id = mc.machine_id
         WHERE prl.routing_header_id = ?
         ORDER BY prl.id
       `, [id]);
@@ -256,8 +259,8 @@ class ProductionRoutingController {
     try {
       const { styleId } = req.params;
 
-      // Pick the routing whose created_on is <= today, closest to today
-      // Falls back to the latest future-dated one if none exist for today or earlier
+      // Pick the routing whose created_on is <= today, closest to today.
+      // Falls back to the latest future-dated one if none exist for today or earlier.
       const [rows] = await db.execute(`
         SELECT 
           prh.*,
@@ -272,8 +275,11 @@ class ProductionRoutingController {
         LEFT JOIN leather l ON prh.leather_id = l.id
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
-        WHERE prh.style_id = ? AND prh.created_on = CURDATE()
-        ORDER BY prh.id DESC
+        WHERE prh.style_id = ?
+        ORDER BY
+          CASE WHEN prh.created_on <= CURDATE() THEN 0 ELSE 1 END ASC,
+          ABS(DATEDIFF(prh.created_on, CURDATE())) ASC,
+          prh.id DESC
         LIMIT 1
       `, [styleId]);
 
@@ -302,7 +308,7 @@ class ProductionRoutingController {
         db.execute('SELECT id, code, name FROM leather ORDER BY name'),
         db.execute('SELECT id, code, name FROM styles ORDER BY name'),
         db.execute('SELECT id, code, name FROM colors ORDER BY name'),
-        db.execute('SELECT id, code, name, machine_id FROM machine_centres ORDER BY machine_id')
+        db.execute('SELECT id, code, name, machine_id, machine_name FROM machine_centres ORDER BY machine_id')
       ]);
 
       res.json({

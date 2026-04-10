@@ -42,16 +42,9 @@ export const isMenuAllowed = (menuKey: string, role: UserRole | string | null): 
 export const getDefaultRoute = (role: UserRole | string | null, userInfo?: any): string => {
   if (!role) return '/overview';
   
-  // Special handling for Machine Centre Users - redirect to their assigned line
+  // Special handling for Machine Centre Users - redirect to their assigned machine
   if (role === 'Machine Centre User' && userInfo?.machine_id) {
-    const machineId = userInfo.machine_id;
-    if (machineId === 'MAC-001') {
-      return '/mobile/line1';
-    } else if (machineId === 'MAC-002') {
-      return '/mobile/line2';
-    }
-    // Fallback to general mobile if machine not recognized
-    return '/mobile';
+    return `/mobile/${encodeURIComponent(userInfo.machine_id)}`;
   }
   
   return roleConfigs[role as UserRole]?.defaultRoute || '/overview';

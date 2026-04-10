@@ -21,18 +21,25 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                 mc.name            AS machine_centre_name,
                 mc.machine_id,
                 COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
-                COALESCE(pp.total_target_per_day, 12) AS target_pairs
+                COALESCE(
+                    (SELECT ROUND(SUM(prl.mins_12_prs_box), 2)
+                     FROM production_routing_lines prl
+                     JOIN production_routing_header prh ON prl.routing_header_id = prh.id
+                     JOIN production_plan pp2 ON prh.style_id = pp2.style_id
+                     WHERE prl.machine_centre_id = mc.machine_id
+                       AND pp2.work_centre_id = ?
+                       AND DATE(pp2.plan_date) = ?
+                       AND DATE(prh.created_on) = ?
+                    ), 0
+                ) AS target_mins_per_box
             FROM machine_centres mc
             LEFT JOIN machine_centre_summary mcs
                 ON mcs.machine_id = mc.machine_id
                 AND DATE(mcs.prod_date) = ?
                 AND mcs.work_centre_id = ?
-            LEFT JOIN production_plan pp
-                ON pp.work_centre_id = ?
-                AND DATE(pp.plan_date) = ?
-            WHERE mc.work_centre_id = ?
-            ORDER BY mc.code
-        `, [date, workCentreId, workCentreId, date, workCentreId]);
+            WHERE mc.work_centre_id = ? OR mcs.work_centre_id = ?
+            ORDER BY mc.machine_id
+        `, [workCentreId, date, date, date, workCentreId, workCentreId, workCentreId]);
 
         res.json({ success: true, data: rows });
     } catch (error) {
@@ -139,15 +146,27 @@ exports.getDashboard = async (req, res) => {
             SELECT 
                 wc.id as work_centre_id,
                 wc.name as line_name,
-                COALESCE(SUM(pp.total_target_per_day), 0) as target,
-                COALESCE(SUM(mcs.total_output_pairs), 0) as output,
-                CASE WHEN SUM(pp.total_target_per_day) > 0 THEN ROUND((SUM(mcs.total_output_pairs) / SUM(pp.total_target_per_day)) * 100, 0) ELSE 0 END as output_percentage,
-                CASE WHEN SUM(mcs.total_actual_mins) > 0 THEN ROUND((SUM(mcs.total_target_mins) / SUM(mcs.total_actual_mins)) * 100, 0) ELSE 0 END as efficiency,
-                GREATEST(0, COALESCE(SUM(pp.total_target_per_day), 0) - COALESCE(SUM(mcs.total_output_pairs), 0)) as wip
+                COALESCE(pp.target, 0) as target,
+                COALESCE(mcs.output, 0) as output,
+                CASE WHEN COALESCE(pp.target, 0) > 0 THEN ROUND((COALESCE(mcs.output, 0) / pp.target) * 100, 0) ELSE 0 END as output_percentage,
+                CASE WHEN COALESCE(mcs.actual_mins, 0) > 0 THEN ROUND((COALESCE(mcs.target_mins, 0) / mcs.actual_mins) * 100, 0) ELSE 0 END as efficiency,
+                GREATEST(0, COALESCE(pp.target, 0) - COALESCE(mcs.output, 0)) as wip
             FROM work_centres wc
-            LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
-            LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
-            GROUP BY wc.id, wc.name
+            LEFT JOIN (
+                SELECT work_centre_id, SUM(total_target_per_day) as target
+                FROM production_plan
+                WHERE DATE(plan_date) = DATE(?)
+                GROUP BY work_centre_id
+            ) pp ON wc.id = pp.work_centre_id
+            LEFT JOIN (
+                SELECT work_centre_id,
+                       SUM(total_output_pairs) as output,
+                       SUM(total_target_mins) as target_mins,
+                       SUM(total_actual_mins) as actual_mins
+                FROM machine_centre_summary
+                WHERE DATE(prod_date) = DATE(?)
+                GROUP BY work_centre_id
+            ) mcs ON wc.id = mcs.work_centre_id
             ORDER BY wc.id
         `, [today, today]);
 
