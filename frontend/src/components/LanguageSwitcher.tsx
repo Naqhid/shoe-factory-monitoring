@@ -30,6 +30,21 @@ export const LanguageSwitcher: React.FC = () => {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
+  // Re-trigger Google Translate after React renders dynamic content
+  React.useEffect(() => {
+    if (current === 'en') return;
+    const timer = setTimeout(() => {
+      try {
+        const select = document.querySelector('.goog-te-combo') as HTMLSelectElement;
+        if (select) {
+          select.value = current;
+          select.dispatchEvent(new Event('change'));
+        }
+      } catch { /* silent */ }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [current]);
+
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);

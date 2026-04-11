@@ -43,8 +43,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
           <div className="flex items-center gap-2">
             <Activity className="h-6 w-6 text-blue-600 ml-16" />
             <div>
-              <h1 className="text-lg font-bold text-gray-800 ">ProdPulse</h1>
-              <p className="text-xs text-gray-500 ">Smart Production Tracking System</p>
+              <h1 className="text-lg font-bold text-gray-800" translate="yes">ProdPulse</h1>
+              <p className="text-xs text-gray-500" translate="yes">Smart Production Tracking System</p>
             </div>
           </div>
           
@@ -58,8 +58,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
                   <User className="h-3 w-3 text-blue-600" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-gray-800">{user.name}</span>
-                  <span className="text-xs text-gray-500">{user.role || 'Admin'}</span>
+                  <span className="text-sm font-semibold text-gray-800" translate="yes">{user.name}</span>
+                  <span className="text-xs text-gray-500" translate="yes">{user.role || 'Admin'}</span>
                 </div>
               </div>
               <button

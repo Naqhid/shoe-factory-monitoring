@@ -100,8 +100,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
           <div className="flex items-center gap-2">
             <Activity className="h-6 w-6 text-blue-600" />
             <div>
-              <h2 className="text-lg font-bold text-gray-800">ProdPulse</h2>
-              <p className="text-xs text-gray-500">Smart Production Tracking</p>
+              <h2 className="text-lg font-bold text-gray-800" translate="yes">ProdPulse</h2>
+              <p className="text-xs text-gray-500" translate="yes">Smart Production Tracking</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -116,7 +116,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
             <div className="mb-6 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center gap-2 mb-2">
                 <User className="h-5 w-5 text-blue-600" />
-                <span className="font-semibold text-gray-800 truncate">{user.name}</span>
+                <span className="font-semibold text-gray-800 truncate" translate="yes">{user.name}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
