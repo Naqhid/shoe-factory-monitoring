@@ -4,6 +4,7 @@ import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw } from 'luc
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
+import { StoppageReasonModal } from './StoppageReasonModal';
 
 interface ProductionData {
     id?: number;
@@ -99,6 +100,7 @@ export const MobileProduction: React.FC = () => {
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
     const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+    const [showStoppageModal, setShowStoppageModal] = useState(false);
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -159,7 +161,7 @@ export const MobileProduction: React.FC = () => {
             } catch (error) {
                 console.error('Timer sync error:', error);
             }
-        }, 60000); // Every 1 minute
+        }, 10000); // Every 10 seconds
         
         return () => clearInterval(syncInterval);
     }, [productionData?.id, productionData?.button_status, productionData?.is_paused, actualTimeCounter, API_BASE]);
@@ -255,7 +257,13 @@ export const MobileProduction: React.FC = () => {
                             target_pairs: targetPairs,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
-                        setActualTimeCounter(unfinishedRecord.actual_time * 60);
+                        // Restore counter: saved actual_time + elapsed seconds since start_time (recovers unsaved seconds on refresh)
+                        const savedSeconds = (unfinishedRecord.actual_time || 0) * 60;
+                        const elapsedSinceStart = unfinishedRecord.start_time && unfinishedRecord.button_status === 1
+                            ? Math.floor((Date.now() - new Date(unfinishedRecord.start_time).getTime()) / 1000)
+                            : 0;
+                        // Use whichever is larger — DB value or live elapsed (in case of clock drift)
+                        setActualTimeCounter(Math.max(savedSeconds, elapsedSinceStart));
                         // Fetch summary data immediately after setting production data
                         await fetchSummaryData(resolvedMachineId);
                         toast.success('Loaded existing session');
@@ -470,20 +478,26 @@ export const MobileProduction: React.FC = () => {
 
     const handlePause = async () => {
         if (!productionData?.id) return;
+        setShowStoppageModal(true);
+    };
+
+    const confirmPause = async (reason: string) => {
+        if (!productionData?.id) return;
+        setShowStoppageModal(false);
         setLoading(true);
         try {
             const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ button_status: 3 })
+                body: JSON.stringify({ button_status: 3, stoppage_reason: reason })
             });
             const result = await response.json();
             if (result.success) {
                 setProductionData({ ...productionData, is_paused: true, button_status: 3 });
-                toast.success('Production paused');
+                toast.success(`Stopped: ${reason}`);
             }
         } catch (error) {
-            toast.error('Failed to pause production');
+            toast.error('Failed to stop production');
         } finally {
             setLoading(false);
         }
@@ -631,7 +645,7 @@ export const MobileProduction: React.FC = () => {
 
     // DASHBOARD STATE
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-3 md:p-6">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-1 md:p-2">
             {/* Initial Loading Screen */}
             {initializing && (
                 <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
@@ -656,7 +670,7 @@ export const MobileProduction: React.FC = () => {
 
             {/* Main Content */}
             {(!loading || productionData) && productionData && (
-                <div className="max-w-4xl mx-auto">
+                <div className="w-full px-2">
                         <>
                     {/* Finish Confirmation Dialog */}
                     {showFinishConfirm && (
@@ -685,6 +699,14 @@ export const MobileProduction: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    )}
+
+                    {/* Stoppage Reason Modal */}
+                    {showStoppageModal && (
+                        <StoppageReasonModal
+                            onConfirm={confirmPause}
+                            onCancel={() => setShowStoppageModal(false)}
+                        />
                     )}
 
                     {/* Header Section */}
@@ -782,13 +804,13 @@ export const MobileProduction: React.FC = () => {
                                 )}
                                 <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
                                 <p className="text-3xl md:text-5xl font-bold text-purple-900">
-                                    {Math.floor(actualTimeCounter / 60)}<span className="text-2xl md:text-3xl">m</span>
-                                    <span className="text-2xl md:text-3xl font-bold text-purple-700 ml-2">{actualTimeCounter % 60}s</span>
+                                    <span>{Math.floor(actualTimeCounter / 60)}</span><span className="text-2xl md:text-3xl">m</span>
+                                    <span className="text-2xl md:text-3xl font-bold text-purple-700 ml-2"><span>{actualTimeCounter % 60}</span>s</span>
                                 </p>
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
                                 <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs</p>
-                                <p className="text-3xl md:text-5xl font-bold text-green-900">{productionData.target_pairs || 0}</p>
+                                <p className="text-3xl md:text-5xl font-bold text-green-900"><span>{productionData.target_pairs || 0}</span></p>
                                 <p className="text-xs text-green-600 mt-1">pairs</p>
                             </div>
                             <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm">
@@ -797,7 +819,7 @@ export const MobileProduction: React.FC = () => {
                                     <Loader2 className="h-8 w-8 animate-spin text-orange-600 mx-auto my-4" />
                                 ) : (
                                     <>
-                                        <p className="text-3xl md:text-5xl font-bold text-orange-900">{totalOutputToday}</p>
+                                        <p className="text-3xl md:text-5xl font-bold text-orange-900"><span>{totalOutputToday}</span></p>
                                         <p className="text-xs text-orange-600 mt-1">pairs (today)</p>
                                     </>
                                 )}
@@ -808,14 +830,14 @@ export const MobileProduction: React.FC = () => {
                                     <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mx-auto my-4" />
                                 ) : (
                                     <>
-                                        <p className="text-3xl md:text-5xl font-bold text-indigo-900">{avgEfficiencyToday}%</p>
+                                        <p className="text-3xl md:text-5xl font-bold text-indigo-900"><span>{avgEfficiencyToday}</span>%</p>
                                         <p className="text-xs text-indigo-600 mt-1">percentage</p>
                                     </>
                                 )}
                             </div>
                             <div className={`p-4 md:p-6 rounded-xl border-2 shadow-sm ${getStatusBgColor()} ${getStatusColor()}`}>
                                 <p className="text-xs font-semibold uppercase mb-1 opacity-90">Status</p>
-                                <p className="text-3xl md:text-5xl font-bold">{getStatusText()}</p>
+                                <p className="text-3xl md:text-5xl font-bold"><span>{getStatusText()}</span></p>
                                 <p className="text-xs mt-1 opacity-90">current</p>
                             </div>
                         </div>
@@ -831,14 +853,14 @@ export const MobileProduction: React.FC = () => {
                                         disabled={loading || productionData.button_status === 2}
                                         className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" />START</>}
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" /><span>START</span></>}
                                     </button>
                                     <button
                                         onClick={handleReset}
                                         disabled={loading}
                                         className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
-                                        <RotateCcw className="h-5 w-5" />RESET
+                                        <RotateCcw className="h-5 w-5" /><span>RESET</span>
                                     </button>
                                 </>
                             ) : productionData.button_status === 1 && !productionData.is_paused ? (
@@ -848,14 +870,14 @@ export const MobileProduction: React.FC = () => {
                                         disabled={loading}
                                         className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" />FINISH</>}
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" /><span>FINISH</span></>}
                                     </button>
                                     <button
-                                        onClick={handleReset}
+                                        onClick={handlePause}
                                         disabled={loading}
-                                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-orange-600 hover:to-orange-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
-                                        <RotateCcw className="h-5 w-5" />RESET
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><span>⏸</span><span>STOP</span></>}
                                     </button>
                                 </>
                             ) : null}

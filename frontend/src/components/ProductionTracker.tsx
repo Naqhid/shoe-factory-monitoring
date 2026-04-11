@@ -23,8 +23,10 @@ export const ProductionTracker: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [reworkSummary, setReworkSummary] = useState<Record<number, { total_rework: number; total_rejection: number }>>({});
-  const [expandedLines, setExpandedLines] = useState<Record<number, boolean>>({});
-  const [machineData, setMachineData] = useState<Record<number, any[]>>({});
+  const [activeTab, setActiveTab] = useState<'line' | 'machine'>('line');
+  const [allMachineData, setAllMachineData] = useState<any[]>([]);
+  const [machineTabLoading, setMachineTabLoading] = useState(false);
+  const [stoppageData, setStoppageData] = useState<any[]>([]);
 
   useEffect(() => {
     const loadWorkCentres = async () => {
@@ -43,18 +45,6 @@ export const ProductionTracker: React.FC = () => {
   }, []);
 
   const [error, setError] = useState<string | null>(null);
-
-  const toggleLine = async (workCentreId: number) => {
-    const isOpen = expandedLines[workCentreId];
-    setExpandedLines(prev => ({ ...prev, [workCentreId]: !isOpen }));
-    if (!isOpen && !machineData[workCentreId]) {
-      try {
-        const res = await apiFetch(`${API_BASE}/api/tv-dashboard/machine-centres/${workCentreId}?date=${selectedDate}`);
-        const result = await res.json();
-        if (result.success) setMachineData(prev => ({ ...prev, [workCentreId]: result.data }));
-      } catch {}
-    }
-  };
 
   const loadAttendanceData = async () => {
     setAttendanceLoading(true);
@@ -119,15 +109,38 @@ export const ProductionTracker: React.FC = () => {
     }
   };
 
+  const loadAllMachineData = async () => {
+    setMachineTabLoading(true);
+    try {
+      const workCentreId = selectedLine || workCentres[0]?.id || 1;
+      const res = await apiFetch(`${API_BASE}/api/tv-dashboard/machine-centres/${workCentreId}?date=${selectedDate}`);
+      const result = await res.json();
+      if (result.success) setAllMachineData(result.data);
+    } catch {}
+    finally { setMachineTabLoading(false); }
+  };
+
+  const loadStoppageData = async () => {
+    try {
+      const workCentreId = selectedLine || workCentres[0]?.id || 1;
+      const res = await apiFetch(`${API_BASE}/api/tracker/stoppages?date=${selectedDate}&workCentreId=${workCentreId}`);
+      const result = await res.json();
+      if (result.success) setStoppageData(result.data);
+    } catch {}
+  };
+
   useEffect(() => {
     if (workCentres.length > 0 && selectedLine) {
-      setExpandedLines({});
-      setMachineData({});
+      setAllMachineData([]);
       loadDashboardData();
       loadAttendanceData();
+      loadAllMachineData();
+      loadStoppageData();
       const interval = setInterval(() => {
         loadDashboardData();
         loadAttendanceData();
+        loadAllMachineData();
+        loadStoppageData();
       }, 10000);
       return () => clearInterval(interval);
     }
@@ -272,8 +285,26 @@ export const ProductionTracker: React.FC = () => {
           </div>
         </div>
 
-        {/* LINE PERFORMANCE Section */}
-        <div className="bg-white rounded-2xl shadow-2xl p-6 mb-4">
+        {/* Tabs */}
+        <div className="bg-white rounded-2xl shadow-2xl mb-4">
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('line')}
+              className={`px-6 py-4 text-sm font-bold transition-colors ${activeTab === 'line' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Line Performance
+            </button>
+            <button
+              onClick={() => setActiveTab('machine')}
+              className={`px-6 py-4 text-sm font-bold transition-colors ${activeTab === 'machine' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Machine Performance
+            </button>
+          </div>
+
+          {/* LINE PERFORMANCE Tab */}
+          {activeTab === 'line' && (
+        <div className="p-6">
           <h3 className="text-2xl font-bold text-blue-600 mb-4">LINE PERFORMANCE</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full">
@@ -291,74 +322,95 @@ export const ProductionTracker: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {lowerSection.linePerformance?.map((line: any, index: number) => {
+                {lowerSection.linePerformance?.filter((line: any) => line.work_centre_id === currentWorkCentreId).map((line: any, index: number) => {
                   const getStatusColor = (eff: number) => {
                     if (eff >= 95) return 'bg-green-500';
                     if (eff >= 85) return 'bg-yellow-500';
                     return 'bg-red-500';
                   };
                   const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
-                  const isExpanded = expandedLines[line.work_centre_id];
-                  const machines = machineData[line.work_centre_id] || [];
                   return (
-                    <>
-                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => toggleLine(line.work_centre_id)}>
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-800 flex items-center gap-2">
-                          <span className={`transition-transform ${isExpanded ? 'rotate-90' : ''} text-gray-400 text-xs`}>▶</span>
-                          {line.line_name}
-                        </td>
-                        <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
-                        <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
-                        <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
-                        <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
-                        <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{line.wip || 0}</td>
-                        <td className="px-4 py-4 text-center text-lg font-bold text-yellow-600">{rw.total_rework}</td>
-                        <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{rw.total_rejection}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex justify-center gap-2">
-                            <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
-                            <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr key={`${index}-machines`}>
-                          <td colSpan={9} className="px-0 py-0 bg-blue-50">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="bg-blue-100 text-blue-800">
-                                  <th className="px-8 py-2 text-left font-semibold">Machine</th>
-                                  <th className="px-4 py-2 text-center font-semibold">Machine ID</th>
-                                  <th className="px-4 py-2 text-center font-semibold">Output (pairs)</th>
-                                  <th className="px-4 py-2 text-center font-semibold">Target (mins/box)</th>
-                                  <th className="px-4 py-2 text-center font-semibold">Output %</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {machines.length === 0 ? (
-                                  <tr><td colSpan={5} className="px-8 py-3 text-gray-400 text-center">No machine data</td></tr>
-                                ) : machines.map((m: any, mi: number) => (
-                                    <tr key={mi} className="border-t border-blue-100 hover:bg-blue-50">
-                                      <td className="px-8 py-2 font-medium text-gray-700">{m.machine_centre_name}</td>
-                                      <td className="px-4 py-2 text-center text-gray-500 font-mono">{m.machine_id}</td>
-                                      <td className="px-4 py-2 text-center font-bold text-green-600">{m.total_output_pairs}</td>
-                                      <td className="px-4 py-2 text-center font-bold text-blue-600">
-                                        {m.target_mins_per_box > 0 ? `${m.target_mins_per_box} mins` : '—'}
-                                      </td>
-                                      <td className="px-4 py-2 text-center text-gray-400 text-sm">—</td>
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{line.wip || 0}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-yellow-600">{rw.total_rework}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{rw.total_rejection}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex justify-center gap-2">
+                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+        </div>
+          )}
+
+          {/* MACHINE PERFORMANCE Tab */}
+          {activeTab === 'machine' && (
+        <div className="p-6">
+          <h3 className="text-2xl font-bold text-blue-600 mb-4">MACHINE PERFORMANCE</h3>
+          {machineTabLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+              <span className="text-gray-600">Loading machine data...</span>
+            </div>
+          ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b-2 border-gray-200">
+                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">MACHINE</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">MACHINE ID</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EMPLOYEE</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">EMP CODE</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">OUTPUT (PAIRS)</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">TARGET (MINS/BOX)</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allMachineData.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No machine data for selected line and date</td>
+                  </tr>
+                ) : allMachineData.map((m: any, index: number) => {
+                  const hasOutput = m.total_output_pairs > 0;
+                  const hasTarget = m.target_mins_per_box > 0;
+                  const statusColor = !hasOutput ? 'bg-red-500' : hasTarget ? 'bg-green-500' : 'bg-yellow-500';
+                  return (
+                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-4 text-sm font-semibold text-gray-800">{m.machine_centre_name}</td>
+                      <td className="px-4 py-4 text-center font-mono text-gray-500">{m.machine_id}</td>
+                      <td className="px-4 py-4 text-center text-sm text-gray-700">{m.emp_name || '—'}</td>
+                      <td className="px-4 py-4 text-center font-mono text-sm text-gray-500">{m.emp_code || '—'}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{m.total_output_pairs}</td>
+                      <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">
+                        {m.target_mins_per_box > 0 ? `${m.target_mins_per_box} mins` : '—'}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex justify-center gap-2">
+                          <div className={`w-4 h-4 rounded-full ${statusColor}`}></div>
+                          <div className={`w-4 h-4 rounded-full ${statusColor}`}></div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          )}
+        </div>
+          )}
         </div>
 
         {/* Bottom Section - Charts */}
@@ -400,6 +452,59 @@ export const ProductionTracker: React.FC = () => {
                   <Smile className="h-16 w-16 mx-auto mb-4 text-green-400" />
                   <div className="text-xl">No Bottlenecks - All machines performing well!</div>
                 </div>
+              </div>
+            )}
+          </div>
+          <div className="bg-white rounded-2xl shadow-2xl p-6">
+            <h3 className="text-2xl font-bold text-orange-600 mb-4 flex items-center gap-2">
+              ⏸ Stoppage Reasons Today
+            </h3>
+            {stoppageData.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-gray-400">
+                <div className="text-center">
+                  <div className="text-4xl mb-2">✅</div>
+                  <div className="text-sm">No stoppages recorded today</div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stoppageData.map((item: any, index: number) => (
+                  <div key={index} className="bg-orange-50 border border-orange-100 rounded-xl p-4">
+                    {/* Top row: rank + reason + duration badge */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-white bg-orange-500 px-2 py-0.5 rounded-full">#{index + 1}</span>
+                        <span className="text-sm font-bold text-gray-800">{item.stoppage_reason}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        {item.total_minutes} min · {item.occurrences}x
+                      </span>
+                    </div>
+                    {/* Detail chips */}
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">
+                        🖥️ {item.machine_name || item.machine_id}
+                      </span>
+                      {item.employee_name && (
+                        <span className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">
+                          👤 {item.employee_name}
+                        </span>
+                      )}
+                      {item.last_stopped_at && (
+                        <span className="flex items-center gap-1 text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded-lg">
+                          🕐 {new Date(item.last_stopped_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    {/* Progress bar */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full bg-orange-400" style={{ width: `${Math.min(item.percentage || 0, 100)}%` }} />
+                      </div>
+                      <span className="text-xs font-bold text-orange-600 w-10 text-right">{item.percentage}%</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

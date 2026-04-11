@@ -148,7 +148,7 @@ exports.update = async (req, res, next) => {
 exports.updateStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { button_status, output_pairs, actual_time } = req.body;
+    const { button_status, output_pairs, actual_time, stoppage_reason } = req.body;
 
     await withTransaction(async (conn) => {
       // Verify record exists
@@ -165,6 +165,7 @@ exports.updateStatus = async (req, res, next) => {
         updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
       } else if (button_status === 3) {
         updateQuery += ', idle_start_time = NOW()';
+        if (stoppage_reason) { updateQuery += ', stoppage_reason = ?'; params.push(stoppage_reason); }
       }
 
       updateQuery += ' WHERE id = ?';

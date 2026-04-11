@@ -31,15 +31,23 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                        AND DATE(pp2.plan_date) = ?
                        AND DATE(prh.created_on) = ?
                     ), 0
-                ) AS target_mins_per_box
+                ) AS target_mins_per_box,
+                ms.emp_code,
+                e.name AS emp_name
             FROM machine_centres mc
             LEFT JOIN machine_centre_summary mcs
                 ON mcs.machine_id = mc.machine_id
                 AND DATE(mcs.prod_date) = ?
                 AND mcs.work_centre_id = ?
+            LEFT JOIN mobile_sessions ms
+                ON ms.machine_id = mc.machine_id
+                AND ms.work_centre_id = ?
+                AND ms.status = 'active'
+                AND DATE(ms.activated_at) = ?
+            LEFT JOIN employees e ON e.id = ms.emp_id
             WHERE mc.work_centre_id = ? OR mcs.work_centre_id = ?
             ORDER BY mc.machine_id
-        `, [workCentreId, date, date, date, workCentreId, workCentreId, workCentreId]);
+        `, [workCentreId, date, date, date, workCentreId, workCentreId, date, workCentreId, workCentreId]);
 
         res.json({ success: true, data: rows });
     } catch (error) {

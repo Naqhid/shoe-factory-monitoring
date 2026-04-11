@@ -102,6 +102,18 @@ class ProductionPlanningController {
         await assertExists(conn, 'customers', customer_id, 'Customer');
         await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
 
+        // Validate routing exists for this style
+        const [routingRows] = await conn.execute(
+          'SELECT id FROM production_routing_header WHERE style_id = ? LIMIT 1',
+          [style_id]
+        );
+        if (routingRows.length === 0) {
+          throw Object.assign(
+            new Error('No production routing found for the selected style. Please create a routing first.'),
+            { status: 422 }
+          );
+        }
+
         const [r] = await conn.execute(
           `INSERT INTO production_plan 
           (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id,
@@ -138,6 +150,18 @@ class ProductionPlanningController {
         await assertExists(conn, 'styles', style_id, 'Style');
         await assertExists(conn, 'customers', customer_id, 'Customer');
         await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
+
+        // Validate routing exists for this style
+        const [routingRows] = await conn.execute(
+          'SELECT id FROM production_routing_header WHERE style_id = ? LIMIT 1',
+          [style_id]
+        );
+        if (routingRows.length === 0) {
+          throw Object.assign(
+            new Error('No production routing found for the selected style. Please create a routing first.'),
+            { status: 422 }
+          );
+        }
 
         const [r] = await conn.execute(
           `UPDATE production_plan 

@@ -23,6 +23,11 @@ const tvDashboardController = require('./controllers/tvDashboardController');
 const hourlyOutputController = require('./controllers/hourlyOutputController');
 const reworkRejectionController = require('./controllers/reworkRejectionController');
 const roleController = require('./controllers/roleController');
+const productionLockController = require('./controllers/productionLockController');
+const alertController = require('./controllers/alertController');
+const backupController = require('./controllers/backupController');
+const checkDayLock = require('./middleware/checkDayLock');
+const backupService = require('./services/backupService');
 const errorHandler = require('./middleware/errorHandler');
 const authenticate = require('./middleware/authenticate');
 const requestLogger = require('./middleware/requestLogger');
@@ -102,6 +107,16 @@ const PORT = process.env.PORT || 3001;
 createDirectories();
 initDb();
 
+// Start daily backup scheduler
+backupService.scheduleDaily();
+
+// Run alert checks every hour
+const { runChecks: runAlertChecks } = require('./controllers/alertController');
+setInterval(() => {
+  const today = new Date().toISOString().split('T')[0];
+  runAlertChecks(today);
+}, 60 * 60 * 1000); // every hour
+
 // Middleware
 app.use(compression());
 const corsOptions = {
@@ -133,8 +148,13 @@ app.post('/api/auth/refresh', authController.refresh.bind(authController));
 // Protect all other /api routes with JWT
 app.use('/api', authenticate);
 
-app.get('/api/reports/hourly-production', validate(validate.schemas.dateQuery), apiController.getHourlyProductionStatus);
-app.get('/api/reports/line-efficiency', validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency);
+app.get('/api/reports/hourly-production', validate(validate.schemas.dateQuery), apiController.getHourlyProductionStatus.bind(apiController));
+app.get('/api/reports/line-efficiency', validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency.bind(apiController));
+app.get('/api/reports/attendance', validate(validate.schemas.dateQuery), apiController.getAttendanceReport.bind(apiController));
+app.get('/api/reports/rework-rejection', validate(validate.schemas.dateQuery), apiController.getReworkRejectionReport.bind(apiController));
+app.get('/api/reports/machine-output', validate(validate.schemas.dateQuery), apiController.getMachineOutputReport.bind(apiController));
+app.get('/api/reports/employee-output', validate(validate.schemas.dateQuery), apiController.getEmployeeOutputReport.bind(apiController));
+app.get('/api/reports/employee-performance', validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
 
 // Master routes — table whitelist on all master endpoints
 app.get('/api/masters/:table', validate.allowedTable, validate.pagination, masterController.getAll);
@@ -212,7 +232,7 @@ app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons
 app.get('/api/tracker/line-performance', productionTrackerController.getLinePerformance);
 
 // Machine Centre routes
-app.post('/api/machine-centre/start', machineCentreController.startProduction);
+app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);
 app.post('/api/machine-centre/stop', machineCentreController.stopProduction);
 app.post('/api/machine-centre/resume', machineCentreController.resumeProduction);
 app.post('/api/machine-centre/finish', machineCentreController.finishProduction);
@@ -231,7 +251,7 @@ app.get('/api/hourly-output/:workCentreId', hourlyOutputController.getHourlyOutp
 // Rework Rejection routes
 app.get('/api/rework-rejection/summary', reworkRejectionController.getSummaryByWorkCentre);
 app.get('/api/rework-rejection', reworkRejectionController.getAll);
-app.post('/api/rework-rejection', validate(validate.schemas.reworkRejection), reworkRejectionController.save);
+app.post('/api/rework-rejection', validate(validate.schemas.reworkRejection), checkDayLock('production_date', 'work_centre_id'), reworkRejectionController.save);
 app.put('/api/rework-rejection/:id', validate.numericId, reworkRejectionController.update);
 app.delete('/api/rework-rejection/:id', validate.numericId, reworkRejectionController.delete);
 
@@ -241,6 +261,25 @@ app.get('/api/roles/:id', roleController.getById);
 app.post('/api/roles', roleController.create);
 app.put('/api/roles/:id', roleController.update);
 app.delete('/api/roles/:id', roleController.delete);
+
+// Auth — password management
+app.post('/api/auth/change-password', authController.changePassword.bind(authController));
+app.post('/api/auth/reset-password/:userId', authController.resetPassword.bind(authController));
+
+// Production day lock routes
+app.get('/api/production-lock', productionLockController.isLocked.bind(productionLockController));
+app.get('/api/production-lock/all', productionLockController.getAll.bind(productionLockController));
+app.post('/api/production-lock/lock', productionLockController.lockDay.bind(productionLockController));
+app.post('/api/production-lock/unlock', productionLockController.unlockDay.bind(productionLockController));
+
+// Alert routes
+app.get('/api/alerts', alertController.getAlerts.bind(alertController));
+app.post('/api/alerts/mark-read', alertController.markRead.bind(alertController));
+app.post('/api/alerts/run-checks', alertController.runChecks.bind(alertController));
+
+// Backup routes (admin only)
+app.post('/api/backup/trigger', backupController.triggerBackup.bind(backupController));
+app.get('/api/backup/list', backupController.getBackups.bind(backupController));
 
 // Health check endpoints (no auth required)
 app.get('/health', healthController.basic.bind(healthController));

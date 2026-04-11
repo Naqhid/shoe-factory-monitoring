@@ -403,8 +403,8 @@ export const ProductionRoutingForm: React.FC = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0">
+          <div className="bg-white rounded-lg w-full h-full max-h-screen overflow-y-auto" style={{ maxWidth: '100vw', maxHeight: '100vh' }}>
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
               <h2 className="text-xl font-bold">{editingId ? 'Edit' : 'Add'} Production Routing</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -486,7 +486,6 @@ export const ProductionRoutingForm: React.FC = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Process</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Normal Time</th>
@@ -509,15 +508,6 @@ export const ProductionRoutingForm: React.FC = () => {
                                 options={machineCentres}
                                 onChange={(val) => updateLine(index, 'machine_centre_id', val)}
                                 placeholder="Select Machine"
-                              />
-                            </td>
-                            <td className="px-2 py-2">
-                              <textarea
-                                value={line.process}
-                                onChange={(e) => updateLine(index, 'process', e.target.value)}
-                                placeholder="Enter process..."
-                                rows={2}
-                                className="w-full min-w-[160px] border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
                               />
                             </td>
                             <td className="px-2 py-2">

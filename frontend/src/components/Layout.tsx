@@ -2,6 +2,8 @@ import React from 'react';
 import { Navigation } from './Navigation';
 import { Activity, LogOut, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AlertBell } from './AlertBell';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -49,6 +51,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
           {/* User info and logout */}
           {user && (
             <div className="flex items-center gap-2">
+              <LanguageSwitcher />
+              <AlertBell />
               <div className="hidden sm:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
                 <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full">
                   <User className="h-3 w-3 text-blue-600" />

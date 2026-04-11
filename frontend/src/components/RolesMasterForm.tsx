@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Loader2 } from 'lucide-react';
-import axios from 'axios';
 import toast from 'react-hot-toast';
+import { apiFetch, API_BASE_URL } from '../services/api';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = `${API_BASE_URL}/api`;
 
 const allMenus = [
   { key: 'overview', label: 'TV Dashboard' },
@@ -51,8 +51,9 @@ export const RolesMasterForm: React.FC = () => {
   const fetchRoles = async () => {
     setFetchLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/roles`);
-      setRoles(response.data);
+      const res = await apiFetch(`${API_URL}/roles`);
+      const data = await res.json();
+      setRoles(data);
     } catch (error) {
       toast.error('Failed to fetch roles');
     } finally {
@@ -64,10 +65,16 @@ export const RolesMasterForm: React.FC = () => {
     e.preventDefault();
     try {
       if (editingRole) {
-        await axios.put(`${API_URL}/roles/${editingRole.id}`, formData);
+        await apiFetch(`${API_URL}/roles/${editingRole.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(formData),
+        });
         toast.success('Role updated successfully');
       } else {
-        await axios.post(`${API_URL}/roles`, formData);
+        await apiFetch(`${API_URL}/roles`, {
+          method: 'POST',
+          body: JSON.stringify(formData),
+        });
         toast.success('Role created successfully');
       }
       fetchRoles();
@@ -80,7 +87,7 @@ export const RolesMasterForm: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this role?')) return;
     try {
-      await axios.delete(`${API_URL}/roles/${id}`);
+      await apiFetch(`${API_URL}/roles/${id}`, { method: 'DELETE' });
       toast.success('Role deleted successfully');
       fetchRoles();
     } catch (error) {

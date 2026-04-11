@@ -2,6 +2,8 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList, MonitorDot } from 'lucide-react';
 import { isMenuAllowed } from '../utils/roleConfig';
+import { AlertBell } from './AlertBell';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface NavigationProps {
   activeMenu: string;
@@ -102,7 +104,10 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
               <p className="text-xs text-gray-500">Smart Production Tracking</p>
             </div>
           </div>
-          <button onClick={onToggleSidebar} className="p-1"><X className="h-5 w-5" /></button>
+          <div className="flex items-center gap-1">
+            <AlertBell />
+            <button onClick={onToggleSidebar} className="p-1"><X className="h-5 w-5" /></button>
+          </div>
         </div>
 
         <nav className="p-4 h-[calc(100vh-73px)] overflow-y-auto">
@@ -111,12 +116,13 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
             <div className="mb-6 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center gap-2 mb-2">
                 <User className="h-5 w-5 text-blue-600" />
-                <span className="font-semibold text-gray-800">{user.name}</span>
+                <span className="font-semibold text-gray-800 truncate">{user.name}</span>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="flex items-center justify-between">
                 <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
                   {user.role || 'Admin'}
                 </span>
+                <LanguageSwitcher />
               </div>
             </div>
           )}

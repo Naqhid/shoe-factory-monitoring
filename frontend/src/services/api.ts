@@ -27,17 +27,28 @@ export const apiFetch = async (input: string, init: RequestInit = {}): Promise<R
       }
       response = await fetch(input, { ...init, headers: retryHeaders });
     } else {
-      localStorage.clear();
-      window.location.href = `${window.location.origin}/`;
+      // Only logout if refresh token is also gone/expired — not on network errors
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) {
+        localStorage.clear();
+        window.location.href = `${window.location.origin}/`;
+      }
+      // Otherwise silently fail — token may refresh on next request
     }
   }
   return response;
 };
 
 let isRefreshing = false;
+let refreshRetryCount = 0;
+const MAX_REFRESH_RETRIES = 2;
 
 const tryRefresh = async (): Promise<boolean> => {
-  if (isRefreshing) return false;
+  if (isRefreshing) {
+    // Wait for the in-progress refresh
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return !!localStorage.getItem('jwt_token');
+  }
   isRefreshing = true;
   try {
     const refreshToken = localStorage.getItem('refresh_token');
@@ -47,15 +58,21 @@ const tryRefresh = async (): Promise<boolean> => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      refreshRetryCount++;
+      if (refreshRetryCount < MAX_REFRESH_RETRIES) return false; // don't logout yet
+      return false;
+    }
     const data = await res.json();
     if (data.success && data.token) {
       localStorage.setItem('jwt_token', data.token);
       localStorage.setItem('refresh_token', data.refreshToken);
+      refreshRetryCount = 0;
       return true;
     }
     return false;
   } catch {
+    // Network error — don't logout, just fail silently
     return false;
   } finally {
     isRefreshing = false;
@@ -86,8 +103,11 @@ api.interceptors.response.use(
         error.config.headers['Authorization'] = `Bearer ${localStorage.getItem('jwt_token')}`;
         return api.request(error.config);
       }
-      localStorage.clear();
-      window.location.href = `${window.location.origin}/`;
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) {
+        localStorage.clear();
+        window.location.href = `${window.location.origin}/`;
+      }
     }
     return Promise.reject(error);
   }

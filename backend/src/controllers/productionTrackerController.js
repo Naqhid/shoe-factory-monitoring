@@ -190,17 +190,26 @@ class ProductionTrackerController {
 
       const [stoppages] = await db.execute(`
         SELECT 
-          pd.stoppage_reason,
-          SUM(pd.idle_stop_time) as total_minutes,
-          ROUND((SUM(pd.idle_stop_time) / NULLIF(SUM(SUM(pd.idle_stop_time)) OVER(), 0)) * 100) as percentage
-        FROM prod_data pd
-        WHERE DATE(pd.prod_date) = DATE(?) 
-          AND pd.stoppage_reason IS NOT NULL 
-          AND pd.idle_stop_time > 0 
-          ${whereClause}
-        GROUP BY pd.stoppage_reason
+          mcp.stoppage_reason,
+          mcp.machine_id,
+          mc.name as machine_name,
+          mcp.emp_id,
+          e.name as employee_name,
+          COUNT(*) as occurrences,
+          SUM(TIMESTAMPDIFF(MINUTE, mcp.idle_start_time, COALESCE(mcp.idle_stop_time, NOW()))) as total_minutes,
+          MAX(mcp.idle_start_time) as last_stopped_at,
+          ROUND((SUM(TIMESTAMPDIFF(MINUTE, mcp.idle_start_time, COALESCE(mcp.idle_stop_time, NOW()))) / 
+            NULLIF(SUM(SUM(TIMESTAMPDIFF(MINUTE, mcp.idle_start_time, COALESCE(mcp.idle_stop_time, NOW())))) OVER(), 0)) * 100) as percentage
+        FROM machine_centre_production mcp
+        LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+        LEFT JOIN employees e ON e.code = mcp.emp_id
+        WHERE DATE(mcp.prod_date) = DATE(?) 
+          AND mcp.stoppage_reason IS NOT NULL
+          AND mcp.idle_start_time IS NOT NULL
+          ${whereClause.replace('pd.work_centre_id', 'mcp.work_centre_id')}
+        GROUP BY mcp.stoppage_reason, mcp.machine_id, mc.name, mcp.emp_id, e.name
         ORDER BY total_minutes DESC
-        LIMIT 3
+        LIMIT 10
       `, params);
 
       res.json({
