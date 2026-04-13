@@ -42,5 +42,105 @@
       }
     </script>
     <script src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+    <!-- Tamil Transliteration - Mozhi scheme -->
+    <script>
+      var transliterationEnabled = false;
+
+      var mozhi = [
+        ['aa','ஆ'],['ii','ஈ'],['uu','ஊ'],['ee','ஏ'],['oo','ஓ'],['ai','ஐ'],['au','ஔ'],
+        ['a','அ'],['i','இ'],['u','உ'],['e','எ'],['o','ஒ'],
+        ['nj','ஞ'],['ng','ங'],['ch','ச'],['sh','ஷ'],['zh','ழ'],
+        ['th','த'],['ph','ப'],['bh','ப'],['kh','க'],['gh','க'],
+        ['Th','ட'],['Nh','ண'],['Lh','ள'],['Rh','ற'],
+        ['k','க்'],['g','க்'],['c','ச்'],['s','ஸ்'],['j','ஜ்'],
+        ['t','ட்'],['d','ட்'],['n','ன்'],['N','ண்'],
+        ['p','ப்'],['b','ப்'],['m','ம்'],
+        ['y','ய்'],['r','ர்'],['R','ற்'],['l','ல்'],['L','ள்'],
+        ['v','வ்'],['w','வ்'],['h','ஹ்'],['z','ழ்'],
+      ];
+
+      function transliterateText(text) {
+        var result = '';
+        var i = 0;
+        while (i < text.length) {
+          var matched = false;
+          for (var j = 0; j < mozhi.length; j++) {
+            var eng = mozhi[j][0];
+            if (text.substr(i, eng.length) === eng) {
+              result += mozhi[j][1];
+              i += eng.length;
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) { result += text[i]; i++; }
+        }
+        return result;
+      }
+
+      function attachTransliteration(el) {
+        if (el._translitAttached) return;
+        el._translitAttached = true;
+        el.addEventListener('keydown', function(e) {
+          if (!transliterationEnabled) return;
+          if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+          e.preventDefault();
+          e.stopPropagation();
+          var ch = e.key;
+          var start = el.selectionStart != null ? el.selectionStart : el.value.length;
+          var end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+          var val = el.value || '';
+          var converted = transliterateText(ch);
+          var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value') ||
+                                       Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+          if (nativeInputValueSetter && nativeInputValueSetter.set) {
+            nativeInputValueSetter.set.call(el, val.substring(0, start) + converted + val.substring(end));
+          } else {
+            el.value = val.substring(0, start) + converted + val.substring(end);
+          }
+          var pos = start + converted.length;
+          el.setSelectionRange(pos, pos);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }, true); // useCapture=true to fire before React
+      }
+
+      function enableTransliteration() {
+        // Attach to existing inputs
+        document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(attachTransliteration);
+        // Also attach on focus for any input (catches React-rendered inputs)
+        if (!window._translitFocusHandler) {
+          window._translitFocusHandler = function(e) {
+            var el = e.target;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+              attachTransliteration(el);
+            }
+          };
+          document.addEventListener('focusin', window._translitFocusHandler, true);
+        }
+        if (!window._translitObserver) {
+          window._translitObserver = new MutationObserver(function(mutations) {
+            if (!transliterationEnabled) return;
+            mutations.forEach(function(m) {
+              m.addedNodes.forEach(function(node) {
+                if (!node || node.nodeType !== 1) return;
+                if (node.querySelectorAll) node.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(attachTransliteration);
+                if (node.matches && node.matches('input[type="text"], input:not([type]), textarea')) attachTransliteration(node);
+              });
+            });
+          });
+          window._translitObserver.observe(document.body, { childList: true, subtree: true });
+        }
+        transliterationEnabled = true;
+        console.log('Transliteration enabled, inputs found:', document.querySelectorAll('input, textarea').length);
+      }
+
+      function disableTransliteration() { transliterationEnabled = false; }
+
+      function toggleTransliteration() {
+        transliterationEnabled ? disableTransliteration() : enableTransliteration();
+        return transliterationEnabled;
+      }
+    </script>
   </body>
 </html>

@@ -419,6 +419,22 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
+    // Retry helper — retries up to maxRetries times with exponential backoff
+    const withRetry = async (fn: () => Promise<any>, maxRetries = 3): Promise<any> => {
+        let lastError;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            } catch (err) {
+                lastError = err;
+                if (attempt < maxRetries) {
+                    await new Promise(r => setTimeout(r, 500 * attempt)); // 500ms, 1s, 1.5s
+                }
+            }
+        }
+        throw lastError;
+    };
+
     const handleStart = async () => {
         // If no production data ID (first time) or after FINISH, create new record
         if (!productionData?.id || productionData.button_status === 2) {
@@ -429,26 +445,22 @@ export const MobileProduction: React.FC = () => {
             
             setLoading(true);
             try {
-                // Create new production record in database
-                const response = await apiFetch(`${API_BASE}/api/mobile-production`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        ...productionData,
-                        button_status: 1 // Start immediately
-                    })
+                const result = await withRetry(async () => {
+                    const response = await apiFetch(`${API_BASE}/api/mobile-production`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...productionData, button_status: 1 })
+                    });
+                    const data = await response.json();
+                    if (!data.success) throw new Error(data.message || 'Failed to start');
+                    return data;
                 });
-                
-                const result = await response.json();
-                if (result.success) {
-                    setProductionData({ ...productionData!, id: result.data.id, button_status: 1, is_paused: false });
-                    setActualTimeCounter(0);
-                    toast.success('Production started');
-                } else {
-                    toast.error('Failed to start production');
-                }
+                setProductionData({ ...productionData!, id: result.data.id, button_status: 1, is_paused: false });
+                setActualTimeCounter(0);
+                toast.success('Production started');
             } catch (error) {
-                toast.error('Failed to start production');
+                // UI stays in idle state — no sync issue since we never updated state
+                toast.error('Failed to start production. Check network and try again.');
             } finally {
                 setLoading(false);
             }
@@ -456,21 +468,32 @@ export const MobileProduction: React.FC = () => {
         }
         
         if (!productionData?.id) return;
-        
+        const prevStatus = productionData.button_status;
         setLoading(true);
         try {
-            const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ button_status: 1 })
+            await withRetry(async () => {
+                const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ button_status: 1 })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || 'Failed');
+                return data;
             });
-            const result = await response.json();
-            if (result.success) {
-                setProductionData({ ...productionData, button_status: 1, is_paused: false });
-                toast.success('Production started');
-            }
+            setProductionData({ ...productionData, button_status: 1, is_paused: false });
+            toast.success('Production started');
         } catch (error) {
-            toast.error('Failed to start production');
+            // Reconcile: re-fetch from DB to get true state
+            try {
+                const today = new Date();
+                const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${productionData.machine_id}/date/${localDate}`);
+                const data = await res.json();
+                const record = data.data?.find((r: any) => r.id === productionData.id);
+                if (record) setProductionData(prev => ({ ...prev!, button_status: record.button_status }));
+            } catch { /* keep previous state */ }
+            toast.error('Failed to start. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -486,18 +509,21 @@ export const MobileProduction: React.FC = () => {
         setShowStoppageModal(false);
         setLoading(true);
         try {
-            const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ button_status: 3, stoppage_reason: reason })
+            await withRetry(async () => {
+                const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ button_status: 3, stoppage_reason: reason })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || 'Failed');
+                return data;
             });
-            const result = await response.json();
-            if (result.success) {
-                setProductionData({ ...productionData, is_paused: true, button_status: 3 });
-                toast.success(`Stopped: ${reason}`);
-            }
+            setProductionData({ ...productionData, is_paused: true, button_status: 3 });
+            toast.success(`Stopped: ${reason}`);
         } catch (error) {
-            toast.error('Failed to stop production');
+            // Don't change UI state — production stays running
+            toast.error('Failed to stop. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -512,25 +538,40 @@ export const MobileProduction: React.FC = () => {
         if (!productionData?.id) return;
         setShowFinishConfirm(false);
         setLoading(true);
+        const outputPairs = productionData.target_pairs || 0;
         try {
-            const outputPairs = productionData.target_pairs || 0;
-            const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    button_status: 2,
-                    output_pairs: outputPairs
-                })
+            await withRetry(async () => {
+                const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ button_status: 2, output_pairs: outputPairs })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || 'Failed');
+                return data;
             });
-            const result = await response.json();
-            if (result.success) {
-                setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
-                // Refresh summary data after finish
-                await fetchSummaryData(productionData.machine_id);
-                toast.success('Production finished - Click RESET for next cycle');
-            }
+            setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
+            await fetchSummaryData(productionData.machine_id);
+            toast.success('Production finished - Click RESET for next cycle');
         } catch (error) {
-            toast.error('Failed to finish production');
+            // Reconcile: re-fetch from DB to get true state
+            try {
+                const today = new Date();
+                const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${productionData.machine_id}/date/${localDate}`);
+                const data = await res.json();
+                const record = data.data?.find((r: any) => r.id === productionData.id);
+                if (record) {
+                    setProductionData(prev => ({ ...prev!, button_status: record.button_status, output_pairs: record.output_pairs }));
+                    if (record.button_status === 2) {
+                        // Actually finished despite error — update UI correctly
+                        await fetchSummaryData(productionData.machine_id);
+                        toast.success('Production finished - Click RESET for next cycle');
+                        return;
+                    }
+                }
+            } catch { /* keep previous state */ }
+            toast.error('Failed to finish. Please try again.');
         } finally {
             setLoading(false);
         }

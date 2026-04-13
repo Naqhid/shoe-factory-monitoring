@@ -122,6 +122,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
                 <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
                   {user.role || 'Admin'}
                 </span>
+              </div>
+              <div className="mt-2">
                 <LanguageSwitcher />
               </div>
             </div>
