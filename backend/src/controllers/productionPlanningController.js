@@ -114,6 +114,18 @@ class ProductionPlanningController {
           );
         }
 
+        // Prevent duplicate plan for same date + work centre
+        const [dupCheck] = await conn.execute(
+          'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? LIMIT 1',
+          [plan_date, work_centre_id]
+        );
+        if (dupCheck.length > 0) {
+          throw Object.assign(
+            new Error('A production plan already exists for this date and work centre. Please edit the existing plan.'),
+            { status: 409 }
+          );
+        }
+
         const [r] = await conn.execute(
           `INSERT INTO production_plan 
           (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id,
@@ -160,6 +172,18 @@ class ProductionPlanningController {
           throw Object.assign(
             new Error('No production routing found for the selected style. Please create a routing first.'),
             { status: 422 }
+          );
+        }
+
+        // Prevent duplicate plan for same date + work centre (exclude current record)
+        const [dupCheck] = await conn.execute(
+          'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND id != ? LIMIT 1',
+          [plan_date, work_centre_id, id]
+        );
+        if (dupCheck.length > 0) {
+          throw Object.assign(
+            new Error('A production plan already exists for this date and work centre. Please edit the existing plan.'),
+            { status: 409 }
           );
         }
 

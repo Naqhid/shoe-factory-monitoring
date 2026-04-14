@@ -29,7 +29,6 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                      WHERE prl.machine_centre_id = mc.machine_id
                        AND pp2.work_centre_id = ?
                        AND DATE(pp2.plan_date) = ?
-                       AND DATE(prh.created_on) = ?
                     ), 0
                 ) AS target_mins_per_box,
                 ms.emp_code,
@@ -47,7 +46,7 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
             LEFT JOIN employees e ON e.id = ms.emp_id
             WHERE mc.work_centre_id = ? OR mcs.work_centre_id = ?
             ORDER BY mc.machine_id
-        `, [workCentreId, date, date, date, workCentreId, workCentreId, date, workCentreId, workCentreId]);
+        `, [workCentreId, date, date, workCentreId, workCentreId, date, workCentreId, workCentreId]);
 
         res.json({ success: true, data: rows });
     } catch (error) {
@@ -139,16 +138,27 @@ exports.getDashboard = async (req, res) => {
             SELECT 
                 mc.name as machine_centre_name,
                 wc.name as work_centre_name,
-                ROUND(mcs.avg_efficiency_percent, 1) as efficiency,
-                GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(mcs.total_output_pairs, 0)) as wip
-            FROM machine_centre_summary mcs
-            JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
-            JOIN work_centres wc ON mcs.work_centre_id = wc.id
-            LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
-            WHERE mcs.work_centre_id = ? AND mcs.prod_date = ? AND mcs.avg_efficiency_percent < 70
-            ORDER BY mcs.avg_efficiency_percent ASC
+                ROUND(COALESCE(mcs.avg_efficiency_percent, 0), 1) as efficiency,
+                GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(mcs.total_output_pairs, 0)) as wip,
+                COALESCE(mcs.total_output_pairs, 0) as output
+            FROM machine_centres mc
+            JOIN work_centres wc ON mc.work_centre_id = wc.id
+            LEFT JOIN machine_centre_summary mcs 
+                ON mcs.machine_id = mc.machine_id 
+                AND mcs.work_centre_id = mc.work_centre_id
+                AND mcs.prod_date = ?
+            LEFT JOIN production_plan pp 
+                ON mcs.work_centre_id = pp.work_centre_id 
+                AND DATE(pp.plan_date) = DATE(?)
+            WHERE mc.work_centre_id = ?
+              AND (
+                mcs.id IS NULL
+                OR mcs.total_output_pairs = 0
+                OR mcs.avg_efficiency_percent < 70
+              )
+            ORDER BY COALESCE(mcs.avg_efficiency_percent, 0) ASC
             LIMIT 3
-        `, [today, workCentreId, today]);
+        `, [today, today, workCentreId]);
 
         const [linePerformance] = await pool.query(`
             SELECT 

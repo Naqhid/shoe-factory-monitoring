@@ -475,9 +475,9 @@ export const ProductionRoutingForm: React.FC = () => {
 
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Line Items</h3>
+                  <h3 className="text-lg font-semibold">Machine Routing Lines</h3>
                   <button type="button" onClick={addLine} className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 flex items-center gap-1 text-sm">
-                    <Plus className="h-4 w-4" />Add Line
+                    <Plus className="h-4 w-4" />Add Machine
                   </button>
                 </div>
 

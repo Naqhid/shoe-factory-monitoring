@@ -12,7 +12,7 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
     allowedMenus: ['overview', 'reports', 'production_routing', 'production_planning', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
   },
   'Line Supervisor': {
-    defaultRoute: '/overview',
+    defaultRoute: '/line_setup_form',
     allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'reports']
   },
   'Machine Centre User': {

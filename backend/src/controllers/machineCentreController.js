@@ -187,22 +187,31 @@ exports.getProductionPlan = async (req, res) => {
     const [rows] = await db.execute(
       `SELECT 
          pp.*,
-         pr.smv,
-         pr.target_per_hour,
-         pr.pairs_per_day,
-         c.customer_name,
-         s.style_name,
-         col.color_name
-       FROM production_planning pp
-       LEFT JOIN production_routing pr ON pp.style_id = pr.style_id
+         prh.target_per_day as pairs_per_day,
+         prh.target_per_hour,
+         prl.mins_12_prs_box as target_mins_12,
+         (prl.mins_12_prs_box / 12) as smv,
+         c.name as customer_name,
+         s.name as style_name,
+         col.name as color_name
+       FROM production_plan pp
        LEFT JOIN customers c ON pp.customer_id = c.id
        LEFT JOIN styles s ON pp.style_id = s.id
        LEFT JOIN colors col ON pp.color_id = col.id
+       LEFT JOIN production_routing_header prh 
+         ON prh.style_id = pp.style_id
+       LEFT JOIN production_routing_lines prl
+         ON prl.routing_header_id = prh.id
+         AND prl.machine_centre_id = ?
        WHERE pp.work_centre_id = ?
-         AND pr.machine_id = ?
          AND pp.plan_date = CURDATE()
+         AND prl.id IS NOT NULL
+       ORDER BY
+         CASE WHEN prh.created_on <= pp.plan_date THEN 0 ELSE 1 END ASC,
+         ABS(DATEDIFF(prh.created_on, pp.plan_date)) ASC,
+         prh.id DESC
        LIMIT 1`,
-      [workCentreId, machineId]
+      [machineId, workCentreId]
     );
     
     res.json({ success: true, data: rows[0] || null });

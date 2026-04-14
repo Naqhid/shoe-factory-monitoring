@@ -367,26 +367,28 @@ exports.getInitData = async (req, res, next) => {
     const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE id = ?', [finalWorkCentreId]);
     const workCentre = wcRows[0] || { id: finalWorkCentreId, name: `WC-${finalWorkCentreId}` };
 
-    // Get target mins from routing — match to today's production plan style
-    let targetMins = 16.6;
+    // Get target mins from routing for today's plan and machine
+    let targetMins = 0;
     try {
       const [linesRows] = await db.query(
-        `SELECT prl.mins_12_prs_box 
-         FROM production_routing_lines prl
-         JOIN production_routing_header prh ON prl.routing_header_id = prh.id
-         JOIN production_plan pp ON prh.style_id = pp.style_id
-         WHERE prl.machine_centre_id = ?
-           AND pp.work_centre_id = ?
-           AND DATE(pp.plan_date) = CURDATE()
-           AND DATE(prh.created_on) = CURDATE()
-         LIMIT 10`,
+        `SELECT prl.mins_12_prs_box
+         FROM production_plan pp
+         JOIN production_routing_header prh ON prh.style_id = pp.style_id
+         JOIN production_routing_lines prl
+           ON prl.routing_header_id = prh.id
+           AND prl.machine_centre_id = ?
+         WHERE pp.work_centre_id = ?
+           AND pp.plan_date = CURDATE()
+         ORDER BY
+           CASE WHEN prh.created_on <= pp.plan_date THEN 0 ELSE 1 END ASC,
+           ABS(DATEDIFF(prh.created_on, pp.plan_date)) ASC,
+           prh.id DESC
+         LIMIT 1`,
         [machineId, finalWorkCentreId]
       );
-      if (linesRows.length > 0) {
-        targetMins = linesRows.reduce((sum, line) => sum + parseFloat(line.mins_12_prs_box || 0), 0);
-      }
+      if (linesRows.length > 0) targetMins = parseFloat(linesRows[0].mins_12_prs_box || 0);
     } catch (err) {
-      logger.warn('Could not fetch routing data, using default target mins:', err.message);
+      logger.warn('Could not fetch routing data, using fallback target mins 0:', err.message);
     }
 
     // Get target pairs from planning (default 0)
@@ -408,6 +410,19 @@ exports.getInitData = async (req, res, next) => {
       }
     } catch (err) {
       logger.warn('Could not fetch planning data, using default target pairs:', err.message);
+    }
+
+    // Keep unfinished row aligned with latest routing target so resumed sessions don't show stale values.
+    if (existingRecord && existingRecord.button_status !== 2) {
+      const existingTarget = Number(existingRecord.target_mins || 0);
+      const latestTarget = Number(targetMins || 0);
+      if (latestTarget > 0 && existingTarget !== latestTarget) {
+        await db.query(
+          'UPDATE machine_centre_production SET target_mins = ? WHERE id = ?',
+          [latestTarget, existingRecord.id]
+        );
+        existingRecord.target_mins = latestTarget;
+      }
     }
 
     res.json({

@@ -49,6 +49,21 @@ const QRWaitScreen: React.FC<{
     onSessionActive: (empCode: string) => void;
 }> = ({ machineId, urlMachineId, qrCandidates, onSessionActive }) => {
     const API_BASE = `${window.location.protocol}//${window.location.hostname}:3001`;
+    const [machineName, setMachineName] = React.useState<string>('');
+
+    React.useEffect(() => {
+        const fetchMachineName = async () => {
+            try {
+                const res = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const record = json.data.find((m: any) => m.machine_id === machineId);
+                    if (record) setMachineName(record.machine_name || record.name || '');
+                }
+            } catch {}
+        };
+        fetchMachineName();
+    }, [machineId, API_BASE]);
 
     React.useEffect(() => {
         const interval = setInterval(async () => {
@@ -68,6 +83,9 @@ const QRWaitScreen: React.FC<{
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-md p-6 text-center max-w-sm w-full">
                 <h1 className="text-xl font-bold text-gray-900 mb-1">Machine {machineId}</h1>
+                {machineName && (
+                    <p className="text-base font-semibold text-blue-600 mb-1">{machineName}</p>
+                )}
                 <p className="text-sm text-gray-500 mb-4">Scan QR code to start production</p>
                 <QRImageWithFallback candidates={qrCandidates} machineId={machineId} />
                 <p className="text-xs text-gray-400 mt-4 animate-pulse">Waiting for employee scan...</p>
@@ -101,6 +119,15 @@ export const MobileProduction: React.FC = () => {
     const [loadingSummary, setLoadingSummary] = useState(true);
     const [showFinishConfirm, setShowFinishConfirm] = useState(false);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
+
+    const formatOperatorDisplay = (name?: string, code?: string | number) => {
+        const safeName = (name || '').toString().trim();
+        const safeCode = (code ?? '').toString().trim();
+        if (safeName && safeCode) return `${safeName} (${safeCode})`;
+        if (safeName) return safeName;
+        if (safeCode) return safeCode;
+        return 'N/A';
+    };
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -217,14 +244,19 @@ export const MobileProduction: React.FC = () => {
                     if (unfinishedRecord) {
                         // Use the unfinished record ONLY if it's truly in progress (button_status = 1 or 3)
                         // If button_status = 2 (finished), create new record instead
-                        const [empRes, macRes, wcRes, planningRes] = await Promise.all([
+                        const [empRes, macRes, wcRes, planningRes, initRes] = await Promise.all([
                             apiFetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
-                            apiFetch(`${API_BASE}/api/production-planning`).then(r => r.json())
+                            apiFetch(`${API_BASE}/api/production-planning`).then(r => r.json()),
+                            apiFetch(`${API_BASE}/api/mobile-production/init/${resolvedMachineId}/${urlEmpId}`).then(r => r.json())
                         ]);
 
-                        const employee = empRes.data?.find((e: any) => e.id === parseInt(unfinishedRecord.emp_id));
+                        const employee = empRes.data?.find((e: any) =>
+                            e.id === parseInt(unfinishedRecord.emp_id) ||
+                            e.code === unfinishedRecord.emp_id ||
+                            e.emp_id === unfinishedRecord.emp_id
+                        );
                         const machine = macRes.data?.find((m: any) => (m.machine_id === resolvedMachineId || m.code === urlMachineId));
                         const workCentre = wcRes.data?.find((wc: any) => wc.id === unfinishedRecord.work_centre_id);
 
@@ -238,9 +270,21 @@ export const MobileProduction: React.FC = () => {
                             targetPairs = planning?.target_pairs_per_tray || 0;
                         }
 
+                        // Always refresh target_mins from latest routing for this machine/work-centre.
+                        // This prevents stale unfinished records (e.g. old 16.6) from overriding current routing.
+                        const refreshedTargetMins =
+                            initRes?.success && typeof initRes?.data?.targetMins !== 'undefined'
+                                ? Number(initRes.data.targetMins)
+                                : Number(unfinishedRecord.target_mins || 0);
+
                         setSessionStatus('active');
                         setQrData(resolvedMachineId);
-                        setEmployeeName(employee?.name || employee?.emp_name || '');
+                        setEmployeeName(
+                            employee?.name ||
+                            employee?.emp_name ||
+                            initRes?.data?.employee?.name ||
+                            ''
+                        );
                         // Get machine centre name from machine centres data
                         const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
                         const machineData = await machineRes.json();
@@ -254,6 +298,7 @@ export const MobileProduction: React.FC = () => {
                         setMachineName(machineCentreName);
                         setProductionData({
                             ...unfinishedRecord,
+                            target_mins: refreshedTargetMins,
                             target_pairs: targetPairs,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
@@ -794,7 +839,9 @@ export const MobileProduction: React.FC = () => {
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Operator</p>
-                                        <p className="font-semibold truncate">{employeeName || productionData.emp_id}</p>
+                                        <p className="font-semibold truncate">
+                                            {formatOperatorDisplay(employeeName, productionData.emp_id)}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">

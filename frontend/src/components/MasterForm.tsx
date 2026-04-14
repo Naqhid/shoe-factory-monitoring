@@ -263,14 +263,15 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
               {table === 'machine_centres' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Machine Name
+                    Process Name
                   </label>
                   <input
                     type="text"
-                    value={formData.machine_name || ''}
-                    onChange={(e) => setFormData({ ...formData, machine_name: e.target.value })}
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value, machine_name: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Attaching, Stitching"
+                    placeholder="e.g., Eyelet Attaching"
+                    required
                   />
                 </div>
               )}
@@ -324,7 +325,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                 )}
                 {table === 'machine_centres' && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Machine Name
+                    Process Name
                   </th>
                 )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

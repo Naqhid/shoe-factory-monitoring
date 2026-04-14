@@ -117,6 +117,41 @@ setInterval(() => {
   runAlertChecks(today);
 }, 60 * 60 * 1000); // every hour
 
+// Poll for un-emailed alerts every 5 minutes (catches DB-trigger-created alerts too)
+const { sendAlertDigest } = require('./services/emailService');
+const db = require('../config/database');
+
+// Ensure emailed column exists
+db.execute(`ALTER TABLE production_alerts ADD COLUMN emailed TINYINT(1) DEFAULT 0`)
+  .catch(() => {}); // ignore if already exists
+
+const pollAndEmailAlerts = async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const [unEmailed] = await db.execute(`
+      SELECT pa.*, wc.name as work_centre_name
+      FROM production_alerts pa
+      LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
+      WHERE pa.alert_date = ? AND pa.emailed = 0
+      ORDER BY pa.severity DESC, pa.created_at DESC
+    `, [today]);
+
+    if (unEmailed.length > 0) {
+      await sendAlertDigest(unEmailed, today);
+      const ids = unEmailed.map(a => a.id);
+      const placeholders = ids.map(() => '?').join(',');
+      await db.execute(`UPDATE production_alerts SET emailed = 1 WHERE id IN (${placeholders})`, ids);
+    }
+  } catch (err) {
+    const logger = require('./utils/logger');
+    logger.error('Alert email poller error:', err.message);
+  }
+};
+
+// Run immediately on startup, then every 5 minutes
+setTimeout(pollAndEmailAlerts, 10000); // 10s after startup
+setInterval(pollAndEmailAlerts, 5 * 60 * 1000); // every 5 minutes
+
 // Middleware
 app.use(compression());
 const corsOptions = {
@@ -144,6 +179,26 @@ app.use((req, res, next) => {
 // Routes
 app.post('/api/login', validate(validate.schemas.login), authController.login);
 app.post('/api/auth/refresh', authController.refresh.bind(authController));
+
+// Unprotected test endpoint for email
+app.post('/api/alerts/send-test-email', async (req, res) => {
+  try {
+    const { sendAlertDigest } = require('./services/emailService');
+    const today = new Date().toISOString().split('T')[0];
+    const [alerts] = await db.execute(`
+      SELECT pa.*, wc.name as work_centre_name
+      FROM production_alerts pa
+      LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
+      WHERE pa.alert_date = ?
+      ORDER BY pa.severity DESC, pa.created_at DESC
+    `, [today]);
+    if (alerts.length === 0) return res.json({ success: false, message: 'No alerts for today' });
+    await sendAlertDigest(alerts, today);
+    res.json({ success: true, message: `Test email sent with ${alerts.length} alerts` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+  }
+});
 
 // Protect all other /api routes with JWT
 app.use('/api', authenticate);
@@ -247,6 +302,7 @@ app.get('/api/tv-dashboard/dashboard/:workCentreId', tvDashboardController.getDa
 
 // Hourly Output routes
 app.get('/api/hourly-output/:workCentreId', hourlyOutputController.getHourlyOutput);
+app.get('/api/hourly-output/:workCentreId/machines', hourlyOutputController.getMachineHourlyOutput);
 
 // Rework Rejection routes
 app.get('/api/rework-rejection/summary', reworkRejectionController.getSummaryByWorkCentre);
