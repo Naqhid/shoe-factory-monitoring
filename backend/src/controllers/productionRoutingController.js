@@ -2,6 +2,70 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 
 class ProductionRoutingController {
+  async ensureUniqueStyle(connection, { styleId, excludeId = null }) {
+    const query = excludeId
+      ? `SELECT id FROM production_routing_header
+         WHERE style_id = ? AND id <> ?
+         LIMIT 1`
+      : `SELECT id FROM production_routing_header
+         WHERE style_id = ?
+         LIMIT 1`;
+    const params = excludeId ? [styleId, excludeId] : [styleId];
+    const [dupRows] = await connection.execute(query, params);
+    if (dupRows.length > 0) {
+      return 'A routing already exists for this style. Please edit the existing routing.';
+    }
+    return null;
+  }
+
+  validateHeader(header) {
+    if (!header) return 'Header is required';
+    const requiredIds = ['customer_id', 'group_id', 'leather_id', 'style_id', 'color_id'];
+    for (const key of requiredIds) {
+      const val = Number(header[key]);
+      if (!Number.isFinite(val) || val <= 0) return `Invalid ${key}`;
+    }
+    const targetPerDay = Number(header.target_per_day);
+    const totalSmv = Number(header.tot_smv);
+    if (!Number.isFinite(targetPerDay) || targetPerDay <= 0) return 'Target per day must be greater than 0';
+    if (!Number.isFinite(totalSmv) || totalSmv <= 0) return 'Total SMV must be greater than 0';
+    return null;
+  }
+
+  validateLines(lines) {
+    if (!Array.isArray(lines) || lines.length === 0) return 'At least one line item is required';
+    const seenMachineIds = new Set();
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] || {};
+      const machineId = String(line.machine_centre_id || '').trim();
+      const observedTime = Number(line.observed_time);
+      const ratingFactor = Number(line.rating_factor);
+      const manpower = Number(line.manpower);
+      if (!machineId) return `Line ${i + 1}: machine centre is required`;
+      if (seenMachineIds.has(machineId)) return `Line ${i + 1}: duplicate machine centre ${machineId} is not allowed`;
+      seenMachineIds.add(machineId);
+      if (!Number.isFinite(observedTime) || observedTime <= 0) return `Line ${i + 1}: observed time must be greater than 0`;
+      if (!Number.isFinite(ratingFactor) || ratingFactor <= 0 || ratingFactor > 200) return `Line ${i + 1}: rating factor must be between 0 and 200`;
+      if (!Number.isFinite(manpower) || manpower <= 0) return `Line ${i + 1}: manpower must be greater than 0`;
+    }
+    return null;
+  }
+
+  async validateMachineCentresExist(connection, lines) {
+    const machineIds = Array.from(new Set(lines.map((line) => String(line.machine_centre_id || '').trim()).filter(Boolean)));
+    if (machineIds.length === 0) return 'At least one valid machine centre is required';
+
+    const placeholders = machineIds.map(() => '?').join(', ');
+    const [rows] = await connection.execute(
+      `SELECT machine_id FROM machine_centres WHERE machine_id IN (${placeholders})`,
+      machineIds
+    );
+    const existing = new Set(rows.map((row) => String(row.machine_id)));
+    const missing = machineIds.filter((id) => !existing.has(id));
+    if (missing.length > 0) return `Invalid machine centre id(s): ${missing.join(', ')}`;
+    return null;
+  }
+
   // Get all production routings with details
   async getAll(req, res) {
     try {
@@ -115,6 +179,27 @@ class ProductionRoutingController {
           error: 'Header and at least one line item are required' 
         });
       }
+
+      const headerError = this.validateHeader(header);
+      if (headerError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: headerError });
+      }
+      const lineError = this.validateLines(lines);
+      if (lineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: lineError });
+      }
+      const machineError = await this.validateMachineCentresExist(connection, lines);
+      if (machineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: machineError });
+      }
+      const uniquenessError = await this.ensureUniqueStyle(connection, { styleId: header.style_id });
+      if (uniquenessError) {
+        await connection.rollback();
+        return res.status(409).json({ success: false, error: uniquenessError });
+      }
       
       // Insert header
       const [headerResult] = await connection.execute(
@@ -180,6 +265,30 @@ class ProductionRoutingController {
           error: 'Header and at least one line item are required' 
         });
       }
+
+      const headerError = this.validateHeader(header);
+      if (headerError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: headerError });
+      }
+      const lineError = this.validateLines(lines);
+      if (lineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: lineError });
+      }
+      const machineError = await this.validateMachineCentresExist(connection, lines);
+      if (machineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: machineError });
+      }
+      const uniquenessError = await this.ensureUniqueStyle(connection, {
+        styleId: header.style_id,
+        excludeId: id
+      });
+      if (uniquenessError) {
+        await connection.rollback();
+        return res.status(409).json({ success: false, error: uniquenessError });
+      }
       
       // Update header
       const [result] = await connection.execute(
@@ -238,6 +347,26 @@ class ProductionRoutingController {
   async delete(req, res) {
     try {
       const { id } = req.params;
+      const [headerRows] = await db.execute(
+        'SELECT id, style_id, created_on FROM production_routing_header WHERE id = ?',
+        [id]
+      );
+      if (headerRows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Routing not found' });
+      }
+      const header = headerRows[0];
+
+      const [planRefs] = await db.execute(
+        'SELECT COUNT(*) as cnt FROM production_plan WHERE style_id = ?',
+        [header.style_id]
+      );
+      if ((planRefs[0]?.cnt || 0) > 0) {
+        return res.status(409).json({
+          success: false,
+          error: 'Cannot delete this routing because it is referenced by production plans. Please keep it for historical consistency.'
+        });
+      }
+
       const [result] = await db.execute(
         'DELETE FROM production_routing_header WHERE id = ?',
         [id]
@@ -259,8 +388,6 @@ class ProductionRoutingController {
     try {
       const { styleId } = req.params;
 
-      // Pick the routing whose created_on is <= today, closest to today.
-      // Falls back to the latest future-dated one if none exist for today or earlier.
       const [rows] = await db.execute(`
         SELECT 
           prh.*,
@@ -276,10 +403,7 @@ class ProductionRoutingController {
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
         WHERE prh.style_id = ?
-        ORDER BY
-          CASE WHEN prh.created_on <= CURDATE() THEN 0 ELSE 1 END ASC,
-          ABS(DATEDIFF(prh.created_on, CURDATE())) ASC,
-          prh.id DESC
+        ORDER BY prh.id DESC
         LIMIT 1
       `, [styleId]);
 

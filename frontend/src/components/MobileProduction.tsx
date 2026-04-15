@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw } from 'lucide-react';
+import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -119,6 +119,7 @@ export const MobileProduction: React.FC = () => {
     const [loadingSummary, setLoadingSummary] = useState(true);
     const [showFinishConfirm, setShowFinishConfirm] = useState(false);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
+    const overTargetToastShownRef = React.useRef(false);
 
     const formatOperatorDisplay = (name?: string, code?: string | number) => {
         const safeName = (name || '').toString().trim();
@@ -171,6 +172,34 @@ export const MobileProduction: React.FC = () => {
         
         return () => clearInterval(counterInterval);
     }, [productionData?.button_status, productionData?.is_paused]);
+
+    // One-time toast when target time is first exceeded (red progress bar) — reminds operator to tap FINISH
+    useEffect(() => {
+        if (!productionData || productionData.button_status !== 1 || productionData.is_paused) {
+            overTargetToastShownRef.current = false;
+            return;
+        }
+        const targetMins = Number(productionData.target_mins || 0);
+        if (targetMins <= 0) return;
+        const actualMins = actualTimeCounter / 60;
+        const exceeded = actualMins > targetMins;
+        if (!exceeded) {
+            overTargetToastShownRef.current = false;
+            return;
+        }
+        if (overTargetToastShownRef.current) return;
+        overTargetToastShownRef.current = true;
+        toast.error('Target time exceeded — tap FINISH when your cycle is complete.', {
+            duration: 8000,
+            id: 'mobile-over-target',
+        });
+    }, [
+        productionData?.id,
+        productionData?.button_status,
+        productionData?.is_paused,
+        productionData?.target_mins,
+        actualTimeCounter,
+    ]);
 
     // Sync actual_time to database every minute
     useEffect(() => {
@@ -729,6 +758,13 @@ export const MobileProduction: React.FC = () => {
         );
     }
 
+    const isTargetTimeExceeded =
+        !!productionData &&
+        productionData.button_status === 1 &&
+        !productionData.is_paused &&
+        Number(productionData.target_mins || 0) > 0 &&
+        actualTimeCounter / 60 > Number(productionData.target_mins || 0);
+
     // DASHBOARD STATE
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-1 md:p-2">
@@ -758,6 +794,13 @@ export const MobileProduction: React.FC = () => {
             {(!loading || productionData) && productionData && (
                 <div className="w-full px-2">
                         <>
+                    {/* Full-screen flashing alert overlay when time exceeds target */}
+                    {isTargetTimeExceeded && (
+                        <div
+                            className="fixed inset-0 z-40 pointer-events-none animate-pulse bg-red-600/35"
+                            aria-hidden
+                        />
+                    )}
                     {/* Finish Confirmation Dialog */}
                     {showFinishConfirm && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -858,22 +901,36 @@ export const MobileProduction: React.FC = () => {
                     <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
                         <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Status</h2>
                         
-                        {/* Progress Bar */}
+                        {/* Progress Bar — red when actual time exceeds target */}
                         {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (
                             <div className="mb-4">
-                                <div className="flex justify-between text-xs text-gray-600 mb-1">
-                                    <span>Progress</span>
-                                    <span>{Math.min(100, Math.round((actualTimeCounter / 60 / productionData.target_mins) * 100))}%</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                                    <div 
-                                        className={`h-full transition-all duration-1000 ${
-                                            (actualTimeCounter / 60) > productionData.target_mins 
-                                                ? 'bg-red-500' 
-                                                : 'bg-green-500'
-                                        }`}
-                                        style={{ width: `${Math.min(100, (actualTimeCounter / 60 / productionData.target_mins) * 100)}%` }}
-                                    />
+                                {isTargetTimeExceeded && (
+                                    <div role="alert" className="mb-3 flex items-center justify-center gap-2 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2.5 text-center shadow-md">
+                                        <AlertTriangle className="h-6 w-6 shrink-0 text-red-600" aria-hidden />
+                                        <p className="text-sm font-bold text-red-800">Target time exceeded — tap <span className="whitespace-nowrap">FINISH</span> when done</p>
+                                    </div>
+                                )}
+                                <div
+                                    className={`rounded-lg p-1 transition-shadow duration-300 ${
+                                        isTargetTimeExceeded
+                                            ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-white shadow-[0_0_0_3px_rgba(239,68,68,0.35)]'
+                                            : ''
+                                    }`}
+                                >
+                                    <div className="flex justify-between text-xs text-gray-600 mb-1 px-0.5">
+                                        <span>Progress</span>
+                                        <span className={isTargetTimeExceeded ? 'font-bold text-red-600' : ''}>
+                                            {Math.min(100, Math.round((actualTimeCounter / 60 / Number(productionData.target_mins)) * 100))}%
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all duration-1000 ${
+                                                isTargetTimeExceeded ? 'bg-red-500' : 'bg-green-500'
+                                            }`}
+                                            style={{ width: `${Math.min(100, (actualTimeCounter / 60 / Number(productionData.target_mins)) * 100)}%` }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         )}

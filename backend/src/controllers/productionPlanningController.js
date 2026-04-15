@@ -102,7 +102,6 @@ class ProductionPlanningController {
         await assertExists(conn, 'customers', customer_id, 'Customer');
         await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
 
-        // Validate routing exists for this style
         const [routingRows] = await conn.execute(
           'SELECT id FROM production_routing_header WHERE style_id = ? LIMIT 1',
           [style_id]
@@ -163,7 +162,6 @@ class ProductionPlanningController {
         await assertExists(conn, 'customers', customer_id, 'Customer');
         await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
 
-        // Validate routing exists for this style
         const [routingRows] = await conn.execute(
           'SELECT id FROM production_routing_header WHERE style_id = ? LIMIT 1',
           [style_id]

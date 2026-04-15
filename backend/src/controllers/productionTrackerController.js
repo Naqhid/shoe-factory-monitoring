@@ -26,7 +26,14 @@ class ProductionTrackerController {
         FROM machine_centre_summary mcs
         LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
         LEFT JOIN mobile_sessions ms ON mcs.work_centre_id = ms.work_centre_id AND DATE(ms.activated_at) = DATE(?) AND ms.status = 'active'
-        LEFT JOIN production_routing_header prh ON pp.style_id = prh.style_id
+        LEFT JOIN production_routing_header prh ON prh.id = (
+          SELECT prh2.id
+          FROM production_routing_header prh2
+          WHERE prh2.style_id = pp.style_id
+            AND DATE(prh2.created_on) <= DATE(pp.plan_date)
+          ORDER BY prh2.created_on DESC, prh2.id DESC
+          LIMIT 1
+        )
         LEFT JOIN production_routing_lines prl ON prh.id = prl.routing_header_id
         WHERE DATE(mcs.prod_date) = DATE(?) ${whereClause}
       `, workCentreId && workCentreId !== 'all' ? [date, date, date, workCentreId] : [date, date, date]);

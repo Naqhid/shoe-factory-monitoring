@@ -157,7 +157,7 @@ export const ProductionPlanningForm: React.FC = () => {
           man_hours_minutes: manHoursMins,
         });
       } else {
-        toast.error('No routing found for this style today. Please create a routing first.');
+        toast.error(result.error || 'No routing found for this style. Please create routing first.');
         updateLine(idx, { style_id: styleId });
       }
     } catch (e) {

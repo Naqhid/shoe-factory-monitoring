@@ -19,8 +19,10 @@ const SearchableSelect: React.FC<{
   options: MasterOption[];
   onChange: (value: string) => void;
   placeholder?: string;
-}> = ({ value, options, onChange, placeholder = 'Select' }) => {
+  disabledValues?: string[];
+}> = ({ value, options, onChange, placeholder = 'Select', disabledValues = [] }) => {
   const [search, setSearch] = React.useState('');
+  const getOptionValue = (o: MasterOption) => o.machine_id || String(o.id);
 
   const getLabel = (o: MasterOption) =>
     o.machine_id ? `${o.machine_id} - ${o.machine_name ?? o.name}` : (o.machine_name ?? o.name);
@@ -31,7 +33,7 @@ const SearchableSelect: React.FC<{
     (o.machine_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const selected = options.find(o => o.machine_id === value || String(o.id) === value);
+  const selected = options.find(o => getOptionValue(o) === value);
 
   return (
     <div className="flex flex-col min-w-[190px] rounded-lg border border-gray-200 shadow-sm overflow-hidden bg-white">
@@ -64,7 +66,12 @@ const SearchableSelect: React.FC<{
       >
         <option value="" className="text-gray-400">{placeholder}</option>
         {filtered.map(opt => (
-          <option key={opt.id} value={opt.machine_id || String(opt.id)} className="py-1">
+          <option
+            key={opt.id}
+            value={opt.machine_id || String(opt.id)}
+            className="py-1"
+            disabled={disabledValues.includes(getOptionValue(opt))}
+          >
             {getLabel(opt)}
           </option>
         ))}
@@ -192,6 +199,18 @@ export const ProductionRoutingForm: React.FC = () => {
 
   const targetPerHour = headerData.target_per_day ? Math.round(parseFloat(headerData.target_per_day) / 8) : 0;
 
+  const getDuplicateMachineIds = (routingLines: RoutingLine[]): string[] => {
+    const counts = new Map<string, number>();
+    routingLines.forEach((line) => {
+      const machineId = (line.machine_centre_id || '').trim();
+      if (!machineId) return;
+      counts.set(machineId, (counts.get(machineId) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([machineId]) => machineId);
+  };
+
   const calculateLineValues = (line: RoutingLine) => {
     const observedTime = parseFloat(line.observed_time) || 0;
     const ratingFactor = parseFloat(line.rating_factor) || 0;
@@ -277,6 +296,35 @@ export const ProductionRoutingForm: React.FC = () => {
     }
     if (lines.some(l => !l.machine_centre_id || !l.observed_time || !l.rating_factor || !l.manpower)) {
       toast.error('Please fill all line item fields');
+      return;
+    }
+    const targetPerDay = parseFloat(headerData.target_per_day);
+    const totalSmv = parseFloat(headerData.tot_smv);
+    if (!Number.isFinite(targetPerDay) || targetPerDay <= 0) {
+      toast.error('Target per day must be greater than 0');
+      return;
+    }
+    if (!Number.isFinite(totalSmv) || totalSmv <= 0) {
+      toast.error('Total SMV must be greater than 0');
+      return;
+    }
+    const invalidLineIndex = lines.findIndex((line) => {
+      const observedTime = parseFloat(line.observed_time);
+      const ratingFactor = parseFloat(line.rating_factor);
+      const manpower = parseFloat(line.manpower);
+      return (
+        !Number.isFinite(observedTime) || observedTime <= 0 ||
+        !Number.isFinite(ratingFactor) || ratingFactor <= 0 || ratingFactor > 200 ||
+        !Number.isFinite(manpower) || manpower <= 0
+      );
+    });
+    if (invalidLineIndex >= 0) {
+      toast.error(`Line ${invalidLineIndex + 1}: invalid observed time / rating factor / manpower`);
+      return;
+    }
+    const duplicateMachineIds = getDuplicateMachineIds(lines);
+    if (duplicateMachineIds.length > 0) {
+      toast.error('Duplicate machine centre entries are not allowed');
       return;
     }
 
@@ -460,7 +508,7 @@ export const ProductionRoutingForm: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Target per Day <span className="text-red-500">*</span></label>
-                    <input type="number" value={headerData.target_per_day} onChange={(e) => setHeaderData({ ...headerData, target_per_day: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                    <input type="number" min="1" step="1" value={headerData.target_per_day} onChange={(e) => setHeaderData({ ...headerData, target_per_day: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Target per Hour</label>
@@ -468,7 +516,7 @@ export const ProductionRoutingForm: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Total SMV <span className="text-red-500">*</span></label>
-                    <input type="number" step="0.0001" value={headerData.tot_smv} onChange={(e) => setHeaderData({ ...headerData, tot_smv: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                    <input type="number" min="0.0001" step="0.0001" value={headerData.tot_smv} onChange={(e) => setHeaderData({ ...headerData, tot_smv: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
                   </div>
                 </div>
               </div>
@@ -508,13 +556,17 @@ export const ProductionRoutingForm: React.FC = () => {
                                 options={machineCentres}
                                 onChange={(val) => updateLine(index, 'machine_centre_id', val)}
                                 placeholder="Select Machine"
+                                disabledValues={lines
+                                  .filter((_, i) => i !== index)
+                                  .map((l) => l.machine_centre_id)
+                                  .filter(Boolean)}
                               />
                             </td>
                             <td className="px-2 py-2">
-                              <input type="number" step="0.01" value={line.observed_time} onChange={(e) => updateLine(index, 'observed_time', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
+                              <input type="number" min="0.01" step="0.01" value={line.observed_time} onChange={(e) => updateLine(index, 'observed_time', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
                             </td>
                             <td className="px-2 py-2">
-                              <input type="number" step="0.01" value={line.rating_factor} onChange={(e) => updateLine(index, 'rating_factor', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
+                              <input type="number" min="0.01" max="200" step="0.01" value={line.rating_factor} onChange={(e) => updateLine(index, 'rating_factor', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
                             </td>
                             <td className="px-2 py-2 text-gray-700">{calc.normal_time_secs_pr}</td>
                             <td className="px-2 py-2 text-gray-700">{calc.std_time_secs_pr}</td>
@@ -522,7 +574,7 @@ export const ProductionRoutingForm: React.FC = () => {
                             <td className="px-2 py-2 text-gray-700">{calc.pairs_per_hr}</td>
                             <td className="px-2 py-2 text-gray-700">{calc.pairs_per_day}</td>
                             <td className="px-2 py-2">
-                              <input type="number" step="0.1" value={line.manpower} onChange={(e) => updateLine(index, 'manpower', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
+                              <input type="number" min="0.1" step="0.1" value={line.manpower} onChange={(e) => updateLine(index, 'manpower', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
                             </td>
                             <td className="px-2 py-2">
                               <button type="button" onClick={() => removeLine(index)} className="text-red-600 hover:text-red-900">

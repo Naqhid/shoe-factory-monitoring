@@ -104,7 +104,14 @@ exports.getDashboard = async (req, res) => {
         const [attendanceTarget] = await pool.query(`
             SELECT COALESCE(SUM(prl.manpower), 0) as target_employees
             FROM production_plan pp
-            JOIN production_routing_header prh ON pp.style_id = prh.style_id
+            JOIN production_routing_header prh ON prh.id = (
+                SELECT prh2.id
+                FROM production_routing_header prh2
+                WHERE prh2.style_id = pp.style_id
+                  AND DATE(prh2.created_on) <= DATE(pp.plan_date)
+                ORDER BY prh2.created_on DESC, prh2.id DESC
+                LIMIT 1
+            )
             JOIN production_routing_lines prl ON prh.id = prl.routing_header_id
             WHERE DATE(pp.plan_date) = DATE(?) AND pp.work_centre_id = ?
         `, [today, workCentreId]);
