@@ -18,19 +18,6 @@ class ProductionRoutingController {
     return null;
   }
 
-  validateHeader(header) {
-    if (!header) return 'Header is required';
-    const requiredIds = ['customer_id', 'group_id', 'leather_id', 'style_id', 'color_id'];
-    for (const key of requiredIds) {
-      const val = Number(header[key]);
-      if (!Number.isFinite(val) || val <= 0) return `Invalid ${key}`;
-    }
-    const targetPerDay = Number(header.target_per_day);
-    const totalSmv = Number(header.tot_smv);
-    if (!Number.isFinite(targetPerDay) || targetPerDay <= 0) return 'Target per day must be greater than 0';
-    if (!Number.isFinite(totalSmv) || totalSmv <= 0) return 'Total SMV must be greater than 0';
-    return null;
-  }
 
   validateLines(lines) {
     if (!Array.isArray(lines) || lines.length === 0) return 'At least one line item is required';
@@ -180,26 +167,21 @@ class ProductionRoutingController {
         });
       }
 
-      const headerError = this.validateHeader(header);
-      if (headerError) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, error: headerError });
-      }
-      const lineError = this.validateLines(lines);
-      if (lineError) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, error: lineError });
-      }
-      const machineError = await this.validateMachineCentresExist(connection, lines);
-      if (machineError) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, error: machineError });
-      }
-      const uniquenessError = await this.ensureUniqueStyle(connection, { styleId: header.style_id });
-      if (uniquenessError) {
-        await connection.rollback();
-        return res.status(409).json({ success: false, error: uniquenessError });
-      }
+      // const lineError = this.validateLines(lines);
+      // if (lineError) {
+      //   await connection.rollback();
+      //   return res.status(400).json({ success: false, error: lineError });
+      // }
+      // const machineError = await this.validateMachineCentresExist(connection, lines);
+      // if (machineError) {
+      //   await connection.rollback();
+      //   return res.status(400).json({ success: false, error: machineError });
+      // }
+      // const uniquenessError = await this.ensureUniqueStyle(connection, { styleId: header.style_id });
+      // if (uniquenessError) {
+      //   await connection.rollback();
+      //   return res.status(409).json({ success: false, error: uniquenessError });
+      // }
       
       // Insert header
       const [headerResult] = await connection.execute(
@@ -266,29 +248,24 @@ class ProductionRoutingController {
         });
       }
 
-      const headerError = this.validateHeader(header);
-      if (headerError) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, error: headerError });
-      }
-      const lineError = this.validateLines(lines);
-      if (lineError) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, error: lineError });
-      }
-      const machineError = await this.validateMachineCentresExist(connection, lines);
-      if (machineError) {
-        await connection.rollback();
-        return res.status(400).json({ success: false, error: machineError });
-      }
-      const uniquenessError = await this.ensureUniqueStyle(connection, {
-        styleId: header.style_id,
-        excludeId: id
-      });
-      if (uniquenessError) {
-        await connection.rollback();
-        return res.status(409).json({ success: false, error: uniquenessError });
-      }
+      // const lineError = this.validateLines(lines);
+      // if (lineError) {
+      //   await connection.rollback();
+      //   return res.status(400).json({ success: false, error: lineError });
+      // }
+      // const machineError = await this.validateMachineCentresExist(connection, lines);
+      // if (machineError) {
+      //   await connection.rollback();
+      //   return res.status(400).json({ success: false, error: machineError });
+      // }
+      // const uniquenessError = await this.ensureUniqueStyle(connection, {
+      //   styleId: header.style_id,
+      //   excludeId: id
+      // });
+      // if (uniquenessError) {
+      //   await connection.rollback();
+      //   return res.status(409).json({ success: false, error: uniquenessError });
+      // }
       
       // Update header
       const [result] = await connection.execute(
