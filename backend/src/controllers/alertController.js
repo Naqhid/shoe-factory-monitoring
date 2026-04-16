@@ -19,7 +19,8 @@ const initTable = async () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_alert_date (alert_date),
       INDEX idx_unread (is_read, alert_date),
-      INDEX idx_wc (work_centre_id)
+      INDEX idx_wc (work_centre_id),
+      UNIQUE KEY uniq_alert (alert_type, work_centre_id, machine_id, alert_date)
     )
   `);
   await db.execute(`
@@ -88,33 +89,47 @@ const isWithinPreShiftEndWindow = (now = new Date()) => {
 };
 
 class AlertController {
-  // Get alerts (unread by default)
+  // Get alerts (unread by default) - supports public access (no auth required)
   async getAlerts(req, res) {
     try {
       const { date, work_centre_id, unread_only = 'true', limit = 50 } = req.query;
-      const userId = req.user?.id;
-      if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-      }
+      const userId = req.user?.id || null; // null for public/factory floor access
       const limitInt = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
       const now = new Date();
       const alertDate = date || formatDateOnly(now);
       const baseDate = new Date(`${alertDate}T00:00:00`);
       const shiftWindow = getShiftWindow(baseDate, now);
       const showEndShiftWarnings = date ? true : isWithinPreShiftEndWindow(now);
-      let query = `SELECT pa.*, wc.name as work_centre_name,
+      // Build query based on whether user is authenticated or public access
+      let query;
+      let params;
+      
+      if (userId) {
+        // Authenticated user - join with alert_reads to get read status
+        query = `SELECT pa.*, wc.name as work_centre_name,
                           CASE WHEN ar.alert_id IS NULL THEN 0 ELSE 1 END as is_read
                    FROM production_alerts pa
                    LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
-                    LEFT JOIN alert_reads ar ON ar.alert_id = pa.id AND ar.user_id = ?
+                   LEFT JOIN alert_reads ar ON ar.alert_id = pa.id AND ar.user_id = ?
                    WHERE 1=1`;
-      const params = [userId];
+        params = [userId];
+      } else {
+        // Public access - no read tracking, show all as unread
+        query = `SELECT pa.*, wc.name as work_centre_name,
+                          0 as is_read
+                   FROM production_alerts pa
+                   LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
+                   WHERE 1=1`;
+        params = [];
+      }
+      
       query += ' AND pa.alert_date = ?';
       params.push(alertDate);
       query += ' AND pa.created_at BETWEEN ? AND ?';
       params.push(formatDateTime(shiftWindow.startAt), formatDateTime(shiftWindow.endAt));
       if (work_centre_id) { query += ' AND pa.work_centre_id = ?'; params.push(work_centre_id); }
-      if (unread_only === 'true') { query += ' AND ar.alert_id IS NULL'; }
+      // For authenticated users, filter by unread; for public, show all (already filtered as unread=0)
+      if (unread_only === 'true' && userId) { query += ' AND ar.alert_id IS NULL'; }
       if (!showEndShiftWarnings) {
         // End-of-shift risk alerts stay hidden until near shift end
         query += ` AND NOT (
@@ -123,36 +138,46 @@ class AlertController {
         )`;
       }
       query += ` ORDER BY 
-        CASE WHEN ar.alert_id IS NULL THEN 0 ELSE 1 END ASC,
+        ${userId ? 'CASE WHEN ar.alert_id IS NULL THEN 0 ELSE 1 END ASC,' : ''}
         CASE pa.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END ASC,
         pa.created_at DESC
         LIMIT ${limitInt}`;
 
       const [rows] = await db.execute(query, params);
-      let unreadCountQuery = `SELECT COUNT(*) as total
-                              FROM production_alerts pa
-                              LEFT JOIN alert_reads ar ON ar.alert_id = pa.id AND ar.user_id = ?
-                              WHERE pa.alert_date = ?
-                                AND pa.created_at BETWEEN ? AND ?
-                                AND ar.alert_id IS NULL`;
-      const unreadParams = [
-        userId,
-        alertDate,
-        formatDateTime(shiftWindow.startAt),
-        formatDateTime(shiftWindow.endAt)
-      ];
-      if (work_centre_id) {
-        unreadCountQuery += ' AND pa.work_centre_id = ?';
-        unreadParams.push(work_centre_id);
+      
+      // For public access, all visible alerts are considered "unread"
+      let unreadCount;
+      if (userId) {
+        let unreadCountQuery = `SELECT COUNT(*) as total
+                                FROM production_alerts pa
+                                LEFT JOIN alert_reads ar ON ar.alert_id = pa.id AND ar.user_id = ?
+                                WHERE pa.alert_date = ?
+                                  AND pa.created_at BETWEEN ? AND ?
+                                  AND ar.alert_id IS NULL`;
+        const unreadParams = [
+          userId,
+          alertDate,
+          formatDateTime(shiftWindow.startAt),
+          formatDateTime(shiftWindow.endAt)
+        ];
+        if (work_centre_id) {
+          unreadCountQuery += ' AND pa.work_centre_id = ?';
+          unreadParams.push(work_centre_id);
+        }
+        if (!showEndShiftWarnings) {
+          unreadCountQuery += ` AND NOT (
+            pa.alert_type = 'target_at_risk'
+            OR (pa.alert_type = 'efficiency_low' AND pa.severity = 'warning')
+          )`;
+        }
+        const [countRow] = await db.execute(unreadCountQuery, unreadParams);
+        unreadCount = countRow[0].total;
+      } else {
+        // Public access: count of visible rows is the unread count
+        unreadCount = rows.length;
       }
-      if (!showEndShiftWarnings) {
-        unreadCountQuery += ` AND NOT (
-          pa.alert_type = 'target_at_risk'
-          OR (pa.alert_type = 'efficiency_low' AND pa.severity = 'warning')
-        )`;
-      }
-      const [countRow] = await db.execute(unreadCountQuery, unreadParams);
-      res.json({ success: true, data: rows, unread_count: countRow[0].total });
+      
+      res.json({ success: true, data: rows, unread_count: unreadCount });
     } catch (error) {
       logger.error('getAlerts error:', error);
       res.status(500).json({ success: false, error: error.message });

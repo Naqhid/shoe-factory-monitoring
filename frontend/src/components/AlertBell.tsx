@@ -16,7 +16,7 @@ interface Alert {
   is_read: number;
 }
 
-const POLL_INTERVAL = 60_000; // 1 minute
+const POLL_INTERVAL = 300_000; // 5 minutes (only when bell open)
 
 const severityIcon = (s: Alert['severity']) => {
   if (s === 'critical') return <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />;
@@ -51,12 +51,18 @@ export const AlertBell: React.FC = () => {
     } catch { /* silent */ }
   }, []);
 
-  // Poll every minute
+  // Initial fetch on mount for badge count, then only poll when dropdown is open
   React.useEffect(() => {
-    fetchAlerts();
+    fetchAlerts(); // One-time fetch for initial badge count
+  }, [fetchAlerts]);
+
+  // Poll every 5 minutes ONLY when dropdown is open
+  React.useEffect(() => {
+    if (!open) return;
+    fetchAlerts(); // Fetch immediately when opened
     const id = setInterval(fetchAlerts, POLL_INTERVAL);
     return () => clearInterval(id);
-  }, [fetchAlerts]);
+  }, [open, fetchAlerts]);
 
   // Close on outside click
   React.useEffect(() => {

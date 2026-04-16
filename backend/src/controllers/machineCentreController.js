@@ -54,16 +54,20 @@ exports.resumeProduction = async (req, res) => {
   const connection = await db.getConnection();
   try {
     const { id } = req.body;
-    
+
+    if (!id) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+
     await connection.execute(
-      `UPDATE machine_centre_app 
-       SET idle_stop_time = NOW(), 
-           idle_duration = idle_duration + TIMESTAMPDIFF(MINUTE, idle_start_time, NOW()),
+      `UPDATE machine_centre_app
+       SET idle_stop_time = NOW(),
+           idle_duration = idle_duration + COALESCE(TIMESTAMPDIFF(MINUTE, idle_start_time, NOW()), 0),
            button_status = 1
        WHERE id = ?`,
       [id]
     );
-    
+
     res.json({ success: true });
   } catch (error) {
     logger.error('Resume production error:', error);

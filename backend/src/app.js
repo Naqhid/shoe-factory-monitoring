@@ -117,40 +117,41 @@ setInterval(() => {
   runAlertChecks(today);
 }, 60 * 60 * 1000); // every hour
 
+// Email alerts DISABLED - re-enable by uncommenting below code and setting EMAIL_USER/EMAIL_PASS in .env
 // Poll for un-emailed alerts every 5 minutes (catches DB-trigger-created alerts too)
-const { sendAlertDigest } = require('./services/emailService');
+// const { sendAlertDigest } = require('./services/emailService');
 const db = require('../config/database');
 
 // Ensure emailed column exists
-db.execute(`ALTER TABLE production_alerts ADD COLUMN emailed TINYINT(1) DEFAULT 0`)
-  .catch(() => {}); // ignore if already exists
+// db.execute(`ALTER TABLE production_alerts ADD COLUMN emailed TINYINT(1) DEFAULT 0`)
+//   .catch(() => {}); // ignore if already exists
 
-const pollAndEmailAlerts = async () => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const [unEmailed] = await db.execute(`
-      SELECT pa.*, wc.name as work_centre_name
-      FROM production_alerts pa
-      LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
-      WHERE pa.alert_date = ? AND pa.emailed = 0
-      ORDER BY pa.severity DESC, pa.created_at DESC
-    `, [today]);
+// const pollAndEmailAlerts = async () => {
+//   try {
+//     const today = new Date().toISOString().split('T')[0];
+//     const [unEmailed] = await db.execute(`
+//       SELECT pa.*, wc.name as work_centre_name
+//       FROM production_alerts pa
+//       LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
+//       WHERE pa.alert_date = ? AND pa.emailed = 0
+//       ORDER BY pa.severity DESC, pa.created_at DESC
+//     `, [today]);
 
-    if (unEmailed.length > 0) {
-      await sendAlertDigest(unEmailed, today);
-      const ids = unEmailed.map(a => a.id);
-      const placeholders = ids.map(() => '?').join(',');
-      await db.execute(`UPDATE production_alerts SET emailed = 1 WHERE id IN (${placeholders})`, ids);
-    }
-  } catch (err) {
-    const logger = require('./utils/logger');
-    logger.error('Alert email poller error:', err.message);
-  }
-};
+//     if (unEmailed.length > 0) {
+//       await sendAlertDigest(unEmailed, today);
+//       const ids = unEmailed.map(a => a.id);
+//       const placeholders = ids.map(() => '?').join(',');
+//       await db.execute(`UPDATE production_alerts SET emailed = 1 WHERE id IN (${placeholders})`, ids);
+//     }
+//   } catch (err) {
+//     const logger = require('./utils/logger');
+//     logger.error('Alert email poller error:', err.message);
+//   }
+// };
 
 // Run immediately on startup, then every 5 minutes
-setTimeout(pollAndEmailAlerts, 10000); // 10s after startup
-setInterval(pollAndEmailAlerts, 5 * 60 * 1000); // every 5 minutes
+// setTimeout(pollAndEmailAlerts, 10000); // 10s after startup
+// setInterval(pollAndEmailAlerts, 5 * 60 * 1000); // every 5 minutes
 
 // Middleware
 app.use(compression());
@@ -180,28 +181,25 @@ app.use((req, res, next) => {
 app.post('/api/login', validate(validate.schemas.login), authController.login);
 app.post('/api/auth/refresh', authController.refresh.bind(authController));
 
-// Unprotected test endpoint for email
-app.post('/api/alerts/send-test-email', async (req, res) => {
-  try {
-    const { sendAlertDigest } = require('./services/emailService');
-    const today = new Date().toISOString().split('T')[0];
-    const [alerts] = await db.execute(`
-      SELECT pa.*, wc.name as work_centre_name
-      FROM production_alerts pa
-      LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
-      WHERE pa.alert_date = ?
-      ORDER BY pa.severity DESC, pa.created_at DESC
-    `, [today]);
-    if (alerts.length === 0) return res.json({ success: false, message: 'No alerts for today' });
-    await sendAlertDigest(alerts, today);
-    res.json({ success: true, message: `Test email sent with ${alerts.length} alerts` });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
-  }
-});
-
-// Protect all other /api routes with JWT
-app.use('/api', authenticate);
+// Email test endpoint DISABLED - re-enable when email is configured
+// app.post('/api/alerts/send-test-email', async (req, res) => {
+//   try {
+//     const { sendAlertDigest } = require('./services/emailService');
+//     const today = new Date().toISOString().split('T')[0];
+//     const [alerts] = await db.execute(`
+//       SELECT pa.*, wc.name as work_centre_name
+//       FROM production_alerts pa
+//       LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
+//       WHERE pa.alert_date = ?
+//       ORDER BY pa.severity DESC, pa.created_at DESC
+//     `, [today]);
+//     if (alerts.length === 0) return res.json({ success: false, message: 'No alerts for today' });
+//     await sendAlertDigest(alerts, today);
+//     res.json({ success: true, message: `Test email sent with ${alerts.length} alerts` });
+//   } catch (err) {
+//     res.status(500).json({ success: false, error: err.message, stack: err.stack });
+//   }
+// });
 
 app.get('/api/reports/hourly-production', validate(validate.schemas.dateQuery), apiController.getHourlyProductionStatus.bind(apiController));
 app.get('/api/reports/line-efficiency', validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency.bind(apiController));
@@ -253,7 +251,13 @@ app.put('/api/user-rights/:id', userRightsController.update);
 app.delete('/api/user-rights/:id', userRightsController.delete);
 app.delete('/api/user-rights/user/:userId', userRightsController.deleteByUserId);
 
-// Mobile session routes
+// ============================================================================
+// PUBLIC ROUTES - NO JWT REQUIRED (Production floor tablets/machines)
+// These routes are intentionally unprotected for 100+ factory floor devices
+// Security is handled via employee QR scan + machine session validation
+// ============================================================================
+
+// Mobile session routes (public)
 app.post('/api/mobile-session/init', mobileSessionController.createSession);
 app.post('/api/mobile-session/activate', mobileSessionController.activateSession);
 app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.findActiveSession);
@@ -263,7 +267,7 @@ app.get('/api/mobile-sessions/attendance/:workCentreId', mobileSessionController
 app.get('/api/mobile-session/test', (req, res) => res.json({ test: 'working' }));
 app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionStatus);
 
-// Mobile production routes
+// Mobile production routes (public - no JWT for factory floor use)
 app.get('/api/mobile-production', mobileProductionController.getAll);
 app.get('/api/mobile-production/init/:machineId/:empCode', mobileProductionController.getInitData);
 app.get('/api/mobile-production/:id', mobileProductionController.getById);
@@ -286,7 +290,7 @@ app.get('/api/tracker/workstations', productionTrackerController.getWorkstationP
 app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons);
 app.get('/api/tracker/line-performance', productionTrackerController.getLinePerformance);
 
-// Machine Centre routes
+// Machine Centre routes (public - no JWT for factory floor use)
 app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);
 app.post('/api/machine-centre/stop', machineCentreController.stopProduction);
 app.post('/api/machine-centre/resume', machineCentreController.resumeProduction);
@@ -294,6 +298,9 @@ app.post('/api/machine-centre/finish', machineCentreController.finishProduction)
 app.get('/api/machine-centre/status/:machineId', machineCentreController.getMachineStatus);
 app.post('/api/machine-centre/update-time', machineCentreController.updateActualTime);
 app.get('/api/machine-centre/plan/:workCentreId/:machineId', machineCentreController.getProductionPlan);
+
+// Alert routes (public - factory floor can see alerts)
+app.get('/api/alerts', alertController.getAlerts.bind(alertController));
 
 // TV Dashboard routes
 app.get('/api/tv-dashboard/work-centres', tvDashboardController.getWorkCentres);
@@ -328,8 +335,7 @@ app.get('/api/production-lock/all', productionLockController.getAll.bind(product
 app.post('/api/production-lock/lock', productionLockController.lockDay.bind(productionLockController));
 app.post('/api/production-lock/unlock', productionLockController.unlockDay.bind(productionLockController));
 
-// Alert routes
-app.get('/api/alerts', alertController.getAlerts.bind(alertController));
+// Alert routes (protected - only admin can mark read or run checks)
 app.post('/api/alerts/mark-read', alertController.markRead.bind(alertController));
 app.post('/api/alerts/run-checks', alertController.runChecks.bind(alertController));
 

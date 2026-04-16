@@ -14,7 +14,14 @@ const authenticate = (req, res, next) => {
     req.user = jwt.verify(token, SECRET);
     next();
   } catch (err) {
-    return res.status(401).json({ success: false, message: 'Token expired or invalid' });
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Token expired, please login again' });
+    }
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+    // For any other unexpected errors, pass to error handler
+    return res.status(401).json({ success: false, message: 'Authentication failed' });
   }
 };
 

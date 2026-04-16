@@ -954,7 +954,7 @@ export const MobileProduction: React.FC = () => {
                                 </p>
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
-                                <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs</p>
+                                <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs / BIN</p>
                                 <p className="text-3xl md:text-5xl font-bold text-green-900"><span>{productionData.target_pairs || 0}</span></p>
                                 <p className="text-xs text-green-600 mt-1">pairs</p>
                             </div>

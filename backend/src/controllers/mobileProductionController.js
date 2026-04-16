@@ -85,13 +85,21 @@ exports.create = async (req, res, next) => {
       button_status
     } = req.body;
 
+    // Extract YYYY-MM-DD from ISO timestamp for MySQL DATE column
+    const formattedDate = prod_date ? prod_date.split('T')[0] : null;
+
     const [result] = await db.query(
-      `INSERT INTO machine_centre_production 
-       (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins, 
+      `INSERT INTO machine_centre_production
+       (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
         start_time, finish_time, idle_start_time, idle_stop_time, button_status)
        VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
-      [prod_date, work_centre_id, machine_id, emp_id, output_pairs !== undefined ? output_pairs : 0, target_mins || 0,
-        finish_time, idle_start_time, idle_stop_time, button_status || 1]
+      [formattedDate, work_centre_id, machine_id, emp_id,
+       output_pairs !== undefined ? output_pairs : 0,
+       target_mins || 0,
+       finish_time || null,
+       idle_start_time || null,
+       idle_stop_time || null,
+       button_status || 1]
     );
 
     res.status(201).json({
@@ -144,7 +152,7 @@ exports.update = async (req, res, next) => {
   }
 };
 
-// Update button status (Start/Finish/Stop)
+// Update button status (Start/Finish/Stop) and/or actual_time
 exports.updateStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -155,17 +163,32 @@ exports.updateStatus = async (req, res, next) => {
       const [existing] = await conn.execute('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
       if (existing.length === 0) throw Object.assign(new Error('Production data not found'), { status: 404 });
 
-      let updateQuery = 'UPDATE machine_centre_production SET button_status = ?';
-      let params = [button_status];
+      let updateQuery = 'UPDATE machine_centre_production SET';
+      let params = [];
+      let hasUpdate = false;
 
-      if (button_status === 2) {
-        updateQuery += ', finish_time = NOW()';
-        if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
-      } else if (button_status === 1) {
-        updateQuery += ', start_time = NOW(), idle_stop_time = NOW()';
-      } else if (button_status === 3) {
-        updateQuery += ', idle_start_time = NOW()';
-        if (stoppage_reason) { updateQuery += ', stoppage_reason = ?'; params.push(stoppage_reason); }
+      // Handle button_status update (may not be provided during time-only sync)
+      if (button_status !== undefined) {
+        updateQuery += ' button_status = ?';
+        params.push(button_status);
+        hasUpdate = true;
+
+        if (button_status === 2) {
+          updateQuery += ', finish_time = NOW()';
+          if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
+        } else if (button_status === 1) {
+          updateQuery += ', idle_stop_time = NOW()';
+        } else if (button_status === 3) {
+          updateQuery += ', idle_start_time = NOW()';
+          if (stoppage_reason) { updateQuery += ', stoppage_reason = ?'; params.push(stoppage_reason); }
+        }
+      }
+
+      // Note: actual_time is a generated column - cannot be updated directly
+      // Frontend timer display is client-side only
+
+      if (!hasUpdate) {
+        return res.json({ success: true, message: 'No updates required' });
       }
 
       updateQuery += ' WHERE id = ?';
