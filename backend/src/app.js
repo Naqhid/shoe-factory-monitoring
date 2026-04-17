@@ -264,6 +264,7 @@ app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.fi
 app.get('/api/mobile-session/waiting-for/:machine_id', mobileSessionController.findWaitingSession);
 app.get('/api/mobile-session/latest-active/:machineId?', mobileSessionController.getLatestActiveSession);
 app.get('/api/mobile-sessions/attendance/:workCentreId', mobileSessionController.getAttendance);
+app.get('/api/mobile-sessions/logs', mobileSessionController.getSessionLogs);
 app.get('/api/mobile-session/test', (req, res) => res.json({ test: 'working' }));
 app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionStatus);
 

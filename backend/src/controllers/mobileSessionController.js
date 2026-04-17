@@ -269,6 +269,55 @@ const mobileSessionController = {
         } catch (error) {
             next(error);
         }
+    },
+
+    // 8. Get machine login/session logs with optional line/date filters
+    getSessionLogs: async (req, res, next) => {
+        try {
+            const { work_centre_id, date } = req.query;
+
+            let query = `
+                SELECT
+                    ms.session_id,
+                    ms.machine_id,
+                    COALESCE(mc.name, ms.machine_id) AS machine_name,
+                    COALESCE(ms.work_centre_id, mc.work_centre_id) AS work_centre_id,
+                    wc.name AS work_centre_name,
+                    ms.emp_code,
+                    e.name AS emp_name,
+                    ms.status,
+                    ms.activated_at,
+                    ms.created_at
+                FROM mobile_sessions ms
+                LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
+                LEFT JOIN work_centres wc ON wc.id = COALESCE(ms.work_centre_id, mc.work_centre_id)
+                LEFT JOIN employees e ON e.id = ms.emp_id
+                WHERE ms.status = 'active' AND ms.activated_at IS NOT NULL
+            `;
+
+            const params = [];
+
+            if (work_centre_id) {
+                query += ' AND COALESCE(ms.work_centre_id, mc.work_centre_id) = ?';
+                params.push(work_centre_id);
+            }
+
+            if (date) {
+                query += ' AND DATE(ms.activated_at) = DATE(?)';
+                params.push(date);
+            }
+
+            query += ' ORDER BY ms.activated_at DESC';
+
+            const [rows] = await pool.execute(query, params);
+
+            res.json({
+                success: true,
+                data: rows
+            });
+        } catch (error) {
+            next(error);
+        }
     }
 };
 

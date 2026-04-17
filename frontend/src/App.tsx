@@ -28,8 +28,8 @@ import { RolesMasterForm } from './components/RolesMasterForm';
 import { TVDashboard } from './components/TVDashboard';
 import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerPage';
 import { MonitoringDashboard } from './components/MonitoringDashboard';
+import LogPage from './components/LogPage';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
-import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { isMenuAllowed, getDefaultRoute } from './utils/roleConfig';
 import { API_BASE_URL, apiFetch } from './services/api';
 import { MachineStatus } from './types';
@@ -74,15 +74,6 @@ function App() {
 
   // App-wide login: show LoginForm first when not authenticated
   const isAuthenticated = typeof localStorage !== 'undefined' && !!localStorage.getItem('app_authenticated');
-
-  // Auto-logout after 30 minutes of inactivity
-  const handleSessionTimeout = React.useCallback(() => {
-    localStorage.clear();
-    toast.error('Session expired due to inactivity. Please log in again.');
-    navigate('/', { replace: true });
-  }, [navigate]);
-
-  useSessionTimeout(handleSessionTimeout, isAuthenticated);
 
   const [selectedDate] = React.useState(new Date());
   const [selectedMachine, setSelectedMachine] = React.useState<MachineStatus | null>(null);
@@ -201,6 +192,7 @@ function App() {
   const isUserRights = activeMenu === 'user_rights';
   const isRoles = activeMenu === 'roles';
   const isMonitoring = activeMenu === 'monitoring';
+  const isLogs = activeMenu === 'logs';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
 
@@ -289,6 +281,8 @@ function App() {
         <RolesMasterForm />
       ) : isMonitoring ? (
         <MonitoringDashboard />
+      ) : isLogs ? (
+        <LogPage />
       ) : isMasterView ? (
         loading ? (
           <div className="flex items-center justify-center h-full">
