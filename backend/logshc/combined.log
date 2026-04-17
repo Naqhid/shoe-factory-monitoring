@@ -64193,3 +64193,10 @@
 {"ip":"192.168.5.47","level":"info","message":"PATCH /api/mobile-production/119/status 200 2ms","requestId":"0ac950ec-7bd5-49b0-9ed2-a58ca0416e7a","service":"prodpulse","timestamp":"2026-04-17T10:32:50.172Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
 {"level":"info","message":"PATCH /api/mobile-production/119/status from 192.168.5.47 | Origin: http://192.168.5.47:3000","service":"prodpulse","timestamp":"2026-04-17T10:33:00.172Z"}
 {"ip":"192.168.5.47","level":"info","message":"PATCH /api/mobile-production/119/status 200 2ms","requestId":"e84d2ad3-ea18-4186-8415-ba51c1ec6112","service":"prodpulse","timestamp":"2026-04-17T10:33:00.174Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"level":"info","message":"Next DB backup scheduled at 17/4/2026, 5:00:00 pm (in 23 min)","service":"prodpulse","timestamp":"2026-04-17T11:06:43.699Z"}
+{"level":"info","message":"Running on HTTP (HTTPS disabled for mobile compatibility)","service":"prodpulse","timestamp":"2026-04-17T11:06:43.705Z"}
+{"level":"info","message":"Server started on port 3101 (HTTP) and listening on all interfaces","service":"prodpulse","timestamp":"2026-04-17T11:06:43.722Z"}
+{"level":"info","message":"Starting file watcher on directory: C:\\Software\\shoe-factory-monitoring-feature\\backend\\data\\incoming","service":"prodpulse","timestamp":"2026-04-17T11:06:43.723Z"}
+{"level":"info","message":"File watcher started successfully","service":"prodpulse","timestamp":"2026-04-17T11:06:43.732Z"}
+{"level":"info","message":"rework_rejection table ready","service":"prodpulse","timestamp":"2026-04-17T11:06:45.033Z"}
+{"level":"info","message":"Old machine centre summary data archived on startup","service":"prodpulse","timestamp":"2026-04-17T11:06:46.206Z"}
