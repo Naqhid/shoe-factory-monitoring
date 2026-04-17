@@ -142,7 +142,7 @@ export const ProductionRoutingForm: React.FC = () => {
   });
 
   const [lines, setLines] = React.useState<RoutingLine[]>([{
-    machine_centre_id: '', process: '', observed_time: '', rating_factor: '', manpower: '',
+    machine_centre_id: '', machine_name: '', process: '', observed_time: '', rating_factor: '', manpower: '',
   }]);
 
   React.useEffect(() => {
@@ -226,7 +226,7 @@ export const ProductionRoutingForm: React.FC = () => {
     return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_12_prs_box: mins12Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
   };
 
-  const addLine = () => setLines([...lines, { machine_centre_id: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
+  const addLine = () => setLines([...lines, { machine_centre_id: '', machine_name: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
   const removeLine = (index: number) => lines.length > 1 ? setLines(lines.filter((_, i) => i !== index)) : toast.error('At least one line required');
   const updateLine = (index: number, field: keyof RoutingLine, value: string) => {
     const newLines = [...lines];
@@ -236,8 +236,8 @@ export const ProductionRoutingForm: React.FC = () => {
 
   const handleAdd = () => {
     setEditingId(null);
-    setHeaderData({ customer_id: '', group_id: '', leather_id: '', style_id: '', color_id: '', created_on: new Date().toISOString().split('T')[0], target_per_day: '', tot_smv: '' });
-    setLines([{ machine_centre_id: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
+    setHeaderData({ customer_id: '', group_id: '', leather_id: '', style_id: '', color_id: '', created_on: new Date().toISOString().split('T')[0], machine_centre_id: '', target_per_day: '', tot_smv: '' });
+    setLines([{ machine_centre_id: '', machine_name: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
     setShowModal(true);
   };
 
@@ -259,7 +259,7 @@ export const ProductionRoutingForm: React.FC = () => {
           target_per_day: String(header.target_per_day),
           tot_smv: String(header.tot_smv)
         });
-        setLines(result.data.lines.map((l: any) => ({ machine_centre_id: String(l.machine_centre_id), process: l.process || '', observed_time: String(l.observed_time), rating_factor: String(l.rating_factor), manpower: String(l.manpower) })));
+        setLines(result.data.lines.map((l: any) => ({ machine_centre_id: String(l.machine_centre_id), machine_name: l.machine_name || '', process: l.process || '', observed_time: String(l.observed_time), rating_factor: String(l.rating_factor), manpower: String(l.manpower) })));
         setShowModal(true);
       }
     } catch (error) {

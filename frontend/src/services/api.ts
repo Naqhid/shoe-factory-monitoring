@@ -98,6 +98,10 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     if (error.response?.status === 401) {
+      // Don't retry login requests - 401 means invalid credentials, not expired token
+      if (error.config?.url?.includes('/login')) {
+        return Promise.reject(error);
+      }
       const refreshed = await tryRefresh();
       if (refreshed) {
         error.config.headers['Authorization'] = `Bearer ${localStorage.getItem('jwt_token')}`;

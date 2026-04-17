@@ -299,8 +299,6 @@ function App() {
           <MasterForm
             title={currentConfig!.title}
             table={currentConfig!.table}
-            records={records}
-            onRefresh={handleRefresh}
           />
         )
       ) : (

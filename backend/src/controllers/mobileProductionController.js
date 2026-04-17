@@ -158,7 +158,7 @@ exports.updateStatus = async (req, res, next) => {
     const { id } = req.params;
     const { button_status, output_pairs, actual_time, stoppage_reason } = req.body;
 
-    await withTransaction(async (conn) => {
+    const result = await withTransaction(async (conn) => {
       // Verify record exists
       const [existing] = await conn.execute('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
       if (existing.length === 0) throw Object.assign(new Error('Production data not found'), { status: 404 });
@@ -188,7 +188,7 @@ exports.updateStatus = async (req, res, next) => {
       // Frontend timer display is client-side only
 
       if (!hasUpdate) {
-        return res.json({ success: true, message: 'No updates required' });
+        return { noUpdate: true };
       }
 
       updateQuery += ' WHERE id = ?';
@@ -216,7 +216,12 @@ exports.updateStatus = async (req, res, next) => {
           [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
         );
       }
+      return { noUpdate: false };
     });
+
+    if (result.noUpdate) {
+      return res.json({ success: true, message: 'No updates required' });
+    }
 
     res.json({ success: true, message: 'Status updated successfully' });
   } catch (error) {

@@ -153,6 +153,7 @@ export const MobileProduction: React.FC = () => {
     const resolvedMachineId = urlMachineId && slugToMachineId[urlMachineId]
         ? slugToMachineId[urlMachineId]
         : urlMachineId;
+    const effectiveMachineId = resolvedMachineId || urlMachineId || '';
 
     // Update current time every second
     useEffect(() => {
@@ -264,7 +265,7 @@ export const MobileProduction: React.FC = () => {
                             // Check for existing production record for today that's not finished
                     const today = new Date();
                     const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                    const existingRes = await apiFetch(`${API_BASE}/api/mobile-production/machine/${resolvedMachineId}/date/${localDate}`);
+                    const existingRes = await apiFetch(`${API_BASE}/api/mobile-production/machine/${effectiveMachineId}/date/${localDate}`);
                     const existingData = await existingRes.json();
                     
                     // Find the most recent unfinished record (button_status !== 2)
@@ -278,7 +279,7 @@ export const MobileProduction: React.FC = () => {
                             apiFetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/production-planning`).then(r => r.json()),
-                            apiFetch(`${API_BASE}/api/mobile-production/init/${resolvedMachineId}/${urlEmpId}`).then(r => r.json())
+                            apiFetch(`${API_BASE}/api/mobile-production/init/${effectiveMachineId}/${urlEmpId}`).then(r => r.json())
                         ]);
 
                         const employee = empRes.data?.find((e: any) =>
@@ -286,7 +287,7 @@ export const MobileProduction: React.FC = () => {
                             e.code === unfinishedRecord.emp_id ||
                             e.emp_id === unfinishedRecord.emp_id
                         );
-                        const machine = macRes.data?.find((m: any) => (m.machine_id === resolvedMachineId || m.code === urlMachineId));
+                        const machine = macRes.data?.find((m: any) => (m.machine_id === effectiveMachineId || m.code === urlMachineId));
                         const workCentre = wcRes.data?.find((wc: any) => wc.id === unfinishedRecord.work_centre_id);
 
                         // Get target_pairs from planning if not set
@@ -307,7 +308,7 @@ export const MobileProduction: React.FC = () => {
                                 : Number(unfinishedRecord.target_mins || 0);
 
                         setSessionStatus('active');
-                        setQrData(resolvedMachineId);
+                        setQrData(effectiveMachineId);
                         setEmployeeName(
                             employee?.name ||
                             employee?.emp_name ||
@@ -319,7 +320,7 @@ export const MobileProduction: React.FC = () => {
                         const machineData = await machineRes.json();
                         let machineCentreName = machine?.machine_name || machine?.name || urlMachineId;
                         if (machineData.success) {
-                            const machineRecord = machineData.data.find((m: any) => m.machine_id === resolvedMachineId);
+                            const machineRecord = machineData.data.find((m: any) => m.machine_id === effectiveMachineId);
                             if (machineRecord) {
                                 machineCentreName = machineRecord.machine_name || machineRecord.name;
                             }
@@ -339,11 +340,11 @@ export const MobileProduction: React.FC = () => {
                         // Use whichever is larger — DB value or live elapsed (in case of clock drift)
                         setActualTimeCounter(Math.max(savedSeconds, elapsedSinceStart));
                         // Fetch summary data immediately after setting production data
-                        await fetchSummaryData(resolvedMachineId);
+                        await fetchSummaryData(effectiveMachineId);
                         toast.success('Loaded existing session');
                     } else {
                         // Create new session - use optimized endpoint
-                        const response = await apiFetch(`${API_BASE}/api/mobile-production/init/${resolvedMachineId}/${urlEmpId}`);
+                        const response = await apiFetch(`${API_BASE}/api/mobile-production/init/${effectiveMachineId}/${urlEmpId}`);
                         const result = await response.json();
 
                         if (!result.success) {
@@ -354,14 +355,14 @@ export const MobileProduction: React.FC = () => {
                         const { employee, machine, workCentre, targetMins, targetPairs, existingRecord } = result.data;
 
                         setSessionStatus('active');
-                        setQrData(resolvedMachineId);
+                        setQrData(effectiveMachineId);
                         setEmployeeName(employee.name);
                         // Get machine centre name from machine centres data
                         const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
                         const machineData = await machineRes.json();
                         let machineCentreName = machine.machine_name || machine.name;
                         if (machineData.success) {
-                            const machineRecord = machineData.data.find((m: any) => m.machine_id === resolvedMachineId);
+                            const machineRecord = machineData.data.find((m: any) => m.machine_id === effectiveMachineId);
                             if (machineRecord) {
                                 machineCentreName = machineRecord.machine_name || machineRecord.name;
                             }
@@ -376,7 +377,7 @@ export const MobileProduction: React.FC = () => {
                             prod_date: prodDate,
                             work_centre_id: workCentre.id,
                             work_centre_name: workCentre.name,
-                            machine_id: resolvedMachineId,
+                            machine_id: effectiveMachineId,
                             emp_id: employee.id,
                             output_pairs: 0,
                             target_mins: targetMins,
@@ -390,7 +391,7 @@ export const MobileProduction: React.FC = () => {
                         };
                         setProductionData(defaultData);
                         // Fetch summary data immediately after setting production data
-                        await fetchSummaryData(resolvedMachineId);
+                        await fetchSummaryData(effectiveMachineId);
                         toast.success('Ready to start production');
                     }
                         })(),
@@ -725,7 +726,7 @@ export const MobileProduction: React.FC = () => {
         ];
         return (
             <QRWaitScreen
-                machineId={resolvedMachineId}
+                machineId={effectiveMachineId}
                 urlMachineId={urlMachineId}
                 qrCandidates={qrCandidates}
                 onSessionActive={(empCode) => navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(empCode)}`)}

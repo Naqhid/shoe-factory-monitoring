@@ -18,7 +18,7 @@ export const ProductionTracker: React.FC = () => {
   const [workCentres, setWorkCentres] = useState<any[]>([]);
   const [selectedLine, setSelectedLine] = useState('');
   const [dashboardData, setDashboardData] = useState<any>(null);
-  const [attendanceData, setAttendanceData] = useState({ present: 0, target: 0 });
+  const [attendanceData, setAttendanceData] = useState({ present: 0, target_employees: 0 });
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
