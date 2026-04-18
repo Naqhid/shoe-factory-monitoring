@@ -12,13 +12,14 @@ class ApiController {
 
   async getHourlyProductionStatus(req, res) {
     try {
-      const { fromDate, toDate, workCentreId, search, page, limit } = req.query;
+      const { fromDate, toDate, workCentreId, machineId, search, page, limit } = req.query;
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
       let where = 'WHERE DATE(mcp.prod_date) BETWEEN ? AND ?';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcp.work_centre_id = ?'; params.push(workCentreId); }
+      if (machineId) { where += ' AND mcp.machine_id = ?'; params.push(machineId); }
       if (search) { where += ' AND (wc.name LIKE ? OR c.name LIKE ? OR s.name LIKE ? OR col.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
 
       const baseQuery = `

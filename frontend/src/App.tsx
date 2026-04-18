@@ -87,6 +87,8 @@ function App() {
   const isMobileLineProduction = isLineRoute;
   const isMobileProduction = pathParts[0] === 'mobile' && pathParts.length >= 2 && !isLineRoute;
   const isMobileQRScanner = pathParts[0] === 'mobile' && pathParts.length === 2 && !isLineRoute;
+  const hideTopHeader = isMobileProduction || isMobileQRScanner;
+  const hideLogout = isMobileProduction || isMobileQRScanner;
 
   const {
     data: machines = [],
@@ -242,7 +244,7 @@ function App() {
   }
 
   return (
-    <Layout activeMenu={activeMenu}>
+    <Layout activeMenu={activeMenu} hideTopHeader={hideTopHeader} hideLogout={hideLogout}>
       {isProductionDashboard ? (
         <TVDashboard />
       ) : isReports ? (

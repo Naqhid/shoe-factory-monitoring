@@ -9,6 +9,7 @@ export const TVDashboard: React.FC = () => {
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
     const [currentDate, setCurrentDate] = useState('');
     const [reworkSummary, setReworkSummary] = useState<Record<number, { total_rework: number; total_rejection: number }>>({});
@@ -26,9 +27,15 @@ export const TVDashboard: React.FC = () => {
                 const result = await res.json();
                 if (result.success && result.data.length > 0) {
                     setWorkCentres(result.data);
+                    setErrorMessage(null);
+                } else {
+                    setErrorMessage('No work centres available for dashboard.');
+                    setLoading(false);
                 }
             } catch (error) {
                 console.error('Error fetching work centres:', error);
+                setErrorMessage('Failed to load work centres. Please retry.');
+                setLoading(false);
             }
         };
         fetchWorkCentres();
@@ -46,7 +53,14 @@ export const TVDashboard: React.FC = () => {
                 ]);
                 const dashResult = await dashRes.json();
                 const reworkResult = await reworkRes.json();
-                if (dashResult.success) { setDashboardData(dashResult.data); setLoading(false); }
+                if (dashResult.success) {
+                    setDashboardData(dashResult.data);
+                    setErrorMessage(null);
+                    setLoading(false);
+                } else {
+                    setErrorMessage(dashResult.message || 'Failed to load dashboard data.');
+                    setLoading(false);
+                }
                 if (reworkResult.success) {
                     const map: Record<number, { total_rework: number; total_rejection: number }> = {};
                     reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
@@ -54,6 +68,8 @@ export const TVDashboard: React.FC = () => {
                 }
             } catch (error) {
                 console.error('Error fetching dashboard:', error);
+                setErrorMessage('Failed to refresh dashboard data. Please retry.');
+                setLoading(false);
             }
         };
 
@@ -82,6 +98,23 @@ export const TVDashboard: React.FC = () => {
         const interval = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(interval);
     }, []);
+
+    if (errorMessage && !dashboardData) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center p-6">
+                <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full text-center">
+                    <h2 className="text-2xl font-bold text-red-600 mb-3">Dashboard Unavailable</h2>
+                    <p className="text-gray-700 mb-6">{errorMessage}</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (loading || !dashboardData) {
         return (

@@ -63,7 +63,9 @@ export const Reports: React.FC = () => {
   const [toDate, setToDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [reportType, setReportType] = React.useState<ReportType>('hourly-production');
   const [workCentres, setWorkCentres] = React.useState<any[]>([]);
+  const [machines, setMachines] = React.useState<any[]>([]);
   const [selectedLine, setSelectedLine] = React.useState('');
+  const [selectedMachine, setSelectedMachine] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [limit, setLimit] = React.useState(50);
@@ -78,7 +80,25 @@ export const Reports: React.FC = () => {
       .then(r => r.json())
       .then(res => { if (res.success) setWorkCentres(res.data); })
       .catch(() => {});
+
+    apiFetch(`${API_BASE}/api/masters/machine_centres`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setMachines(res.data); })
+      .catch(() => {});
   }, []);
+
+  const filteredMachines = React.useMemo(() => {
+    const list = selectedLine
+      ? machines.filter((m: any) => String(m.work_centre_id) === String(selectedLine))
+      : machines;
+    return [...list].sort((a: any, b: any) => String(a.machine_id || '').localeCompare(String(b.machine_id || '')));
+  }, [machines, selectedLine]);
+
+  React.useEffect(() => {
+    if (!selectedMachine) return;
+    const stillExists = filteredMachines.some((m: any) => String(m.machine_id) === String(selectedMachine));
+    if (!stillExists) setSelectedMachine('');
+  }, [filteredMachines, selectedMachine]);
 
   const fetchReport = async (overridePage?: number, overrideSearch?: string) => {
     if (!fromDate || !toDate) return;
@@ -88,6 +108,7 @@ export const Reports: React.FC = () => {
     try {
       const params = new URLSearchParams({ fromDate, toDate, page: String(currentPage), limit: String(limit) });
       if (selectedLine) params.set('workCentreId', selectedLine);
+      if (reportType === 'hourly-production' && selectedMachine) params.set('machineId', selectedMachine);
       if (currentSearch.trim()) params.set('search', currentSearch.trim());
       const response = await apiFetch(`${API_BASE}/api/reports/${reportType}?${params}`);
       const result = await response.json();
@@ -112,6 +133,7 @@ export const Reports: React.FC = () => {
     // pass newLimit directly since state update is async
     const params = new URLSearchParams({ fromDate, toDate, page: '1', limit: String(newLimit) });
     if (selectedLine) params.set('workCentreId', selectedLine);
+    if (reportType === 'hourly-production' && selectedMachine) params.set('machineId', selectedMachine);
     if (search.trim()) params.set('search', search.trim());
     setIsLoading(true); setError(null);
     apiFetch(`${API_BASE}/api/reports/${reportType}?${params}`)
@@ -511,6 +533,20 @@ export const Reports: React.FC = () => {
                 {workCentres.map(wc => <option key={wc.id} value={wc.id}>{wc.name}</option>)}
               </select>
             </div>
+            {reportType === 'hourly-production' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Machine</label>
+                <select value={selectedMachine} onChange={e => setSelectedMachine(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 min-w-[180px]">
+                  <option value="">All Machines</option>
+                  {filteredMachines.map((machine: any) => (
+                    <option key={machine.id || machine.machine_id} value={machine.machine_id}>
+                      {machine.machine_id} {machine.machine_name || machine.name ? `- ${machine.machine_name || machine.name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">From Date</label>
               <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
@@ -593,6 +629,7 @@ export const Reports: React.FC = () => {
               <span className="text-xs text-gray-500 font-medium">
                 {fmtDate(fromDate)} — {fmtDate(toDate)}
                 {selectedLine && workCentres.length > 0 && ` · ${workCentres.find(w => w.id == selectedLine)?.name}`}
+                {reportType === 'hourly-production' && selectedMachine && ` · Machine ${selectedMachine}`}
               </span>
             </div>
             {renderTable()}

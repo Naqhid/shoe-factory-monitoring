@@ -2,6 +2,8 @@
 
 This guide explains how to work in a feature branch without impacting live production, and how to merge safely into `develop` (your live production branch).
 
+For Mobile Production reliability checks, use: [Mobile Production Stability Checklist](./mobile-production-stability-checklist.md)
+
 ---
 
 ## 1) Branch Model Used in This Repo
@@ -37,6 +39,34 @@ This ensures your branch starts from the latest live baseline.
 ---
 
 ## 4) Local Runtime Isolation (Recommended)
+
+### 🔒 Do Not Forget (Feature Ports)
+
+- **Feature backend port:** `3101`
+- **Feature frontend port:** `3004`
+- **Live production backend port:** `3001` (do not use for feature testing)
+
+Use these exact commands each time:
+
+```bash
+# Terminal 1 (backend)
+cd backend
+PORT=3101 npm start
+
+# Terminal 2 (frontend)
+cd frontend
+npm run dev -- --port 3004 --host 0.0.0.0
+```
+
+Optional quick checks:
+
+```bash
+# Backend health
+curl http://localhost:3101/health
+
+# Frontend
+start http://localhost:3004
+```
 
 ### Backend (feature)
 

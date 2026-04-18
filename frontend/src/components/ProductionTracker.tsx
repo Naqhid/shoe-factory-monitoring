@@ -36,9 +36,15 @@ export const ProductionTracker: React.FC = () => {
         if (result.success && result.data.length > 0) {
           setWorkCentres(result.data);
           setSelectedLine(result.data[0].id.toString());
+          setError(null);
+        } else {
+          setError('No work centres available for production tracker.');
+          setLoading(false);
         }
       } catch (error) {
         console.error('Failed to load work centres:', error);
+        setError('Failed to load work centres. Please retry.');
+        setLoading(false);
       }
     };
     loadWorkCentres();
@@ -81,7 +87,7 @@ export const ProductionTracker: React.FC = () => {
 
   const loadDashboardData = async () => {
     if (!dashboardData) setLoading(true);
-    setError(null);
+    if (!dashboardData) setError(null);
     try {
       const workCentreId = selectedLine || workCentres[0]?.id || 1;
       const [res, reworkRes] = await Promise.all([
@@ -92,8 +98,9 @@ export const ProductionTracker: React.FC = () => {
       const reworkResult = await reworkRes.json();
       if (result.success) {
         setDashboardData(result.data);
+        setError(null);
       } else {
-        setError(result.error || 'Failed to load data');
+        setError(result.error || result.message || 'Failed to load data');
       }
       if (reworkResult.success) {
         const map: Record<number, { total_rework: number; total_rejection: number }> = {};
@@ -189,6 +196,23 @@ export const ProductionTracker: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
+        {error && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Live refresh issue</p>
+                <p className="text-sm text-amber-700">{error}. Showing last available data.</p>
+              </div>
+              <button
+                onClick={loadDashboardData}
+                className="text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1 rounded"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header with filters */}
         <div className="bg-white rounded-2xl shadow-md p-4 mb-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Production Tracker</h1>
@@ -318,14 +342,19 @@ export const ProductionTracker: React.FC = () => {
                   <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">WIP</th>
                   <th className="px-4 py-3 text-center text-sm font-bold text-yellow-600">REWORK</th>
                   <th className="px-4 py-3 text-center text-sm font-bold text-red-600">REJECTION</th>
-                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">
+                    <div className="flex flex-col items-center leading-tight">
+                      <span>STATUS</span>
+                      <span className="text-[10px] font-medium text-gray-500">O=Output, E=Efficiency</span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {lowerSection.linePerformance?.filter((line: any) => line.work_centre_id === currentWorkCentreId).map((line: any, index: number) => {
-                  const getStatusColor = (eff: number) => {
-                    if (eff >= 95) return 'bg-green-500';
-                    if (eff >= 85) return 'bg-yellow-500';
+                  const getStatusColor = (value: number) => {
+                    if (value >= 95) return 'bg-green-500';
+                    if (value >= 85) return 'bg-yellow-500';
                     return 'bg-red-500';
                   };
                   const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
@@ -340,9 +369,15 @@ export const ProductionTracker: React.FC = () => {
                       <td className="px-4 py-4 text-center text-lg font-bold text-yellow-600">{rw.total_rework}</td>
                       <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{rw.total_rejection}</td>
                       <td className="px-4 py-4">
-                        <div className="flex justify-center gap-2">
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
+                        <div className="flex justify-center gap-3">
+                          <div className="flex items-center gap-1" title={`Output %: ${Number(line.output_percentage) || 0}%`}>
+                            <span className="text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-300 rounded px-1 leading-none">O</span>
+                            <div className={`w-4 h-4 rounded-full ${getStatusColor(Number(line.output_percentage) || 0)}`}></div>
+                          </div>
+                          <div className="flex items-center gap-1" title={`Efficiency %: ${Number(line.efficiency) || 0}%`}>
+                            <span className="text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-300 rounded px-1 leading-none">E</span>
+                            <div className={`w-4 h-4 rounded-full ${getStatusColor(Number(line.efficiency) || 0)}`}></div>
+                          </div>
                         </div>
                       </td>
                     </tr>
