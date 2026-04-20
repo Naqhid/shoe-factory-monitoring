@@ -64,10 +64,14 @@ exports.getDashboard = async (req, res) => {
             'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
             [today, workCentreId]
         );
-        const [summaryData] = await pool.query(
-            'SELECT SUM(total_output_pairs) as total_output FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?',
-            [today, workCentreId]
-        );
+        // Get output from Machine 07 (Final Inspection) for Line 2A
+        const [summaryData] = await pool.query(`
+            SELECT COALESCE(total_output_pairs, 0) as total_output 
+            FROM machine_centre_summary 
+            WHERE prod_date = ? AND work_centre_id = ? AND machine_id = '07'
+            LIMIT 1
+        `, [today, workCentreId]);
+        const finalOutput = summaryData[0]?.total_output || 0;
         const [overallEfficiency] = await pool.query(`
             SELECT CASE WHEN SUM(total_actual_mins) > 0 
                 THEN (SUM(total_target_mins) / SUM(total_actual_mins)) * 100 
@@ -77,7 +81,7 @@ exports.getDashboard = async (req, res) => {
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
         const target = planningData[0]?.total_target || 0;
-        const output = summaryData[0]?.total_output || 0;
+        const output = finalOutput;
         const outputPercent = target > 0 ? (output / target) * 100 : 0;
         const efficiencyPercent = overallEfficiency[0]?.overall_efficiency_percent || 0;
 
@@ -127,7 +131,7 @@ exports.getDashboard = async (req, res) => {
             FROM (
                 SELECT HOUR(created_at) AS hr, SUM(output_pairs) AS hourly_output
                 FROM machine_centre_production
-                WHERE DATE(created_at) = ? AND work_centre_id = ?
+                WHERE DATE(created_at) = ? AND work_centre_id = ? AND button_status = 2
                 GROUP BY HOUR(created_at)
             ) AS hourly_data
         `, [today, workCentreId]);
@@ -136,7 +140,7 @@ exports.getDashboard = async (req, res) => {
         const [hourlyData] = await pool.query(`
             SELECT HOUR(updated_at) as hour, SUM(output_pairs) as output
             FROM machine_centre_production
-            WHERE work_centre_id = ? AND DATE(prod_date) = ?
+            WHERE work_centre_id = ? AND DATE(prod_date) = ? AND button_status = 2
             GROUP BY HOUR(updated_at)
             ORDER BY hour
         `, [workCentreId, today]);
@@ -172,10 +176,13 @@ exports.getDashboard = async (req, res) => {
                 wc.id as work_centre_id,
                 wc.name as line_name,
                 COALESCE(pp.target, 0) as target,
-                COALESCE(mcs.output, 0) as output,
-                CASE WHEN COALESCE(pp.target, 0) > 0 THEN ROUND((COALESCE(mcs.output, 0) / pp.target) * 100, 0) ELSE 0 END as output_percentage,
-                CASE WHEN COALESCE(mcs.actual_mins, 0) > 0 THEN ROUND((COALESCE(mcs.target_mins, 0) / mcs.actual_mins) * 100, 0) ELSE 0 END as efficiency,
-                GREATEST(0, COALESCE(pp.target, 0) - COALESCE(mcs.output, 0)) as wip
+                -- For Line 2A (id=5), use Machine 07 output; for others, sum all machines
+                COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) as output,
+                CASE WHEN COALESCE(pp.target, 0) > 0 THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) / pp.target) * 100, 0) ELSE 0 END as output_percentage,
+                CASE WHEN COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0) > 0 
+                    THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.target_mins ELSE mcsall.target_mins END, 0) / COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0)) * 100, 0) 
+                    ELSE 0 END as efficiency,
+                GREATEST(0, COALESCE(pp.target, 0) - COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0)) as wip
             FROM work_centres wc
             LEFT JOIN (
                 SELECT work_centre_id, SUM(total_target_per_day) as target
@@ -184,6 +191,16 @@ exports.getDashboard = async (req, res) => {
                 GROUP BY work_centre_id
             ) pp ON wc.id = pp.work_centre_id
             LEFT JOIN (
+                -- Machine 07 output for Line 2A (Final Inspection)
+                SELECT work_centre_id,
+                       total_output_pairs as output,
+                       total_target_mins as target_mins,
+                       total_actual_mins as actual_mins
+                FROM machine_centre_summary
+                WHERE DATE(prod_date) = DATE(?) AND machine_id = '07'
+            ) mcs07 ON wc.id = mcs07.work_centre_id
+            LEFT JOIN (
+                -- All machines output for other lines
                 SELECT work_centre_id,
                        SUM(total_output_pairs) as output,
                        SUM(total_target_mins) as target_mins,
@@ -191,9 +208,9 @@ exports.getDashboard = async (req, res) => {
                 FROM machine_centre_summary
                 WHERE DATE(prod_date) = DATE(?)
                 GROUP BY work_centre_id
-            ) mcs ON wc.id = mcs.work_centre_id
+            ) mcsall ON wc.id = mcsall.work_centre_id
             ORDER BY wc.id
-        `, [today, today]);
+        `, [today, today, today]);
 
         res.json({
             success: true,

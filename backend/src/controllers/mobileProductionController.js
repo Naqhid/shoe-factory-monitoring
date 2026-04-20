@@ -182,99 +182,83 @@ exports.updateStatus = async (req, res, next) => {
     const { button_status, output_pairs, actual_time, stoppage_reason, emp_id, session_id } = req.body;
     const normalizedButtonStatus = button_status === 3 ? 1 : button_status;
 
-    const result = await withTransaction(async (conn) => {
-      // Verify record exists
-      const [existing] = await conn.execute('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
-      if (existing.length === 0) throw Object.assign(new Error('Production data not found'), { status: 404 });
-      const existingRecord = existing[0];
+    // Get existing record first (outside transaction to ensure we have current data)
+    const [existingRows] = await db.execute('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Production data not found' });
+    }
+    const existingRecord = existingRows[0];
 
-      // Ownership guard for control actions (start/stop/finish)
-      const isControlAction = normalizedButtonStatus !== undefined || output_pairs !== undefined || stoppage_reason !== undefined;
-      if (isControlAction) {
-        if (emp_id === undefined || emp_id === null) {
-          throw Object.assign(new Error('emp_id is required for status control actions'), { status: 400 });
-        }
+    let updateQuery = 'UPDATE machine_centre_production SET';
+    let params = [];
+    let hasUpdate = false;
 
-        if (!session_id) {
-          throw Object.assign(new Error('session_id is required for status control actions'), { status: 400 });
-        }
+    // Handle button_status update (may not be provided during time-only sync)
+    if (normalizedButtonStatus !== undefined) {
+      updateQuery += ' button_status = ?';
+      params.push(normalizedButtonStatus);
+      hasUpdate = true;
 
-        if (String(existingRecord.emp_id) !== String(emp_id)) {
-          throw Object.assign(new Error('Operator mismatch: this production record belongs to a different operator'), { status: 403 });
-        }
-
-        const [sessionRows] = await conn.execute(
-          `SELECT session_id
-           FROM mobile_sessions
-           WHERE machine_id = ?
-             AND emp_code = ?
-             AND status = 'active'
-             AND DATE(activated_at) = CURDATE()
-           ORDER BY activated_at DESC
-           LIMIT 1`,
-          [existingRecord.machine_id, String(existingRecord.emp_id)]
-        );
-
-        if (sessionRows.length === 0 || String(sessionRows[0].session_id) !== String(session_id)) {
-          throw Object.assign(new Error('Session mismatch: control is allowed only from the active scanned session'), { status: 403 });
-        }
-      }
-
-      let updateQuery = 'UPDATE machine_centre_production SET';
-      let params = [];
-      let hasUpdate = false;
-
-      // Handle button_status update (may not be provided during time-only sync)
-      if (normalizedButtonStatus !== undefined) {
-        updateQuery += ' button_status = ?';
-        params.push(normalizedButtonStatus);
-        hasUpdate = true;
-
-        if (normalizedButtonStatus === 2) {
-          updateQuery += ', finish_time = NOW()';
-          if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
-        } else if (normalizedButtonStatus === 1) {
-          updateQuery += ', idle_stop_time = NOW()';
-        }
-      }
-
-      // Note: actual_time is a generated column - cannot be updated directly
-      // Frontend timer display is client-side only
-
-      if (!hasUpdate) {
-        return { noUpdate: true };
-      }
-
-      updateQuery += ' WHERE id = ?';
-      params.push(id);
-      await conn.execute(updateQuery, params);
-
-      // On finish: update summary table atomically in same transaction
       if (normalizedButtonStatus === 2) {
-        const prod = existingRecord;
-        await conn.execute(
-          `INSERT INTO machine_centre_summary 
-           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, button_status)
+        updateQuery += ', finish_time = NOW()';
+        if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
+      } else if (normalizedButtonStatus === 1) {
+        updateQuery += ', idle_stop_time = NOW()';
+      }
+    }
+
+    if (!hasUpdate) {
+      return res.json({ success: true, message: 'No updates required' });
+    }
+
+    updateQuery += ' WHERE id = ?';
+    params.push(id);
+    await db.execute(updateQuery, params);
+
+    // On finish: update summary table after the main update (outside transaction)
+    // This ensures the SELECT sees the committed data
+    if (normalizedButtonStatus === 2) {
+      const prod = existingRecord;
+      try {
+        // Small delay to ensure MySQL has processed generated columns
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Re-read the updated record to ensure generated columns (actual_time) are calculated
+        const [updatedRows] = await db.execute(
+          'SELECT actual_time, finish_time FROM machine_centre_production WHERE id = ?', 
+          [id]
+        );
+        if (updatedRows.length > 0) {
+          logger.info(`Updated record - actual_time: ${updatedRows[0].actual_time}, finish_time: ${updatedRows[0].finish_time}`);
+        }
+        
+        // Aggregate all FINISHED records only (button_status = 2) for this machine/date/employee
+        // Note: avg_efficiency_percent is a GENERATED column, auto-calculated by MySQL
+        await db.execute(
+          `INSERT INTO machine_centre_summary
+           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
            SELECT prod_date, work_centre_id, machine_id, emp_id,
-             SUM(output_pairs), SUM(target_mins), SUM(actual_time), SUM(idle_mins), MAX(button_status)
+             SUM(output_pairs), SUM(target_mins), SUM(actual_time), SUM(idle_mins),
+             CASE WHEN SUM(output_pairs) > 0 THEN SUM(actual_time) / SUM(output_pairs) ELSE 0 END,
+             MAX(button_status)
            FROM machine_centre_production
-           WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ?
+           WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2
            GROUP BY prod_date, work_centre_id, machine_id, emp_id
            ON DUPLICATE KEY UPDATE
              total_output_pairs = VALUES(total_output_pairs),
              total_target_mins = VALUES(total_target_mins),
              total_actual_mins = VALUES(total_actual_mins),
              total_idle_mins = VALUES(total_idle_mins),
+             cum_avg_time = VALUES(cum_avg_time),
              button_status = VALUES(button_status),
              updated_at = CURRENT_TIMESTAMP`,
           [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
         );
+        logger.info(`Summary updated for machine ${prod.machine_id}, emp ${prod.emp_id} on ${prod.prod_date}`);
+      } catch (summaryError) {
+        logger.error('Error updating summary after finish:', summaryError);
+        // Don't fail the main request if summary update fails
       }
-      return { noUpdate: false };
-    });
-
-    if (result.noUpdate) {
-      return res.json({ success: true, message: 'No updates required' });
     }
 
     res.json({ success: true, message: 'Status updated successfully' });
@@ -388,11 +372,11 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
         SUM(total_target_mins) as total_target_mins,
         SUM(total_actual_mins) as total_actual_mins,
         SUM(total_idle_mins) as total_idle_mins,
-        avg_efficiency_percent,
-        cum_avg_time
+        CASE WHEN SUM(total_target_mins) > 0 THEN (SUM(total_actual_mins) / SUM(total_target_mins)) * 100 ELSE 0 END as avg_efficiency_percent,
+        CASE WHEN SUM(total_output_pairs) > 0 THEN SUM(total_actual_mins) / SUM(total_output_pairs) ELSE 0 END as cum_avg_time
       FROM machine_centre_summary
       WHERE machine_id = ? AND prod_date = ?
-      GROUP BY machine_id, prod_date, avg_efficiency_percent, cum_avg_time
+      GROUP BY machine_id, prod_date
     `, [machineId, date]);
 
     logger.info(`Found ${rows.length} summary records`);

@@ -271,7 +271,7 @@ const mobileSessionController = {
         }
     },
 
-    // 8. Get machine login/session logs with optional line/date filters
+    // 8. Get machine login/session logs with optional line/date filters and production metrics
     getSessionLogs: async (req, res, next) => {
         try {
             const { work_centre_id, date } = req.query;
@@ -287,11 +287,43 @@ const mobileSessionController = {
                     e.name AS emp_name,
                     ms.status,
                     ms.activated_at,
-                    ms.created_at
+                    ms.created_at,
+                    -- Production metrics from finished cycles during this session
+                    COALESCE(prod_stats.total_output, 0) AS total_output,
+                    COALESCE(prod_stats.total_cycles, 0) AS total_cycles,
+                    COALESCE(prod_stats.total_actual_mins, 0) AS total_actual_mins,
+                    COALESCE(prod_stats.total_target_mins, 0) AS total_target_mins,
+                    COALESCE(prod_stats.avg_efficiency, 0) AS avg_efficiency,
+                    COALESCE(prod_stats.total_idle_mins, 0) AS total_idle_mins,
+                    -- Last logout/completed time
+                    prod_stats.last_finish_time AS last_finish_time
                 FROM mobile_sessions ms
                 LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
                 LEFT JOIN work_centres wc ON wc.id = COALESCE(ms.work_centre_id, mc.work_centre_id)
                 LEFT JOIN employees e ON e.id = ms.emp_id
+                LEFT JOIN (
+                    -- Aggregate production stats per machine/employee/date for finished cycles
+                    SELECT 
+                        machine_id,
+                        emp_id,
+                        prod_date,
+                        SUM(output_pairs) AS total_output,
+                        COUNT(*) AS total_cycles,
+                        SUM(actual_time) AS total_actual_mins,
+                        SUM(target_mins) AS total_target_mins,
+                        CASE 
+                            WHEN SUM(actual_time) > 0 THEN ROUND((SUM(target_mins) / SUM(actual_time)) * 100, 1)
+                            ELSE 0 
+                        END AS avg_efficiency,
+                        SUM(idle_mins) AS total_idle_mins,
+                        MAX(finish_time) AS last_finish_time
+                    FROM machine_centre_production
+                    WHERE button_status = 2
+                    GROUP BY machine_id, emp_id, prod_date
+                ) prod_stats 
+                    ON prod_stats.machine_id = ms.machine_id 
+                    AND prod_stats.emp_id = ms.emp_id
+                    AND prod_stats.prod_date = DATE(ms.activated_at)
                 WHERE ms.status = 'active' AND ms.activated_at IS NOT NULL
             `;
 

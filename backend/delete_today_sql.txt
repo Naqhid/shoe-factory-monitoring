@@ -1,0 +1,4 @@
+-- Run these SQL commands to delete today's data:
+
+DELETE FROM machine_centre_production WHERE prod_date = CURDATE();
+DELETE FROM machine_centre_summary WHERE prod_date = CURDATE();

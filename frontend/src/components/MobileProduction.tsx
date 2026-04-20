@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
+import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTriangle, LogOut } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -240,20 +240,49 @@ export const MobileProduction: React.FC = () => {
     }, [productionData?.id, productionData?.button_status, productionData?.is_paused, actualTimeCounter, API_BASE]);
 
     // Fetch summary data from machine_centre_summary table
-    const fetchSummaryData = async (machineId: string) => {
+    const fetchSummaryData = async (machineId: string, expectedMinTotal?: number) => {
         setLoadingSummary(true);
         try {
             // Use local date instead of UTC
             const today = new Date();
             const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const response = await apiFetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}`);
-            const result = await response.json();
-            if (result.success && result.data) {
-                setTotalOutputToday(result.data.total_output_pairs || 0);
-                setAvgEfficiencyToday(parseFloat(result.data.avg_efficiency_percent || 0).toFixed(1));
-            } else {
-                setTotalOutputToday(0);
-                setAvgEfficiencyToday('0');
+            
+            // Retry logic: if expectedMinTotal provided, verify we got at least that much
+            let retries = expectedMinTotal ? 3 : 1;
+            let lastResult = null;
+            
+            while (retries > 0) {
+                // Add cache-busting timestamp to prevent browser caching stale data
+                const timestamp = Date.now();
+                const response = await apiFetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}?_=${timestamp}`);
+                const result = await response.json();
+                lastResult = result;
+                
+                if (result.success && result.data) {
+                    const totalOutput = result.data.total_output_pairs || 0;
+                    
+                    // If we have an expected minimum and haven't reached it, retry after delay
+                    if (expectedMinTotal && totalOutput < expectedMinTotal && retries > 1) {
+                        console.log(`Summary not updated yet: ${totalOutput} < ${expectedMinTotal}, retrying...`);
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        retries--;
+                        continue;
+                    }
+                    
+                    setTotalOutputToday(totalOutput);
+                    setAvgEfficiencyToday(parseFloat(result.data.avg_efficiency_percent || 0).toFixed(1));
+                    return;
+                } else {
+                    setTotalOutputToday(0);
+                    setAvgEfficiencyToday('0');
+                    return;
+                }
+            }
+            
+            // Use last result if we exhausted retries
+            if (lastResult?.success && lastResult?.data) {
+                setTotalOutputToday(lastResult.data.total_output_pairs || 0);
+                setAvgEfficiencyToday(parseFloat(lastResult.data.avg_efficiency_percent || 0).toFixed(1));
             }
         } catch (error) {
             console.error('Error fetching summary data:', error);
@@ -601,7 +630,11 @@ export const MobileProduction: React.FC = () => {
                 return data;
             });
             setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
-            await fetchSummaryData(productionData.machine_id);
+            // Calculate expected new total (current + this cycle's output)
+            const expectedMinTotal = totalOutputToday + outputPairs;
+            // Delay to ensure backend summary update completes, then verify with retry
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await fetchSummaryData(productionData.machine_id, expectedMinTotal);
             toast.success('Production finished - Click RESET for next cycle');
         } catch (error) {
             // Reconcile: re-fetch from DB to get true state (date-agnostic)
@@ -652,6 +685,15 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
+    const handleLogout = () => {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('app_authenticated');
+            localStorage.removeItem('mobile_authenticated');
+            localStorage.removeItem('user_info');
+        }
+        navigate('/');
+    };
+
     const calculateEfficiency = () => {
         if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 0;
         // Only calculate after FINISH (button_status === 2)
@@ -663,16 +705,18 @@ export const MobileProduction: React.FC = () => {
 
     const calculateStatus = () => {
         if (!productionData) return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
-        
+
         // Paused/Idle state
         if (productionData.is_paused || productionData.button_status === 3) {
             return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
         }
-        
+
         // Use efficiency from summary table
         const efficiency = parseFloat(avgEfficiencyToday || '0');
-        if (efficiency < 80) {
+        if (efficiency < 70) {
             return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
+        } else if (efficiency < 90) {
+            return { label: 'Average', color: 'text-white', bgColor: 'bg-orange-500' };
         }
         return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
     };
@@ -873,7 +917,7 @@ export const MobileProduction: React.FC = () => {
                             </svg>
                         </button>
                         {headerExpanded && (
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm px-4 pb-4">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm px-4 pb-4">
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Process Name</p>
@@ -906,6 +950,13 @@ export const MobileProduction: React.FC = () => {
                                         <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
                                 </div>
+                                <button
+                                    onClick={handleLogout}
+                                    className="flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-300/50 rounded-lg p-2 transition-colors"
+                                >
+                                    <LogOut className="h-4 w-4 text-red-100" />
+                                    <span className="text-sm font-semibold text-white">Logout</span>
+                                </button>
                             </div>
                         )}
                     </div>
@@ -1008,14 +1059,14 @@ export const MobileProduction: React.FC = () => {
                                 <>
                                     <button
                                         onClick={handleStart}
-                                        disabled={loading || controlsLocked || productionData.button_status === 2}
+                                        disabled={loading || productionData.button_status === 2}
                                         className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" /><span>START</span></>}
                                     </button>
                                     <button
                                         onClick={handleReset}
-                                        disabled={loading || controlsLocked}
+                                        disabled={loading}
                                         className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         <RotateCcw className="h-5 w-5" /><span>RESET</span>
@@ -1025,8 +1076,7 @@ export const MobileProduction: React.FC = () => {
                                 <>
                                     <button
                                         onClick={handleFinish}
-                                        disabled={loading || controlsLocked}
-                                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" /><span>FINISH</span></>}
                                     </button>

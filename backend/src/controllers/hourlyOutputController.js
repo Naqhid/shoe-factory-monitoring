@@ -27,7 +27,7 @@ class HourlyOutputController {
       let [hourlyData] = await db.query(`
         SELECT HOUR(start_time) as hour, SUM(output_pairs) as production
         FROM machine_centre_production
-        WHERE work_centre_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL
+        WHERE work_centre_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL AND button_status = 2
         GROUP BY HOUR(start_time)
         ORDER BY hour
       `, [workCentreId, requestedDate]);
@@ -38,7 +38,7 @@ class HourlyOutputController {
         const [altHourlyData] = await db.query(`
           SELECT HOUR(finish_time) as hour, SUM(output_pairs) as production
           FROM machine_centre_production
-          WHERE work_centre_id = ? AND DATE(prod_date) = ? AND finish_time IS NOT NULL
+          WHERE work_centre_id = ? AND DATE(prod_date) = ? AND finish_time IS NOT NULL AND button_status = 2
           GROUP BY HOUR(finish_time)
           ORDER BY hour
         `, [workCentreId, requestedDate]);
@@ -52,7 +52,7 @@ class HourlyOutputController {
         FROM (
           SELECT SUM(output_pairs) as hourly_sum
           FROM machine_centre_production
-          WHERE work_centre_id = ? AND DATE(prod_date) = ?
+          WHERE work_centre_id = ? AND DATE(prod_date) = ? AND button_status = 2
           GROUP BY HOUR(start_time)
         ) as hourly_totals
       `, [workCentreId, requestedDate]);
@@ -100,7 +100,7 @@ class HourlyOutputController {
         let [hourlyData] = await db.query(`
           SELECT HOUR(start_time) as hour, SUM(output_pairs) as production
           FROM machine_centre_production
-          WHERE work_centre_id = ? AND machine_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL
+          WHERE work_centre_id = ? AND machine_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL AND button_status = 2
           GROUP BY HOUR(start_time)
           ORDER BY hour
         `, [workCentreId, machine.machine_id, requestedDate]);
@@ -109,7 +109,7 @@ class HourlyOutputController {
           [hourlyData] = await db.query(`
             SELECT HOUR(finish_time) as hour, SUM(output_pairs) as production
             FROM machine_centre_production
-            WHERE work_centre_id = ? AND machine_id = ? AND DATE(prod_date) = ? AND finish_time IS NOT NULL
+            WHERE work_centre_id = ? AND machine_id = ? AND DATE(prod_date) = ? AND finish_time IS NOT NULL AND button_status = 2
             GROUP BY HOUR(finish_time)
             ORDER BY hour
           `, [workCentreId, machine.machine_id, requestedDate]);

@@ -11,9 +11,19 @@ const logger = require('./logger');
  *     await conn.execute('UPDATE ...', [...]);
  *     return { id: 1 };
  *   });
+ *
+ * For operations that need to see their own changes within the transaction
+ * (e.g., INSERT then SELECT), use isolationLevel: 'READ COMMITTED':
+ *   const result = await withTransaction(async (conn) => { ... }, { isolationLevel: 'READ COMMITTED' });
  */
-const withTransaction = async (callback) => {
+const withTransaction = async (callback, options = {}) => {
   const connection = await db.getConnection();
+  
+  // Set isolation level if specified (e.g., 'READ COMMITTED' to see own changes)
+  if (options.isolationLevel) {
+    await connection.execute(`SET SESSION TRANSACTION ISOLATION LEVEL ${options.isolationLevel}`);
+  }
+  
   await connection.beginTransaction();
   try {
     const result = await callback(connection);
