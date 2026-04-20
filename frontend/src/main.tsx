@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import App from './App.tsx'
 import { MachineCentreProduction } from './components/MachineCentreProduction.tsx'
-import LogPage from './components/LogPage.tsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -12,7 +11,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/mobile/machine-centre" element={<MachineCentreProduction />} />
         <Route path="/mobile/machine-centre/:machineId" element={<MachineCentreProduction />} />
-        <Route path="/logs" element={<LogPage />} />
         <Route path="/*" element={<App />} />
       </Routes>
     </BrowserRouter>

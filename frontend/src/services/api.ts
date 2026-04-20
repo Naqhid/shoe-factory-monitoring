@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { MachineStatus, RunIdleData, HourlyData, OverallEfficiency, ApiResponse } from '../types';
 
-export const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:3001`;
+const defaultApiBaseUrl = `${window.location.protocol}//${window.location.hostname}:3001`;
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl;
 const API_BASE = `${API_BASE_URL}/api`;
 
 // Central fetch wrapper — attaches JWT and handles 401 with refresh

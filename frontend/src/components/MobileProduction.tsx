@@ -25,6 +25,18 @@ interface ProductionData {
     is_paused?: boolean;
 }
 
+const normalizePauseState = <T extends ProductionData>(record: T): T => {
+    // Pause state is deprecated: treat any in-progress paused record as running.
+    if (record.button_status === 3 && record.start_time) {
+        return {
+            ...record,
+            button_status: 1,
+            is_paused: false,
+        };
+    }
+    return record;
+};
+
 // Tries each candidate URL in order, shows first one that loads
 const QRImageWithFallback: React.FC<{ candidates: string[]; machineId: string }> = ({ candidates, machineId }) => {
     const [idx, setIdx] = React.useState(0);
@@ -46,7 +58,7 @@ const QRWaitScreen: React.FC<{
     machineId: string;
     urlMachineId: string;
     qrCandidates: string[];
-    onSessionActive: (empCode: string) => void;
+    onSessionActive: (empCode: string, sessionId?: string) => void;
 }> = ({ machineId, urlMachineId, qrCandidates, onSessionActive }) => {
     const API_BASE = `${window.location.protocol}//${window.location.hostname}:3001`;
     const [machineName, setMachineName] = React.useState<string>('');
@@ -72,7 +84,7 @@ const QRWaitScreen: React.FC<{
                 const json = await res.json();
                 if (json.success && json.data?.emp_code) {
                     clearInterval(interval);
-                    onSessionActive(json.data.emp_code);
+                    onSessionActive(json.data.emp_code, json.data.session_id);
                 }
             } catch {}
         }, 1000);
@@ -120,6 +132,9 @@ export const MobileProduction: React.FC = () => {
     const [showFinishConfirm, setShowFinishConfirm] = useState(false);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const overTargetToastShownRef = React.useRef(false);
+    const [machineBusyRecord, setMachineBusyRecord] = useState<{ emp_id: string | number; employee_name?: string; machine_id: string } | null>(null);
+    const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
+    const [hasTabSessionBinding, setHasTabSessionBinding] = useState(false);
 
     const formatOperatorDisplay = (name?: string, code?: string | number) => {
         const safeName = (name || '').toString().trim();
@@ -144,6 +159,7 @@ export const MobileProduction: React.FC = () => {
     
     if (!urlMachineId) urlMachineId = queryParams.get('machine');
     if (!urlEmpId) urlEmpId = queryParams.get('employee');
+    const sessionToken = queryParams.get('session');
 
     // Map URL slugs to actual machine_ids stored in DB
     // Format: { urlSlug: actualMachineId }
@@ -262,16 +278,38 @@ export const MobileProduction: React.FC = () => {
                     // Add minimum delay to show loader
                     const [_, __] = await Promise.all([
                         (async () => {
-                            // Check for existing production record for today that's not finished
-                    const today = new Date();
-                    const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                    const existingRes = await apiFetch(`${API_BASE}/api/mobile-production/machine/${effectiveMachineId}/date/${localDate}`);
+                            // Check for latest unfinished production record (date-agnostic) to preserve state across refresh/day rollover
+                    const existingRes = await apiFetch(`${API_BASE}/api/mobile-production/machine/${effectiveMachineId}/latest-unfinished`);
                     const existingData = await existingRes.json();
+
+                    let isAuthorized = false;
+                    try {
+                        const activeSessionRes = await apiFetch(`${API_BASE}/api/mobile-session/active-for/${effectiveMachineId}`);
+                        const activeSessionData = await activeSessionRes.json();
+                        const bindingKey = `mobile_control_session_${effectiveMachineId}_${urlEmpId}`;
+                        const boundSession = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(bindingKey) : null;
+                        setHasTabSessionBinding(!!boundSession && !!sessionToken && String(boundSession) === String(sessionToken));
+                        if (activeSessionData.success && activeSessionData.data) {
+                            const activeSession = activeSessionData.data;
+                            isAuthorized =
+                                !!sessionToken &&
+                                String(activeSession.emp_code) === String(urlEmpId) &&
+                                String(activeSession.session_id) === String(sessionToken);
+                        }
+                    } catch {
+                        isAuthorized = false;
+                        setHasTabSessionBinding(false);
+                    }
+                    setIsSessionAuthorizedController(isAuthorized);
                     
-                    // Find the most recent unfinished record (button_status !== 2)
-                    const unfinishedRecord = existingData.data?.find((r: any) => r.button_status !== 2);
-                    
-                    if (unfinishedRecord) {
+                    // Use unfinished record if present.
+                    // If it belongs to a different operator, keep dashboard visible but lock controls.
+                    const rawUnfinished = existingData.data;
+                    const isOtherOperatorRecord = rawUnfinished && String(rawUnfinished.emp_id) !== String(urlEmpId);
+                    const activeRecord = rawUnfinished || null;
+                    setMachineBusyRecord(isOtherOperatorRecord ? rawUnfinished : null);
+
+                    if (activeRecord) {
                         // Use the unfinished record ONLY if it's truly in progress (button_status = 1 or 3)
                         // If button_status = 2 (finished), create new record instead
                         const [empRes, macRes, wcRes, planningRes, initRes] = await Promise.all([
@@ -283,17 +321,17 @@ export const MobileProduction: React.FC = () => {
                         ]);
 
                         const employee = empRes.data?.find((e: any) =>
-                            e.id === parseInt(unfinishedRecord.emp_id) ||
-                            e.code === unfinishedRecord.emp_id ||
-                            e.emp_id === unfinishedRecord.emp_id
+                            e.id === parseInt(activeRecord.emp_id) ||
+                            e.code === activeRecord.emp_id ||
+                            e.emp_id === activeRecord.emp_id
                         );
                         const machine = macRes.data?.find((m: any) => (m.machine_id === effectiveMachineId || m.code === urlMachineId));
-                        const workCentre = wcRes.data?.find((wc: any) => wc.id === unfinishedRecord.work_centre_id);
+                        const workCentre = wcRes.data?.find((wc: any) => wc.id === activeRecord.work_centre_id);
 
                         // Get target_pairs from planning if not set
-                        let targetPairs = unfinishedRecord.target_pairs || 0;
+                        let targetPairs = activeRecord.target_pairs || 0;
                         if (targetPairs === 0) {
-                            const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === unfinishedRecord.work_centre_id) || [];
+                            const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === activeRecord.work_centre_id) || [];
                             const planning = matchingPlans.sort((a: any, b: any) => 
                                 new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
                             )[0];
@@ -305,7 +343,7 @@ export const MobileProduction: React.FC = () => {
                         const refreshedTargetMins =
                             initRes?.success && typeof initRes?.data?.targetMins !== 'undefined'
                                 ? Number(initRes.data.targetMins)
-                                : Number(unfinishedRecord.target_mins || 0);
+                                : Number(activeRecord.target_mins || 0);
 
                         setSessionStatus('active');
                         setQrData(effectiveMachineId);
@@ -326,16 +364,17 @@ export const MobileProduction: React.FC = () => {
                             }
                         }
                         setMachineName(machineCentreName);
+                        const normalizedRecord = normalizePauseState(activeRecord);
                         setProductionData({
-                            ...unfinishedRecord,
+                            ...normalizedRecord,
                             target_mins: refreshedTargetMins,
                             target_pairs: targetPairs,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
                         // Restore counter: saved actual_time + elapsed seconds since start_time (recovers unsaved seconds on refresh)
-                        const savedSeconds = (unfinishedRecord.actual_time || 0) * 60;
-                        const elapsedSinceStart = unfinishedRecord.start_time && unfinishedRecord.button_status === 1
-                            ? Math.floor((Date.now() - new Date(unfinishedRecord.start_time).getTime()) / 1000)
+                        const savedSeconds = (normalizedRecord.actual_time || 0) * 60;
+                        const elapsedSinceStart = normalizedRecord.start_time && normalizedRecord.button_status === 1
+                            ? Math.floor((Date.now() - new Date(normalizedRecord.start_time).getTime()) / 1000)
                             : 0;
                         // Use whichever is larger — DB value or live elapsed (in case of clock drift)
                         setActualTimeCounter(Math.max(savedSeconds, elapsedSinceStart));
@@ -426,73 +465,8 @@ export const MobileProduction: React.FC = () => {
             }, 5000); // 5 second polling as requested
             return () => clearInterval(globalSyncInterval);
         }
-    }, [location.pathname, API_BASE, navigate, urlMachineId, urlEmpId]);
+    }, [location.pathname, location.search, API_BASE, navigate, urlMachineId, urlEmpId, sessionToken]);
 
-
-    const initializeProduction = async (machineId: string, empCode: string, workCentreId: number = 1, targetMins?: number, targetPairs?: number, workCentreName?: string) => {
-        if (isInitializingRef.current) return;
-        isInitializingRef.current = true;
-        setLoading(true);
-        try {
-            // Always fetch from optimized endpoint to get latest data
-            const initResponse = await apiFetch(`${API_BASE}/api/mobile-production/init/${machineId}/${empCode}`);
-            const initResult = await initResponse.json();
-            if (!initResult.success) {
-                toast.error(initResult.message || 'Failed to initialize');
-                return;
-            }
-            // Use fetched values, override with provided values if they exist
-            targetMins = targetMins || initResult.data.targetMins;
-            targetPairs = targetPairs || initResult.data.targetPairs;
-            workCentreName = workCentreName || initResult.data.workCentre.name;
-            workCentreId = initResult.data.machine.work_centre_id || workCentreId;
-
-            const empRes = await apiFetch(`${API_BASE}/api/masters/employees/emp_id/${empCode}`);
-            const empData = await empRes.json();
-            if (!empData.success || !empData.data) {
-                toast.error(`Employee ${empCode} not found`);
-                return;
-            }
-
-            const localDate = new Date();
-            const prodDate = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
-            const newData: ProductionData = {
-                prod_date: prodDate,
-                work_centre_id: workCentreId,
-                work_centre_name: workCentreName || `WC-${workCentreId}`,
-                machine_id: machineId,
-                emp_id: empData.data.id,
-                output_pairs: 0,
-                target_mins: targetMins,
-                target_pairs: targetPairs,
-                start_time: null,
-                finish_time: null,
-                idle_start_time: null,
-                actual_time: 0,
-                button_status: 3,
-                is_paused: false
-            };
-
-            const response = await apiFetch(`${API_BASE}/api/mobile-production`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newData)
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                setProductionData({ ...newData, id: result.data.id });
-                setActualTimeCounter(0);
-                toast.success('Production initialized');
-            }
-        } catch (error) {
-            console.error('Error initializing production:', error);
-            toast.error('Failed to initialize production');
-        } finally {
-            setLoading(false);
-            isInitializingRef.current = false;
-        }
-    };
 
     // Retry helper — retries up to maxRetries times with exponential backoff
     const withRetry = async (fn: () => Promise<any>, maxRetries = 3): Promise<any> => {
@@ -550,7 +524,7 @@ export const MobileProduction: React.FC = () => {
                 const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ button_status: 1 })
+                    body: JSON.stringify({ button_status: 1, emp_id: productionData.emp_id, session_id: sessionToken })
                 });
                 const data = await response.json();
                 if (!data.success) throw new Error(data.message || 'Failed');
@@ -559,14 +533,15 @@ export const MobileProduction: React.FC = () => {
             setProductionData({ ...productionData, button_status: 1, is_paused: false });
             toast.success('Production started');
         } catch (error) {
-            // Reconcile: re-fetch from DB to get true state
+            // Reconcile: re-fetch from DB to get true state (date-agnostic)
             try {
-                const today = new Date();
-                const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${productionData.machine_id}/date/${localDate}`);
+                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${productionData.machine_id}/latest-unfinished`);
                 const data = await res.json();
-                const record = data.data?.find((r: any) => r.id === productionData.id);
-                if (record) setProductionData(prev => ({ ...prev!, button_status: record.button_status }));
+                const record = data.data;
+                if (record && record.id === productionData.id) {
+                    const normalizedRecord = normalizePauseState(record);
+                    setProductionData(prev => ({ ...prev!, button_status: normalizedRecord.button_status, is_paused: normalizedRecord.is_paused || false }));
+                }
             } catch { /* keep previous state */ }
             toast.error('Failed to start. Please try again.');
         } finally {
@@ -588,7 +563,7 @@ export const MobileProduction: React.FC = () => {
                 const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ button_status: 3, stoppage_reason: reason })
+                    body: JSON.stringify({ button_status: 3, stoppage_reason: reason, emp_id: productionData.emp_id, session_id: sessionToken })
                 });
                 const data = await response.json();
                 if (!data.success) throw new Error(data.message || 'Failed');
@@ -619,7 +594,7 @@ export const MobileProduction: React.FC = () => {
                 const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ button_status: 2, output_pairs: outputPairs })
+                    body: JSON.stringify({ button_status: 2, output_pairs: outputPairs, emp_id: productionData.emp_id, session_id: sessionToken })
                 });
                 const data = await response.json();
                 if (!data.success) throw new Error(data.message || 'Failed');
@@ -629,16 +604,15 @@ export const MobileProduction: React.FC = () => {
             await fetchSummaryData(productionData.machine_id);
             toast.success('Production finished - Click RESET for next cycle');
         } catch (error) {
-            // Reconcile: re-fetch from DB to get true state
+            // Reconcile: re-fetch from DB to get true state (date-agnostic)
             try {
-                const today = new Date();
-                const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${productionData.machine_id}/date/${localDate}`);
+                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${productionData.machine_id}/latest-unfinished`);
                 const data = await res.json();
-                const record = data.data?.find((r: any) => r.id === productionData.id);
-                if (record) {
-                    setProductionData(prev => ({ ...prev!, button_status: record.button_status, output_pairs: record.output_pairs }));
-                    if (record.button_status === 2) {
+                const record = data.data;
+                if (record && record.id === productionData.id) {
+                    const normalizedRecord = normalizePauseState(record);
+                    setProductionData(prev => ({ ...prev!, button_status: normalizedRecord.button_status, output_pairs: normalizedRecord.output_pairs, is_paused: normalizedRecord.is_paused || false }));
+                    if (normalizedRecord.button_status === 2) {
                         // Actually finished despite error — update UI correctly
                         await fetchSummaryData(productionData.machine_id);
                         toast.success('Production finished - Click RESET for next cycle');
@@ -729,7 +703,15 @@ export const MobileProduction: React.FC = () => {
                 machineId={effectiveMachineId}
                 urlMachineId={urlMachineId}
                 qrCandidates={qrCandidates}
-                onSessionActive={(empCode) => navigate(`/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(empCode)}`)}
+                onSessionActive={(empCode, sessionId) => {
+                    const machine = encodeURIComponent(urlMachineId);
+                    const emp = encodeURIComponent(empCode);
+                    const token = sessionId ? encodeURIComponent(sessionId) : '';
+                    if (sessionId && typeof sessionStorage !== 'undefined') {
+                        sessionStorage.setItem(`mobile_control_session_${urlMachineId}_${empCode}`, sessionId);
+                    }
+                    navigate(`/mobile/${machine}/${emp}${token ? `?session=${token}` : ''}`);
+                }}
             />
         );
     }
@@ -765,6 +747,36 @@ export const MobileProduction: React.FC = () => {
         !productionData.is_paused &&
         Number(productionData.target_mins || 0) > 0 &&
         actualTimeCounter / 60 > Number(productionData.target_mins || 0);
+
+    const currentLoggedInUser = (() => {
+        try {
+            if (typeof localStorage === 'undefined') return null;
+            const raw = localStorage.getItem('user_info');
+            return raw ? JSON.parse(raw) : null;
+        } catch {
+            return null;
+        }
+    })();
+
+    const currentUserCode =
+        currentLoggedInUser?.code ||
+        currentLoggedInUser?.emp_code ||
+        currentLoggedInUser?.emp_id ||
+        '';
+
+    const isLoggedInOperatorOwner =
+        !!currentLoggedInUser &&
+        currentLoggedInUser?.role === 'Machine Centre User' &&
+        String(currentUserCode) === String(urlEmpId || '') &&
+        (
+            !currentLoggedInUser?.machine_id ||
+            String(currentLoggedInUser.machine_id) === String(effectiveMachineId)
+        );
+
+    const controlsLockedByOtherOperator = !!machineBusyRecord;
+    const controlsLockedBySession = !(isSessionAuthorizedController && hasTabSessionBinding);
+    const controlsLockedByLoggedInUser = !isLoggedInOperatorOwner;
+    const controlsLocked = controlsLockedByOtherOperator || controlsLockedBySession || controlsLockedByLoggedInUser;
 
     // DASHBOARD STATE
     return (
@@ -843,16 +855,16 @@ export const MobileProduction: React.FC = () => {
                     <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl">
                         <button
                             onClick={() => setHeaderExpanded(!headerExpanded)}
-                            className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+                            className="relative w-full p-4 hover:bg-white/5 transition-colors"
                         >
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-col items-center justify-center gap-2 w-full text-center">
                                 <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
                                 {!headerExpanded && (
                                     <span className="text-xs bg-white/20 px-2 py-1 rounded-full animate-pulse">Tap to view details</span>
                                 )}
                             </div>
                             <svg
-                                className={`h-6 w-6 transition-transform ${headerExpanded ? 'rotate-180' : ''}`}
+                                className={`absolute right-4 top-1/2 -translate-y-1/2 h-6 w-6 transition-transform ${headerExpanded ? 'rotate-180' : ''}`}
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -996,14 +1008,14 @@ export const MobileProduction: React.FC = () => {
                                 <>
                                     <button
                                         onClick={handleStart}
-                                        disabled={loading || productionData.button_status === 2}
+                                        disabled={loading || controlsLocked || productionData.button_status === 2}
                                         className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" /><span>START</span></>}
                                     </button>
                                     <button
                                         onClick={handleReset}
-                                        disabled={loading}
+                                        disabled={loading || controlsLocked}
                                         className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         <RotateCcw className="h-5 w-5" /><span>RESET</span>
@@ -1013,17 +1025,10 @@ export const MobileProduction: React.FC = () => {
                                 <>
                                     <button
                                         onClick={handleFinish}
-                                        disabled={loading}
+                                        disabled={loading || controlsLocked}
                                         className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" /><span>FINISH</span></>}
-                                    </button>
-                                    <button
-                                        onClick={handlePause}
-                                        disabled={loading}
-                                        className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-orange-600 hover:to-orange-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><span>⏸</span><span>STOP</span></>}
                                     </button>
                                 </>
                             ) : null}

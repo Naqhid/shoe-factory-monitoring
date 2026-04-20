@@ -410,24 +410,55 @@ class AlertController {
 
   // Upsert alert — avoid duplicate alerts for same type/machine/date
   static async _upsertAlert({ alert_type, severity, work_centre_id, machine_id, alert_date, message, threshold_value, actual_value }) {
+    const wcId = work_centre_id || null;
+    const machineId = machine_id || null;
+    const threshold = threshold_value || null;
+    const actual = actual_value || null;
+
+    // Null-safe dedupe first. This handles machine_id = NULL alerts (e.g., headcount/target-at-risk)
+    // where MySQL UNIQUE constraints allow multiple NULL rows.
+    const [updateResult] = await db.execute(`
+      UPDATE production_alerts
+      SET severity = ?,
+          message = ?,
+          threshold_value = ?,
+          actual_value = ?,
+          is_read = 0,
+          created_at = NOW()
+      WHERE alert_type = ?
+        AND work_centre_id <=> ?
+        AND machine_id <=> ?
+        AND alert_date = ?
+      LIMIT 1
+    `, [
+      severity,
+      message,
+      threshold,
+      actual,
+      alert_type,
+      wcId,
+      machineId,
+      alert_date,
+    ]);
+
+    if (updateResult.affectedRows > 0) {
+      return;
+    }
+
     await db.execute(`
       INSERT INTO production_alerts 
         (alert_type, severity, work_centre_id, machine_id, alert_date, message, threshold_value, actual_value, is_read)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-      ON DUPLICATE KEY UPDATE
-        severity = VALUES(severity), message = VALUES(message),
-        actual_value = VALUES(actual_value), is_read = 0, created_at = NOW()
-    `, [alert_type, severity, work_centre_id || null, machine_id || null,
-        alert_date, message, threshold_value || null, actual_value || null])
-      .catch(() => {
-        // If no unique key, just insert
-        return db.execute(`
-          INSERT INTO production_alerts 
-            (alert_type, severity, work_centre_id, machine_id, alert_date, message, threshold_value, actual_value)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [alert_type, severity, work_centre_id || null, machine_id || null,
-           alert_date, message, threshold_value || null, actual_value || null]);
-      });
+    `, [
+      alert_type,
+      severity,
+      wcId,
+      machineId,
+      alert_date,
+      message,
+      threshold,
+      actual,
+    ]);
   }
 }
 

@@ -8,9 +8,11 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 interface LayoutProps {
   children: React.ReactNode;
   activeMenu?: string;
+  hideTopHeader?: boolean;
+  hideLogout?: boolean;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '', hideTopHeader = false, hideLogout = false }) => {
   const [sidebarOpen, setSidebarOpen] = React.useState(() => window.innerWidth >= 1024);
   const navigate = useNavigate();
 
@@ -38,7 +40,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
   return (
     <>
       {/* Fixed header when sidebar is closed */}
-      {!sidebarOpen && (
+      {!sidebarOpen && !hideTopHeader && (
         <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2">
             <Activity className="h-6 w-6 text-blue-600 ml-16" />
@@ -80,12 +82,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '' }) => 
           activeMenu={activeMenu}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          hideLogout={hideLogout}
         />
 
         {/* Main content area */}
         <div className={`flex-1 flex flex-col min-w-0 ${sidebarOpen ? 'lg:ml-64' : ''}`}>
           {/* Spacer for fixed header when sidebar is closed */}
-          {!sidebarOpen && <div className="h-20 flex-shrink-0"></div>}
+          {!sidebarOpen && !hideTopHeader && <div className="h-20 flex-shrink-0"></div>}
           
           {/* Content wrapper */}
           <div className="flex-1 overflow-auto min-h-0">

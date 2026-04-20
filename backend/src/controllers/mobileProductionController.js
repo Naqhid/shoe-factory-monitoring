@@ -68,6 +68,29 @@ exports.getByMachineAndDate = async (req, res, next) => {
   }
 };
 
+// Get latest unfinished production data by machine (date-agnostic)
+exports.getLatestUnfinishedByMachine = async (req, res, next) => {
+  try {
+    const { machineId } = req.params;
+    const [rows] = await db.query(`
+      SELECT pd.*, 
+             wc.name as work_centre_name,
+             e.name as employee_name
+      FROM machine_centre_production pd
+      LEFT JOIN work_centres wc ON pd.work_centre_id = wc.id
+      LEFT JOIN employees e ON pd.emp_id = e.code
+      WHERE pd.machine_id = ? AND pd.button_status != 2
+      ORDER BY pd.created_at DESC
+      LIMIT 1
+    `, [machineId]);
+
+    res.json({ success: true, data: rows[0] || null });
+  } catch (error) {
+    logger.error('Error fetching latest unfinished production data by machine:', error);
+    next(error);
+  }
+};
+
 // Create production data
 exports.create = async (req, res, next) => {
   try {
@@ -156,31 +179,62 @@ exports.update = async (req, res, next) => {
 exports.updateStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { button_status, output_pairs, actual_time, stoppage_reason } = req.body;
+    const { button_status, output_pairs, actual_time, stoppage_reason, emp_id, session_id } = req.body;
+    const normalizedButtonStatus = button_status === 3 ? 1 : button_status;
 
     const result = await withTransaction(async (conn) => {
       // Verify record exists
       const [existing] = await conn.execute('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
       if (existing.length === 0) throw Object.assign(new Error('Production data not found'), { status: 404 });
+      const existingRecord = existing[0];
+
+      // Ownership guard for control actions (start/stop/finish)
+      const isControlAction = normalizedButtonStatus !== undefined || output_pairs !== undefined || stoppage_reason !== undefined;
+      if (isControlAction) {
+        if (emp_id === undefined || emp_id === null) {
+          throw Object.assign(new Error('emp_id is required for status control actions'), { status: 400 });
+        }
+
+        if (!session_id) {
+          throw Object.assign(new Error('session_id is required for status control actions'), { status: 400 });
+        }
+
+        if (String(existingRecord.emp_id) !== String(emp_id)) {
+          throw Object.assign(new Error('Operator mismatch: this production record belongs to a different operator'), { status: 403 });
+        }
+
+        const [sessionRows] = await conn.execute(
+          `SELECT session_id
+           FROM mobile_sessions
+           WHERE machine_id = ?
+             AND emp_code = ?
+             AND status = 'active'
+             AND DATE(activated_at) = CURDATE()
+           ORDER BY activated_at DESC
+           LIMIT 1`,
+          [existingRecord.machine_id, String(existingRecord.emp_id)]
+        );
+
+        if (sessionRows.length === 0 || String(sessionRows[0].session_id) !== String(session_id)) {
+          throw Object.assign(new Error('Session mismatch: control is allowed only from the active scanned session'), { status: 403 });
+        }
+      }
 
       let updateQuery = 'UPDATE machine_centre_production SET';
       let params = [];
       let hasUpdate = false;
 
       // Handle button_status update (may not be provided during time-only sync)
-      if (button_status !== undefined) {
+      if (normalizedButtonStatus !== undefined) {
         updateQuery += ' button_status = ?';
-        params.push(button_status);
+        params.push(normalizedButtonStatus);
         hasUpdate = true;
 
-        if (button_status === 2) {
+        if (normalizedButtonStatus === 2) {
           updateQuery += ', finish_time = NOW()';
           if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
-        } else if (button_status === 1) {
+        } else if (normalizedButtonStatus === 1) {
           updateQuery += ', idle_stop_time = NOW()';
-        } else if (button_status === 3) {
-          updateQuery += ', idle_start_time = NOW()';
-          if (stoppage_reason) { updateQuery += ', stoppage_reason = ?'; params.push(stoppage_reason); }
         }
       }
 
@@ -196,8 +250,8 @@ exports.updateStatus = async (req, res, next) => {
       await conn.execute(updateQuery, params);
 
       // On finish: update summary table atomically in same transaction
-      if (button_status === 2) {
-        const prod = existing[0];
+      if (normalizedButtonStatus === 2) {
+        const prod = existingRecord;
         await conn.execute(
           `INSERT INTO machine_centre_summary 
            (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, button_status)

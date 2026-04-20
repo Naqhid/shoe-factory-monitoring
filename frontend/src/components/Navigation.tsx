@@ -9,11 +9,13 @@ interface NavigationProps {
   activeMenu: string;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  hideLogout?: boolean;
 }
 
 const processMenus = [
   { key: 'overview', label: 'TV Dashboard', icon: Tv },
   { key: 'reports', label: 'Reports', icon: TrendingUp },
+  { key: 'logs', label: 'Login Logs', icon: FileText },
   { key: 'production_routing', label: 'Routing', icon: Route },
   { key: 'production_planning', label: 'Planning', icon: Calendar },
   { key: 'line_setup_form', label: 'Line Setup ', icon: UserCheck },
@@ -41,7 +43,7 @@ const setupMenus = [
   { key: 'monitoring', label: 'Monitoring', icon: MonitorDot },
 ];
 
-export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar }) => {
+export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar, hideLogout = false }) => {
   const navigate = useNavigate();
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
   const [processExpanded, setProcessExpanded] = React.useState(true);
@@ -191,11 +193,13 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
             </div>
           )}
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <button type="button" onClick={handleLogout} className="flex items-center w-full text-left p-2 rounded-md text-red-600 hover:bg-red-50 transition-colors">
-              <LogOut className="h-4 w-4 mr-2" />Logout
-            </button>
-          </div>
+          {!hideLogout && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <button type="button" onClick={handleLogout} className="flex items-center w-full text-left p-2 rounded-md text-red-600 hover:bg-red-50 transition-colors">
+                <LogOut className="h-4 w-4 mr-2" />Logout
+              </button>
+            </div>
+          )}
         </nav>
       </div>
     </>
