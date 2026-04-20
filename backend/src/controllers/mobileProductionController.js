@@ -215,35 +215,47 @@ exports.updateStatus = async (req, res, next) => {
     params.push(id);
     await db.execute(updateQuery, params);
 
-    // On finish: update summary table after the main update (outside transaction)
-    // This ensures the SELECT sees the committed data
+    // On finish: update summary table after the main update
     if (normalizedButtonStatus === 2) {
       const prod = existingRecord;
       try {
-        // Small delay to ensure MySQL has processed generated columns
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // CRITICAL FIX: Instead of relying on MySQL generated columns which may not be immediately visible,
+        // we calculate the summary directly using raw time calculations
         
-        // Re-read the updated record to ensure generated columns (actual_time) are calculated
-        const [updatedRows] = await db.execute(
-          'SELECT actual_time, finish_time FROM machine_centre_production WHERE id = ?', 
-          [id]
+        // Get all finished records and calculate sums manually
+        const [finishedRecords] = await db.execute(
+          `SELECT 
+            output_pairs, 
+            target_mins,
+            TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
+            COALESCE(idle_mins, 0) as idle_mins
+           FROM machine_centre_production 
+           WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
+          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
         );
-        if (updatedRows.length > 0) {
-          logger.info(`Updated record - actual_time: ${updatedRows[0].actual_time}, finish_time: ${updatedRows[0].finish_time}`);
-        }
         
-        // Aggregate all FINISHED records only (button_status = 2) for this machine/date/employee
-        // Note: avg_efficiency_percent is a GENERATED column, auto-calculated by MySQL
+        // Calculate totals manually
+        let totalOutput = 0;
+        let totalTargetMins = 0;
+        let totalActualMins = 0;
+        let totalIdleMins = 0;
+        
+        finishedRecords.forEach(record => {
+          totalOutput += parseInt(record.output_pairs) || 0;
+          totalTargetMins += parseFloat(record.target_mins) || 0;
+          totalActualMins += parseFloat(record.actual_mins) || 0;
+          totalIdleMins += parseFloat(record.idle_mins) || 0;
+        });
+        
+        const cumAvgTime = totalOutput > 0 ? (totalActualMins / totalOutput) : 0;
+        
+        logger.info(`Manual summary calc for ${prod.machine_id}: output=${totalOutput}, actual=${totalActualMins}, target=${totalTargetMins}, idle=${totalIdleMins}, cycles=${finishedRecords.length}`);
+        
+        // Update summary with calculated values (not relying on generated columns)
         await db.execute(
           `INSERT INTO machine_centre_summary
            (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
-           SELECT prod_date, work_centre_id, machine_id, emp_id,
-             SUM(output_pairs), SUM(target_mins), SUM(actual_time), SUM(idle_mins),
-             CASE WHEN SUM(output_pairs) > 0 THEN SUM(actual_time) / SUM(output_pairs) ELSE 0 END,
-             MAX(button_status)
-           FROM machine_centre_production
-           WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2
-           GROUP BY prod_date, work_centre_id, machine_id, emp_id
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              total_output_pairs = VALUES(total_output_pairs),
              total_target_mins = VALUES(total_target_mins),
@@ -252,9 +264,11 @@ exports.updateStatus = async (req, res, next) => {
              cum_avg_time = VALUES(cum_avg_time),
              button_status = VALUES(button_status),
              updated_at = CURRENT_TIMESTAMP`,
-          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
+          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id,
+           totalOutput, totalTargetMins, totalActualMins, totalIdleMins, cumAvgTime, 2]
         );
-        logger.info(`Summary updated for machine ${prod.machine_id}, emp ${prod.emp_id} on ${prod.prod_date}`);
+        
+        logger.info(`Summary updated successfully: ${totalOutput} pairs from ${finishedRecords.length} cycles`);
       } catch (summaryError) {
         logger.error('Error updating summary after finish:', summaryError);
         // Don't fail the main request if summary update fails
@@ -364,31 +378,77 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
     const { machineId, date } = req.params;
     logger.info(`Fetching summary for machine: ${machineId}, date: ${date}`);
     
-    const [rows] = await db.query(`
+    // CRITICAL FIX: Always recalculate from production records to ensure fresh data
+    // Don't rely solely on summary table which may have stale/generated column issues
+    const [productionRows] = await db.query(`
       SELECT 
-        machine_id,
-        prod_date,
-        SUM(total_output_pairs) as total_output_pairs,
-        SUM(total_target_mins) as total_target_mins,
-        SUM(total_actual_mins) as total_actual_mins,
-        SUM(total_idle_mins) as total_idle_mins,
-        CASE WHEN SUM(total_target_mins) > 0 THEN (SUM(total_actual_mins) / SUM(total_target_mins)) * 100 ELSE 0 END as avg_efficiency_percent,
-        CASE WHEN SUM(total_output_pairs) > 0 THEN SUM(total_actual_mins) / SUM(total_output_pairs) ELSE 0 END as cum_avg_time
-      FROM machine_centre_summary
-      WHERE machine_id = ? AND prod_date = ?
-      GROUP BY machine_id, prod_date
+        SUM(output_pairs) as total_output_pairs,
+        SUM(target_mins) as total_target_mins,
+        SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)) as total_actual_mins,
+        SUM(COALESCE(idle_mins, 0)) as total_idle_mins,
+        COUNT(*) as total_cycles
+      FROM machine_centre_production
+      WHERE machine_id = ? AND prod_date = ? AND button_status = 2
     `, [machineId, date]);
-
-    logger.info(`Found ${rows.length} summary records`);
-    if (rows.length > 0) {
-      logger.info(`Summary data: ${JSON.stringify(rows[0])}`);
-    }
-
-    if (rows.length === 0) {
+    
+    const prodData = productionRows[0];
+    
+    if (!prodData || !prodData.total_output_pairs) {
+      logger.info(`No finished production records found for ${machineId} on ${date}`);
       return res.json({ success: true, data: null });
     }
-
-    res.json({ success: true, data: rows[0] });
+    
+    // Calculate derived values
+    const totalOutput = parseInt(prodData.total_output_pairs) || 0;
+    const totalTargetMins = parseFloat(prodData.total_target_mins) || 0;
+    const totalActualMins = parseFloat(prodData.total_actual_mins) || 0;
+    const totalIdleMins = parseFloat(prodData.total_idle_mins) || 0;
+    
+    const avgEfficiency = totalTargetMins > 0 
+      ? ((totalActualMins / totalTargetMins) * 100).toFixed(1)
+      : '0';
+    const cumAvgTime = totalOutput > 0
+      ? (totalActualMins / totalOutput).toFixed(2)
+      : '0';
+    
+    const result = {
+      machine_id: machineId,
+      prod_date: date,
+      total_output_pairs: totalOutput,
+      total_target_mins: totalTargetMins,
+      total_actual_mins: totalActualMins,
+      total_idle_mins: totalIdleMins,
+      avg_efficiency_percent: avgEfficiency,
+      cum_avg_time: cumAvgTime,
+      total_cycles: parseInt(prodData.total_cycles) || 0
+    };
+    
+    logger.info(`Fresh calc for ${machineId}: ${JSON.stringify(result)}`);
+    
+    // Also update the summary table to keep it in sync (fire and forget)
+    db.execute(
+      `INSERT INTO machine_centre_summary
+       (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
+       SELECT prod_date, work_centre_id, machine_id, emp_id,
+         SUM(output_pairs), SUM(target_mins), 
+         SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)), 
+         SUM(COALESCE(idle_mins, 0)),
+         CASE WHEN SUM(output_pairs) > 0 THEN SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)) / SUM(output_pairs) ELSE 0 END,
+         2
+       FROM machine_centre_production
+       WHERE machine_id = ? AND prod_date = ? AND button_status = 2
+       GROUP BY prod_date, work_centre_id, machine_id, emp_id
+       ON DUPLICATE KEY UPDATE
+         total_output_pairs = VALUES(total_output_pairs),
+         total_target_mins = VALUES(total_target_mins),
+         total_actual_mins = VALUES(total_actual_mins),
+         total_idle_mins = VALUES(total_idle_mins),
+         cum_avg_time = VALUES(cum_avg_time),
+         updated_at = CURRENT_TIMESTAMP`,
+      [machineId, date]
+    ).catch(err => logger.error('Background summary sync error:', err));
+    
+    res.json({ success: true, data: result });
   } catch (error) {
     logger.error('Error fetching summary data:', error);
     next(error);

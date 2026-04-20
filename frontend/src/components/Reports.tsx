@@ -45,7 +45,7 @@ const HEADER_MAP: Record<string, string> = {
   color: 'Color', leather: 'Leather', group: 'Group', total_planned_qty: 'Total Planned',
   total_output: 'Total Output', avg_hourly_output: 'Avg Hourly Output',
   '9_10': '9-10', '10_11': '10-11', '11_12': '11-12', '12_1': '12-1',
-  '2_3': '2-3', '3_4': '3-4', '4_5': '4-5', '5_6': '5-6',
+  '2_3': '2-3', '3_4': '3-4', '4_5': '4-5', '5_6': '5-6', '6_7': '6-7',
   process: 'Process/Machine', output_percent: 'Output %',
   total_standard_mins_value: 'Std Mins', total_produced_mins_value: 'Actual Mins',
   targeted_output_smv: 'Target @ SMV', efficiency_percent: 'Efficiency %',
@@ -208,7 +208,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Customer','Article No','Color','Leather','Group','Planned','Output','WIP','Avg/Hr','9-10','10-11','11-12','12-1','2-3','3-4','4-5','5-6'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Customer','Article No','Color','Leather','Group','Planned','Output','WIP','Avg/Hr','9-10','10-11','11-12','12-1','2-3','3-4','4-5','5-6','6-7'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => {
@@ -222,7 +222,7 @@ export const Reports: React.FC = () => {
                   <Td center><span className="font-bold text-green-600">{r(row.total_output)}</span></Td>
                   <Td center><span className={`font-semibold ${wip > 0 ? 'text-red-500' : 'text-gray-400'}`}>{wip}</span></Td>
                   <Td center>{r(row.avg_hourly_output)}</Td>
-                  {['9_10','10_11','11_12','12_1','2_3','3_4','4_5','5_6'].map(k => (
+                  {['9_10','10_11','11_12','12_1','2_3','3_4','4_5','5_6','6_7'].map(k => (
                     <Td key={k} center><span className={row[k] > 0 ? 'text-gray-700' : 'text-gray-300'}>{ r(row[k]) || '—'}</span></Td>
                   ))}
                 </tr>
