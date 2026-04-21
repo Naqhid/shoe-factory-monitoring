@@ -322,7 +322,7 @@ const mobileSessionController = {
                     GROUP BY machine_id, emp_id, prod_date
                 ) prod_stats 
                     ON prod_stats.machine_id = ms.machine_id 
-                    AND prod_stats.emp_id = ms.emp_id
+                    AND prod_stats.emp_id = ms.emp_code
                     AND prod_stats.prod_date = DATE(ms.activated_at)
                 WHERE ms.status = 'active' AND ms.activated_at IS NOT NULL
             `;
@@ -346,6 +346,57 @@ const mobileSessionController = {
             res.json({
                 success: true,
                 data: rows
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // Get individual cycle details for a machine/employee/date
+    getCycleDetails: async (req, res, next) => {
+        try {
+            const { machine_id, emp_code, date } = req.query;
+            
+            if (!machine_id || !emp_code || !date) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'machine_id, emp_code, and date are required'
+                });
+            }
+
+            const [cycles] = await pool.execute(
+                `SELECT
+                    id,
+                    output_pairs,
+                    target_mins,
+                    actual_time,
+                    TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
+                    COALESCE(idle_mins, 0) as idle_mins,
+                    start_time,
+                    finish_time,
+                    CASE
+                        WHEN TIMESTAMPDIFF(MINUTE, start_time, finish_time) > 0
+                        THEN ROUND((target_mins / TIMESTAMPDIFF(MINUTE, start_time, finish_time)) * 100, 1)
+                        ELSE 0
+                    END as efficiency
+                FROM machine_centre_production
+                WHERE machine_id = ?
+                    AND emp_id = ?
+                    AND DATE(prod_date) = DATE(?)
+                    AND button_status = 2
+                ORDER BY start_time ASC`,
+                [machine_id, emp_code, date]
+            );
+
+            // Add cycle numbers
+            const cyclesWithNumbers = cycles.map((cycle, index) => ({
+                ...cycle,
+                cycle_number: index + 1
+            }));
+
+            res.json({
+                success: true,
+                data: cyclesWithNumbers
             });
         } catch (error) {
             next(error);

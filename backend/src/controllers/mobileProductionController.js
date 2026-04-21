@@ -108,6 +108,33 @@ exports.create = async (req, res, next) => {
       button_status
     } = req.body;
 
+    // SECURITY: Prevent creating records that are already finished
+    // Records must be created in status 1 (running) or 3 (idle), NOT 2 (finished)
+    const requestedStatus = button_status || 1;
+    if (requestedStatus === 2) {
+      logger.warn(`BLOCKED: Attempt to create already-finished record for machine ${machine_id}, emp ${emp_id}`);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot create production record in finished state. Records must start as running (1) or idle (3).' 
+      });
+    }
+
+    // Check for existing active record for this machine/employee/date to prevent duplicates
+    const [existingRows] = await db.query(
+      `SELECT id, button_status FROM machine_centre_production 
+       WHERE machine_id = ? AND emp_id = ? AND prod_date = ? AND button_status != 2`,
+      [machine_id, emp_id, prod_date ? prod_date.split('T')[0] : new Date().toISOString().split('T')[0]]
+    );
+    
+    if (existingRows.length > 0) {
+      logger.warn(`BLOCKED: Duplicate record creation attempt for machine ${machine_id}, emp ${emp_id}. Existing record: ${existingRows[0].id}`);
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Active production record already exists for this machine and employee',
+        data: { existing_id: existingRows[0].id }
+      });
+    }
+
     // Extract YYYY-MM-DD from ISO timestamp for MySQL DATE column
     const formattedDate = prod_date ? prod_date.split('T')[0] : null;
 
@@ -122,7 +149,7 @@ exports.create = async (req, res, next) => {
        finish_time || null,
        idle_start_time || null,
        idle_stop_time || null,
-       button_status || 1]
+       requestedStatus]
     );
 
     res.status(201).json({
@@ -154,14 +181,23 @@ exports.update = async (req, res, next) => {
       button_status
     } = req.body;
 
+    // SECURITY: Block status changes through PUT - use PATCH /status instead
+    if (button_status !== undefined) {
+      logger.warn(`BLOCKED: Attempt to change button_status via PUT for record ${id}. Use PATCH /status endpoint instead.`);
+      return res.status(400).json({
+        success: false,
+        message: 'Status changes not allowed via PUT. Use PATCH /api/mobile-production/:id/status endpoint instead.'
+      });
+    }
+
     const [result] = await db.query(
       `UPDATE machine_centre_production 
        SET prod_date = ?, work_centre_id = ?, machine_id = ?, emp_id = ?,
            output_pairs = ?, target_mins = ?, start_time = ?, finish_time = ?,
-           idle_start_time = ?, idle_stop_time = ?, button_status = ?
+           idle_start_time = ?, idle_stop_time = ?
        WHERE id = ?`,
       [prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
-        start_time, finish_time, idle_start_time, idle_stop_time, button_status, id]
+        start_time, finish_time, idle_start_time, idle_stop_time, id]
     );
 
     if (result.affectedRows === 0) {
@@ -182,12 +218,18 @@ exports.updateStatus = async (req, res, next) => {
     const { button_status, output_pairs, actual_time, stoppage_reason, emp_id, session_id } = req.body;
     const normalizedButtonStatus = button_status === 3 ? 1 : button_status;
 
+    // DEBUG: Log all status change requests for troubleshooting ghost records
+    logger.info(`[STATUS-CHANGE] Record ${id}: requested_status=${button_status}, normalized=${normalizedButtonStatus}, emp_id=${emp_id}, session_id=${session_id}, output_pairs=${output_pairs}, ip=${req.ip}, ua=${req.headers['user-agent']?.substring(0, 50)}`);
+
     // Get existing record first (outside transaction to ensure we have current data)
     const [existingRows] = await db.execute('SELECT * FROM machine_centre_production WHERE id = ?', [id]);
     if (existingRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Production data not found' });
     }
     const existingRecord = existingRows[0];
+    
+    // DEBUG: Log current state before change
+    logger.info(`[STATUS-CHANGE] Record ${id}: current_status=${existingRecord.button_status}, current_start_time=${existingRecord.start_time}, current_finish_time=${existingRecord.finish_time}`);
 
     let updateQuery = 'UPDATE machine_centre_production SET';
     let params = [];
@@ -200,6 +242,20 @@ exports.updateStatus = async (req, res, next) => {
       hasUpdate = true;
 
       if (normalizedButtonStatus === 2) {
+        // GHOST RECORD DETECTION: Block finishes within 1 minute to prevent accidental clicks
+        // Most production cycles take 15-30 minutes, so 1 minute minimum prevents mistakes
+        const startTime = existingRecord.start_time ? new Date(existingRecord.start_time) : null;
+        const now = new Date();
+        const elapsedSeconds = startTime ? Math.floor((now - startTime) / 1000) : 0;
+        
+        if (startTime && elapsedSeconds < 60) {
+          logger.warn(`[GHOST-DETECTED] Record ${id} being finished after only ${elapsedSeconds} seconds! Machine=${existingRecord.machine_id}, Emp=${existingRecord.emp_id}. Blocking suspicious finish.`);
+          return res.status(400).json({
+            success: false,
+            message: `Cannot finish production cycle after only ${elapsedSeconds} seconds. Minimum cycle time is 1 minute.`
+          });
+        }
+        
         updateQuery += ', finish_time = NOW()';
         if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
       } else if (normalizedButtonStatus === 1) {
@@ -213,69 +269,103 @@ exports.updateStatus = async (req, res, next) => {
 
     updateQuery += ' WHERE id = ?';
     params.push(id);
-    await db.execute(updateQuery, params);
+    
+    // CRITICAL: Use transaction for atomicity - both production update AND summary update succeed or fail together
+    let updateResult, summaryData;
+    
+    try {
+      await withTransaction(async (conn) => {
+        // 1. Update production record
+        [updateResult] = await conn.execute(updateQuery, params);
+        
+        if (updateResult.affectedRows === 0) {
+          throw new Error(`Record ${id} not updated - may not exist or already finished`);
+        }
+        
+        logger.info(`[FINISH-SUCCESS] Record ${id} updated: button_status=${normalizedButtonStatus}, affectedRows=${updateResult.affectedRows}`);
 
-    // On finish: update summary table after the main update
-    if (normalizedButtonStatus === 2) {
-      const prod = existingRecord;
-      try {
-        // CRITICAL FIX: Instead of relying on MySQL generated columns which may not be immediately visible,
-        // we calculate the summary directly using raw time calculations
-        
-        // Get all finished records and calculate sums manually
-        const [finishedRecords] = await db.execute(
-          `SELECT 
-            output_pairs, 
-            target_mins,
-            TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
-            COALESCE(idle_mins, 0) as idle_mins
-           FROM machine_centre_production 
-           WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
-          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
-        );
-        
-        // Calculate totals manually
-        let totalOutput = 0;
-        let totalTargetMins = 0;
-        let totalActualMins = 0;
-        let totalIdleMins = 0;
-        
-        finishedRecords.forEach(record => {
-          totalOutput += parseInt(record.output_pairs) || 0;
-          totalTargetMins += parseFloat(record.target_mins) || 0;
-          totalActualMins += parseFloat(record.actual_mins) || 0;
-          totalIdleMins += parseFloat(record.idle_mins) || 0;
+        // 2. On finish: update summary table atomically within same transaction
+        if (normalizedButtonStatus === 2) {
+          const prod = existingRecord;
+          
+          // Get all finished records and calculate sums manually
+          const [finishedRecords] = await conn.execute(
+            `SELECT 
+              output_pairs, 
+              target_mins,
+              TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
+              COALESCE(idle_mins, 0) as idle_mins
+             FROM machine_centre_production 
+             WHERE DATE(prod_date) = DATE(?) AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
+            [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
+          );
+          
+          // Calculate totals manually
+          let totalOutput = 0;
+          let totalTargetMins = 0;
+          let totalActualMins = 0;
+          let totalIdleMins = 0;
+          
+          finishedRecords.forEach(record => {
+            totalOutput += parseInt(record.output_pairs) || 0;
+            totalTargetMins += parseFloat(record.target_mins) || 0;
+            totalActualMins += parseFloat(record.actual_mins) || 0;
+            totalIdleMins += parseFloat(record.idle_mins) || 0;
+          });
+          
+          const cumAvgTime = totalOutput > 0 ? (totalActualMins / totalOutput) : 0;
+          
+          // avg_efficiency_percent is a GENERATED COLUMN - MySQL calculates it automatically
+          // Formula in DB: (total_target_mins / total_actual_mins) * 100
+          
+          logger.info(`[SUMMARY-CALC] ${prod.machine_id}: output=${totalOutput}, cycles=${finishedRecords.length}, target=${totalTargetMins}m, actual=${totalActualMins}m`);
+          
+          // Update summary atomically within transaction
+          const [summaryResult] = await conn.execute(
+            `INSERT INTO machine_centre_summary
+             (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               total_output_pairs = VALUES(total_output_pairs),
+               total_target_mins = VALUES(total_target_mins),
+               total_actual_mins = VALUES(total_actual_mins),
+               total_idle_mins = VALUES(total_idle_mins),
+               cum_avg_time = VALUES(cum_avg_time),
+               button_status = VALUES(button_status),
+               updated_at = CURRENT_TIMESTAMP`,
+            [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id,
+             totalOutput, totalTargetMins, totalActualMins, totalIdleMins, cumAvgTime, 2]
+          );
+          
+          logger.info(`[SUMMARY-UPDATED] ${prod.machine_id}: ${totalOutput} pairs, affectedRows=${summaryResult.affectedRows}`);
+          
+          summaryData = {
+            total_output_pairs: totalOutput,
+            total_cycles: finishedRecords.length,
+            summary_updated: true
+          };
+        }
+      }, { isolationLevel: 'READ COMMITTED' }); // Ensure we see our own changes
+      
+      // Transaction succeeded - send response
+      if (normalizedButtonStatus === 2 && summaryData) {
+        res.json({ 
+          success: true, 
+          message: 'Status updated successfully',
+          data: summaryData
         });
-        
-        const cumAvgTime = totalOutput > 0 ? (totalActualMins / totalOutput) : 0;
-        
-        logger.info(`Manual summary calc for ${prod.machine_id}: output=${totalOutput}, actual=${totalActualMins}, target=${totalTargetMins}, idle=${totalIdleMins}, cycles=${finishedRecords.length}`);
-        
-        // Update summary with calculated values (not relying on generated columns)
-        await db.execute(
-          `INSERT INTO machine_centre_summary
-           (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE
-             total_output_pairs = VALUES(total_output_pairs),
-             total_target_mins = VALUES(total_target_mins),
-             total_actual_mins = VALUES(total_actual_mins),
-             total_idle_mins = VALUES(total_idle_mins),
-             cum_avg_time = VALUES(cum_avg_time),
-             button_status = VALUES(button_status),
-             updated_at = CURRENT_TIMESTAMP`,
-          [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id,
-           totalOutput, totalTargetMins, totalActualMins, totalIdleMins, cumAvgTime, 2]
-        );
-        
-        logger.info(`Summary updated successfully: ${totalOutput} pairs from ${finishedRecords.length} cycles`);
-      } catch (summaryError) {
-        logger.error('Error updating summary after finish:', summaryError);
-        // Don't fail the main request if summary update fails
+      } else {
+        res.json({ success: true, message: 'Status updated successfully' });
       }
+      
+    } catch (txError) {
+      logger.error(`[TRANSACTION-FAILED] Record ${id}:`, txError);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Database update failed. Please retry.',
+        error: txError.message 
+      });
     }
-
-    res.json({ success: true, message: 'Status updated successfully' });
   } catch (error) {
     logger.error('Error updating status:', error);
     next(error);
@@ -380,6 +470,7 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
     
     // CRITICAL FIX: Always recalculate from production records to ensure fresh data
     // Don't rely solely on summary table which may have stale/generated column issues
+    // Use DATE(prod_date) to handle timezone differences in date comparison
     const [productionRows] = await db.query(`
       SELECT 
         SUM(output_pairs) as total_output_pairs,
@@ -388,7 +479,7 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
         SUM(COALESCE(idle_mins, 0)) as total_idle_mins,
         COUNT(*) as total_cycles
       FROM machine_centre_production
-      WHERE machine_id = ? AND prod_date = ? AND button_status = 2
+      WHERE machine_id = ? AND DATE(prod_date) = ? AND button_status = 2
     `, [machineId, date]);
     
     const prodData = productionRows[0];
@@ -404,8 +495,9 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
     const totalActualMins = parseFloat(prodData.total_actual_mins) || 0;
     const totalIdleMins = parseFloat(prodData.total_idle_mins) || 0;
     
-    const avgEfficiency = totalTargetMins > 0 
-      ? ((totalActualMins / totalTargetMins) * 100).toFixed(1)
+    // Efficiency = (target / actual) * 100 (higher is better - they beat the target)
+    const avgEfficiency = totalActualMins > 0 
+      ? ((totalTargetMins / totalActualMins) * 100).toFixed(1)
       : '0';
     const cumAvgTime = totalOutput > 0
       ? (totalActualMins / totalOutput).toFixed(2)
@@ -426,18 +518,20 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
     logger.info(`Fresh calc for ${machineId}: ${JSON.stringify(result)}`);
     
     // Also update the summary table to keep it in sync (fire and forget)
+    // avg_efficiency_percent is a GENERATED COLUMN - MySQL calculates it automatically
+    // Use DATE(prod_date) for consistent timezone handling
     db.execute(
       `INSERT INTO machine_centre_summary
        (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
-       SELECT prod_date, work_centre_id, machine_id, emp_id,
+       SELECT DATE(prod_date), work_centre_id, machine_id, emp_id,
          SUM(output_pairs), SUM(target_mins), 
          SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)), 
          SUM(COALESCE(idle_mins, 0)),
          CASE WHEN SUM(output_pairs) > 0 THEN SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)) / SUM(output_pairs) ELSE 0 END,
          2
        FROM machine_centre_production
-       WHERE machine_id = ? AND prod_date = ? AND button_status = 2
-       GROUP BY prod_date, work_centre_id, machine_id, emp_id
+       WHERE machine_id = ? AND DATE(prod_date) = ? AND button_status = 2
+       GROUP BY DATE(prod_date), work_centre_id, machine_id, emp_id
        ON DUPLICATE KEY UPDATE
          total_output_pairs = VALUES(total_output_pairs),
          total_target_mins = VALUES(total_target_mins),

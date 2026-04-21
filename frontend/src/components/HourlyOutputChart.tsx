@@ -213,17 +213,21 @@ export const HourlyOutputChart: React.FC<Props> = ({
           {/* Summary cards */}
           {viewMode === 'line' && lineData && (
             <div className="mt-6 grid grid-cols-3 gap-4 text-center">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Current Hour</p>
-                <p className="text-3xl font-bold text-blue-600">{lineData.hourlyData[lineData.hourlyData.length - 1]?.production || 0}</p>
-              </div>
               <div className="bg-orange-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Target/hr</p>
-                <p className="text-3xl font-bold text-orange-600">{lineData.target}</p>
+                <p className="text-sm text-gray-600">Target</p>
+                <p className="text-3xl font-bold text-orange-600">{lineData.target * lineData.hourlyData.length}</p>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">Output</p>
+                <p className="text-3xl font-bold text-blue-600">{lineData.hourlyData.reduce((sum, h) => sum + h.production, 0)}</p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Average</p>
-                <p className="text-3xl font-bold text-green-600">{lineData.average}</p>
+                <p className="text-sm text-gray-600">Achievement %</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {lineData.target > 0 && lineData.hourlyData.length > 0
+                    ? Math.round((lineData.hourlyData.reduce((sum, h) => sum + h.production, 0) / (lineData.target * lineData.hourlyData.length)) * 100)
+                    : 0}%
+                </p>
               </div>
             </div>
           )}

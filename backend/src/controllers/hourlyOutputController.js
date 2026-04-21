@@ -24,10 +24,13 @@ class HourlyOutputController {
 
       logger.info(`Data check result:`, checkData[0]);
 
+      // For Line 2A (workCentreId=5), only show Final Inspection (Machine 07) output
+      // This matches how Overall Performance OUTPUT is calculated
       let [hourlyData] = await db.query(`
         SELECT HOUR(start_time) as hour, SUM(output_pairs) as production
         FROM machine_centre_production
         WHERE work_centre_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL AND button_status = 2
+          AND machine_id = '07'
         GROUP BY HOUR(start_time)
         ORDER BY hour
       `, [workCentreId, requestedDate]);
@@ -39,6 +42,7 @@ class HourlyOutputController {
           SELECT HOUR(finish_time) as hour, SUM(output_pairs) as production
           FROM machine_centre_production
           WHERE work_centre_id = ? AND DATE(prod_date) = ? AND finish_time IS NOT NULL AND button_status = 2
+            AND machine_id = '07'
           GROUP BY HOUR(finish_time)
           ORDER BY hour
         `, [workCentreId, requestedDate]);
@@ -53,6 +57,7 @@ class HourlyOutputController {
           SELECT SUM(output_pairs) as hourly_sum
           FROM machine_centre_production
           WHERE work_centre_id = ? AND DATE(prod_date) = ? AND button_status = 2
+            AND machine_id = '07'
           GROUP BY HOUR(start_time)
         ) as hourly_totals
       `, [workCentreId, requestedDate]);

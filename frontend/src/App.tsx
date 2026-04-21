@@ -88,7 +88,7 @@ function App() {
   const isMobileProduction = pathParts[0] === 'mobile' && pathParts.length >= 2 && !isLineRoute;
   const isMobileQRScanner = pathParts[0] === 'mobile' && pathParts.length === 2 && !isLineRoute;
   const hideTopHeader = isMobileProduction || isMobileQRScanner;
-  const hideLogout = isMobileProduction || isMobileQRScanner;
+  const hideLogout = false; // Show logout for all users including Machine Centre Users
 
   const {
     data: machines = [],

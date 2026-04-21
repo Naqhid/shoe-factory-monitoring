@@ -126,6 +126,7 @@ export const MobileProduction: React.FC = () => {
     const [machineName, setMachineName] = useState('');
     const [headerExpanded, setHeaderExpanded] = useState(false);
     const isInitializingRef = React.useRef(false);
+    const isCreatingRecordRef = React.useRef(false); // Prevent duplicate record creation on double-click
     const [totalOutputToday, setTotalOutputToday] = useState(0);
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
@@ -135,6 +136,13 @@ export const MobileProduction: React.FC = () => {
     const [machineBusyRecord, setMachineBusyRecord] = useState<{ emp_id: string | number; employee_name?: string; machine_id: string } | null>(null);
     const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
     const [hasTabSessionBinding, setHasTabSessionBinding] = useState(false);
+    
+    // Pull-to-refresh state
+    const [pullRefreshing, setPullRefreshing] = useState(false);
+    const [pullDistance, setPullDistance] = useState(0);
+    const touchStartY = React.useRef(0);
+    const touchStartX = React.useRef(0);
+    const isPulling = React.useRef(false);
 
     const formatOperatorDisplay = (name?: string, code?: string | number) => {
         const safeName = (name || '').toString().trim();
@@ -248,7 +256,7 @@ export const MobileProduction: React.FC = () => {
             const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
             
             // Retry logic: if expectedMinTotal provided, verify we got at least that much
-            let retries = expectedMinTotal ? 3 : 1;
+            let retries = expectedMinTotal ? 10 : 1; // Increased to 10 retries for finish operations
             let lastResult = null;
             
             while (retries > 0) {
@@ -262,11 +270,21 @@ export const MobileProduction: React.FC = () => {
                     const totalOutput = result.data.total_output_pairs || 0;
                     
                     // If we have an expected minimum and haven't reached it, retry after delay
-                    if (expectedMinTotal && totalOutput < expectedMinTotal && retries > 1) {
-                        console.log(`Summary not updated yet: ${totalOutput} < ${expectedMinTotal}, retrying...`);
-                        await new Promise(resolve => setTimeout(resolve, 300));
-                        retries--;
-                        continue;
+                    // CRITICAL FIX: Continue retrying even on last iteration if expected not met
+                    if (expectedMinTotal && totalOutput < expectedMinTotal) {
+                        if (retries > 1) {
+                            console.log(`Summary not updated yet: ${totalOutput} < ${expectedMinTotal}, retrying... (${retries-1} left)`);
+                            await new Promise(resolve => setTimeout(resolve, 500)); // Increased delay
+                            retries--;
+                            continue;
+                        } else {
+                            // Final retry - still not updated, this is an error condition
+                            console.error(`Summary update failed: expected ${expectedMinTotal} but got ${totalOutput} after all retries`);
+                            toast.error('Output not updated. Please pull down to refresh.');
+                            // Don't update with stale data - keep previous value
+                            setLoadingSummary(false);
+                            throw new Error(`Summary not updated: expected ${expectedMinTotal}, got ${totalOutput}`);
+                        }
                     }
                     
                     setTotalOutputToday(totalOutput);
@@ -278,16 +296,63 @@ export const MobileProduction: React.FC = () => {
                     return;
                 }
             }
-            
-            // Use last result if we exhausted retries
-            if (lastResult?.success && lastResult?.data) {
-                setTotalOutputToday(lastResult.data.total_output_pairs || 0);
-                setAvgEfficiencyToday(parseFloat(lastResult.data.avg_efficiency_percent || 0).toFixed(1));
-            }
         } catch (error) {
             console.error('Error fetching summary data:', error);
         } finally {
             setLoadingSummary(false);
+        }
+    };
+
+    // Pull-to-refresh handlers
+    const handlePullRefresh = async () => {
+        if (!productionData?.machine_id || pullRefreshing) return;
+        setPullRefreshing(true);
+        try {
+            await fetchSummaryData(productionData.machine_id);
+            toast.success('Data refreshed');
+        } catch {
+            toast.error('Failed to refresh');
+        } finally {
+            setPullRefreshing(false);
+            setPullDistance(0);
+        }
+    };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        // Only allow pull-to-refresh when at top of page
+        if (window.scrollY > 0) return;
+        touchStartY.current = e.touches[0].clientY;
+        touchStartX.current = e.touches[0].clientX;
+        isPulling.current = true;
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!isPulling.current) return;
+        const currentY = e.touches[0].clientY;
+        const currentX = e.touches[0].clientX;
+        const deltaY = currentY - touchStartY.current;
+        const deltaX = Math.abs(currentX - touchStartX.current);
+        
+        // Only pull down, not horizontal scroll
+        if (deltaY > 0 && deltaX < deltaY && window.scrollY === 0) {
+            // Resistance: harder to pull as distance increases
+            const resistance = 0.4;
+            const newDistance = Math.min(deltaY * resistance, 100);
+            setPullDistance(newDistance);
+            e.preventDefault();
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (!isPulling.current) return;
+        isPulling.current = false;
+        
+        if (pullDistance > 60) {
+            // Trigger refresh
+            handlePullRefresh();
+        } else {
+            // Snap back
+            setPullDistance(0);
         }
     };
 
@@ -521,6 +586,13 @@ export const MobileProduction: React.FC = () => {
                 return;
             }
             
+            // Prevent double-click: check if already creating
+            if (isCreatingRecordRef.current) {
+                console.log('Record creation already in progress, ignoring duplicate click');
+                return;
+            }
+            isCreatingRecordRef.current = true;
+            
             setLoading(true);
             try {
                 const result = await withRetry(async () => {
@@ -541,6 +613,7 @@ export const MobileProduction: React.FC = () => {
                 toast.error('Failed to start production. Check network and try again.');
             } finally {
                 setLoading(false);
+                isCreatingRecordRef.current = false; // Reset flag
             }
             return;
         }
@@ -618,45 +691,117 @@ export const MobileProduction: React.FC = () => {
         setShowFinishConfirm(false);
         setLoading(true);
         const outputPairs = productionData.target_pairs || 0;
-        try {
-            await withRetry(async () => {
-                const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ button_status: 2, output_pairs: outputPairs, emp_id: productionData.emp_id, session_id: sessionToken })
-                });
-                const data = await response.json();
-                if (!data.success) throw new Error(data.message || 'Failed');
-                return data;
-            });
-            setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
-            // Calculate expected new total (current + this cycle's output)
-            const expectedMinTotal = totalOutputToday + outputPairs;
-            // Delay to ensure backend summary update completes, then verify with retry
-            await new Promise(resolve => setTimeout(resolve, 500));
-            await fetchSummaryData(productionData.machine_id, expectedMinTotal);
-            toast.success('Production finished - Click RESET for next cycle');
-        } catch (error) {
-            // Reconcile: re-fetch from DB to get true state (date-agnostic)
+        const maxFinishRetries = 5;
+        let finishSuccess = false;
+        let finishResult: any;
+        let lastError: any;
+        let validationErrorMsg: string | null = null;
+        
+        // CRITICAL: Retry loop with verification - keeps trying until DB confirms update or max retries
+        for (let attempt = 1; attempt <= maxFinishRetries; attempt++) {
             try {
-                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${productionData.machine_id}/latest-unfinished`);
-                const data = await res.json();
-                const record = data.data;
-                if (record && record.id === productionData.id) {
-                    const normalizedRecord = normalizePauseState(record);
-                    setProductionData(prev => ({ ...prev!, button_status: normalizedRecord.button_status, output_pairs: normalizedRecord.output_pairs, is_paused: normalizedRecord.is_paused || false }));
-                    if (normalizedRecord.button_status === 2) {
-                        // Actually finished despite error — update UI correctly
-                        await fetchSummaryData(productionData.machine_id);
-                        toast.success('Production finished - Click RESET for next cycle');
-                        return;
+                finishResult = await withRetry(async () => {
+                    const response = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ button_status: 2, output_pairs: outputPairs, emp_id: productionData.emp_id, session_id: sessionToken })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        // Ghost cycle or validation error - store message and stop retrying
+                        if (data.message?.includes('Cannot finish') || data.message?.includes('Minimum cycle time')) {
+                            validationErrorMsg = data.message;
+                            throw new Error('VALIDATION_ERROR'); // Stop retrying
+                        }
+                        throw new Error(data.message || 'Failed');
                     }
+                    return data;
+                }, 3);
+                
+                // VERIFY: Double-check the record was actually updated by fetching it
+                await new Promise(r => setTimeout(r, 200)); // Brief delay for DB consistency
+                const verifyRes = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}`);
+                const verifyData = await verifyRes.json();
+                
+                if (verifyData.success && verifyData.data?.button_status === 2) {
+                    // VERIFIED: DB actually has the finished status
+                    finishSuccess = true;
+                    break; // Exit retry loop
+                } else {
+                    // DB doesn't reflect the update - retry
+                    throw new Error('DB verification failed');
                 }
-            } catch { /* keep previous state */ }
-            toast.error('Failed to finish. Please try again.');
-        } finally {
-            setLoading(false);
+            } catch (err) {
+                lastError = err;
+                console.error(`Finish attempt ${attempt} failed:`, err);
+                // If validation error, stop retrying immediately
+                if ((err as Error).message === 'VALIDATION_ERROR') {
+                    break;
+                }
+                if (attempt < maxFinishRetries) {
+                    toast.loading(`Retrying finish... (${attempt}/${maxFinishRetries})`, { id: 'finish-retry', duration: 1500 });
+                    await new Promise(r => setTimeout(r, 1000 * attempt)); // Exponential backoff
+                }
+            }
         }
+        
+        toast.dismiss('finish-retry');
+        
+        if (!finishSuccess) {
+            // Check if it was a validation error (ghost cycle, etc.)
+            if (validationErrorMsg) {
+                // Show simple toast for validation errors
+                toast.error(validationErrorMsg, { duration: 5000, id: 'validation-error' });
+                setLoading(false);
+                return;
+            }
+            
+            // CRITICAL FAILURE: DB may not have the finished record
+            // Block user from starting new cycle until resolved
+            toast.error(
+                <div className="text-left">
+                    <p className="font-bold">⚠️ CRITICAL: Finish may not be saved!</p>
+                    <p className="text-sm mt-1">Do not start new cycle until resolved.</p>
+                    <button 
+                        onClick={async () => {
+                            // Manual retry
+                            toast.loading('Checking...', { id: 'manual-check' });
+                            try {
+                                const res = await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}`);
+                                const data = await res.json();
+                                if (data.success && data.data?.button_status === 2) {
+                                    toast.success('✅ Cycle is finished! Click RESET to continue.', { id: 'manual-check', duration: 5000 });
+                                } else {
+                                    toast.error('❌ Cycle still running. Tap FINISH again.', { id: 'manual-check', duration: 5000 });
+                                }
+                            } catch {
+                                toast.error('Network error. Try again.', { id: 'manual-check' });
+                            }
+                        }}
+                        className="mt-2 w-full px-3 py-2 bg-red-600 text-white rounded font-semibold"
+                    >
+                        Tap to Verify Status
+                    </button>
+                </div>,
+                { duration: 30000, id: 'finish-critical-error' }
+            );
+            setLoading(false);
+            return;
+        }
+        
+        // SUCCESS: Update local state and show success
+        setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
+        
+        if (finishResult?.data?.summary_updated && finishResult?.data?.total_output_pairs !== undefined) {
+            setTotalOutputToday(finishResult.data.total_output_pairs);
+            toast.success(`✅ Production finished! Total: ${finishResult.data.total_output_pairs} pairs from ${finishResult.data.total_cycles} cycles`);
+        } else {
+            // Fetch summary even if backend didn't return it
+            await fetchSummaryData(productionData.machine_id);
+            toast.success('✅ Production finished - Click RESET for next cycle');
+        }
+        
+        setLoading(false);
     };
 
     const handleReset = async () => {
@@ -849,7 +994,29 @@ export const MobileProduction: React.FC = () => {
 
             {/* Main Content */}
             {(!loading || productionData) && productionData && (
-                <div className="w-full px-2">
+                <div 
+                    className="w-full px-2 relative"
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    {/* Pull-to-refresh indicator */}
+                    {pullDistance > 0 && (
+                        <div 
+                            className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center transition-transform"
+                            style={{ 
+                                transform: `translateY(${Math.min(pullDistance, 80)}px)`,
+                                opacity: Math.min(pullDistance / 60, 1)
+                            }}
+                        >
+                            <div className="bg-white rounded-full shadow-lg p-3 flex items-center gap-2">
+                                <RefreshCw className={`h-5 w-5 text-blue-600 ${pullRefreshing ? 'animate-spin' : ''}`} />
+                                <span className="text-sm font-medium text-gray-700">
+                                    {pullRefreshing ? 'Refreshing...' : pullDistance > 60 ? 'Release to refresh' : 'Pull down to refresh'}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                         <>
                     {/* Full-screen flashing alert overlay when time exceeds target */}
                     {isTargetTimeExceeded && (
@@ -1022,7 +1189,7 @@ export const MobileProduction: React.FC = () => {
                                 <p className="text-3xl md:text-5xl font-bold text-green-900"><span>{productionData.target_pairs || 0}</span></p>
                                 <p className="text-xs text-green-600 mt-1">pairs</p>
                             </div>
-                            <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm">
+                            <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm relative">
                                 <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>
                                 {loadingSummary ? (
                                     <Loader2 className="h-8 w-8 animate-spin text-orange-600 mx-auto my-4" />
@@ -1032,6 +1199,15 @@ export const MobileProduction: React.FC = () => {
                                         <p className="text-xs text-orange-600 mt-1">pairs (today)</p>
                                     </>
                                 )}
+                                {/* Refresh button for manual update */}
+                                <button
+                                    onClick={() => productionData?.machine_id && fetchSummaryData(productionData.machine_id)}
+                                    disabled={loadingSummary}
+                                    className="absolute top-2 right-2 p-1.5 bg-white/80 hover:bg-white rounded-full shadow-sm transition-all disabled:opacity-50"
+                                    title="Refresh output"
+                                >
+                                    <RefreshCw className={`h-4 w-4 text-orange-600 ${loadingSummary ? 'animate-spin' : ''}`} />
+                                </button>
                             </div>
                             <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm">
                                 <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Avg Efficiency</p>
