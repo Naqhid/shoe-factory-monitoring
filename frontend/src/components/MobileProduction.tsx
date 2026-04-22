@@ -122,6 +122,8 @@ export const MobileProduction: React.FC = () => {
     const [showQRScanner, setShowQRScanner] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [actualTimeCounter, setActualTimeCounter] = useState(0);
+    const actualTimeCounterRef = React.useRef(0);
+    const runningSinceMsRef = React.useRef<number | null>(null);
     const [employeeName, setEmployeeName] = useState('');
     const [machineName, setMachineName] = useState('');
     const [headerExpanded, setHeaderExpanded] = useState(false);
@@ -194,14 +196,75 @@ export const MobileProduction: React.FC = () => {
 
     // Timer logic - increment actual_time counter every second when running
     useEffect(() => {
+        actualTimeCounterRef.current = actualTimeCounter;
+    }, [actualTimeCounter]);
+
+    const recomputeActualTimeCounter = React.useCallback(() => {
+        if (!productionData) return;
+
+        const savedSeconds = Math.max(0, Math.floor(Number(productionData.actual_time || 0) * 60));
+        const isRunning = productionData.button_status === 1 && !productionData.is_paused;
+
+        if (isRunning) {
+            let startMs = runningSinceMsRef.current;
+            if (productionData.start_time) {
+                const parsed = new Date(productionData.start_time).getTime();
+                if (!Number.isNaN(parsed)) startMs = parsed;
+            }
+            if (startMs) {
+                const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+                const next = Math.max(savedSeconds, elapsedSeconds);
+                setActualTimeCounter((prev) => (prev === next ? prev : next));
+                return;
+            }
+        }
+
+        // Keep displayed time monotonic if DB minutes are behind local seconds.
+        setActualTimeCounter((prev) => {
+            const next = Math.max(savedSeconds, prev);
+            return prev === next ? prev : next;
+        });
+    }, [
+        productionData?.id,
+        productionData?.actual_time,
+        productionData?.button_status,
+        productionData?.is_paused,
+        productionData?.start_time,
+    ]);
+
+    useEffect(() => {
+        recomputeActualTimeCounter();
         if (!productionData || productionData.button_status !== 1 || productionData.is_paused) return;
-        
-        const counterInterval = setInterval(() => {
-            setActualTimeCounter(prev => prev + 1);
-        }, 1000); // Every 1 second
-        
-        return () => clearInterval(counterInterval);
-    }, [productionData?.button_status, productionData?.is_paused]);
+
+        const counterInterval = window.setInterval(recomputeActualTimeCounter, 1000);
+        return () => window.clearInterval(counterInterval);
+    }, [
+        productionData?.id,
+        productionData?.button_status,
+        productionData?.is_paused,
+        recomputeActualTimeCounter,
+    ]);
+
+    // Browser timers are throttled while tab is locked/backgrounded.
+    // Recalculate immediately on resume so Actual Time catches up without manual refresh.
+    useEffect(() => {
+        const refresh = () => {
+            if (document.visibilityState !== 'hidden') {
+                recomputeActualTimeCounter();
+            }
+        };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') refresh();
+        };
+        window.addEventListener('focus', refresh);
+        window.addEventListener('pageshow', refresh);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            window.removeEventListener('focus', refresh);
+            window.removeEventListener('pageshow', refresh);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
+    }, [recomputeActualTimeCounter]);
 
     // One-time toast when target time is first exceeded (red progress bar) — reminds operator to tap FINISH
     const stopAlertSound = React.useCallback(() => {
@@ -372,12 +435,12 @@ export const MobileProduction: React.FC = () => {
         playAlertSound,
     ]);
 
-    // Sync actual_time to database every minute
+    // Sync actual_time to database periodically (source-of-truth correction).
     useEffect(() => {
         if (!productionData?.id || productionData.button_status !== 1 || productionData.is_paused) return;
         
         const syncInterval = setInterval(async () => {
-            const actualMins = Math.floor(actualTimeCounter / 60);
+            const actualMins = Math.floor(actualTimeCounterRef.current / 60);
             try {
                 await apiFetch(`${API_BASE}/api/mobile-production/${productionData.id}/status`, {
                     method: 'PATCH',
@@ -388,10 +451,10 @@ export const MobileProduction: React.FC = () => {
             } catch (error) {
                 console.error('Timer sync error:', error);
             }
-        }, 10000); // Every 10 seconds
+        }, 30000); // Every 30 seconds
         
         return () => clearInterval(syncInterval);
-    }, [productionData?.id, productionData?.button_status, productionData?.is_paused, actualTimeCounter, API_BASE]);
+    }, [productionData?.id, productionData?.button_status, productionData?.is_paused, API_BASE]);
 
     // Fetch summary data from machine_centre_summary table
     const fetchSummaryData = async (machineId: string, expectedMinTotal?: number) => {
@@ -611,6 +674,9 @@ export const MobileProduction: React.FC = () => {
                             target_pairs: targetPairs,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
+                        runningSinceMsRef.current = normalizedRecord.start_time
+                            ? new Date(normalizedRecord.start_time).getTime()
+                            : null;
                         // Restore counter: saved actual_time + elapsed seconds since start_time (recovers unsaved seconds on refresh)
                         const savedSeconds = (normalizedRecord.actual_time || 0) * 60;
                         const elapsedSinceStart = normalizedRecord.start_time && normalizedRecord.button_status === 1
@@ -669,6 +735,7 @@ export const MobileProduction: React.FC = () => {
                             is_paused: false
                         };
                         setProductionData(defaultData);
+                        runningSinceMsRef.current = null;
                         // Fetch summary data immediately after setting production data
                         await fetchSummaryData(effectiveMachineId);
                         toast.success('Ready to start production');
@@ -753,6 +820,7 @@ export const MobileProduction: React.FC = () => {
                 });
                 setProductionData({ ...productionData!, id: result.data.id, button_status: 1, is_paused: false });
                 setActualTimeCounter(0);
+                runningSinceMsRef.current = Date.now();
                 toast.success('Production started');
             } catch (error) {
                 // UI stays in idle state — no sync issue since we never updated state
@@ -779,6 +847,7 @@ export const MobileProduction: React.FC = () => {
                 return data;
             });
             setProductionData({ ...productionData, button_status: 1, is_paused: false });
+            runningSinceMsRef.current = Date.now();
             toast.success('Production started');
         } catch (error) {
             // Reconcile: re-fetch from DB to get true state (date-agnostic)
@@ -818,6 +887,7 @@ export const MobileProduction: React.FC = () => {
                 return data;
             });
             setProductionData({ ...productionData, is_paused: true, button_status: 3 });
+            runningSinceMsRef.current = null;
             toast.success(`Stopped: ${reason}`);
         } catch (error) {
             // Don't change UI state — production stays running
@@ -937,6 +1007,7 @@ export const MobileProduction: React.FC = () => {
         
         // SUCCESS: Update local state and show success
         setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
+        runningSinceMsRef.current = null;
         
         if (finishResult?.data?.summary_updated && finishResult?.data?.total_output_pairs !== undefined) {
             setTotalOutputToday(finishResult.data.total_output_pairs);
@@ -971,10 +1042,12 @@ export const MobileProduction: React.FC = () => {
             };
             setProductionData(resetData);
             setActualTimeCounter(0);
+            runningSinceMsRef.current = null;
             toast.success('Ready for next cycle - Click START to begin');
         } else {
             setActualTimeCounter(0);
             setProductionData({ ...productionData, actual_time: 0, button_status: 3, is_paused: false });
+            runningSinceMsRef.current = null;
             toast.success('Timer reset');
         }
     };

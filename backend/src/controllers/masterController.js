@@ -40,9 +40,9 @@ class MasterController {
     const prefix = alias ? `${alias}.` : '';
     const filters = [];
     if (columnSet.has('deleted_at')) filters.push(`${prefix}deleted_at IS NULL`);
-    if (columnSet.has('is_deleted')) filters.push(`${prefix}COALESCE(is_deleted, 0) = 0`);
-    if (columnSet.has('is_active')) filters.push(`${prefix}COALESCE(is_active, 1) = 1`);
-    if (columnSet.has('active')) filters.push(`${prefix}COALESCE(active, 1) = 1`);
+    if (columnSet.has('is_deleted')) filters.push(`COALESCE(${prefix}is_deleted, 0) = 0`);
+    if (columnSet.has('is_active')) filters.push(`COALESCE(${prefix}is_active, 1) = 1`);
+    if (columnSet.has('active')) filters.push(`COALESCE(${prefix}active, 1) = 1`);
     return filters.length > 0 ? filters.join(' AND ') : '';
   }
 
