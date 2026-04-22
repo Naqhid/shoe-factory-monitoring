@@ -1236,6 +1236,7 @@ export const MobileProduction: React.FC = () => {
                                     <button
                                         onClick={handleStart}
                                         disabled={loading || productionData.button_status === 2}
+                                        title={productionData.button_status === 2 ? "Cycle finished. Click RESET to start a new cycle." : ""}
                                         className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" /><span>START</span></>}

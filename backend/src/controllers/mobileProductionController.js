@@ -288,6 +288,10 @@ exports.updateStatus = async (req, res, next) => {
         if (normalizedButtonStatus === 2) {
           const prod = existingRecord;
           
+          // IMPORTANT: Use CURRENT_DATE to get TODAY's records, not record's prod_date
+          // The record's prod_date might be old (e.g., April 18) but we want today's summary (April 21)
+          const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+          
           // Get all finished records and calculate sums manually
           const [finishedRecords] = await conn.execute(
             `SELECT 
@@ -296,8 +300,8 @@ exports.updateStatus = async (req, res, next) => {
               TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
               COALESCE(idle_mins, 0) as idle_mins
              FROM machine_centre_production 
-             WHERE DATE(prod_date) = DATE(?) AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
-            [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id]
+             WHERE DATE(prod_date) = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
+            [today, prod.work_centre_id, prod.machine_id, prod.emp_id]
           );
           
           // Calculate totals manually
@@ -333,7 +337,7 @@ exports.updateStatus = async (req, res, next) => {
                cum_avg_time = VALUES(cum_avg_time),
                button_status = VALUES(button_status),
                updated_at = CURRENT_TIMESTAMP`,
-            [prod.prod_date, prod.work_centre_id, prod.machine_id, prod.emp_id,
+            [today, prod.work_centre_id, prod.machine_id, prod.emp_id,
              totalOutput, totalTargetMins, totalActualMins, totalIdleMins, cumAvgTime, 2]
           );
           
@@ -517,30 +521,8 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
     
     logger.info(`Fresh calc for ${machineId}: ${JSON.stringify(result)}`);
     
-    // Also update the summary table to keep it in sync (fire and forget)
-    // avg_efficiency_percent is a GENERATED COLUMN - MySQL calculates it automatically
-    // Use DATE(prod_date) for consistent timezone handling
-    db.execute(
-      `INSERT INTO machine_centre_summary
-       (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
-       SELECT DATE(prod_date), work_centre_id, machine_id, emp_id,
-         SUM(output_pairs), SUM(target_mins), 
-         SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)), 
-         SUM(COALESCE(idle_mins, 0)),
-         CASE WHEN SUM(output_pairs) > 0 THEN SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)) / SUM(output_pairs) ELSE 0 END,
-         2
-       FROM machine_centre_production
-       WHERE machine_id = ? AND DATE(prod_date) = ? AND button_status = 2
-       GROUP BY DATE(prod_date), work_centre_id, machine_id, emp_id
-       ON DUPLICATE KEY UPDATE
-         total_output_pairs = VALUES(total_output_pairs),
-         total_target_mins = VALUES(total_target_mins),
-         total_actual_mins = VALUES(total_actual_mins),
-         total_idle_mins = VALUES(total_idle_mins),
-         cum_avg_time = VALUES(cum_avg_time),
-         updated_at = CURRENT_TIMESTAMP`,
-      [machineId, date]
-    ).catch(err => logger.error('Background summary sync error:', err));
+    // Note: Summary is already updated atomically by transaction in updateStatus
+    // No background sync needed - prevents race conditions
     
     res.json({ success: true, data: result });
   } catch (error) {
