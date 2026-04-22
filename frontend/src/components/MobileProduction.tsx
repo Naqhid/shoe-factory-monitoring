@@ -794,6 +794,9 @@ export const MobileProduction: React.FC = () => {
         
         if (finishResult?.data?.summary_updated && finishResult?.data?.total_output_pairs !== undefined) {
             setTotalOutputToday(finishResult.data.total_output_pairs);
+            // Root cause fix: this branch previously skipped summary re-fetch,
+            // so avgEfficiencyToday stayed stale until manual refresh.
+            await fetchSummaryData(productionData.machine_id, finishResult.data.total_output_pairs);
             toast.success(`✅ Production finished! Total: ${finishResult.data.total_output_pairs} pairs from ${finishResult.data.total_cycles} cycles`);
         } else {
             // Fetch summary even if backend didn't return it

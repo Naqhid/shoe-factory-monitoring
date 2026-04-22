@@ -256,7 +256,12 @@ exports.updateStatus = async (req, res, next) => {
           });
         }
         
-        updateQuery += ', finish_time = NOW()';
+        // Root-cause fix:
+        // Some machines resume an older unfinished record (date-agnostic lookup).
+        // If that old record is finished today, it previously kept old prod_date and
+        // was excluded from today's output summary. Force prod_date to today on FINISH
+        // so the completed cycle is counted in today's totals.
+        updateQuery += ', finish_time = NOW(), prod_date = CURDATE()';
         if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
       } else if (normalizedButtonStatus === 1) {
         updateQuery += ', idle_stop_time = NOW()';
@@ -288,9 +293,9 @@ exports.updateStatus = async (req, res, next) => {
         if (normalizedButtonStatus === 2) {
           const prod = existingRecord;
           
-          // IMPORTANT: Use CURRENT_DATE to get TODAY's records, not record's prod_date
-          // The record's prod_date might be old (e.g., April 18) but we want today's summary (April 21)
-          const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+          // IMPORTANT: Use DB date (CURDATE) for consistency with DB timezone.
+          const [[todayRow]] = await conn.execute('SELECT CURDATE() as today');
+          const today = todayRow.today;
           
           // Get all finished records and calculate sums manually
           const [finishedRecords] = await conn.execute(
