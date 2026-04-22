@@ -133,6 +133,11 @@ export const MobileProduction: React.FC = () => {
     const [showFinishConfirm, setShowFinishConfirm] = useState(false);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const overTargetToastShownRef = React.useRef(false);
+    const hasUserInteractedRef = React.useRef(false);
+    const alertAudioContextRef = React.useRef<AudioContext | null>(null);
+    const alertToneIntervalRef = React.useRef<number | null>(null);
+    const alertToneTimeoutRef = React.useRef<number | null>(null);
+    const startReminderAnchorRef = React.useRef<number | null>(null);
     const [machineBusyRecord, setMachineBusyRecord] = useState<{ emp_id: string | number; employee_name?: string; machine_id: string } | null>(null);
     const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
     const [hasTabSessionBinding, setHasTabSessionBinding] = useState(false);
@@ -199,21 +204,108 @@ export const MobileProduction: React.FC = () => {
     }, [productionData?.button_status, productionData?.is_paused]);
 
     // One-time toast when target time is first exceeded (red progress bar) — reminds operator to tap FINISH
+    const stopAlertSound = React.useCallback(() => {
+        if (alertToneIntervalRef.current) {
+            window.clearInterval(alertToneIntervalRef.current);
+            alertToneIntervalRef.current = null;
+        }
+        if (alertToneTimeoutRef.current) {
+            window.clearTimeout(alertToneTimeoutRef.current);
+            alertToneTimeoutRef.current = null;
+        }
+        if (alertAudioContextRef.current) {
+            alertAudioContextRef.current.close().catch(() => {});
+            alertAudioContextRef.current = null;
+        }
+    }, []);
+
+    const playAlertSound = React.useCallback(() => {
+        try {
+            if (!hasUserInteractedRef.current) return;
+            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioCtx) return;
+
+            stopAlertSound();
+            const audioCtx: AudioContext = new AudioCtx();
+            alertAudioContextRef.current = audioCtx;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+
+            const playBeep = () => {
+                const now = audioCtx.currentTime;
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(900, now);
+
+                gainNode.gain.setValueAtTime(0.0001, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.2, now + 0.02);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.start(now);
+                oscillator.stop(now + 0.17);
+            };
+
+            playBeep();
+            alertToneIntervalRef.current = window.setInterval(playBeep, 320);
+            alertToneTimeoutRef.current = window.setTimeout(() => {
+                stopAlertSound();
+            }, 3000);
+        } catch (error) {
+            console.warn('Alert sound playback blocked or unavailable:', error);
+        }
+    }, [stopAlertSound]);
+
+    useEffect(() => {
+        return () => stopAlertSound();
+    }, [stopAlertSound]);
+
+    // Unlock alert sound after first user gesture (browser autoplay policies).
+    useEffect(() => {
+        const unlockAudio = () => {
+            hasUserInteractedRef.current = true;
+            if (alertAudioContextRef.current?.state === 'suspended') {
+                alertAudioContextRef.current.resume().catch(() => {});
+            }
+        };
+
+        window.addEventListener('pointerdown', unlockAudio, { passive: true });
+        window.addEventListener('touchstart', unlockAudio, { passive: true });
+        window.addEventListener('keydown', unlockAudio, { passive: true });
+
+        return () => {
+            window.removeEventListener('pointerdown', unlockAudio);
+            window.removeEventListener('touchstart', unlockAudio);
+            window.removeEventListener('keydown', unlockAudio);
+        };
+    }, []);
+
     useEffect(() => {
         if (!productionData || productionData.button_status !== 1 || productionData.is_paused) {
             overTargetToastShownRef.current = false;
+            stopAlertSound();
             return;
         }
         const targetMins = Number(productionData.target_mins || 0);
-        if (targetMins <= 0) return;
+        if (targetMins <= 0) {
+            stopAlertSound();
+            return;
+        }
         const actualMins = actualTimeCounter / 60;
         const exceeded = actualMins > targetMins;
         if (!exceeded) {
             overTargetToastShownRef.current = false;
+            stopAlertSound();
             return;
         }
         if (overTargetToastShownRef.current) return;
         overTargetToastShownRef.current = true;
+        playAlertSound();
         toast.error('Target time exceeded — tap FINISH when your cycle is complete.', {
             duration: 8000,
             id: 'mobile-over-target',
@@ -224,6 +316,60 @@ export const MobileProduction: React.FC = () => {
         productionData?.is_paused,
         productionData?.target_mins,
         actualTimeCounter,
+        playAlertSound,
+        stopAlertSound,
+    ]);
+
+    // Repeating reminder every 10 minutes when production is not running.
+    // Covers cases like: cycle finished but operator forgets RESET/START.
+    useEffect(() => {
+        if (!productionData || initializing || loading) {
+            startReminderAnchorRef.current = null;
+            return;
+        }
+
+        const needsStartReminder =
+            (productionData.button_status === 3 && !productionData.is_paused) ||
+            productionData.button_status === 2;
+
+        if (!needsStartReminder) {
+            startReminderAnchorRef.current = null;
+            return;
+        }
+
+        if (startReminderAnchorRef.current === null) {
+            startReminderAnchorRef.current = Date.now();
+        }
+
+        const REMINDER_MS = 10 * 60 * 1000;
+
+        const tick = () => {
+            if (startReminderAnchorRef.current === null) return;
+            const elapsed = Date.now() - startReminderAnchorRef.current;
+            if (elapsed < REMINDER_MS) return;
+
+            playAlertSound();
+            toast.error(
+                productionData.button_status === 2
+                    ? 'Cycle completed. Tap RESET, then START for next cycle.'
+                    : 'Production not started. Tap START to begin cycle.',
+                {
+                    duration: 8000,
+                    id: 'mobile-start-reminder',
+                }
+            );
+            startReminderAnchorRef.current = Date.now();
+        };
+
+        const intervalId = window.setInterval(tick, 30000);
+        return () => window.clearInterval(intervalId);
+    }, [
+        productionData?.id,
+        productionData?.button_status,
+        productionData?.is_paused,
+        initializing,
+        loading,
+        playAlertSound,
     ]);
 
     // Sync actual_time to database every minute

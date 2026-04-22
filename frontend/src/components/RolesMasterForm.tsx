@@ -8,6 +8,7 @@ const API_URL = `${API_BASE_URL}/api`;
 const allMenus = [
   { key: 'overview', label: 'TV Dashboard' },
   { key: 'reports', label: 'Reports' },
+  { key: 'missed_actions', label: 'Missed Actions' },
   { key: 'production_routing', label: 'Production Routing' },
   { key: 'production_planning', label: 'Production Planning' },
   { key: 'line_setup_form', label: 'Line Setup Form' },

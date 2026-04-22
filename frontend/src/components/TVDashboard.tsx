@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smile, Frown, Meh, TrendingUp, Target, Clock, Zap, Activity } from 'lucide-react';
+import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 
@@ -13,6 +13,11 @@ export const TVDashboard: React.FC = () => {
     const [progress, setProgress] = useState(0);
     const [currentDate, setCurrentDate] = useState('');
     const [reworkSummary, setReworkSummary] = useState<Record<number, { total_rework: number; total_rejection: number }>>({});
+    const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+    const [isOffline, setIsOffline] = useState<boolean>(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [retryAttempts, setRetryAttempts] = useState(0);
+    const [partialWarning, setPartialWarning] = useState<string | null>(null);
 
     useEffect(() => {
         const now = new Date();
@@ -42,34 +47,78 @@ export const TVDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        const handleOnline = () => setIsOffline(false);
+        const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    useEffect(() => {
         if (workCentres.length === 0 || !currentDate) return;
 
         const fetchDashboard = async () => {
+            setIsRefreshing(true);
             try {
                 const workCentreId = workCentres[currentIndex].id;
-                const [dashRes, reworkRes] = await Promise.all([
+                const [dashRes, reworkRes] = await Promise.allSettled([
                     apiFetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`),
-                    apiFetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`),
+                    apiFetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`)
                 ]);
-                const dashResult = await dashRes.json();
-                const reworkResult = await reworkRes.json();
-                if (dashResult.success) {
-                    setDashboardData(dashResult.data);
-                    setErrorMessage(null);
-                    setLoading(false);
+
+                let dashboardUpdated = false;
+                const warnings: string[] = [];
+
+                if (dashRes.status === 'fulfilled') {
+                    const dashResult = await dashRes.value.json();
+                    if (dashResult.success && dashResult.data) {
+                        setDashboardData(dashResult.data);
+                        setLastUpdatedAt(new Date());
+                        setErrorMessage(null);
+                        setRetryAttempts(0);
+                        setLoading(false);
+                        dashboardUpdated = true;
+                    } else {
+                        warnings.push('Live dashboard feed returned invalid data.');
+                    }
                 } else {
-                    setErrorMessage(dashResult.message || 'Failed to load dashboard data.');
+                    warnings.push('Live dashboard feed is unreachable.');
+                }
+
+                if (reworkRes.status === 'fulfilled') {
+                    const reworkResult = await reworkRes.value.json();
+                    if (reworkResult.success && Array.isArray(reworkResult.data)) {
+                        const map: Record<number, { total_rework: number; total_rejection: number }> = {};
+                        reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
+                        setReworkSummary(map);
+                    } else {
+                        warnings.push('Rework/rejection summary is unavailable.');
+                    }
+                } else {
+                    warnings.push('Rework/rejection feed is unreachable.');
+                }
+
+                if (!dashboardUpdated) {
+                    setRetryAttempts((prev) => prev + 1);
+                    setErrorMessage('Live refresh failed. Auto-retrying...');
                     setLoading(false);
                 }
-                if (reworkResult.success) {
-                    const map: Record<number, { total_rework: number; total_rejection: number }> = {};
-                    reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
-                    setReworkSummary(map);
+
+                if (warnings.length > 0) {
+                    setPartialWarning(warnings.join(' '));
+                } else {
+                    setPartialWarning(null);
                 }
             } catch (error) {
                 console.error('Error fetching dashboard:', error);
-                setErrorMessage('Failed to refresh dashboard data. Please retry.');
+                setErrorMessage('Failed to refresh dashboard data. Auto-retrying...');
+                setRetryAttempts((prev) => prev + 1);
                 setLoading(false);
+            } finally {
+                setIsRefreshing(false);
             }
         };
 
@@ -126,6 +175,9 @@ export const TVDashboard: React.FC = () => {
 
     const { topSection, middleSection, lowerSection } = dashboardData;
     const currentWorkCentreId = workCentres[currentIndex]?.id;
+    const secondsSinceUpdate = lastUpdatedAt ? Math.floor((currentTime.getTime() - lastUpdatedAt.getTime()) / 1000) : null;
+    const isStale = secondsSinceUpdate !== null && secondsSinceUpdate > 30;
+    const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
 
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
@@ -149,8 +201,39 @@ export const TVDashboard: React.FC = () => {
                             <div className="text-blue-100 text-base sm:text-xl">
                                 {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                             </div>
+                            <div className="text-blue-100 text-xs sm:text-sm mt-1">
+                                Last update: {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Waiting...'}
+                            </div>
                         </div>
                     </div>
+                    <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isOffline ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            {isOffline ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
+                            {isOffline ? 'Offline' : 'Online'}
+                        </div>
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isCriticalStale ? 'bg-red-100 text-red-700' : isStale ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {secondsSinceUpdate === null ? 'No live data yet' : isCriticalStale ? `Data stale (${secondsSinceUpdate}s)` : isStale ? `Data aging (${secondsSinceUpdate}s)` : `Live (${secondsSinceUpdate}s ago)`}
+                        </div>
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isRefreshing ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
+                            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            {isRefreshing ? 'Refreshing...' : 'Auto-refresh 10s'}
+                        </div>
+                        {retryAttempts > 0 && (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-orange-100 text-orange-700">
+                                Retry attempt {retryAttempts}
+                            </div>
+                        )}
+                    </div>
+                    {(partialWarning || errorMessage || isOffline || isCriticalStale) && (
+                        <div className={`rounded-xl px-4 py-3 text-sm font-semibold mb-4 ${isOffline || isCriticalStale ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
+                            {isOffline
+                                ? 'Connection lost. Showing last available data. Auto-retry is active.'
+                                : isCriticalStale
+                                    ? 'Data feed appears stale. Showing last available snapshot while auto-retry continues.'
+                                    : partialWarning || errorMessage}
+                        </div>
+                    )}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
                         <div className="bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 text-center hover:bg-white/30 transition-all duration-300 shadow-lg">
                             <Target className="h-8 w-8 sm:h-12 sm:w-12 text-white mx-auto mb-2 sm:mb-3 drop-shadow-md" />

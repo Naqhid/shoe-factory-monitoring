@@ -16,10 +16,12 @@ class ApiController {
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
+      const resolvedMachineId = machineId || '07';
       let where = 'WHERE DATE(mcp.prod_date) BETWEEN ? AND ? AND mcp.button_status = 2';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcp.work_centre_id = ?'; params.push(workCentreId); }
-      if (machineId) { where += ' AND mcp.machine_id = ?'; params.push(machineId); }
+      where += ' AND mcp.machine_id = ?';
+      params.push(resolvedMachineId);
       if (search) { where += ' AND (wc.name LIKE ? OR c.name LIKE ? OR s.name LIKE ? OR col.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
 
       const baseQuery = `

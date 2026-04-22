@@ -1,8 +1,9 @@
 import React from 'react';
-import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, Cpu, UserCheck, TrendingUp, ChevronRight } from 'lucide-react';
+import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, Cpu, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
+import * as XLSX from 'xlsx';
 
 type ReportType = 'hourly-production' | 'line-efficiency' | 'attendance' | 'rework-rejection' | 'machine-output' | 'employee-output' | 'employee-performance';
 
@@ -58,9 +59,39 @@ const HEADER_MAP: Record<string, string> = {
   target: 'Target', performance_grade: 'Grade',
 };
 
+const FILTER_STORAGE_KEY = 'reports_filters_v1';
+
+type DatePreset = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'custom';
+
+const formatDateInput = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getPresetRange = (preset: DatePreset) => {
+  const today = new Date();
+  const start = new Date(today);
+  const end = new Date(today);
+
+  if (preset === 'yesterday') {
+    start.setDate(start.getDate() - 1);
+    end.setDate(end.getDate() - 1);
+  } else if (preset === 'last7') {
+    start.setDate(start.getDate() - 6);
+  } else if (preset === 'thisMonth') {
+    start.setDate(1);
+  }
+
+  return { from: formatDateInput(start), to: formatDateInput(end) };
+};
+
 export const Reports: React.FC = () => {
-  const [fromDate, setFromDate] = React.useState(new Date().toISOString().split('T')[0]);
-  const [toDate, setToDate] = React.useState(new Date().toISOString().split('T')[0]);
+  const defaultRange = getPresetRange('today');
+  const [fromDate, setFromDate] = React.useState(defaultRange.from);
+  const [toDate, setToDate] = React.useState(defaultRange.to);
+  const [datePreset, setDatePreset] = React.useState<DatePreset>('today');
   const [reportType, setReportType] = React.useState<ReportType>('hourly-production');
   const [workCentres, setWorkCentres] = React.useState<any[]>([]);
   const [machines, setMachines] = React.useState<any[]>([]);
@@ -74,6 +105,49 @@ export const Reports: React.FC = () => {
   const [data, setData] = React.useState<any[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [dateError, setDateError] = React.useState<string | null>(null);
+  const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.reportType) setReportType(saved.reportType);
+      if (saved.fromDate) setFromDate(saved.fromDate);
+      if (saved.toDate) setToDate(saved.toDate);
+      if (saved.selectedLine) setSelectedLine(saved.selectedLine);
+      if (saved.selectedMachine) setSelectedMachine(saved.selectedMachine);
+      if (saved.search) setSearch(saved.search);
+      if (saved.limit) setLimit(saved.limit);
+      if (saved.datePreset) setDatePreset(saved.datePreset);
+    } catch {
+      // ignore invalid stored state
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 768);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  React.useEffect(() => {
+    localStorage.setItem(
+      FILTER_STORAGE_KEY,
+      JSON.stringify({
+        fromDate,
+        toDate,
+        reportType,
+        selectedLine,
+        selectedMachine,
+        search,
+        limit,
+        datePreset,
+      })
+    );
+  }, [fromDate, toDate, reportType, selectedLine, selectedMachine, search, limit, datePreset]);
 
   React.useEffect(() => {
     apiFetch(`${API_BASE}/api/tv-dashboard/work-centres`)
@@ -100,8 +174,49 @@ export const Reports: React.FC = () => {
     if (!stillExists) setSelectedMachine('');
   }, [filteredMachines, selectedMachine]);
 
+  const validateDateRange = React.useCallback(() => {
+    if (!fromDate || !toDate) {
+      setDateError('Please select both From Date and To Date.');
+      return false;
+    }
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    if (from > to) {
+      setDateError('From Date cannot be after To Date.');
+      return false;
+    }
+    setDateError(null);
+    return true;
+  }, [fromDate, toDate]);
+
+  React.useEffect(() => {
+    validateDateRange();
+  }, [fromDate, toDate, validateDateRange]);
+
+  const applyDatePreset = (preset: DatePreset) => {
+    setDatePreset(preset);
+    if (preset === 'custom') return;
+    const range = getPresetRange(preset);
+    setFromDate(range.from);
+    setToDate(range.to);
+    setPage(1);
+  };
+
+  const clearAllFilters = () => {
+    const todayRange = getPresetRange('today');
+    setDatePreset('today');
+    setFromDate(todayRange.from);
+    setToDate(todayRange.to);
+    setSelectedLine('');
+    setSelectedMachine('');
+    setSearch('');
+    setPage(1);
+    setError(null);
+    setData(null);
+  };
+
   const fetchReport = async (overridePage?: number, overrideSearch?: string) => {
-    if (!fromDate || !toDate) return;
+    if (!validateDateRange()) return;
     setIsLoading(true); setError(null);
     const currentPage = overridePage ?? page;
     const currentSearch = overrideSearch !== undefined ? overrideSearch : search;
@@ -128,6 +243,7 @@ export const Reports: React.FC = () => {
   };
 
   const handleLimitChange = (newLimit: number) => {
+    if (!validateDateRange()) return;
     setLimit(newLimit);
     setPage(1);
     // pass newLimit directly since state update is async
@@ -166,6 +282,55 @@ export const Reports: React.FC = () => {
     toast.success('CSV downloaded');
   };
 
+  const exportExcel = () => {
+    if (!data || data.length === 0) return;
+    const headers = Object.keys(data[0]);
+    const rows = data.map((row) => {
+      const mapped: Record<string, any> = {};
+      headers.forEach((h) => {
+        mapped[HEADER_MAP[h] || h] = row[h];
+      });
+      return mapped;
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Report');
+    XLSX.writeFile(wb, `${reportType}_${fromDate}_${toDate}.xlsx`);
+    toast.success('Excel downloaded');
+  };
+
+  const exportPDF = () => {
+    if (!data || data.length === 0) return;
+    const headers = Object.keys(data[0]);
+    const title = `${activeOption.label} (${fmtDate(fromDate)} - ${fmtDate(toDate)})`;
+    const tableHead = headers.map(h => `<th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">${HEADER_MAP[h] || h}</th>`).join('');
+    const tableRows = data.map((row) => `<tr>${headers.map(h => `<td style="border:1px solid #ddd;padding:6px;font-size:10px;">${String(row[h] ?? '')}</td>`).join('')}</tr>`).join('');
+
+    const html = `
+      <html>
+      <head><title>${title}</title></head>
+      <body style="font-family:Arial, sans-serif; padding:16px;">
+        <h2 style="margin-bottom:4px;">${title}</h2>
+        <p style="color:#666; margin-top:0;">Generated at ${new Date().toLocaleString()}</p>
+        <table style="border-collapse:collapse; width:100%;">
+          <thead><tr style="background:#f3f4f6;">${tableHead}</tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Popup blocked. Please allow popups to export PDF.');
+      return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const activeOption = REPORT_OPTIONS.find(o => o.value === reportType)!;
   const activeColor = COLOR_MAP[activeOption.color];
 
@@ -175,6 +340,52 @@ export const Reports: React.FC = () => {
   const Td = ({ children, center }: { children: React.ReactNode; center?: boolean }) => (
     <td className={`px-3 py-2.5 text-sm text-gray-700 whitespace-nowrap ${center ? 'text-center' : ''}`}>{children}</td>
   );
+
+  const activeFilterChips = React.useMemo(() => {
+    const chips: string[] = [];
+    if (selectedLine) {
+      chips.push(`Line: ${workCentres.find((w) => String(w.id) === String(selectedLine))?.name || selectedLine}`);
+    }
+    if (reportType === 'hourly-production') {
+      chips.push(selectedMachine ? `Machine: ${selectedMachine}` : 'Machine: End-of-line (07)');
+    }
+    if (search.trim()) chips.push(`Search: ${search.trim()}`);
+    return chips;
+  }, [selectedLine, selectedMachine, search, reportType, workCentres]);
+
+  const renderMobileCards = () => {
+    if (!data || data.length === 0) return null;
+    const columnsByType: Record<ReportType, string[]> = {
+      'hourly-production': ['date', 'line', 'customer', 'article_no', 'total_planned_qty', 'total_output', 'avg_hourly_output'],
+      'line-efficiency': ['date', 'line', 'process', 'total_output', 'output_percent', 'efficiency_percent'],
+      'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'login_time'],
+      'rework-rejection': ['date', 'line', 'machine', 'output', 'rework_qty', 'rejection_qty', 'reason'],
+      'machine-output': ['date', 'line', 'machine_id', 'machine_name', 'output', 'efficiency_percent'],
+      'employee-output': ['date', 'line', 'emp_code', 'emp_name', 'machine_id', 'total_output'],
+      'employee-performance': ['date', 'line', 'emp_code', 'emp_name', 'machine_id', 'output', 'efficiency_percent', 'performance_grade'],
+    };
+    const keys = columnsByType[reportType];
+    return (
+      <div className="space-y-3 p-3">
+        {data.map((row, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            {keys.map((key) => {
+              let value: any = row[key];
+              if (key === 'date') value = fmtDate(value);
+              if (key === 'login_time') value = fmtTime(value);
+              if (value === null || value === undefined || value === '') value = '—';
+              return (
+                <div key={key} className="flex items-start justify-between gap-3 py-1.5 border-b border-gray-100 last:border-b-0">
+                  <span className="text-xs font-semibold text-gray-500">{HEADER_MAP[key] || key}</span>
+                  <span className="text-sm font-medium text-gray-800 text-right">{String(value)}</span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const renderTable = () => {
     if (!data || data.length === 0) return (
@@ -524,6 +735,29 @@ export const Reports: React.FC = () => {
 
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <div className="flex flex-wrap gap-2 mb-3">
+            {([
+              { key: 'today', label: 'Today' },
+              { key: 'yesterday', label: 'Yesterday' },
+              { key: 'last7', label: 'Last 7 Days' },
+              { key: 'thisMonth', label: 'This Month' },
+              { key: 'custom', label: 'Custom' },
+            ] as { key: DatePreset; label: string }[]).map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => applyDatePreset(preset.key)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+                  datePreset === preset.key
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Line</label>
@@ -538,7 +772,7 @@ export const Reports: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Machine</label>
                 <select value={selectedMachine} onChange={e => setSelectedMachine(e.target.value)}
                   className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 min-w-[180px]">
-                  <option value="">All Machines</option>
+                  <option value="">End-of-line (Default)</option>
                   {filteredMachines.map((machine: any) => (
                     <option key={machine.id || machine.machine_id} value={machine.machine_id}>
                       {machine.machine_id} {machine.machine_name || machine.name ? `- ${machine.machine_name || machine.name}` : ''}
@@ -549,12 +783,12 @@ export const Reports: React.FC = () => {
             )}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">From Date</label>
-              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+              <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setDatePreset('custom'); }}
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">To Date</label>
-              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+              <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setDatePreset('custom'); }}
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
             </div>
             <div>
@@ -582,16 +816,42 @@ export const Reports: React.FC = () => {
                 )}
               </div>
             </div>
-            <button onClick={() => { setPage(1); fetchReport(1); }} disabled={isLoading}
+            <button onClick={() => { setPage(1); fetchReport(1); }} disabled={isLoading || !!dateError}
               className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50 ${activeColor.activeBg} hover:opacity-90 shadow-sm`}>
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               Generate Report
+            </button>
+            <button onClick={clearAllFilters}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all shadow-sm">
+              <RotateCcw className="h-4 w-4" /> Clear All
             </button>
             <button onClick={exportCSV} disabled={!data || data.length === 0}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gray-700 hover:bg-gray-800 disabled:opacity-40 transition-all shadow-sm">
               <Download className="h-4 w-4" /> Export CSV
             </button>
+            <button onClick={exportExcel} disabled={!data || data.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 transition-all shadow-sm">
+              <FileSpreadsheet className="h-4 w-4" /> Export Excel
+            </button>
+            <button onClick={exportPDF} disabled={!data || data.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 transition-all shadow-sm">
+              <FileText className="h-4 w-4" /> Export PDF
+            </button>
           </div>
+
+          {dateError && (
+            <p className="mt-3 text-sm text-red-600 font-medium">{dateError}</p>
+          )}
+
+          {activeFilterChips.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {activeFilterChips.map((chip) => (
+                <span key={chip} className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+                  {chip}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Results */}
@@ -607,6 +867,12 @@ export const Reports: React.FC = () => {
             <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-3" />
             <h2 className="text-lg font-semibold text-red-700 mb-1">Failed to load report</h2>
             <p className="text-red-500 text-sm">{error}</p>
+            <button
+              onClick={() => fetchReport(page, search)}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold"
+            >
+              <RotateCcw className="h-4 w-4" /> Retry
+            </button>
           </div>
         ) : data === null ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col items-center justify-center py-20">
@@ -632,7 +898,19 @@ export const Reports: React.FC = () => {
                 {reportType === 'hourly-production' && selectedMachine && ` · Machine ${selectedMachine}`}
               </span>
             </div>
-            {renderTable()}
+            {isMobile && (
+              <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
+                Mobile view enabled for readability. Switch to desktop for full table grid.
+              </div>
+            )}
+            {isMobile ? renderMobileCards() : (
+              <>
+                <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
+                  Tip: scroll horizontally to view all columns.
+                </div>
+                {renderTable()}
+              </>
+            )}
             {data && data.length > 0 && (
               <Pagination
                 currentPage={page}

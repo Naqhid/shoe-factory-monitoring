@@ -19,6 +19,7 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
             SELECT
                 mc.id              AS machine_centre_id,
                 mc.name            AS machine_centre_name,
+                COALESCE(mc.machine_name, mc.name) AS machine_name,
                 mc.machine_id,
                 COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
                 COALESCE(

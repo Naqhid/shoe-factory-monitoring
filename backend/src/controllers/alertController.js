@@ -1,6 +1,5 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
-const { sendAlertDigest } = require('../services/emailService');
 
 // Create alerts table on startup
 const initTable = async () => {
@@ -391,17 +390,7 @@ class AlertController {
 
       logger.info(`Alert checks for ${date}: ${count} alerts generated`);
 
-      // Send email digest if any alerts were generated
-      if (count > 0) {
-        const [newAlerts] = await db.execute(`
-          SELECT pa.*, wc.name as work_centre_name
-          FROM production_alerts pa
-          LEFT JOIN work_centres wc ON pa.work_centre_id = wc.id
-          WHERE pa.alert_date = ? AND pa.is_read = 0
-          ORDER BY pa.severity DESC, pa.created_at DESC
-        `, [date]);
-        sendAlertDigest(newAlerts, date).catch(e => logger.error('Digest email error:', e.message));
-      }
+      // Email digest intentionally disabled.
     } catch (err) {
       logger.error('Alert _runChecks error:', err.message);
     }

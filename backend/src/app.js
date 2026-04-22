@@ -26,6 +26,7 @@ const roleController = require('./controllers/roleController');
 const productionLockController = require('./controllers/productionLockController');
 const alertController = require('./controllers/alertController');
 const backupController = require('./controllers/backupController');
+const missedActionsController = require('./controllers/missedActionsController');
 const checkDayLock = require('./middleware/checkDayLock');
 const backupService = require('./services/backupService');
 const errorHandler = require('./middleware/errorHandler');
@@ -116,6 +117,56 @@ setInterval(() => {
   const today = new Date().toISOString().split('T')[0];
   runAlertChecks(today);
 }, 60 * 60 * 1000); // every hour
+
+// Auto-close all active mobile sessions daily (configurable)
+const AUTO_CLOSE_ENABLED = (process.env.MOBILE_SESSION_AUTO_CLOSE_ENABLED || 'true').toLowerCase() !== 'false';
+const AUTO_CLOSE_TIME = process.env.MOBILE_SESSION_AUTO_CLOSE_TIME || '18:35'; // HH:mm (24h)
+
+const parseAutoCloseTime = (timeValue) => {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec((timeValue || '').trim());
+  if (!match) return null;
+  return { hour: Number(match[1]), minute: Number(match[2]) };
+};
+
+const autoCloseTimeParts = parseAutoCloseTime(AUTO_CLOSE_TIME) || { hour: 18, minute: 35 };
+if (!parseAutoCloseTime(AUTO_CLOSE_TIME)) {
+  logger.warn(`Invalid MOBILE_SESSION_AUTO_CLOSE_TIME="${AUTO_CLOSE_TIME}". Falling back to 18:35.`);
+}
+
+let lastSessionAutoCloseDate = null;
+const getLocalDateKey = (date = new Date()) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const runAutoSessionCloseCheck = async () => {
+  try {
+    if (!AUTO_CLOSE_ENABLED) return;
+
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setHours(autoCloseTimeParts.hour, autoCloseTimeParts.minute, 0, 0);
+
+    const todayKey = getLocalDateKey(now);
+    if (now >= cutoff && lastSessionAutoCloseDate !== todayKey) {
+      const closedCount = await mobileSessionController.expireAllActiveSessions();
+      lastSessionAutoCloseDate = todayKey;
+      logger.info(`Auto-close check completed for ${todayKey} at/after ${AUTO_CLOSE_TIME}. Closed sessions: ${closedCount}`);
+    }
+  } catch (error) {
+    logger.error(`Auto-close scheduler error: ${error.message}`);
+  }
+};
+
+if (AUTO_CLOSE_ENABLED) {
+  logger.info(`Mobile session auto-close is enabled. Daily cutoff: ${AUTO_CLOSE_TIME} (server local time).`);
+  setInterval(runAutoSessionCloseCheck, 60 * 1000); // check every minute
+  setTimeout(runAutoSessionCloseCheck, 10 * 1000); // run once shortly after startup
+} else {
+  logger.info('Mobile session auto-close is disabled via MOBILE_SESSION_AUTO_CLOSE_ENABLED=false.');
+}
 
 // Email alerts DISABLED - re-enable by uncommenting below code and setting EMAIL_USER/EMAIL_PASS in .env
 // Poll for un-emailed alerts every 5 minutes (catches DB-trigger-created alerts too)
@@ -210,14 +261,16 @@ app.get('/api/reports/employee-output', validate(validate.schemas.dateQuery), ap
 app.get('/api/reports/employee-performance', validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
 
 // Master routes — table whitelist on all master endpoints
-app.get('/api/masters/:table', validate.allowedTable, validate.pagination, masterController.getAll);
+app.get('/api/masters/:table', validate.allowedTable, validate.pagination, masterController.getAll.bind(masterController));
 app.get('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.getById);
 app.get('/api/masters/:table/code/:code', validate.allowedTable, masterController.getByCode);
+app.get('/api/masters/:table/:id/usage', validate.allowedTable, validate.numericId, masterController.getUsage.bind(masterController));
+app.post('/api/masters/:table/:id/restore', validate.allowedTable, validate.numericId, masterController.restore.bind(masterController));
 app.get('/api/masters/employees/emp_id/:empId', masterController.getByEmpId);
 app.get('/api/masters/machine_centres/machine_id/:machineId', masterController.getByMachineId);
-app.post('/api/masters/:table', validate.allowedTable, masterController.create);
-app.put('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.update);
-app.delete('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.delete);
+app.post('/api/masters/:table', validate.allowedTable, masterController.create.bind(masterController));
+app.put('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.update.bind(masterController));
+app.delete('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.delete.bind(masterController));
 
 // Production routing routes
 app.get('/api/production-routing', validate.pagination, productionRoutingController.getAll);
@@ -292,6 +345,7 @@ app.get('/api/tracker/hourly', productionTrackerController.getHourlyPerformance)
 app.get('/api/tracker/workstations', productionTrackerController.getWorkstationPerformance);
 app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons);
 app.get('/api/tracker/line-performance', productionTrackerController.getLinePerformance);
+app.get('/api/missed-actions', missedActionsController.getMissedActions);
 
 // Machine Centre routes (public - no JWT for factory floor use)
 app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);

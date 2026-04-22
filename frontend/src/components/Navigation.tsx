@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList, MonitorDot } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList, MonitorDot, AlertTriangle } from 'lucide-react';
 import { isMenuAllowed } from '../utils/roleConfig';
 import { AlertBell } from './AlertBell';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -15,6 +15,7 @@ interface NavigationProps {
 const processMenus = [
   { key: 'overview', label: 'TV Dashboard', icon: Tv },
   { key: 'reports', label: 'Reports', icon: TrendingUp },
+  { key: 'missed_actions', label: 'Missed Actions', icon: AlertTriangle },
   { key: 'logs', label: 'Login Logs', icon: FileText },
   { key: 'production_routing', label: 'Routing', icon: Route },
   { key: 'production_planning', label: 'Planning', icon: Calendar },
