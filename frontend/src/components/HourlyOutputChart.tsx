@@ -22,11 +22,13 @@ const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f9
 export const HourlyOutputChart: React.FC<Props> = ({
   workCentreId, workCentreName, showProgress = false, progress = 0, date
 }) => {
+  const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState<'line' | 'machine'>('line');
   const [lineData, setLineData] = useState<HourlyOutputData | null>(null);
   const [machineData, setMachineData] = useState<MachineHourlyData[]>([]);
   const [selectedMachine, setSelectedMachine] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const dateParam = date || new Date().toISOString().split('T')[0];
 
@@ -57,6 +59,13 @@ export const HourlyOutputChart: React.FC<Props> = ({
     const interval = setInterval(() => { fetchLineData(); fetchMachineData(); }, 60000);
     return () => clearInterval(interval);
   }, [workCentreId, date]);
+
+  useEffect(() => {
+    const updateMobileState = () => setIsMobile(window.innerWidth < 640);
+    updateMobileState();
+    window.addEventListener('resize', updateMobileState);
+    return () => window.removeEventListener('resize', updateMobileState);
+  }, []);
 
   const CustomTick = ({ x, y, payload }: any) => {
     const text = payload.value;
@@ -115,6 +124,15 @@ export const HourlyOutputChart: React.FC<Props> = ({
     ? chartDataLine.length === 0
     : selectedMachine === 'all' ? chartDataMachineAll.length === 0 : chartDataMachineSingle.length === 0;
 
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchLineData(), fetchMachineData()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       {showProgress && (
@@ -126,16 +144,16 @@ export const HourlyOutputChart: React.FC<Props> = ({
       )}
 
       {/* Header + controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h2 className="text-2xl font-bold text-blue-600">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-2xl font-bold text-blue-600">
           {workCentreName ? `${workCentreName} - Hourly Output` : 'Hourly Output'}
         </h2>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {/* View mode dropdown */}
           <select
             value={viewMode}
             onChange={e => { setViewMode(e.target.value as 'line' | 'machine'); setSelectedMachine('all'); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
           >
             <option value="line">Line Hourly Output</option>
             <option value="machine">Machine Hourly Output</option>
@@ -146,7 +164,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             <select
               value={selectedMachine}
               onChange={e => setSelectedMachine(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Machines</option>
               {machineData.map(m => (
@@ -156,6 +174,15 @@ export const HourlyOutputChart: React.FC<Props> = ({
               ))}
             </select>
           )}
+
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="w-full sm:w-auto px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
       </div>
 
@@ -163,11 +190,12 @@ export const HourlyOutputChart: React.FC<Props> = ({
         <div className="flex items-center justify-center h-64 text-gray-400 text-lg">No data available</div>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={400}>
+          <div className={isMobile ? 'h-[280px]' : 'h-[400px]'}>
+          <ResponsiveContainer width="100%" height="100%">
             {viewMode === 'line' ? (
               <LineChart data={chartDataLine} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={80} interval={0} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
                   label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
                 <Tooltip />
@@ -182,7 +210,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             ) : selectedMachine === 'all' ? (
               <LineChart data={chartDataMachineAll} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={80} interval={0} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
                   label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
                 <Tooltip />
@@ -197,7 +225,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             ) : (
               <LineChart data={chartDataMachineSingle} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={80} interval={0} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
                   label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
                 <Tooltip />
@@ -209,10 +237,11 @@ export const HourlyOutputChart: React.FC<Props> = ({
               </LineChart>
             )}
           </ResponsiveContainer>
+          </div>
 
           {/* Summary cards */}
           {viewMode === 'line' && lineData && (
-            <div className="mt-6 grid grid-cols-3 gap-4 text-center">
+            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
               <div className="bg-orange-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Target</p>
                 <p className="text-3xl font-bold text-orange-600">{lineData.target * lineData.hourlyData.length}</p>
@@ -233,7 +262,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
           )}
 
           {viewMode === 'machine' && selectedMachine !== 'all' && activeMachine && (
-            <div className="mt-6 grid grid-cols-3 gap-4 text-center">
+            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Current Hour</p>
                 <p className="text-3xl font-bold text-blue-600">{activeMachine.hourlyData[activeMachine.hourlyData.length - 1]?.production || 0}</p>

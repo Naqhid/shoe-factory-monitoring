@@ -29,6 +29,7 @@ import { TVDashboard } from './components/TVDashboard';
 import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerPage';
 import { MonitoringDashboard } from './components/MonitoringDashboard';
 import LogPage from './components/LogPage';
+import { MissedActionsPage } from './components/MissedActionsPage';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { isMenuAllowed, getDefaultRoute } from './utils/roleConfig';
 import { API_BASE_URL, apiFetch } from './services/api';
@@ -182,6 +183,7 @@ function App() {
 
   const isProductionDashboard = activeMenu === 'overview';
   const isReports = activeMenu === 'reports';
+  const isMissedActions = activeMenu === 'missed_actions';
   const isProductionRouting = activeMenu === 'production_routing';
   const isProductionPlanning = activeMenu === 'production_planning';
   const isLineSetupForm = activeMenu === 'line_setup_form';
@@ -249,6 +251,8 @@ function App() {
         <TVDashboard />
       ) : isReports ? (
         <Reports />
+      ) : isMissedActions ? (
+        <MissedActionsPage />
       ) : isProductionRouting ? (
         <ProductionRoutingForm />
       ) : isProductionPlanning ? (

@@ -401,6 +401,23 @@ const mobileSessionController = {
         } catch (error) {
             next(error);
         }
+    },
+
+    // Internal utility: expire all active sessions (used by scheduler)
+    expireAllActiveSessions: async () => {
+        const [result] = await pool.execute(
+            `UPDATE mobile_sessions
+             SET status = 'expired'
+             WHERE status = 'active'`
+        );
+
+        if (result.affectedRows > 0) {
+            logger.warn(`Auto-close: expired ${result.affectedRows} active mobile session(s).`);
+        } else {
+            logger.info('Auto-close: no active mobile sessions to expire.');
+        }
+
+        return result.affectedRows || 0;
     }
 };
 
