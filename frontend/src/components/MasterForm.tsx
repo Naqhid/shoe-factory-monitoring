@@ -14,6 +14,8 @@ interface MasterRecord {
   machine_name?: string;
   work_centre_id?: number;
   work_centre_name?: string;
+  machine_centre_id?: number;
+  machine_centre_name?: string;
 }
 
 interface MasterFormProps {
@@ -21,14 +23,21 @@ interface MasterFormProps {
   table: string;
 }
 
-const ARCHIVE_TABLES = ['customers', 'groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres'];
-const USAGE_CHECK_TABLES = ['groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres'];
+const ARCHIVE_TABLES = ['customers', 'groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees'];
+const USAGE_CHECK_TABLES = ['groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees'];
 
 export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<MasterRecord | null>(null);
-  const [formData, setFormData] = React.useState({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '' });
+  const [formData, setFormData] = React.useState({
+    code: '',
+    name: '',
+    machine_id: '',
+    machine_name: '',
+    work_centre_id: '',
+    machine_centre_id: '',
+  });
   const [loading, setLoading] = React.useState(false);
   const [fetchLoading, setFetchLoading] = React.useState(false);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
@@ -42,6 +51,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   const [deleteConfirmText, setDeleteConfirmText] = React.useState('Delete');
   const [deleteBlocked, setDeleteBlocked] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<Array<{ id: number; name: string }>>([]);
+  const [machineCentres, setMachineCentres] = React.useState<Array<{ id: number; name: string; work_centre_id?: number }>>([]);
   const isArchiveTable = ARCHIVE_TABLES.includes(table);
   const needsUsageCheck = USAGE_CHECK_TABLES.includes(table);
   const archiveLabel = title || 'Record';
@@ -61,11 +71,17 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   }, [searchTerm]);
 
   React.useEffect(() => {
-    if (table !== 'machine_centres') return;
+    if (table !== 'machine_centres' && table !== 'employees') return;
     apiFetch(`${API_BASE}/api/tv-dashboard/work-centres`)
       .then((r) => r.json())
       .then((result) => {
         if (result.success) setWorkCentres(result.data || []);
+      })
+      .catch(() => {});
+    apiFetch(`${API_BASE}/api/masters/machine_centres?limit=500`)
+      .then((r) => r.json())
+      .then((result) => {
+        if (result.success) setMachineCentres(result.data || []);
       })
       .catch(() => {});
   }, [table]);
@@ -99,7 +115,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   }, [currentPage, itemsPerPage, table, debouncedSearch, showArchived]);
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '' });
+    setFormData({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '', machine_centre_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -108,6 +124,10 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
     e.preventDefault();
     if (!formData.code.trim() || !formData.name.trim()) {
       toast.error('Code and name are required');
+      return;
+    }
+    if (table === 'employees' && !formData.work_centre_id) {
+      toast.error('Work centre is required for employee');
       return;
     }
 
@@ -125,6 +145,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
         body: JSON.stringify({
           ...formData,
           work_centre_id: formData.work_centre_id ? Number(formData.work_centre_id) : null,
+          machine_centre_id: formData.machine_centre_id ? Number(formData.machine_centre_id) : null,
         }),
       });
 
@@ -151,7 +172,8 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
       name: record.name,
       machine_id: record.machine_id || '',
       machine_name: record.machine_name || '',
-      work_centre_id: record.work_centre_id ? String(record.work_centre_id) : ''
+      work_centre_id: record.work_centre_id ? String(record.work_centre_id) : '',
+      machine_centre_id: record.machine_centre_id ? String(record.machine_centre_id) : '',
     });
     setShowForm(true);
   };
@@ -351,7 +373,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {table === 'machine_centres' && (
+              {(table === 'machine_centres' || table === 'employees') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Work Centre
@@ -366,6 +388,26 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     {workCentres.map((wc) => (
                       <option key={wc.id} value={wc.id}>{wc.name}</option>
                     ))}
+                  </select>
+                </div>
+              )}
+
+              {table === 'employees' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Machine Centre (optional)
+                  </label>
+                  <select
+                    value={formData.machine_centre_id}
+                    onChange={(e) => setFormData({ ...formData, machine_centre_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">No fixed machine</option>
+                    {machineCentres
+                      .filter((mc) => !formData.work_centre_id || String(mc.work_centre_id || '') === String(formData.work_centre_id))
+                      .map((mc) => (
+                        <option key={mc.id} value={mc.id}>{mc.name}</option>
+                      ))}
                   </select>
                 </div>
               )}
@@ -487,6 +529,16 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     Work Centre
                   </th>
                 )}
+                {table === 'employees' && (
+                  <>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Work Centre
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Machine Centre
+                    </th>
+                  </>
+                )}
                 {isArchiveTable && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -522,6 +574,16 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {record.work_centre_name || 'N/A'}
                     </td>
+                  )}
+                  {table === 'employees' && (
+                    <>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {record.work_centre_name || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {record.machine_centre_name || 'N/A'}
+                      </td>
+                    </>
                   )}
                   {isArchiveTable && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

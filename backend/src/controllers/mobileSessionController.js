@@ -418,6 +418,44 @@ const mobileSessionController = {
         }
 
         return result.affectedRows || 0;
+    },
+
+    // Internal utility: auto-finish any unfinished production cycles (used by scheduler)
+    autoFinishUnfinishedProductions: async () => {
+        const [result] = await pool.execute(
+            `UPDATE machine_centre_production
+             SET
+               finish_time = NOW(),
+               idle_stop_time = CASE
+                 WHEN button_status = 3 AND idle_start_time IS NOT NULL AND idle_stop_time IS NULL THEN NOW()
+                 ELSE idle_stop_time
+               END,
+               idle_mins = CASE
+                 WHEN button_status = 3 AND idle_start_time IS NOT NULL AND idle_stop_time IS NULL
+                 THEN COALESCE(idle_mins, 0) + GREATEST(TIMESTAMPDIFF(MINUTE, idle_start_time, NOW()), 0)
+                 ELSE COALESCE(idle_mins, 0)
+               END,
+               actual_time = GREATEST(
+                 0,
+                 TIMESTAMPDIFF(MINUTE, start_time, NOW()) - (
+                   CASE
+                     WHEN button_status = 3 AND idle_start_time IS NOT NULL AND idle_stop_time IS NULL
+                     THEN COALESCE(idle_mins, 0) + GREATEST(TIMESTAMPDIFF(MINUTE, idle_start_time, NOW()), 0)
+                     ELSE COALESCE(idle_mins, 0)
+                   END
+                 )
+               ),
+               button_status = 2
+             WHERE button_status IN (1, 3)`
+        );
+
+        if (result.affectedRows > 0) {
+            logger.warn(`Auto-finish: closed ${result.affectedRows} unfinished production cycle(s).`);
+        } else {
+            logger.info('Auto-finish: no unfinished production cycles found.');
+        }
+
+        return result.affectedRows || 0;
     }
 };
 

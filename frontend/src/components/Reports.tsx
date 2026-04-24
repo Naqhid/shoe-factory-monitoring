@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, Cpu, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw } from 'lucide-react';
+import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, Cpu, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
@@ -104,12 +104,36 @@ export const Reports: React.FC = () => {
   const searchTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [data, setData] = React.useState<any[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isExportLoading, setIsExportLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [dateError, setDateError] = React.useState<string | null>(null);
   const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  const [lastReportGeneratedAt, setLastReportGeneratedAt] = React.useState<Date | null>(null);
 
   React.useEffect(() => {
     try {
+      const params = new URLSearchParams(window.location.search);
+      const urlReportType = params.get('reportType') as ReportType | null;
+      const urlFromDate = params.get('fromDate');
+      const urlToDate = params.get('toDate');
+      const urlSelectedLine = params.get('workCentreId');
+      const urlSelectedMachine = params.get('machineId');
+      const urlSearch = params.get('search');
+      const urlLimit = params.get('limit');
+      const urlPreset = params.get('datePreset') as DatePreset | null;
+
+      if (urlReportType) setReportType(urlReportType);
+      if (urlFromDate) setFromDate(urlFromDate);
+      if (urlToDate) setToDate(urlToDate);
+      if (urlSelectedLine) setSelectedLine(urlSelectedLine);
+      if (urlSelectedMachine) setSelectedMachine(urlSelectedMachine);
+      if (urlSearch) setSearch(urlSearch);
+      if (urlLimit && !Number.isNaN(Number(urlLimit))) setLimit(Number(urlLimit));
+      if (urlPreset) setDatePreset(urlPreset);
+
+      // If URL has report params, treat it as source-of-truth and skip localStorage restore.
+      if (urlReportType || urlFromDate || urlToDate || urlSelectedLine || urlSelectedMachine || urlSearch) return;
+
       const raw = localStorage.getItem(FILTER_STORAGE_KEY);
       if (!raw) return;
       const saved = JSON.parse(raw);
@@ -147,6 +171,18 @@ export const Reports: React.FC = () => {
         datePreset,
       })
     );
+
+    const params = new URLSearchParams();
+    params.set('reportType', reportType);
+    params.set('fromDate', fromDate);
+    params.set('toDate', toDate);
+    if (selectedLine) params.set('workCentreId', selectedLine);
+    if (selectedMachine && reportType === 'hourly-production') params.set('machineId', selectedMachine);
+    if (search.trim()) params.set('search', search.trim());
+    params.set('limit', String(limit));
+    params.set('datePreset', datePreset);
+    const nextUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, '', nextUrl);
   }, [fromDate, toDate, reportType, selectedLine, selectedMachine, search, limit, datePreset]);
 
   React.useEffect(() => {
@@ -215,20 +251,32 @@ export const Reports: React.FC = () => {
     setData(null);
   };
 
+  const buildReportParams = React.useCallback((opts?: { page?: number; limit?: number; search?: string }) => {
+    const params = new URLSearchParams({
+      fromDate,
+      toDate,
+      page: String(opts?.page ?? page),
+      limit: String(opts?.limit ?? limit),
+    });
+    if (selectedLine) params.set('workCentreId', selectedLine);
+    if (reportType === 'hourly-production' && selectedMachine) params.set('machineId', selectedMachine);
+    const s = opts?.search !== undefined ? opts.search : search;
+    if (s.trim()) params.set('search', s.trim());
+    return params;
+  }, [fromDate, toDate, page, limit, selectedLine, reportType, selectedMachine, search]);
+
   const fetchReport = async (overridePage?: number, overrideSearch?: string) => {
     if (!validateDateRange()) return;
     setIsLoading(true); setError(null);
     const currentPage = overridePage ?? page;
     const currentSearch = overrideSearch !== undefined ? overrideSearch : search;
     try {
-      const params = new URLSearchParams({ fromDate, toDate, page: String(currentPage), limit: String(limit) });
-      if (selectedLine) params.set('workCentreId', selectedLine);
-      if (reportType === 'hourly-production' && selectedMachine) params.set('machineId', selectedMachine);
-      if (currentSearch.trim()) params.set('search', currentSearch.trim());
+      const params = buildReportParams({ page: currentPage, search: currentSearch });
       const response = await apiFetch(`${API_BASE}/api/reports/${reportType}?${params}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.error);
       setData(result.data);
+      setLastReportGeneratedAt(new Date());
       if (result.pagination) setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
     } catch (e: any) {
       setError(e.message);
@@ -246,29 +294,50 @@ export const Reports: React.FC = () => {
     if (!validateDateRange()) return;
     setLimit(newLimit);
     setPage(1);
-    // pass newLimit directly since state update is async
-    const params = new URLSearchParams({ fromDate, toDate, page: '1', limit: String(newLimit) });
-    if (selectedLine) params.set('workCentreId', selectedLine);
-    if (reportType === 'hourly-production' && selectedMachine) params.set('machineId', selectedMachine);
-    if (search.trim()) params.set('search', search.trim());
+    const params = buildReportParams({ page: 1, limit: newLimit });
     setIsLoading(true); setError(null);
     apiFetch(`${API_BASE}/api/reports/${reportType}?${params}`)
       .then(r => r.json())
       .then(result => {
         if (!result.success) throw new Error(result.error);
         setData(result.data);
+        setLastReportGeneratedAt(new Date());
         if (result.pagination) setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
       })
       .catch((e: any) => setError(e.message))
       .finally(() => setIsLoading(false));
   };
 
-  const exportCSV = () => {
-    if (!data || data.length === 0) return;
-    const headers = Object.keys(data[0]);
+  const fetchAllRowsForExport = async () => {
+    const exportLimit = 500;
+    const firstParams = buildReportParams({ page: 1, limit: exportLimit });
+    const firstRes = await apiFetch(`${API_BASE}/api/reports/${reportType}?${firstParams}`);
+    const first = await firstRes.json();
+    if (!first.success) throw new Error(first.error || 'Failed to load report for export');
+    let allRows = [...(first.data || [])];
+    const totalPages = first.pagination?.totalPages || 1;
+    for (let p = 2; p <= totalPages; p++) {
+      const params = buildReportParams({ page: p, limit: exportLimit });
+      const res = await apiFetch(`${API_BASE}/api/reports/${reportType}?${params}`);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || `Failed on export page ${p}`);
+      allRows = allRows.concat(json.data || []);
+    }
+    return { rows: allRows, total: first.pagination?.total || allRows.length };
+  };
+
+  const exportCSV = async () => {
+    setIsExportLoading(true);
+    try {
+      const { rows } = await fetchAllRowsForExport();
+      if (!rows || rows.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+      const headers = Object.keys(rows[0]);
     const csvRows = [
       headers.map(h => `"${HEADER_MAP[h] || h}"`).join(','),
-      ...data.map(row => headers.map(h => {
+      ...rows.map(row => headers.map(h => {
         const v = row[h] === null || row[h] === undefined ? '' : String(row[h]);
         return `"${v.replace(/"/g, '""')}"`;
       }).join(','))
@@ -280,12 +349,23 @@ export const Reports: React.FC = () => {
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
     toast.success('CSV downloaded');
+    } catch (e: any) {
+      toast.error(e.message || 'Export failed');
+    } finally {
+      setIsExportLoading(false);
+    }
   };
 
-  const exportExcel = () => {
-    if (!data || data.length === 0) return;
-    const headers = Object.keys(data[0]);
-    const rows = data.map((row) => {
+  const exportExcel = async () => {
+    setIsExportLoading(true);
+    try {
+      const { rows: exportRows } = await fetchAllRowsForExport();
+      if (!exportRows || exportRows.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+      const headers = Object.keys(exportRows[0]);
+      const rows = exportRows.map((row) => {
       const mapped: Record<string, any> = {};
       headers.forEach((h) => {
         mapped[HEADER_MAP[h] || h] = row[h];
@@ -297,14 +377,25 @@ export const Reports: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Report');
     XLSX.writeFile(wb, `${reportType}_${fromDate}_${toDate}.xlsx`);
     toast.success('Excel downloaded');
+    } catch (e: any) {
+      toast.error(e.message || 'Export failed');
+    } finally {
+      setIsExportLoading(false);
+    }
   };
 
-  const exportPDF = () => {
-    if (!data || data.length === 0) return;
-    const headers = Object.keys(data[0]);
+  const exportPDF = async () => {
+    setIsExportLoading(true);
+    try {
+      const { rows: exportRows } = await fetchAllRowsForExport();
+      if (!exportRows || exportRows.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+      const headers = Object.keys(exportRows[0]);
     const title = `${activeOption.label} (${fmtDate(fromDate)} - ${fmtDate(toDate)})`;
     const tableHead = headers.map(h => `<th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">${HEADER_MAP[h] || h}</th>`).join('');
-    const tableRows = data.map((row) => `<tr>${headers.map(h => `<td style="border:1px solid #ddd;padding:6px;font-size:10px;">${String(row[h] ?? '')}</td>`).join('')}</tr>`).join('');
+    const tableRows = exportRows.map((row) => `<tr>${headers.map(h => `<td style="border:1px solid #ddd;padding:6px;font-size:10px;">${String(row[h] ?? '')}</td>`).join('')}</tr>`).join('');
 
     const html = `
       <html>
@@ -329,6 +420,11 @@ export const Reports: React.FC = () => {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+    } catch (e: any) {
+      toast.error(e.message || 'Export failed');
+    } finally {
+      setIsExportLoading(false);
+    }
   };
 
   const activeOption = REPORT_OPTIONS.find(o => o.value === reportType)!;
@@ -706,7 +802,9 @@ export const Reports: React.FC = () => {
           {data && data.length > 0 && (
             <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2 shadow-sm">
               <span className={`w-2 h-2 rounded-full ${activeColor.activeBg}`}></span>
-              <span className="text-sm font-semibold text-gray-700">{pagination.total || data.length} records found</span>
+              <span className="text-sm font-semibold text-gray-700">
+                Showing {data.length} / {pagination.total || data.length} rows
+              </span>
             </div>
           )}
         </div>
@@ -825,18 +923,33 @@ export const Reports: React.FC = () => {
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all shadow-sm">
               <RotateCcw className="h-4 w-4" /> Clear All
             </button>
-            <button onClick={exportCSV} disabled={!data || data.length === 0}
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href)
+                  .then(() => toast.success('Report link copied'))
+                  .catch(() => toast.error('Could not copy link'));
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all shadow-sm"
+            >
+              <Copy className="h-4 w-4" /> Copy Link
+            </button>
+            <button onClick={exportCSV} disabled={!data || data.length === 0 || isExportLoading}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gray-700 hover:bg-gray-800 disabled:opacity-40 transition-all shadow-sm">
               <Download className="h-4 w-4" /> Export CSV
             </button>
-            <button onClick={exportExcel} disabled={!data || data.length === 0}
+            <button onClick={exportExcel} disabled={!data || data.length === 0 || isExportLoading}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 transition-all shadow-sm">
               <FileSpreadsheet className="h-4 w-4" /> Export Excel
             </button>
-            <button onClick={exportPDF} disabled={!data || data.length === 0}
+            <button onClick={exportPDF} disabled={!data || data.length === 0 || isExportLoading}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 transition-all shadow-sm">
               <FileText className="h-4 w-4" /> Export PDF
             </button>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-gray-500">
+            <span>Exports include all filtered rows (not just current page).</span>
+            <span>{lastReportGeneratedAt ? `Last generated: ${lastReportGeneratedAt.toLocaleTimeString()}` : 'Not generated yet'}</span>
           </div>
 
           {dateError && (

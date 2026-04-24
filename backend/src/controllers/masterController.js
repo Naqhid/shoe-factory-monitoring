@@ -4,11 +4,11 @@ const { withTransaction } = require('../utils/transaction');
 
 class MasterController {
   getArchiveEnabledTables() {
-    return ['customers', 'groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres'];
+    return ['customers', 'groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees'];
   }
 
   getUsageCheckTables() {
-    return ['groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres'];
+    return ['groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees'];
   }
 
   logMasterAudit(action, req, details = {}) {
@@ -125,6 +125,35 @@ class MasterController {
       return { total: details.reduce((sum, row) => sum + row.count, 0), details };
     }
 
+    if (table === 'employees') {
+      const [[empRow]] = await conn.execute(
+        'SELECT id, code FROM employees WHERE id = ?',
+        [id]
+      );
+      if (!empRow) return { total: 0, details: [] };
+
+      const employeeId = empRow.id;
+      const employeeCode = empRow.code;
+      const [[activeSessionUsage]] = await conn.execute(
+        "SELECT COUNT(*) as total FROM mobile_sessions WHERE (emp_id = ? OR emp_code = ?) AND status = 'active'",
+        [employeeId, employeeCode]
+      );
+      const [[productionUsage]] = await conn.execute(
+        'SELECT COUNT(*) as total FROM machine_centre_production WHERE emp_id = ?',
+        [employeeCode]
+      );
+      const [[summaryUsage]] = await conn.execute(
+        'SELECT COUNT(*) as total FROM machine_centre_summary WHERE emp_id = ?',
+        [employeeCode]
+      );
+      const details = [
+        { table: 'mobile_sessions', label: 'Active Mobile Sessions', count: Number(activeSessionUsage?.total || 0) },
+        { table: 'machine_centre_production', label: 'Production Records', count: Number(productionUsage?.total || 0) },
+        { table: 'machine_centre_summary', label: 'Summary Records', count: Number(summaryUsage?.total || 0) },
+      ];
+      return { total: details.reduce((sum, row) => sum + row.count, 0), details };
+    }
+
     if (table === 'styles') {
       const [[planUsage]] = await conn.execute('SELECT COUNT(*) as total FROM production_plan WHERE style_id = ?', [id]);
       const [[routingUsage]] = await conn.execute('SELECT COUNT(*) as total FROM production_routing_header WHERE style_id = ?', [id]);
@@ -232,15 +261,23 @@ class MasterController {
           params
         );
       } else if (table === 'employees') {
-        const where = search
-          ? `WHERE (
-              e.code LIKE ?
-              OR e.name LIKE ?
-              OR wc.name LIKE ?
-              OR mc.name LIKE ?
-            )`
-          : '';
-        const params = search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : [];
+        const params = [];
+        const whereParts = [];
+        if (search) {
+          whereParts.push(`(
+            e.code LIKE ?
+            OR e.name LIKE ?
+            OR wc.name LIKE ?
+            OR mc.name LIKE ?
+          )`);
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        if (!includeArchived) {
+          const colSet = await this.getTableColumns(db, table);
+          const activeFilter = this.getActiveFilter(colSet, 'e');
+          if (activeFilter) whereParts.push(activeFilter);
+        }
+        const where = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
         [rows] = await db.query(
           `SELECT e.*, wc.name as work_centre_name, mc.name as machine_centre_name 
            FROM employees e 
@@ -431,14 +468,16 @@ class MasterController {
 
         if (table === 'employees') {
           const { code, name, work_centre_id, machine_centre_id } = data;
-          if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
-          if (work_centre_id) {
-            const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
-            if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          if (!code || !name || !work_centre_id) throw Object.assign(new Error('Code, name and work centre are required'), { status: 400 });
+          const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
+          if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          if (machine_centre_id) {
+            const [mc] = await conn.execute('SELECT id FROM machine_centres WHERE id = ?', [machine_centre_id]);
+            if (mc.length === 0) throw Object.assign(new Error('Machine centre not found'), { status: 400 });
           }
           const [r] = await conn.execute(
             `INSERT INTO employees (code, name, work_centre_id, machine_centre_id) VALUES (?, ?, ?, ?)`,
-            [code, name, work_centre_id || null, machine_centre_id || null]
+            [code, name, work_centre_id, machine_centre_id || null]
           );
           return { id: r.insertId };
         }
@@ -504,10 +543,16 @@ class MasterController {
 
         if (table === 'employees') {
           const { code, name, work_centre_id, machine_centre_id } = data;
-          if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+          if (!code || !name || !work_centre_id) throw Object.assign(new Error('Code, name and work centre are required'), { status: 400 });
+          const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
+          if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          if (machine_centre_id) {
+            const [mc] = await conn.execute('SELECT id FROM machine_centres WHERE id = ?', [machine_centre_id]);
+            if (mc.length === 0) throw Object.assign(new Error('Machine centre not found'), { status: 400 });
+          }
           await conn.execute(
             `UPDATE employees SET code = ?, name = ?, work_centre_id = ?, machine_centre_id = ? WHERE id = ?`,
-            [code, name, work_centre_id || null, machine_centre_id || null, id]
+            [code, name, work_centre_id, machine_centre_id || null, id]
           );
           return;
         }

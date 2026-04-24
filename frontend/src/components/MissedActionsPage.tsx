@@ -3,6 +3,7 @@ import { AlertTriangle, BellOff, CheckCircle2, Download, Loader2, RefreshCw } fr
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
 type MissedAction = {
+  issue_key: string;
   session_id: string;
   machine_id: string;
   machine_name: string;
@@ -13,10 +14,17 @@ type MissedAction = {
   action_label: string;
   overdue_mins: number;
   details: string;
+  state?: {
+    acknowledged?: boolean;
+    acknowledged_at?: string | null;
+    snoozed_until?: string | null;
+    is_snoozed?: boolean;
+  };
 };
 
 export const MissedActionsPage: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [items, setItems] = React.useState<MissedAction[]>([]);
   const [summary, setSummary] = React.useState({ total: 0, start_pending: 0, finish_pending: 0 });
@@ -24,34 +32,6 @@ export const MissedActionsPage: React.FC = () => {
   const [issueFilter, setIssueFilter] = React.useState<'all' | 'START_PENDING' | 'FINISH_PENDING'>('all');
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [showMuted, setShowMuted] = React.useState(false);
-  const [mutedMap, setMutedMap] = React.useState<Record<string, { snoozeUntil?: number; acknowledged?: boolean }>>({});
-  const MUTED_STORAGE_KEY = 'missed_actions_muted_v1';
-
-  React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem(MUTED_STORAGE_KEY);
-      if (!raw) return;
-      setMutedMap(JSON.parse(raw));
-    } catch {
-      setMutedMap({});
-    }
-  }, []);
-
-  React.useEffect(() => {
-    localStorage.setItem(MUTED_STORAGE_KEY, JSON.stringify(mutedMap));
-  }, [mutedMap]);
-
-  const cleanupExpiredMuted = React.useCallback(() => {
-    const now = Date.now();
-    setMutedMap((prev) => {
-      const next: Record<string, { snoozeUntil?: number; acknowledged?: boolean }> = {};
-      Object.entries(prev).forEach(([k, v]) => {
-        if (v.snoozeUntil && v.snoozeUntil < now) return;
-        next[k] = v;
-      });
-      return next;
-    });
-  }, []);
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
@@ -71,15 +51,16 @@ export const MissedActionsPage: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    cleanupExpiredMuted();
     fetchData();
-  }, [fetchData, cleanupExpiredMuted]);
+    const id = window.setInterval(() => {
+      fetchData();
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [fetchData]);
 
   const lineOptions = React.useMemo(() => {
     return Array.from(new Set(items.map((i) => i.work_centre_name).filter(Boolean))).sort();
   }, [items]);
-
-  const getRowKey = (item: MissedAction) => `${item.machine_id}__${item.employee_code}__${item.action_type}`;
 
   const getSeverity = (overdueMins: number) => {
     if (overdueMins >= 60) return { label: 'Critical', cls: 'bg-red-100 text-red-700 border-red-200' };
@@ -90,16 +71,12 @@ export const MissedActionsPage: React.FC = () => {
 
   const visibleItems = React.useMemo(() => {
     if (showMuted) return items;
-    const now = Date.now();
     return items.filter((item) => {
-      const key = getRowKey(item);
-      const muted = mutedMap[key];
-      if (!muted) return true;
-      if (muted.snoozeUntil && muted.snoozeUntil > now) return false;
-      if (muted.acknowledged) return false;
+      if (item.state?.acknowledged) return false;
+      if (item.state?.is_snoozed) return false;
       return true;
     });
-  }, [items, mutedMap, showMuted]);
+  }, [items, showMuted]);
 
   const filteredItems = React.useMemo(() => {
     return visibleItems.filter((item) => {
@@ -126,15 +103,42 @@ export const MissedActionsPage: React.FC = () => {
     }, {});
   }, [filteredItems]);
 
-  const acknowledgeItem = (item: MissedAction) => {
-    const key = getRowKey(item);
-    setMutedMap((prev) => ({ ...prev, [key]: { ...prev[key], acknowledged: true } }));
+  const acknowledgeItem = async (item: MissedAction) => {
+    if (!item.issue_key) return;
+    setIsActionLoading(item.issue_key);
+    try {
+      const response = await apiFetch(`${API_BASE}/api/missed-actions/ack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_key: item.issue_key }),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to acknowledge');
+      await fetchData();
+    } catch (e: any) {
+      setError(e.message || 'Failed to acknowledge');
+    } finally {
+      setIsActionLoading(null);
+    }
   };
 
-  const snoozeItem = (item: MissedAction, mins: number) => {
-    const key = getRowKey(item);
-    const until = Date.now() + mins * 60 * 1000;
-    setMutedMap((prev) => ({ ...prev, [key]: { ...prev[key], snoozeUntil: until } }));
+  const snoozeItem = async (item: MissedAction, mins: number) => {
+    if (!item.issue_key) return;
+    setIsActionLoading(item.issue_key);
+    try {
+      const response = await apiFetch(`${API_BASE}/api/missed-actions/snooze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_key: item.issue_key, minutes: mins }),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to snooze');
+      await fetchData();
+    } catch (e: any) {
+      setError(e.message || 'Failed to snooze');
+    } finally {
+      setIsActionLoading(null);
+    }
   };
 
   const exportFilteredCsv = () => {
@@ -179,6 +183,7 @@ export const MissedActionsPage: React.FC = () => {
             <p className="text-xs text-gray-400 mt-1">
               {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Not updated yet'}
             </p>
+            <p className="text-xs text-gray-400">Auto-refresh every 30s</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -332,6 +337,7 @@ export const MissedActionsPage: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => acknowledgeItem(item)}
+                                    disabled={isActionLoading === item.issue_key}
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100"
                                   >
                                     <CheckCircle2 className="h-3.5 w-3.5" /> Ack
@@ -339,6 +345,7 @@ export const MissedActionsPage: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => snoozeItem(item, 30)}
+                                    disabled={isActionLoading === item.issue_key}
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100"
                                   >
                                     <BellOff className="h-3.5 w-3.5" /> Snooze 30m

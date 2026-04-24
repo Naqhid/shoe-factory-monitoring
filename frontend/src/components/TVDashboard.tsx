@@ -4,6 +4,7 @@ import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 
 export const TVDashboard: React.FC = () => {
+    const PINNED_LINE_STORAGE_KEY = 'tv_dashboard_pinned_line_id';
     const [workCentres, setWorkCentres] = useState<any[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [dashboardData, setDashboardData] = useState<any>(null);
@@ -18,11 +19,22 @@ export const TVDashboard: React.FC = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [retryAttempts, setRetryAttempts] = useState(0);
     const [partialWarning, setPartialWarning] = useState<string | null>(null);
+    const [pinnedWorkCentreId, setPinnedWorkCentreId] = useState<number | null>(null);
+    const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<Date | null>(null);
+    const [reworkUpdatedAt, setReworkUpdatedAt] = useState<Date | null>(null);
+    const staleReloadTimerRef = React.useRef<number | null>(null);
 
     useEffect(() => {
         const now = new Date();
         const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         setCurrentDate(localDate);
+        try {
+            const raw = localStorage.getItem(PINNED_LINE_STORAGE_KEY);
+            if (raw) {
+                const parsed = Number(raw);
+                if (!Number.isNaN(parsed) && parsed > 0) setPinnedWorkCentreId(parsed);
+            }
+        } catch {}
     }, []);
 
     useEffect(() => {
@@ -32,6 +44,10 @@ export const TVDashboard: React.FC = () => {
                 const result = await res.json();
                 if (result.success && result.data.length > 0) {
                     setWorkCentres(result.data);
+                    if (pinnedWorkCentreId) {
+                        const idx = result.data.findIndex((wc: any) => Number(wc.id) === Number(pinnedWorkCentreId));
+                        if (idx >= 0) setCurrentIndex(idx);
+                    }
                     setErrorMessage(null);
                 } else {
                     setErrorMessage('No work centres available for dashboard.');
@@ -44,7 +60,13 @@ export const TVDashboard: React.FC = () => {
             }
         };
         fetchWorkCentres();
-    }, []);
+    }, [pinnedWorkCentreId]);
+
+    useEffect(() => {
+        if (!workCentres.length || !pinnedWorkCentreId) return;
+        const idx = workCentres.findIndex((wc: any) => Number(wc.id) === Number(pinnedWorkCentreId));
+        if (idx >= 0) setCurrentIndex(idx);
+    }, [pinnedWorkCentreId, workCentres]);
 
     useEffect(() => {
         const handleOnline = () => setIsOffline(false);
@@ -75,8 +97,10 @@ export const TVDashboard: React.FC = () => {
                 if (dashRes.status === 'fulfilled') {
                     const dashResult = await dashRes.value.json();
                     if (dashResult.success && dashResult.data) {
+                        const nowTs = new Date();
                         setDashboardData(dashResult.data);
-                        setLastUpdatedAt(new Date());
+                        setDashboardUpdatedAt(nowTs);
+                        setLastUpdatedAt(nowTs);
                         setErrorMessage(null);
                         setRetryAttempts(0);
                         setLoading(false);
@@ -91,6 +115,7 @@ export const TVDashboard: React.FC = () => {
                 if (reworkRes.status === 'fulfilled') {
                     const reworkResult = await reworkRes.value.json();
                     if (reworkResult.success && Array.isArray(reworkResult.data)) {
+                        setReworkUpdatedAt(new Date());
                         const map: Record<number, { total_rework: number; total_rejection: number }> = {};
                         reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
                         setReworkSummary(map);
@@ -128,25 +153,52 @@ export const TVDashboard: React.FC = () => {
     }, [workCentres, currentIndex, currentDate]);
 
     useEffect(() => {
-        if (workCentres.length <= 1) return;
+        if (workCentres.length <= 1 || pinnedWorkCentreId !== null) return;
         setProgress(0);
         const interval = setInterval(() => {
             setCurrentIndex((prev) => (prev + 1) % workCentres.length);
             setProgress(0);
         }, 60000);
         return () => clearInterval(interval);
-    }, [workCentres]);
+    }, [workCentres, pinnedWorkCentreId]);
 
     useEffect(() => {
-        if (workCentres.length <= 1) return;
+        if (workCentres.length <= 1 || pinnedWorkCentreId !== null) return;
         const interval = setInterval(() => setProgress((prev) => Math.min(prev + 0.167, 100)), 100);
         return () => clearInterval(interval);
-    }, [currentIndex, workCentres]);
+    }, [currentIndex, workCentres, pinnedWorkCentreId]);
 
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(interval);
     }, []);
+
+    const secondsSinceLastSuccess = lastUpdatedAt ? Math.floor((currentTime.getTime() - lastUpdatedAt.getTime()) / 1000) : null;
+    const isCriticalStaleNow = secondsSinceLastSuccess !== null && secondsSinceLastSuccess > 120;
+    const sectionAge = (ts: Date | null) => ts ? Math.floor((currentTime.getTime() - ts.getTime()) / 1000) : null;
+    const dashboardAgeSec = sectionAge(dashboardUpdatedAt);
+    const reworkAgeSec = sectionAge(reworkUpdatedAt);
+
+    // Escalation: if stale remains critical for 5+ minutes, trigger hard reload.
+    useEffect(() => {
+        if (!isCriticalStaleNow || isOffline) {
+            if (staleReloadTimerRef.current) {
+                window.clearTimeout(staleReloadTimerRef.current);
+                staleReloadTimerRef.current = null;
+            }
+            return;
+        }
+        if (staleReloadTimerRef.current) return;
+        staleReloadTimerRef.current = window.setTimeout(() => {
+            window.location.reload();
+        }, 5 * 60 * 1000);
+        return () => {
+            if (staleReloadTimerRef.current) {
+                window.clearTimeout(staleReloadTimerRef.current);
+                staleReloadTimerRef.current = null;
+            }
+        };
+    }, [isCriticalStaleNow, isOffline]);
 
     if (errorMessage && !dashboardData) {
         return (
@@ -207,6 +259,21 @@ export const TVDashboard: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const currentId = workCentres[currentIndex]?.id;
+                                const next = pinnedWorkCentreId ? null : Number(currentId || 0);
+                                setPinnedWorkCentreId(next && next > 0 ? next : null);
+                                try {
+                                    if (next && next > 0) localStorage.setItem(PINNED_LINE_STORAGE_KEY, String(next));
+                                    else localStorage.removeItem(PINNED_LINE_STORAGE_KEY);
+                                } catch {}
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${pinnedWorkCentreId ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                            {pinnedWorkCentreId ? 'Pinned Line' : 'Auto Rotate'}
+                        </button>
                         <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isOffline ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
                             {isOffline ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
                             {isOffline ? 'Offline' : 'Online'}
@@ -274,7 +341,12 @@ export const TVDashboard: React.FC = () => {
 
             {/* LINE PERFORMANCE Section */}
             <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 mb-4 sm:mb-6 border border-gray-100">
-                <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600 mb-4 sm:mb-6">LINE PERFORMANCE</h3>
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">LINE PERFORMANCE</h3>
+                    {dashboardAgeSec !== null && dashboardAgeSec > 30 && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">Stale metrics</span>
+                    )}
+                </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
                         <thead>
@@ -335,6 +407,9 @@ export const TVDashboard: React.FC = () => {
                     <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-red-600 mb-4 sm:mb-6 flex items-center gap-2">
                         <TrendingUp className="h-6 w-6 text-red-600" />
                         Top 3 Bottleneck Machines
+                        {reworkAgeSec !== null && reworkAgeSec > 30 && (
+                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700 ml-2">Rework stale</span>
+                        )}
                     </h3>
                     {lowerSection.bottlenecks.length > 0 ? (
                         <div className="space-y-3 sm:space-y-4">

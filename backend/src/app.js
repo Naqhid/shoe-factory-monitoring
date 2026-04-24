@@ -84,6 +84,15 @@ const initDb = async () => {
       )
     `);
     logger.info('rework_rejection table ready');
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS missed_action_states (
+        issue_key VARCHAR(255) NOT NULL PRIMARY KEY,
+        acknowledged_at DATETIME NULL,
+        snoozed_until DATETIME NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    logger.info('missed_action_states table ready');
     
     // Archive old machine centre summary data on startup
     try {
@@ -121,6 +130,8 @@ setInterval(() => {
 // Auto-close all active mobile sessions daily (configurable)
 const AUTO_CLOSE_ENABLED = (process.env.MOBILE_SESSION_AUTO_CLOSE_ENABLED || 'true').toLowerCase() !== 'false';
 const AUTO_CLOSE_TIME = process.env.MOBILE_SESSION_AUTO_CLOSE_TIME || '18:35'; // HH:mm (24h)
+const AUTO_FINISH_ENABLED = (process.env.MOBILE_PRODUCTION_AUTO_FINISH_ENABLED || 'true').toLowerCase() !== 'false';
+const AUTO_FINISH_TIME = process.env.MOBILE_PRODUCTION_AUTO_FINISH_TIME || '18:30'; // HH:mm (24h)
 
 const parseAutoCloseTime = (timeValue) => {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec((timeValue || '').trim());
@@ -132,8 +143,13 @@ const autoCloseTimeParts = parseAutoCloseTime(AUTO_CLOSE_TIME) || { hour: 18, mi
 if (!parseAutoCloseTime(AUTO_CLOSE_TIME)) {
   logger.warn(`Invalid MOBILE_SESSION_AUTO_CLOSE_TIME="${AUTO_CLOSE_TIME}". Falling back to 18:35.`);
 }
+const autoFinishTimeParts = parseAutoCloseTime(AUTO_FINISH_TIME) || { hour: 18, minute: 30 };
+if (!parseAutoCloseTime(AUTO_FINISH_TIME)) {
+  logger.warn(`Invalid MOBILE_PRODUCTION_AUTO_FINISH_TIME="${AUTO_FINISH_TIME}". Falling back to 18:30.`);
+}
 
 let lastSessionAutoCloseDate = null;
+let lastProductionAutoFinishDate = null;
 const getLocalDateKey = (date = new Date()) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -160,12 +176,39 @@ const runAutoSessionCloseCheck = async () => {
   }
 };
 
+const runAutoProductionFinishCheck = async () => {
+  try {
+    if (!AUTO_FINISH_ENABLED) return;
+
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setHours(autoFinishTimeParts.hour, autoFinishTimeParts.minute, 0, 0);
+
+    const todayKey = getLocalDateKey(now);
+    if (now >= cutoff && lastProductionAutoFinishDate !== todayKey) {
+      const closedCycles = await mobileSessionController.autoFinishUnfinishedProductions();
+      lastProductionAutoFinishDate = todayKey;
+      logger.info(`Auto-finish check completed for ${todayKey} at/after ${AUTO_FINISH_TIME}. Closed cycles: ${closedCycles}`);
+    }
+  } catch (error) {
+    logger.error(`Auto-finish scheduler error: ${error.message}`);
+  }
+};
+
 if (AUTO_CLOSE_ENABLED) {
   logger.info(`Mobile session auto-close is enabled. Daily cutoff: ${AUTO_CLOSE_TIME} (server local time).`);
   setInterval(runAutoSessionCloseCheck, 60 * 1000); // check every minute
   setTimeout(runAutoSessionCloseCheck, 10 * 1000); // run once shortly after startup
 } else {
   logger.info('Mobile session auto-close is disabled via MOBILE_SESSION_AUTO_CLOSE_ENABLED=false.');
+}
+
+if (AUTO_FINISH_ENABLED) {
+  logger.info(`Mobile production auto-finish is enabled. Daily cutoff: ${AUTO_FINISH_TIME} (server local time).`);
+  setInterval(runAutoProductionFinishCheck, 60 * 1000); // check every minute
+  setTimeout(runAutoProductionFinishCheck, 15 * 1000); // run once shortly after startup
+} else {
+  logger.info('Mobile production auto-finish is disabled via MOBILE_PRODUCTION_AUTO_FINISH_ENABLED=false.');
 }
 
 // Email alerts DISABLED - re-enable by uncommenting below code and setting EMAIL_USER/EMAIL_PASS in .env
@@ -346,6 +389,8 @@ app.get('/api/tracker/workstations', productionTrackerController.getWorkstationP
 app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons);
 app.get('/api/tracker/line-performance', productionTrackerController.getLinePerformance);
 app.get('/api/missed-actions', missedActionsController.getMissedActions);
+app.post('/api/missed-actions/ack', missedActionsController.acknowledgeMissedAction);
+app.post('/api/missed-actions/snooze', missedActionsController.snoozeMissedAction);
 
 // Machine Centre routes (public - no JWT for factory floor use)
 app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);
