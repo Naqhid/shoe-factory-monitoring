@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTriangle, LogOut } from 'lucide-react';
+import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTriangle, Bell, BellOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -137,11 +137,11 @@ export const MobileProduction: React.FC = () => {
     const [loadingSummary, setLoadingSummary] = useState(true);
     const [showFinishConfirm, setShowFinishConfirm] = useState(false);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
+    const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
     const overTargetToastShownRef = React.useRef(false);
     const hasUserInteractedRef = React.useRef(false);
     const alertAudioContextRef = React.useRef<AudioContext | null>(null);
-    const alertToneIntervalRef = React.useRef<number | null>(null);
-    const alertToneTimeoutRef = React.useRef<number | null>(null);
+    const alertSoundTimeoutsRef = React.useRef<number[]>([]);
     const startReminderAnchorRef = React.useRef<number | null>(null);
     const [machineBusyRecord, setMachineBusyRecord] = useState<{ emp_id: string | number; employee_name?: string; machine_id: string } | null>(null);
     const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
@@ -271,61 +271,166 @@ export const MobileProduction: React.FC = () => {
 
     // One-time toast when target time is first exceeded (red progress bar) — reminds operator to tap FINISH
     const stopAlertSound = React.useCallback(() => {
-        if (alertToneIntervalRef.current) {
-            window.clearInterval(alertToneIntervalRef.current);
-            alertToneIntervalRef.current = null;
-        }
-        if (alertToneTimeoutRef.current) {
-            window.clearTimeout(alertToneTimeoutRef.current);
-            alertToneTimeoutRef.current = null;
+        if (alertSoundTimeoutsRef.current.length > 0) {
+            alertSoundTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
+            alertSoundTimeoutsRef.current = [];
         }
         if (alertAudioContextRef.current) {
             alertAudioContextRef.current.close().catch(() => {});
             alertAudioContextRef.current = null;
         }
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
     }, []);
 
-    const playAlertSound = React.useCallback(() => {
+    const playAlarmReminderBackground = React.useCallback((durationMs = 12000) => {
         try {
             if (!hasUserInteractedRef.current) return;
             const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
             if (!AudioCtx) return;
 
-            stopAlertSound();
-            const audioCtx: AudioContext = new AudioCtx();
+            const audioCtx = new AudioCtx();
             alertAudioContextRef.current = audioCtx;
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume().catch(() => {});
             }
 
-            const playBeep = () => {
+            const tone1 = audioCtx.createOscillator();
+            const tone2 = audioCtx.createOscillator();
+            const tone3 = audioCtx.createOscillator();
+            const tone1Gain = audioCtx.createGain();
+            const tone2Gain = audioCtx.createGain();
+            const tone3Gain = audioCtx.createGain();
+            const masterGain = audioCtx.createGain();
+
+            tone1.type = 'square';
+            tone2.type = 'square';
+            tone3.type = 'triangle';
+            tone1.frequency.setValueAtTime(880, audioCtx.currentTime);
+            tone2.frequency.setValueAtTime(1175, audioCtx.currentTime);
+            tone3.frequency.setValueAtTime(1760, audioCtx.currentTime);
+
+            // Maxed output profile (will clip by design for highest perceived loudness).
+            tone1Gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+            tone2Gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+            tone3Gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+            masterGain.gain.setValueAtTime(1.6, audioCtx.currentTime);
+
+            tone1.connect(tone1Gain);
+            tone2.connect(tone2Gain);
+            tone3.connect(tone3Gain);
+            tone1Gain.connect(masterGain);
+            tone2Gain.connect(masterGain);
+            tone3Gain.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            tone1.start();
+            tone2.start();
+            tone3.start();
+
+            const pulseRing = () => {
                 const now = audioCtx.currentTime;
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
+                const pulseOn = 0.22;
+                const sequenceGap = 0.35;
+                const pairGap = 0.95;
+                const steps = [0, sequenceGap, pairGap, pairGap + sequenceGap];
 
-                oscillator.type = 'square';
-                oscillator.frequency.setValueAtTime(900, now);
-
-                gainNode.gain.setValueAtTime(0.0001, now);
-                gainNode.gain.exponentialRampToValueAtTime(0.2, now + 0.02);
-                gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-
-                oscillator.start(now);
-                oscillator.stop(now + 0.17);
+                steps.forEach((offset) => {
+                    const start = now + offset;
+                    const end = start + pulseOn;
+                    tone1Gain.gain.cancelScheduledValues(start);
+                    tone2Gain.gain.cancelScheduledValues(start);
+                    tone3Gain.gain.cancelScheduledValues(start);
+                    tone1Gain.gain.setValueAtTime(0.0001, start);
+                    tone2Gain.gain.setValueAtTime(0.0001, start);
+                    tone3Gain.gain.setValueAtTime(0.0001, start);
+                    tone1Gain.gain.exponentialRampToValueAtTime(1.55, start + 0.012);
+                    tone2Gain.gain.exponentialRampToValueAtTime(1.45, start + 0.012);
+                    tone3Gain.gain.exponentialRampToValueAtTime(1.2, start + 0.012);
+                    tone1Gain.gain.exponentialRampToValueAtTime(0.0001, end);
+                    tone2Gain.gain.exponentialRampToValueAtTime(0.0001, end);
+                    tone3Gain.gain.exponentialRampToValueAtTime(0.0001, end);
+                });
             };
 
-            playBeep();
-            alertToneIntervalRef.current = window.setInterval(playBeep, 320);
-            alertToneTimeoutRef.current = window.setTimeout(() => {
-                stopAlertSound();
-            }, 3000);
+            pulseRing();
+            const repeatId = window.setInterval(pulseRing, 2300);
+            alertSoundTimeoutsRef.current.push(repeatId);
+
+            const stopAlarmId = window.setTimeout(() => {
+                window.clearInterval(repeatId);
+                const stopAt = audioCtx.currentTime + 0.08;
+                tone1Gain.gain.cancelScheduledValues(audioCtx.currentTime);
+                tone2Gain.gain.cancelScheduledValues(audioCtx.currentTime);
+                tone3Gain.gain.cancelScheduledValues(audioCtx.currentTime);
+                tone1Gain.gain.setValueAtTime(Math.max(tone1Gain.gain.value, 0.0001), audioCtx.currentTime);
+                tone2Gain.gain.setValueAtTime(Math.max(tone2Gain.gain.value, 0.0001), audioCtx.currentTime);
+                tone3Gain.gain.setValueAtTime(Math.max(tone3Gain.gain.value, 0.0001), audioCtx.currentTime);
+                tone1Gain.gain.exponentialRampToValueAtTime(0.0001, stopAt);
+                tone2Gain.gain.exponentialRampToValueAtTime(0.0001, stopAt);
+                tone3Gain.gain.exponentialRampToValueAtTime(0.0001, stopAt);
+                tone1.stop(stopAt + 0.02);
+                tone2.stop(stopAt + 0.02);
+                tone3.stop(stopAt + 0.02);
+            }, durationMs);
+            alertSoundTimeoutsRef.current.push(stopAlarmId);
+
+            const closeId = window.setTimeout(() => {
+                if (alertAudioContextRef.current === audioCtx) {
+                    audioCtx.close().catch(() => {});
+                    alertAudioContextRef.current = null;
+                }
+            }, durationMs + 300);
+            alertSoundTimeoutsRef.current.push(closeId);
+        } catch {
+            // Ignore playback failures (autoplay/device restrictions)
+        }
+    }, []);
+
+    const speakAlertVoice = React.useCallback((mode: 'start' | 'finish') => {
+        try {
+            if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const operatorName = (employeeName || '').trim();
+            const operatorAddress = operatorName ? `Operator ${operatorName}` : 'Operator';
+            const parts =
+                mode === 'finish'
+                    ? [`Attention ${operatorAddress}.`, 'Time exceeded.', 'Please finish this cycle now.']
+                    : [`Attention ${operatorAddress}.`, 'Production is idle.', 'Please tap start for next cycle.'];
+            // Speech volume is capped at 1.0 by browser APIs, so repeat once for better audibility.
+            const queue = [...parts, ...parts];
+
+            const speakAt = (idx: number) => {
+                if (idx >= queue.length) return;
+                const utterance = new SpeechSynthesisUtterance(queue[idx]);
+                utterance.rate = 0.98;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                utterance.onend = () => speakAt(idx + 1);
+                utterance.onerror = () => speakAt(idx + 1);
+                window.speechSynthesis.speak(utterance);
+            };
+
+            speakAt(0);
+        } catch {
+            // Ignore speech synthesis failures
+        }
+    }, [employeeName]);
+
+    const playAlertSound = React.useCallback((mode: 'start' | 'finish') => {
+        try {
+            stopAlertSound();
+            const ALARM_DURATION_MS = 12000;
+            playAlarmReminderBackground(ALARM_DURATION_MS);
+            const speechStartId = window.setTimeout(() => {
+                speakAlertVoice(mode);
+            }, ALARM_DURATION_MS);
+            alertSoundTimeoutsRef.current.push(speechStartId);
         } catch (error) {
             console.warn('Alert sound playback blocked or unavailable:', error);
         }
-    }, [stopAlertSound]);
+    }, [playAlarmReminderBackground, speakAlertVoice, stopAlertSound]);
 
     useEffect(() => {
         return () => stopAlertSound();
@@ -335,9 +440,6 @@ export const MobileProduction: React.FC = () => {
     useEffect(() => {
         const unlockAudio = () => {
             hasUserInteractedRef.current = true;
-            if (alertAudioContextRef.current?.state === 'suspended') {
-                alertAudioContextRef.current.resume().catch(() => {});
-            }
         };
 
         window.addEventListener('pointerdown', unlockAudio, { passive: true });
@@ -371,7 +473,7 @@ export const MobileProduction: React.FC = () => {
         }
         if (overTargetToastShownRef.current) return;
         overTargetToastShownRef.current = true;
-        playAlertSound();
+        playAlertSound('finish');
         toast.error('Target time exceeded — tap FINISH when your cycle is complete.', {
             duration: 8000,
             id: 'mobile-over-target',
@@ -386,17 +488,16 @@ export const MobileProduction: React.FC = () => {
         stopAlertSound,
     ]);
 
-    // Repeating reminder every 10 minutes when production is not running.
-    // Covers cases like: cycle finished but operator forgets RESET/START.
+    // Repeating reminder every 10 minutes whenever production is not running.
+    // Covers cases like: cycle finished, paused, or never started.
     useEffect(() => {
-        if (!productionData || initializing || loading) {
+        if (!productionData || initializing || loading || !idleReminderEnabled) {
             startReminderAnchorRef.current = null;
             return;
         }
 
-        const needsStartReminder =
-            (productionData.button_status === 3 && !productionData.is_paused) ||
-            productionData.button_status === 2;
+        const isRunning = productionData.button_status === 1 && !productionData.is_paused;
+        const needsStartReminder = !isRunning;
 
         if (!needsStartReminder) {
             startReminderAnchorRef.current = null;
@@ -414,7 +515,7 @@ export const MobileProduction: React.FC = () => {
             const elapsed = Date.now() - startReminderAnchorRef.current;
             if (elapsed < REMINDER_MS) return;
 
-            playAlertSound();
+            playAlertSound('start');
             toast.error(
                 productionData.button_status === 2
                     ? 'Cycle completed. Tap RESET, then START for next cycle.'
@@ -427,16 +528,51 @@ export const MobileProduction: React.FC = () => {
             startReminderAnchorRef.current = Date.now();
         };
 
-        const intervalId = window.setInterval(tick, 30000);
-        return () => window.clearInterval(intervalId);
+        // Fire once exactly when 10-minute threshold is reached, then repeat every 10 minutes.
+        const elapsed = Date.now() - (startReminderAnchorRef.current ?? Date.now());
+        const firstDelay = Math.max(0, REMINDER_MS - elapsed);
+        const firstTimeoutId = window.setTimeout(() => {
+            tick();
+        }, firstDelay);
+        const intervalId = window.setInterval(tick, REMINDER_MS);
+
+        // Browser timers can be delayed in background tabs; catch up immediately on visibility/focus.
+        const catchUpTick = () => {
+            if (document.visibilityState === 'visible') tick();
+        };
+        document.addEventListener('visibilitychange', catchUpTick);
+        window.addEventListener('focus', catchUpTick);
+
+        return () => {
+            window.clearTimeout(firstTimeoutId);
+            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', catchUpTick);
+            window.removeEventListener('focus', catchUpTick);
+        };
     }, [
         productionData?.id,
         productionData?.button_status,
         productionData?.is_paused,
         initializing,
         loading,
+        idleReminderEnabled,
         playAlertSound,
     ]);
+
+    const toggleIdleReminder = React.useCallback(() => {
+        setIdleReminderEnabled((prev) => {
+            const next = !prev;
+            if (!next) {
+                startReminderAnchorRef.current = null;
+                stopAlertSound();
+                toast('Idle reminder muted');
+            } else {
+                startReminderAnchorRef.current = Date.now();
+                toast.success('Idle reminder enabled (every 10 minutes)');
+            }
+            return next;
+        });
+    }, [stopAlertSound]);
 
     // Sync actual_time to database periodically (source-of-truth correction).
     useEffect(() => {
@@ -1058,15 +1194,6 @@ export const MobileProduction: React.FC = () => {
         }
     };
 
-    const handleLogout = () => {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem('app_authenticated');
-            localStorage.removeItem('mobile_authenticated');
-            localStorage.removeItem('user_info');
-        }
-        navigate('/');
-    };
-
     const calculateEfficiency = () => {
         if (!productionData || !productionData.target_mins || productionData.target_mins === 0) return 0;
         // Only calculate after FINISH (button_status === 2)
@@ -1291,12 +1418,12 @@ export const MobileProduction: React.FC = () => {
                     )}
 
                     {/* Header Section */}
-                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl">
+                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl relative">
                         <button
                             onClick={() => setHeaderExpanded(!headerExpanded)}
                             className="relative w-full p-4 hover:bg-white/5 transition-colors"
                         >
-                            <div className="flex flex-col items-center justify-center gap-2 w-full text-center">
+                            <div className="flex flex-col items-center justify-center gap-2 w-full text-center pl-10 pr-8 md:pl-0 md:pr-0">
                                 <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
                                 {!headerExpanded && (
                                     <span className="text-xs bg-white/20 px-2 py-1 rounded-full animate-pulse">Tap to view details</span>
@@ -1311,6 +1438,32 @@ export const MobileProduction: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                         </button>
+                        <div className="hidden md:block absolute top-3 left-4 z-10">
+                            <span className="text-[11px] md:text-xs font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">
+                                Production Status
+                            </span>
+                        </div>
+                        <div className="hidden md:flex absolute top-3 right-14 items-center gap-1.5 z-10">
+                            <button
+                                onClick={() => playAlertSound('start')}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-700/95 hover:bg-slate-800 text-white text-[11px] md:text-xs font-semibold"
+                                title="Validate alert sound"
+                            >
+                                Test Sound
+                            </button>
+                        </div>
+                        <div className="md:hidden flex items-center justify-between px-3 pb-3">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">
+                                Production Status
+                            </span>
+                            <button
+                                onClick={() => playAlertSound('start')}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-700/95 hover:bg-slate-800 text-white text-[11px] font-semibold"
+                                title="Validate alert sound"
+                            >
+                                Test Sound
+                            </button>
+                        </div>
                         {headerExpanded && (
                             <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm px-4 pb-4">
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
@@ -1346,11 +1499,18 @@ export const MobileProduction: React.FC = () => {
                                     </div>
                                 </div>
                                 <button
-                                    onClick={handleLogout}
-                                    className="flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-300/50 rounded-lg p-2 transition-colors"
+                                    onClick={toggleIdleReminder}
+                                    className={`flex items-center justify-center gap-2 rounded-lg p-2 transition-colors border ${
+                                        idleReminderEnabled
+                                            ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-300/60'
+                                            : 'bg-gray-500/20 hover:bg-gray-500/30 border-gray-300/60'
+                                    }`}
+                                    title={idleReminderEnabled ? 'Turn OFF idle reminder sound' : 'Turn ON idle reminder sound'}
                                 >
-                                    <LogOut className="h-4 w-4 text-red-100" />
-                                    <span className="text-sm font-semibold text-white">Logout</span>
+                                    {idleReminderEnabled ? <Bell className="h-4 w-4 text-emerald-100" /> : <BellOff className="h-4 w-4 text-gray-100" />}
+                                    <span className="text-sm font-semibold text-white">
+                                        {idleReminderEnabled ? 'Idle Reminder ON' : 'Idle Reminder OFF'}
+                                    </span>
                                 </button>
                             </div>
                         )}
@@ -1358,8 +1518,6 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Metrics Section */}
                     <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
-                        <h2 className="text-base md:text-lg font-bold text-gray-800 mb-3 md:mb-4 uppercase tracking-wide">Production Status</h2>
-                        
                         {/* Progress Bar — red when actual time exceeds target */}
                         {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (
                             <div className="mb-4">

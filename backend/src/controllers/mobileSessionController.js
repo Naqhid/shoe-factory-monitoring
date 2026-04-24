@@ -274,7 +274,7 @@ const mobileSessionController = {
     // 8. Get machine login/session logs with optional line/date filters and production metrics
     getSessionLogs: async (req, res, next) => {
         try {
-            const { work_centre_id, date } = req.query;
+            const { work_centre_id, date, status } = req.query;
 
             let query = `
                 SELECT
@@ -324,7 +324,7 @@ const mobileSessionController = {
                     ON prod_stats.machine_id = ms.machine_id 
                     AND prod_stats.emp_id = ms.emp_code
                     AND prod_stats.prod_date = DATE(ms.activated_at)
-                WHERE ms.status = 'active' AND ms.activated_at IS NOT NULL
+                WHERE ms.activated_at IS NOT NULL
             `;
 
             const params = [];
@@ -337,6 +337,11 @@ const mobileSessionController = {
             if (date) {
                 query += ' AND DATE(ms.activated_at) = DATE(?)';
                 params.push(date);
+            }
+
+            if (status) {
+                query += ' AND ms.status = ?';
+                params.push(status);
             }
 
             query += ' ORDER BY ms.activated_at DESC';

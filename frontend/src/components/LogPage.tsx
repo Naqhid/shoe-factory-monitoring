@@ -1,5 +1,5 @@
 import React from 'react';
-import { API_BASE_URL } from '../services/api';
+import { API_BASE_URL, apiFetch } from '../services/api';
 import { RefreshCw, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 
 interface SessionLogEntry {
@@ -78,7 +78,7 @@ const LogPage: React.FC = () => {
         if (selectedDate) params.set('date', selectedDate);
 
         const query = params.toString();
-        const response = await fetch(`${API_BASE_URL}/api/mobile-sessions/logs${query ? `?${query}` : ''}`);
+        const response = await apiFetch(`${API_BASE_URL}/api/mobile-sessions/logs${query ? `?${query}` : ''}`);
         const result = await response.json();
 
         if (result.success) {
@@ -149,7 +149,7 @@ const LogPage: React.FC = () => {
           emp_code: log.emp_code,
           date: selectedDate
         });
-        const response = await fetch(`${API_BASE_URL}/api/mobile-sessions/cycles?${params}`);
+        const response = await apiFetch(`${API_BASE_URL}/api/mobile-sessions/cycles?${params}`);
         const result = await response.json();
         if (result.success) {
           setCycleDetails(prev => ({ ...prev, [sessionId]: result.data }));
@@ -175,7 +175,7 @@ const LogPage: React.FC = () => {
       if (selectedDate) params.set('date', selectedDate);
 
       const query = params.toString();
-      const response = await fetch(`${API_BASE_URL}/api/mobile-sessions/logs${query ? `?${query}` : ''}`);
+      const response = await apiFetch(`${API_BASE_URL}/api/mobile-sessions/logs${query ? `?${query}` : ''}`);
       const result = await response.json();
 
       if (result.success) {

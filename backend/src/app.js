@@ -113,6 +113,15 @@ const initDb = async () => {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
+
+const requireLogsAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !LOGS_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for logs' });
+  }
+  next();
+};
 
 createDirectories();
 initDb();
@@ -360,8 +369,6 @@ app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.fi
 app.get('/api/mobile-session/waiting-for/:machine_id', mobileSessionController.findWaitingSession);
 app.get('/api/mobile-session/latest-active/:machineId?', mobileSessionController.getLatestActiveSession);
 app.get('/api/mobile-sessions/attendance/:workCentreId', mobileSessionController.getAttendance);
-app.get('/api/mobile-sessions/logs', mobileSessionController.getSessionLogs);
-app.get('/api/mobile-sessions/cycles', mobileSessionController.getCycleDetails);
 app.get('/api/mobile-session/test', (req, res) => res.json({ test: 'working' }));
 app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionStatus);
 
@@ -403,6 +410,10 @@ app.get('/api/machine-centre/plan/:workCentreId/:machineId', machineCentreContro
 
 // Alert routes (public - factory floor can see alerts)
 app.get('/api/alerts', alertController.getAlerts.bind(alertController));
+
+// Logs routes (protected)
+app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSessionController.getSessionLogs);
+app.get('/api/mobile-sessions/cycles', authenticate, requireLogsAccess, mobileSessionController.getCycleDetails);
 
 // TV Dashboard routes
 app.get('/api/tv-dashboard/work-centres', tvDashboardController.getWorkCentres);
