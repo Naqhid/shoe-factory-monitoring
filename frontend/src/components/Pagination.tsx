@@ -23,6 +23,12 @@ export const Pagination: React.FC<PaginationProps> = ({
   const generateOptions = () => {
     const options = [5, 10, 15, 20, 25, 50, 100];
     const validOptions = options.filter(opt => opt <= totalItems);
+    // Keep currently selected page size visible even when it is greater than totalItems
+    // (e.g. itemsPerPage=10 with totalItems=8), otherwise the browser shows the first
+    // available option and the dropdown looks incorrect.
+    if (itemsPerPage > 0 && !validOptions.includes(itemsPerPage)) {
+      validOptions.push(itemsPerPage);
+    }
     if (totalItems > 0 && !validOptions.includes(totalItems)) {
       validOptions.push(totalItems);
     }

@@ -80,7 +80,10 @@ const QRWaitScreen: React.FC<{
     React.useEffect(() => {
         const interval = setInterval(async () => {
             try {
-                const res = await apiFetch(`${API_BASE}/api/mobile-session/active-for/${machineId}`);
+                const ts = Date.now();
+                const res = await apiFetch(`${API_BASE}/api/mobile-session/active-for/${machineId}?_=${ts}`, {
+                    cache: 'no-store'
+                });
                 const json = await res.json();
                 if (json.success && json.data?.emp_code) {
                     clearInterval(interval);
@@ -758,7 +761,10 @@ export const MobileProduction: React.FC = () => {
         if (!urlMachineId && !urlEmpId) {
             const globalSyncInterval = setInterval(async () => {
                 try {
-                    const sessionRes = await apiFetch(`${API_BASE}/api/mobile-session/latest-active`);
+                    const ts = Date.now();
+                    const sessionRes = await apiFetch(`${API_BASE}/api/mobile-session/latest-active?_=${ts}`, {
+                        cache: 'no-store'
+                    });
                     const sessionJson = await sessionRes.json();
 
                     if (sessionJson.success && sessionJson.data && sessionJson.data.redirect_url) {
