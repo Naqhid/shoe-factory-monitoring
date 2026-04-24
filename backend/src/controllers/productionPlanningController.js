@@ -3,16 +3,138 @@ const logger = require('../utils/logger');
 const { withTransaction, assertExists } = require('../utils/transaction');
 
 class ProductionPlanningController {
+  normalizePlanPayload(payload = {}) {
+    return {
+      plan_date: payload.plan_date,
+      style_id: payload.style_id,
+      customer_id: payload.customer_id,
+      group_id: payload.group_id || null,
+      leather_id: payload.leather_id || null,
+      color_id: payload.color_id || null,
+      work_centre_id: payload.work_centre_id,
+      total_target_per_day: payload.total_target_per_day,
+      target_pairs_per_tray: payload.target_pairs_per_tray,
+      tray_count: payload.tray_count || 0,
+      man_hours_minutes: payload.man_hours_minutes,
+      smv_per_pair: payload.smv_per_pair,
+    };
+  }
+
+  async validateAndUpsertPlan(conn, payload, existingId = null) {
+    const {
+      plan_date, style_id, customer_id, group_id, leather_id, color_id,
+      work_centre_id, total_target_per_day, target_pairs_per_tray,
+      tray_count, man_hours_minutes, smv_per_pair
+    } = this.normalizePlanPayload(payload);
+
+    if (!plan_date || !style_id || !customer_id || !work_centre_id ||
+      !total_target_per_day || !target_pairs_per_tray || !man_hours_minutes || !smv_per_pair) {
+      throw Object.assign(new Error('Required fields are missing'), { status: 400 });
+    }
+
+    if (existingId) {
+      const [existingRows] = await conn.execute(
+        'SELECT id FROM production_plan WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        [existingId]
+      );
+      if (existingRows.length === 0) {
+        throw Object.assign(new Error('Plan not found'), { status: 404 });
+      }
+    }
+    await assertExists(conn, 'styles', style_id, 'Style');
+    await assertExists(conn, 'customers', customer_id, 'Customer');
+    await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
+
+    const [routingRows] = await conn.execute(
+      'SELECT id FROM production_routing_header WHERE style_id = ? AND deleted_at IS NULL LIMIT 1',
+      [style_id]
+    );
+    if (routingRows.length === 0) {
+      throw Object.assign(
+        new Error('No production routing found for the selected style. Please create a routing first.'),
+        { status: 422 }
+      );
+    }
+
+    const [dupCheck] = await conn.execute(
+      existingId
+        ? 'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND id != ? AND deleted_at IS NULL LIMIT 1'
+        : 'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND deleted_at IS NULL LIMIT 1',
+      existingId ? [plan_date, work_centre_id, existingId] : [plan_date, work_centre_id]
+    );
+    if (dupCheck.length > 0) {
+      throw Object.assign(
+        new Error('A production plan already exists for this date and work centre. Please edit the existing plan.'),
+        { status: 409 }
+      );
+    }
+
+    if (existingId) {
+      const [r] = await conn.execute(
+        `UPDATE production_plan 
+         SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?,
+             leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?,
+             target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
+         WHERE id = ? AND deleted_at IS NULL`,
+        [plan_date, style_id, customer_id, group_id, leather_id, color_id,
+          work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count,
+          man_hours_minutes, smv_per_pair, existingId]
+      );
+      if (r.affectedRows === 0) throw Object.assign(new Error('Plan not found'), { status: 404 });
+      return { id: existingId };
+    }
+
+    const [r] = await conn.execute(
+      `INSERT INTO production_plan 
+       (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id,
+        total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [plan_date, style_id, customer_id, group_id, leather_id, color_id,
+        work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair]
+    );
+    return { id: r.insertId };
+  }
+
   // Get all production plans
   async getAll(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const offset = (page - 1) * limit;
+      const search = String(req.query.search || '').trim();
+      const planDate = String(req.query.plan_date || '').trim();
+      const workCentreId = String(req.query.work_centre_id || '').trim();
+      const styleId = String(req.query.style_id || '').trim();
+      const includeDeleted = String(req.query.include_deleted || '').trim() === '1';
+      const whereParts = includeDeleted ? [] : ['pp.deleted_at IS NULL'];
+      const params = [];
+
+      if (planDate) {
+        whereParts.push('pp.plan_date = ?');
+        params.push(planDate);
+      }
+      if (workCentreId) {
+        whereParts.push('pp.work_centre_id = ?');
+        params.push(workCentreId);
+      }
+      if (styleId) {
+        whereParts.push('pp.style_id = ?');
+        params.push(styleId);
+      }
+      if (search) {
+        whereParts.push(`(
+          s.name LIKE ? OR c.name LIKE ? OR wc.name LIKE ? OR
+          pp.total_target_per_day LIKE ? OR pp.target_pairs_per_tray LIKE ?
+        )`);
+        const like = `%${search}%`;
+        params.push(like, like, like, like, like);
+      }
+      const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
       const [rows] = await db.query(`
         SELECT 
           pp.*,
+          CASE WHEN pp.deleted_at IS NULL THEN 0 ELSE 1 END as is_deleted,
           s.name as style_name,
           c.name as customer_name,
           g.name as group_name,
@@ -26,11 +148,20 @@ class ProductionPlanningController {
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN colors col ON pp.color_id = col.id
         LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
+        ${whereClause}
         ORDER BY pp.plan_date DESC
         LIMIT ? OFFSET ?
-      `, [limit, offset]);
+      `, [...params, limit, offset]);
 
-      const [countResult] = await db.query('SELECT COUNT(*) as total FROM production_plan');
+      const [countResult] = await db.query(
+        `SELECT COUNT(*) as total
+         FROM production_plan pp
+         LEFT JOIN styles s ON pp.style_id = s.id
+         LEFT JOIN customers c ON pp.customer_id = c.id
+         LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
+         ${whereClause}`,
+        params
+      );
       const total = countResult[0].total;
 
       res.json({ 
@@ -70,7 +201,7 @@ class ProductionPlanningController {
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN colors col ON pp.color_id = col.id
         LEFT JOIN work_centres wc ON pp.work_centre_id = wc.id
-        WHERE pp.id = ?
+        WHERE pp.id = ? AND pp.deleted_at IS NULL
       `, [id]);
 
       if (rows.length === 0) {
@@ -87,54 +218,7 @@ class ProductionPlanningController {
   // Create production plan
   async create(req, res) {
     try {
-      const { plan_date, style_id, customer_id, group_id, leather_id, color_id,
-              work_centre_id, total_target_per_day, target_pairs_per_tray,
-              tray_count, man_hours_minutes, smv_per_pair } = req.body;
-
-      if (!plan_date || !style_id || !customer_id || !work_centre_id ||
-          !total_target_per_day || !target_pairs_per_tray || !man_hours_minutes || !smv_per_pair) {
-        return res.status(400).json({ success: false, error: 'Required fields are missing' });
-      }
-
-      const result = await withTransaction(async (conn) => {
-        // Integrity checks
-        await assertExists(conn, 'styles', style_id, 'Style');
-        await assertExists(conn, 'customers', customer_id, 'Customer');
-        await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
-
-        const [routingRows] = await conn.execute(
-          'SELECT id FROM production_routing_header WHERE style_id = ? LIMIT 1',
-          [style_id]
-        );
-        if (routingRows.length === 0) {
-          throw Object.assign(
-            new Error('No production routing found for the selected style. Please create a routing first.'),
-            { status: 422 }
-          );
-        }
-
-        // Prevent duplicate plan for same date + work centre
-        const [dupCheck] = await conn.execute(
-          'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? LIMIT 1',
-          [plan_date, work_centre_id]
-        );
-        if (dupCheck.length > 0) {
-          throw Object.assign(
-            new Error('A production plan already exists for this date and work centre. Please edit the existing plan.'),
-            { status: 409 }
-          );
-        }
-
-        const [r] = await conn.execute(
-          `INSERT INTO production_plan 
-          (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id,
-           total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [plan_date, style_id, customer_id, group_id || null, leather_id || null, color_id || null,
-           work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0, man_hours_minutes, smv_per_pair]
-        );
-        return { id: r.insertId };
-      });
+      const result = await withTransaction(async (conn) => this.validateAndUpsertPlan(conn, req.body));
 
       res.status(201).json({ success: true, data: result });
     } catch (error) {
@@ -147,56 +231,7 @@ class ProductionPlanningController {
   async update(req, res) {
     try {
       const { id } = req.params;
-      const { plan_date, style_id, customer_id, group_id, leather_id, color_id,
-              work_centre_id, total_target_per_day, target_pairs_per_tray,
-              tray_count, man_hours_minutes, smv_per_pair } = req.body;
-
-      if (!plan_date || !style_id || !customer_id || !work_centre_id ||
-          !total_target_per_day || !target_pairs_per_tray || !man_hours_minutes || !smv_per_pair) {
-        return res.status(400).json({ success: false, error: 'Required fields are missing' });
-      }
-
-      await withTransaction(async (conn) => {
-        await assertExists(conn, 'production_plan', id, 'Plan');
-        await assertExists(conn, 'styles', style_id, 'Style');
-        await assertExists(conn, 'customers', customer_id, 'Customer');
-        await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
-
-        const [routingRows] = await conn.execute(
-          'SELECT id FROM production_routing_header WHERE style_id = ? LIMIT 1',
-          [style_id]
-        );
-        if (routingRows.length === 0) {
-          throw Object.assign(
-            new Error('No production routing found for the selected style. Please create a routing first.'),
-            { status: 422 }
-          );
-        }
-
-        // Prevent duplicate plan for same date + work centre (exclude current record)
-        const [dupCheck] = await conn.execute(
-          'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND id != ? LIMIT 1',
-          [plan_date, work_centre_id, id]
-        );
-        if (dupCheck.length > 0) {
-          throw Object.assign(
-            new Error('A production plan already exists for this date and work centre. Please edit the existing plan.'),
-            { status: 409 }
-          );
-        }
-
-        const [r] = await conn.execute(
-          `UPDATE production_plan 
-          SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?,
-              leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?,
-              target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
-          WHERE id = ?`,
-          [plan_date, style_id, customer_id, group_id || null, leather_id || null, color_id || null,
-           work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count || 0,
-           man_hours_minutes, smv_per_pair, id]
-        );
-        if (r.affectedRows === 0) throw Object.assign(new Error('Plan not found'), { status: 404 });
-      });
+      await withTransaction(async (conn) => this.validateAndUpsertPlan(conn, req.body, id));
 
       res.json({ success: true, data: { id } });
     } catch (error) {
@@ -211,13 +246,94 @@ class ProductionPlanningController {
       const { id } = req.params;
 
       await withTransaction(async (conn) => {
-        await assertExists(conn, 'production_plan', id, 'Plan');
-        await conn.execute('DELETE FROM production_plan WHERE id = ?', [id]);
+        const [rows] = await conn.execute(
+          'SELECT id FROM production_plan WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+          [id]
+        );
+        if (rows.length === 0) {
+          throw Object.assign(new Error('Plan not found'), { status: 404 });
+        }
+        await conn.execute('UPDATE production_plan SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL', [id]);
       });
 
-      res.json({ success: true, message: 'Plan deleted successfully' });
+      res.json({ success: true, message: 'Plan moved to deleted records' });
     } catch (error) {
       logger.error('Error deleting production plan:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async createBulk(req, res) {
+    try {
+      const lines = Array.isArray(req.body?.lines) ? req.body.lines : [];
+      if (lines.length === 0) {
+        return res.status(400).json({ success: false, error: 'At least one line is required' });
+      }
+
+      const duplicateKeys = new Set();
+      for (const line of lines) {
+        const key = `${line.plan_date}::${line.work_centre_id}`;
+        if (duplicateKeys.has(key)) {
+          return res.status(409).json({
+            success: false,
+            error: 'Duplicate work centre entries found in the same bulk request for the selected date.'
+          });
+        }
+        duplicateKeys.add(key);
+      }
+
+      const result = await withTransaction(async (conn) => {
+        const insertedIds = [];
+        for (const line of lines) {
+          const inserted = await this.validateAndUpsertPlan(conn, line);
+          insertedIds.push(inserted.id);
+        }
+        return insertedIds;
+      });
+
+      res.status(201).json({ success: true, data: { count: result.length, ids: result } });
+    } catch (error) {
+      logger.error('Error creating production plans in bulk:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async restore(req, res) {
+    try {
+      const { id } = req.params;
+      await withTransaction(async (conn) => {
+        const [rows] = await conn.execute(
+          'SELECT id, plan_date, work_centre_id, deleted_at FROM production_plan WHERE id = ?',
+          [id]
+        );
+        if (rows.length === 0) {
+          throw Object.assign(new Error('Plan not found'), { status: 404 });
+        }
+        const plan = rows[0];
+        if (!plan.deleted_at) {
+          throw Object.assign(new Error('Plan is already active'), { status: 400 });
+        }
+
+        const [dupCheck] = await conn.execute(
+          'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND id != ? AND deleted_at IS NULL LIMIT 1',
+          [plan.plan_date, plan.work_centre_id, id]
+        );
+        if (dupCheck.length > 0) {
+          throw Object.assign(
+            new Error('Cannot restore because an active plan already exists for this date and work centre.'),
+            { status: 409 }
+          );
+        }
+
+        await conn.execute(
+          'UPDATE production_plan SET deleted_at = NULL WHERE id = ?',
+          [id]
+        );
+      });
+
+      res.json({ success: true, message: 'Plan restored successfully' });
+    } catch (error) {
+      logger.error('Error restoring production plan:', error);
       res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }

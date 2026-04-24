@@ -580,11 +580,12 @@ exports.getInitData = async (req, res, next) => {
       const [linesRows] = await db.query(
         `SELECT prl.mins_12_prs_box
          FROM production_plan pp
-         JOIN production_routing_header prh ON prh.style_id = pp.style_id
+         JOIN production_routing_header prh ON prh.style_id = pp.style_id AND prh.deleted_at IS NULL
          JOIN production_routing_lines prl
            ON prl.routing_header_id = prh.id
            AND prl.machine_centre_id = ?
          WHERE pp.work_centre_id = ?
+           AND pp.deleted_at IS NULL
            AND pp.plan_date = CURDATE()
          ORDER BY
            CASE WHEN prh.created_on <= pp.plan_date THEN 0 ELSE 1 END ASC,
@@ -601,7 +602,7 @@ exports.getInitData = async (req, res, next) => {
     // Get target pairs from planning (default 0)
     let targetPairs = 0;
     try {
-      const [planningRows] = await db.query('SELECT work_centre_id, target_pairs_per_tray, plan_date FROM production_plan ORDER BY plan_date DESC');
+      const [planningRows] = await db.query('SELECT work_centre_id, target_pairs_per_tray, plan_date FROM production_plan WHERE deleted_at IS NULL ORDER BY plan_date DESC');
       logger.info(`Found ${planningRows.length} planning records. Looking for work_centre_id: ${finalWorkCentreId}`);
       if (planningRows.length > 0) {
         // Find matching work centre or use the latest plan

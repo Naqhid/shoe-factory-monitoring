@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X } from 'lucide-react';
+import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
@@ -55,12 +55,18 @@ export const ProductionPlanningForm: React.FC = () => {
   const [workCentres, setWorkCentres] = React.useState<MasterOption[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [restoreId, setRestoreId] = React.useState<number | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(10);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [filterDate, setFilterDate] = React.useState('');
+  const [filterWorkCentre, setFilterWorkCentre] = React.useState('');
+  const [filterStyle, setFilterStyle] = React.useState('');
+  const [showDeleted, setShowDeleted] = React.useState(false);
 
   React.useEffect(() => {
     fetchPlans();
@@ -69,13 +75,22 @@ export const ProductionPlanningForm: React.FC = () => {
 
   React.useEffect(() => {
     fetchPlans();
-  }, [currentPage, itemsPerPage]);
+  }, [currentPage, itemsPerPage, searchTerm, filterDate, filterWorkCentre, filterStyle, showDeleted]);
 
   const fetchPlans = async () => {
     setRefreshing(true);
     try {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(itemsPerPage),
+      });
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      if (filterDate) params.set('plan_date', filterDate);
+      if (filterWorkCentre) params.set('work_centre_id', filterWorkCentre);
+      if (filterStyle) params.set('style_id', filterStyle);
+      if (showDeleted) params.set('include_deleted', '1');
       const [res] = await Promise.all([
-        apiFetch(`${API_BASE}/api/production-planning?page=${currentPage}&limit=${itemsPerPage}`),
+        apiFetch(`${API_BASE}/api/production-planning?${params.toString()}`),
         new Promise(resolve => setTimeout(resolve, 500))
       ]);
       const result = await res.json();
@@ -225,6 +240,23 @@ export const ProductionPlanningForm: React.FC = () => {
     }
   };
 
+  const confirmRestore = async () => {
+    if (!restoreId) return;
+    setRestoreId(null);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/production-planning/${restoreId}/restore`, { method: 'POST' });
+      const result = await res.json();
+      if (result.success) {
+        toast.success('Plan restored');
+        fetchPlans();
+      } else {
+        toast.error(result.error || 'Restore failed');
+      }
+    } catch (error) {
+      toast.error('Network error');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const toSave = lines.filter(
@@ -278,35 +310,42 @@ export const ProductionPlanningForm: React.FC = () => {
       }
       setLoading(false);
     } else {
-      // Create new plans
-      let ok = 0, err = 0;
-      for (const l of toSave) {
-        try {
-          const payload = {
-            plan_date: planDate,
-            style_id: parseInt(l.style_id),
-            customer_id: parseInt(l.customer_id),
-            group_id: l.group_id ? parseInt(l.group_id) : null,
-            leather_id: l.leather_id ? parseInt(l.leather_id) : null,
-            color_id: l.color_id ? parseInt(l.color_id) : null,
-            work_centre_id: parseInt(l.work_centre_id),
-            total_target_per_day: parseInt(l.total_target_per_day),
-            target_pairs_per_tray: parseInt(l.target_pairs_per_tray),
-            tray_count: parseInt(l.tray_count || '0'),
-            man_hours_minutes: parseInt(l.man_hours_minutes),
-            smv_per_pair: parseFloat(l.smv_per_pair),
-          };
-          const res = await apiFetch(`${API_BASE}/api/production-planning`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-          const j = await res.json();
-          if (j.success) ok++; else { err++; toast.error(j.error || 'Failed to save line'); }
-        } catch (e) {
-          err++;
-          toast.error('Network error');
+      // Create new plans atomically
+      const payload = {
+        lines: toSave.map((l) => ({
+          plan_date: planDate,
+          style_id: parseInt(l.style_id),
+          customer_id: parseInt(l.customer_id),
+          group_id: l.group_id ? parseInt(l.group_id) : null,
+          leather_id: l.leather_id ? parseInt(l.leather_id) : null,
+          color_id: l.color_id ? parseInt(l.color_id) : null,
+          work_centre_id: parseInt(l.work_centre_id),
+          total_target_per_day: parseInt(l.total_target_per_day),
+          target_pairs_per_tray: parseInt(l.target_pairs_per_tray),
+          tray_count: parseInt(l.tray_count || '0'),
+          man_hours_minutes: parseInt(l.man_hours_minutes),
+          smv_per_pair: parseFloat(l.smv_per_pair),
+        }))
+      };
+      let ok = 0;
+      try {
+        const res = await apiFetch(`${API_BASE}/api/production-planning/bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const j = await res.json();
+        if (j.success) {
+          ok = j?.data?.count || toSave.length;
+        } else {
+          toast.error(j.error || 'Failed to save planning lines');
         }
+      } catch (e) {
+        toast.error('Network error');
       }
       setLoading(false);
-      if (ok) {
-        toast.success(`Saved ${ok} line(s)${err ? `, ${err} failed` : ''}`);
+      if (ok > 0) {
+        toast.success(`Saved ${ok} line(s)`);
         setShowModal(false);
         fetchPlans();
       }
@@ -323,17 +362,85 @@ export const ProductionPlanningForm: React.FC = () => {
         onCancel={() => setDeleteId(null)}
         confirmText="Delete"
       />
+      <ConfirmDialog
+        isOpen={restoreId !== null}
+        title="Restore Plan"
+        message="Restore this plan back to active records?"
+        onConfirm={confirmRestore}
+        onCancel={() => setRestoreId(null)}
+        confirmText="Restore"
+      />
       
       <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
-          <div className="flex gap-2">
-            <button onClick={fetchPlans} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-            <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
-              <Plus className="h-4 w-4" />Add New
-            </button>
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
+            <div className="flex gap-2">
+              <button onClick={fetchPlans} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
+                <Plus className="h-4 w-4" />Add New
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search style/customer/work centre..."
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => {
+                setFilterDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+            <select
+              value={filterWorkCentre}
+              onChange={(e) => {
+                setFilterWorkCentre(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              <option value="">All Work Centres</option>
+              {workCentres.map((wc) => (
+                <option key={wc.id} value={String(wc.id)}>{wc.code} - {wc.name}</option>
+              ))}
+            </select>
+            <select
+              value={filterStyle}
+              onChange={(e) => {
+                setFilterStyle(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              <option value="">All Styles</option>
+              {styles.map((s) => (
+                <option key={s.id} value={String(s.id)}>{s.name}</option>
+              ))}
+            </select>
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showDeleted}
+                onChange={(e) => {
+                  setShowDeleted(e.target.checked);
+                  setCurrentPage(1);
+                }}
+              />
+              Show deleted
+            </label>
           </div>
         </div>
       </header>
@@ -356,6 +463,7 @@ export const ProductionPlanningForm: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Work Centre</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/Tray</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Record</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
@@ -368,20 +476,35 @@ export const ProductionPlanningForm: React.FC = () => {
                   <td className="px-4 py-2 text-sm">{p.total_target_per_day}</td>
                   <td className="px-4 py-2 text-sm">{p.target_pairs_per_tray}</td>
                   <td className="px-4 py-2 text-sm">
+                    {p.is_deleted ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Deleted</span>
+                    ) : (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-sm">
                     <div className="flex gap-2">
-                      <button onClick={() => handleEdit(p.id)} className="text-blue-600 hover:text-blue-900">
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-900">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {p.is_deleted ? (
+                        <button onClick={() => setRestoreId(p.id)} className="text-emerald-600 hover:text-emerald-900" title="Restore">
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <>
+                          <button onClick={() => handleEdit(p.id)} className="text-blue-600 hover:text-blue-900">
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-900">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
               {plans.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No planning records found</td>
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No planning records found</td>
                 </tr>
               )}
             </tbody>

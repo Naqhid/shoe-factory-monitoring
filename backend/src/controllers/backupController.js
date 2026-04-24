@@ -3,7 +3,7 @@ const logger = require('../utils/logger');
 
 class BackupController {
   async triggerBackup(req, res) {
-    if (req.user.role !== 'admin') {
+    if (String(req.user?.role || '').toLowerCase() !== 'admin') {
       return res.status(403).json({ success: false, error: 'Admin access required' });
     }
     try {
@@ -16,7 +16,7 @@ class BackupController {
   }
 
   async getBackups(req, res) {
-    if (req.user.role !== 'admin') {
+    if (String(req.user?.role || '').toLowerCase() !== 'admin') {
       return res.status(403).json({ success: false, error: 'Admin access required' });
     }
     try {

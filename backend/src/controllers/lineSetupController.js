@@ -3,6 +3,24 @@ const logger = require('../utils/logger');
 const { withTransaction, assertExists } = require('../utils/transaction');
 
 class LineSetupController {
+  async ensureNoActiveConflict(conn, { employeeId, machineId, excludeId = null }) {
+    const [rows] = await conn.execute(
+      `SELECT id, employee_id, machine_id
+       FROM line_setup
+       WHERE logout_date_time IS NULL
+         AND (employee_id = ? OR machine_id = ?)
+         ${excludeId ? 'AND id <> ?' : ''}
+       LIMIT 1`,
+      excludeId ? [employeeId, machineId, excludeId] : [employeeId, machineId]
+    );
+    if (rows.length === 0) return null;
+    const conflict = rows[0];
+    if (String(conflict.employee_id) === String(employeeId)) {
+      return 'This employee already has an active line setup.';
+    }
+    return 'This machine already has an active line setup.';
+  }
+
   // Get all line setups
   async getAll(req, res) {
     try {
@@ -66,6 +84,11 @@ class LineSetupController {
       const result = await withTransaction(async (conn) => {
         await assertExists(conn, 'employees', employee_id, 'Employee');
         await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
+        await assertExists(conn, 'machine_centres', machine_centre_id, 'Machine centre');
+        const conflict = await this.ensureNoActiveConflict(conn, { employeeId: employee_id, machineId: machine_id });
+        if (conflict) {
+          throw Object.assign(new Error(conflict), { status: 409 });
+        }
         const [r] = await conn.execute(
           `INSERT INTO line_setup (employee_id, machine_id, login_date_time, work_centre_id, machine_centre_id, smv_per_pair) VALUES (?, ?, ?, ?, ?, ?)`,
           [employee_id, machine_id, login_date_time, work_centre_id, machine_centre_id, smv_per_pair]
@@ -92,12 +115,32 @@ class LineSetupController {
         const [empRows] = await conn.execute('SELECT id FROM employees WHERE code = ?', [employee_id]);
         if (empRows.length === 0) throw Object.assign(new Error('Employee not found'), { status: 400 });
 
-        const [wcRows] = await conn.execute('SELECT id FROM work_centres WHERE name = ?', [work_centre]);
+        const [wcRows] = await conn.execute(
+          'SELECT id FROM work_centres WHERE name = ? OR code = ? OR id = ? LIMIT 1',
+          [work_centre, work_centre, Number(work_centre) || null]
+        );
         if (wcRows.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+
+        const [mcRows] = await conn.execute(
+          'SELECT id, machine_id, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ? LIMIT 1',
+          [machine_id, machine_id]
+        );
+        if (mcRows.length === 0) throw Object.assign(new Error('Machine centre not found'), { status: 400 });
+        if (Number(mcRows[0].work_centre_id) !== Number(wcRows[0].id)) {
+          throw Object.assign(new Error('Machine does not belong to selected work centre'), { status: 400 });
+        }
+
+        const conflict = await this.ensureNoActiveConflict(conn, {
+          employeeId: empRows[0].id,
+          machineId: mcRows[0].machine_id
+        });
+        if (conflict) {
+          throw Object.assign(new Error(conflict), { status: 409 });
+        }
 
         const [r] = await conn.execute(
           `INSERT INTO line_setup (employee_id, machine_id, login_date_time, work_centre_id, machine_centre_id, smv_per_pair) VALUES (?, ?, ?, ?, ?, ?)`,
-          [empRows[0].id, machine_id, login_date_time, wcRows[0].id, wcRows[0].id, 1.0]
+          [empRows[0].id, mcRows[0].machine_id, login_date_time, wcRows[0].id, mcRows[0].id, 1.0]
         );
         return { id: r.insertId };
       });
@@ -122,6 +165,15 @@ class LineSetupController {
         await assertExists(conn, 'line_setup', id, 'Line setup');
         await assertExists(conn, 'employees', employee_id, 'Employee');
         await assertExists(conn, 'work_centres', work_centre_id, 'Work centre');
+        await assertExists(conn, 'machine_centres', machine_centre_id, 'Machine centre');
+        const conflict = await this.ensureNoActiveConflict(conn, {
+          employeeId: employee_id,
+          machineId: machine_id,
+          excludeId: id
+        });
+        if (conflict) {
+          throw Object.assign(new Error(conflict), { status: 409 });
+        }
         const [r] = await conn.execute(
           `UPDATE line_setup SET employee_id = ?, machine_id = ?, login_date_time = ?, work_centre_id = ?, machine_centre_id = ?, smv_per_pair = ?, logout_date_time = ? WHERE id = ?`,
           [employee_id, machine_id, login_date_time, work_centre_id, machine_centre_id, smv_per_pair, logout_date_time || null, id]

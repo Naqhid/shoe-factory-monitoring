@@ -158,7 +158,11 @@ export const MobileLineSetupForm: React.FC = () => {
         toast.success(`Connected! Laptop will update shortly.`, { id: loadingToast });
         setShowSuccessDialog(true);
       } else {
-        toast.error(result.message || 'Activation failed', { id: loadingToast });
+        if (response.status === 409) {
+          toast.error(result.message || 'Active setup conflict: employee or machine is already active.', { id: loadingToast });
+        } else {
+          toast.error(result.message || 'Activation failed', { id: loadingToast });
+        }
       }
     } catch (error) {
       toast.error('Connection error');

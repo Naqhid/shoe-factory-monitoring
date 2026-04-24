@@ -2,6 +2,10 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 
 class ProductionTrackerController {
+  normalizeIssueKey(input) {
+    return String(input || '').trim();
+  }
+
   // Dashboard Summary
   async getSummary(req, res) {
     try {
@@ -24,7 +28,7 @@ class ProductionTrackerController {
           COALESCE(COUNT(DISTINCT ms.emp_id), 0) as present_employees,
           COALESCE(SUM(prl.manpower), 0) as target_employees
         FROM machine_centre_summary mcs
-        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
+        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?) AND pp.deleted_at IS NULL
         LEFT JOIN mobile_sessions ms ON mcs.work_centre_id = ms.work_centre_id AND DATE(ms.activated_at) = DATE(?) AND ms.status = 'active'
         LEFT JOIN production_routing_header prh ON prh.id = (
           SELECT prh2.id
@@ -52,7 +56,7 @@ class ProductionTrackerController {
           COALESCE(SUM(mcs.total_output_pairs), 0) as actual_pairs,
           COALESCE(SUM(pp.total_target_per_day), 0) as target_pairs
         FROM machine_centre_summary mcs
-        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
+        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?) AND pp.deleted_at IS NULL
         WHERE DATE(mcs.prod_date) = DATE(?) ${whereClause}
       `, workCentreId && workCentreId !== 'all' ? [yesterdayStr, yesterdayStr, workCentreId] : [yesterdayStr, yesterdayStr]);
 
@@ -71,7 +75,7 @@ class ProductionTrackerController {
           SELECT 
             (SUM(mcs.total_output_pairs) / NULLIF(SUM(pp.total_target_per_day), 0)) * 100 as daily_eff
           FROM machine_centre_summary mcs
-          LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(mcs.prod_date)
+          LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(mcs.prod_date) AND pp.deleted_at IS NULL
           WHERE DATE(mcs.prod_date) BETWEEN DATE(?) AND DATE(?) ${whereClause}
           GROUP BY DATE(mcs.prod_date)
         ) as daily_stats
@@ -124,9 +128,10 @@ class ProductionTrackerController {
         SELECT 
           HOUR(pd.created_at) as hour,
           SUM(pd.output_pairs) as pairs
-        FROM prod_data pd
+        FROM machine_centre_production pd
         WHERE DATE(pd.prod_date) = DATE(?) ${whereClause}
-        GROUP BY HOUR(pd.created_at)
+          AND pd.button_status = 2
+        GROUP BY HOUR(pd.updated_at)
         ORDER BY hour
       `, params);
 
@@ -164,7 +169,7 @@ class ProductionTrackerController {
           GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(mcs.total_output_pairs, 0)) as wip
         FROM machine_centre_summary mcs
         JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
-        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
+        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?) AND pp.deleted_at IS NULL
         WHERE DATE(mcs.prod_date) = DATE(?) ${whereClause}
         AND mcs.avg_efficiency_percent < 70
         ORDER BY mcs.avg_efficiency_percent ASC
@@ -251,7 +256,7 @@ class ProductionTrackerController {
           ROUND(AVG(mcs.avg_efficiency_percent), 0) as efficiency,
           GREATEST(0, COALESCE(SUM(pp.total_target_per_day), 0) - COALESCE(SUM(mcs.total_output_pairs), 0)) as wip
         FROM work_centres wc
-        LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?)
+        LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?) AND pp.deleted_at IS NULL
         LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
         GROUP BY wc.id, wc.name
         ORDER BY wc.id
@@ -263,6 +268,73 @@ class ProductionTrackerController {
       });
     } catch (error) {
       logger.error('Error getting line performance:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getAlertActions(req, res) {
+    try {
+      const keys = Array.isArray(req.body?.keys)
+        ? req.body.keys.map((k) => this.normalizeIssueKey(k)).filter(Boolean)
+        : [];
+      if (keys.length === 0) {
+        return res.json({ success: true, data: {} });
+      }
+      const placeholders = keys.map(() => '?').join(', ');
+      const [rows] = await db.execute(
+        `SELECT issue_key, acknowledged_at, escalated_at
+         FROM tracker_alert_actions
+         WHERE issue_key IN (${placeholders})`,
+        keys
+      );
+      const data = {};
+      rows.forEach((row) => {
+        data[row.issue_key] = {
+          ack: !!row.acknowledged_at,
+          escalated: !!row.escalated_at,
+        };
+      });
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error querying tracker alert actions:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async acknowledgeAlert(req, res) {
+    try {
+      const issueKey = this.normalizeIssueKey(req.body?.issue_key);
+      if (!issueKey) {
+        return res.status(400).json({ success: false, error: 'issue_key is required' });
+      }
+      await db.execute(
+        `INSERT INTO tracker_alert_actions (issue_key, acknowledged_at, escalated_at, updated_at)
+         VALUES (?, NOW(), NULL, NOW())
+         ON DUPLICATE KEY UPDATE acknowledged_at = NOW(), updated_at = NOW()`,
+        [issueKey]
+      );
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error acknowledging tracker alert:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async escalateAlert(req, res) {
+    try {
+      const issueKey = this.normalizeIssueKey(req.body?.issue_key);
+      if (!issueKey) {
+        return res.status(400).json({ success: false, error: 'issue_key is required' });
+      }
+      await db.execute(
+        `INSERT INTO tracker_alert_actions (issue_key, acknowledged_at, escalated_at, updated_at)
+         VALUES (?, NULL, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE escalated_at = NOW(), updated_at = NOW()`,
+        [issueKey]
+      );
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error escalating tracker alert:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }

@@ -11,8 +11,6 @@ const pool = mysql.createPool({
   connectionLimit: 30,        // Increased from 10 to handle more concurrent users
   queueLimit: 50,             // Allow queueing when pool exhausted
   connectTimeout: 10000,
-  acquireTimeout: 60000,      // Wait up to 60s for connection from pool
-  timeout: 60000,             // Query timeout
   enableKeepAlive: true,      // Keep connections alive
   keepAliveInitialDelay: 10000
 });

@@ -46,8 +46,9 @@ class ProductionLockController {
       const { date, work_centre_id, notes } = req.body;
       const userId = req.user.id;
       const role = req.user.role;
+      const roleNorm = String(role || '').toLowerCase();
 
-      if (!['admin', 'supervisor', 'manager'].includes(role)) {
+      if (!['admin', 'line supervisor', 'supervisor', 'manager'].includes(roleNorm)) {
         return res.status(403).json({ success: false, error: 'Only supervisors/admins can lock production days' });
       }
       if (!date || !work_centre_id) {
@@ -73,7 +74,7 @@ class ProductionLockController {
   async unlockDay(req, res) {
     try {
       const { date, work_centre_id } = req.body;
-      if (req.user.role !== 'admin') {
+      if (String(req.user?.role || '').toLowerCase() !== 'admin') {
         return res.status(403).json({ success: false, error: 'Only admins can unlock production days' });
       }
       if (!date || !work_centre_id) {

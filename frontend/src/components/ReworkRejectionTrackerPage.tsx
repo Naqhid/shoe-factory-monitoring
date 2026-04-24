@@ -106,11 +106,22 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   }, [selectedWorkCentre]);
 
   useEffect(() => {
+    if (selectedWorkCentre && selectedDate) {
+      fetchSavedRecords();
+    }
+  }, [selectedMachineCentre, selectedDate]);
+
+  useEffect(() => {
     const fetchMachineCentres = async () => {
       try {
         const response = await apiFetch(`${API_BASE_URL}/api/masters/machine_centres`);
         const result = await response.json();
-        if (result.success) setMachineCentres(result.data);
+        if (result.success) {
+          const filtered = selectedWorkCentre
+            ? result.data.filter((mc: any) => String(mc.work_centre_id) === String(selectedWorkCentre))
+            : result.data;
+          setMachineCentres(filtered);
+        }
       } catch (error) {
         console.error('Error fetching machine centres:', error);
       }
@@ -123,7 +134,12 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
     if (!wcId || !selectedDate) return;
     setHistoryLoading(true);
     try {
-      const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection?work_centre_id=${wcId}&date=${selectedDate}`);
+      const query = new URLSearchParams({
+        work_centre_id: String(wcId),
+        date: selectedDate,
+      });
+      if (selectedMachineCentre) query.set('machine_centre_name', selectedMachineCentre);
+      const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection?${query.toString()}`);
       const result = await response.json();
       if (result.success) setSavedRecords(result.data);
     } catch (error) {
@@ -339,7 +355,22 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
             )}
           </div>
 
-        
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Cpu className="h-4 w-4 inline mr-1" />
+              Machine Centre
+            </label>
+            <select
+              value={selectedMachineCentre}
+              onChange={(e) => setSelectedMachineCentre(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Machines</option>
+              {machineCentres.map((mc) => (
+                <option key={mc.id} value={mc.name}>{mc.machine_id} - {mc.name}</option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex items-end">
             <button

@@ -118,6 +118,25 @@ const mobileSessionController = {
                 }
             }
 
+            // 2.5 Enforce one active machine per operator (same day).
+            // Prevents same operator being active on multiple machines simultaneously.
+            const [employeeActiveRows] = await pool.execute(
+                `SELECT machine_id
+                 FROM mobile_sessions
+                 WHERE emp_code = ?
+                   AND status = 'active'
+                   AND DATE(activated_at) = CURDATE()
+                 ORDER BY activated_at DESC
+                 LIMIT 1`,
+                [emp_id]
+            );
+            if (employeeActiveRows.length > 0 && String(employeeActiveRows[0].machine_id) !== String(parsedMachineId)) {
+                return res.status(409).json({
+                    success: false,
+                    message: `Operator ${emp_id} is already active on machine ${employeeActiveRows[0].machine_id}. Please finish/logout there first.`
+                });
+            }
+
             // 3. Upsert session by machine_id
             const [existing] = await pool.execute('SELECT session_id FROM mobile_sessions WHERE machine_id = ?', [parsedMachineId]);
             const finalSessionId = existing.length > 0 ? existing[0].session_id : randomUUID();

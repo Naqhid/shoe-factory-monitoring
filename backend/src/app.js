@@ -93,6 +93,31 @@ const initDb = async () => {
       )
     `);
     logger.info('missed_action_states table ready');
+    try {
+      await db.execute('ALTER TABLE production_routing_header ADD COLUMN deleted_at DATETIME NULL');
+      logger.info('Added deleted_at to production_routing_header');
+    } catch (routingAlterError) {
+      if (routingAlterError.code !== 'ER_DUP_FIELDNAME') {
+        throw routingAlterError;
+      }
+    }
+    try {
+      await db.execute('ALTER TABLE production_plan ADD COLUMN deleted_at DATETIME NULL');
+      logger.info('Added deleted_at to production_plan');
+    } catch (planAlterError) {
+      if (planAlterError.code !== 'ER_DUP_FIELDNAME') {
+        throw planAlterError;
+      }
+    }
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS tracker_alert_actions (
+        issue_key VARCHAR(255) NOT NULL PRIMARY KEY,
+        acknowledged_at DATETIME NULL,
+        escalated_at DATETIME NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    logger.info('tracker_alert_actions table ready');
     
     // Archive old machine centre summary data on startup
     try {
@@ -114,6 +139,11 @@ const initDb = async () => {
 const app = express();
 const PORT = process.env.PORT || 3001;
 const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
+const PRODUCTION_ROUTING_ALLOWED_ROLES = new Set(['Admin', 'IED']);
+const PRODUCTION_PLANNING_ALLOWED_ROLES = new Set(['Admin', 'Planner']);
+const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
+const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED']);
+const ADMIN_ALLOWED_ROLES = new Set(['Admin']);
 
 const requireLogsAccess = (req, res, next) => {
   const role = req.user?.role;
@@ -121,6 +151,77 @@ const requireLogsAccess = (req, res, next) => {
     return res.status(403).json({ success: false, message: 'Access denied for logs' });
   }
   next();
+};
+
+const requireProductionRoutingAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !PRODUCTION_ROUTING_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for production routing' });
+  }
+  next();
+};
+
+const requireProductionPlanningAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !PRODUCTION_PLANNING_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for production planning' });
+  }
+  next();
+};
+
+const requireTrackerAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !TRACKER_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for production tracker' });
+  }
+  next();
+};
+
+const requireReworkAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !REWORK_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for rework rejection tracker' });
+  }
+  next();
+};
+
+const requireUsersAdminAccess = (req, res, next) => {
+  if (req.params.table !== 'users') return next();
+  const role = req.user?.role;
+  if (!role || !ADMIN_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for user administration' });
+  }
+  next();
+};
+
+const requireMonitoringAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !ADMIN_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for monitoring dashboard' });
+  }
+  next();
+};
+
+const requireAdminAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !ADMIN_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Admin access required' });
+  }
+  next();
+};
+
+const LOCK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
+const requireProductionLockAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !LOCK_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Only supervisors/admins can lock production days' });
+  }
+  next();
+};
+
+const authenticateUsersTable = (req, res, next) => {
+  if (req.params.table !== 'users') return next();
+  return authenticate(req, res, next);
 };
 
 createDirectories();
@@ -313,32 +414,35 @@ app.get('/api/reports/employee-output', validate(validate.schemas.dateQuery), ap
 app.get('/api/reports/employee-performance', validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
 
 // Master routes — table whitelist on all master endpoints
-app.get('/api/masters/:table', validate.allowedTable, validate.pagination, masterController.getAll.bind(masterController));
-app.get('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.getById);
-app.get('/api/masters/:table/code/:code', validate.allowedTable, masterController.getByCode);
-app.get('/api/masters/:table/:id/usage', validate.allowedTable, validate.numericId, masterController.getUsage.bind(masterController));
-app.post('/api/masters/:table/:id/restore', validate.allowedTable, validate.numericId, masterController.restore.bind(masterController));
+app.get('/api/masters/:table', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.pagination, masterController.getAll.bind(masterController));
+app.get('/api/masters/:table/:id', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.numericId, masterController.getById);
+app.get('/api/masters/:table/code/:code', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, masterController.getByCode);
+app.get('/api/masters/:table/:id/usage', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.numericId, masterController.getUsage.bind(masterController));
+app.post('/api/masters/:table/:id/restore', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.restore.bind(masterController));
 app.get('/api/masters/employees/emp_id/:empId', masterController.getByEmpId);
 app.get('/api/masters/machine_centres/machine_id/:machineId', masterController.getByMachineId);
-app.post('/api/masters/:table', validate.allowedTable, masterController.create.bind(masterController));
-app.put('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.update.bind(masterController));
-app.delete('/api/masters/:table/:id', validate.allowedTable, validate.numericId, masterController.delete.bind(masterController));
+app.post('/api/masters/:table', validate.allowedTable, authenticate, requireAdminAccess, masterController.create.bind(masterController));
+app.put('/api/masters/:table/:id', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.update.bind(masterController));
+app.delete('/api/masters/:table/:id', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.delete.bind(masterController));
 
 // Production routing routes
-app.get('/api/production-routing', validate.pagination, productionRoutingController.getAll);
-app.get('/api/production-routing/masters', productionRoutingController.getMastersData);
-app.get('/api/production-routing/style/:styleId', productionRoutingController.getByStyleId);
-app.get('/api/production-routing/:id', validate.numericId, productionRoutingController.getById);
-app.post('/api/production-routing', productionRoutingController.create);
-app.put('/api/production-routing/:id', validate.numericId, productionRoutingController.update);
-app.delete('/api/production-routing/:id', validate.numericId, productionRoutingController.delete);
+app.get('/api/production-routing', authenticate, requireProductionRoutingAccess, validate.pagination, productionRoutingController.getAll.bind(productionRoutingController));
+app.get('/api/production-routing/masters', authenticate, requireProductionRoutingAccess, productionRoutingController.getMastersData.bind(productionRoutingController));
+app.get('/api/production-routing/style/:styleId', authenticate, requireProductionRoutingAccess, productionRoutingController.getByStyleId.bind(productionRoutingController));
+app.get('/api/production-routing/:id', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.getById.bind(productionRoutingController));
+app.post('/api/production-routing', authenticate, requireProductionRoutingAccess, productionRoutingController.create.bind(productionRoutingController));
+app.put('/api/production-routing/:id', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.update.bind(productionRoutingController));
+app.delete('/api/production-routing/:id', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.delete.bind(productionRoutingController));
+app.post('/api/production-routing/:id/restore', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.restore.bind(productionRoutingController));
 
 // Production planning routes
-app.get('/api/production-planning', validate.pagination, productionPlanningController.getAll);
-app.get('/api/production-planning/:id', validate.numericId, productionPlanningController.getById);
-app.post('/api/production-planning', validate(validate.schemas.productionPlan), productionPlanningController.create);
-app.put('/api/production-planning/:id', validate.numericId, validate(validate.schemas.productionPlan), productionPlanningController.update);
-app.delete('/api/production-planning/:id', validate.numericId, productionPlanningController.delete);
+app.get('/api/production-planning', authenticate, requireProductionPlanningAccess, validate.pagination, productionPlanningController.getAll.bind(productionPlanningController));
+app.get('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.getById.bind(productionPlanningController));
+app.post('/api/production-planning', authenticate, requireProductionPlanningAccess, validate(validate.schemas.productionPlan), productionPlanningController.create.bind(productionPlanningController));
+app.post('/api/production-planning/bulk', authenticate, requireProductionPlanningAccess, productionPlanningController.createBulk.bind(productionPlanningController));
+app.post('/api/production-planning/:id/restore', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.restore.bind(productionPlanningController));
+app.put('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, validate(validate.schemas.productionPlan), productionPlanningController.update.bind(productionPlanningController));
+app.delete('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.delete.bind(productionPlanningController));
 
 // Line setup routes
 app.get('/api/line-setup', lineSetupController.getAll);
@@ -349,12 +453,12 @@ app.delete('/api/line-setup/:id', lineSetupController.delete);
 app.post('/api/shift-start', lineSetupController.createShift);
 
 // User rights routes
-app.get('/api/user-rights', userRightsController.getAll);
-app.get('/api/user-rights/user/:userId', userRightsController.getByUserId);
-app.post('/api/user-rights', userRightsController.create);
-app.put('/api/user-rights/:id', userRightsController.update);
-app.delete('/api/user-rights/:id', userRightsController.delete);
-app.delete('/api/user-rights/user/:userId', userRightsController.deleteByUserId);
+app.get('/api/user-rights', authenticate, requireAdminAccess, userRightsController.getAll);
+app.get('/api/user-rights/user/:userId', authenticate, requireAdminAccess, userRightsController.getByUserId);
+app.post('/api/user-rights', authenticate, requireAdminAccess, userRightsController.create);
+app.put('/api/user-rights/:id', authenticate, requireAdminAccess, userRightsController.update);
+app.delete('/api/user-rights/:id', authenticate, requireAdminAccess, userRightsController.delete);
+app.delete('/api/user-rights/user/:userId', authenticate, requireAdminAccess, userRightsController.deleteByUserId);
 
 // ============================================================================
 // PUBLIC ROUTES - NO JWT REQUIRED (Production floor tablets/machines)
@@ -390,11 +494,14 @@ app.get('/api/pivot-data', mobileProductionController.getPivotData);
 app.post('/api/pivot-data/refresh', mobileProductionController.refreshPivotData);
 
 // Production Tracker routes
-app.get('/api/tracker/summary', productionTrackerController.getSummary);
-app.get('/api/tracker/hourly', productionTrackerController.getHourlyPerformance);
-app.get('/api/tracker/workstations', productionTrackerController.getWorkstationPerformance);
-app.get('/api/tracker/stoppages', productionTrackerController.getStoppageReasons);
-app.get('/api/tracker/line-performance', productionTrackerController.getLinePerformance);
+app.get('/api/tracker/summary', authenticate, requireTrackerAccess, productionTrackerController.getSummary.bind(productionTrackerController));
+app.get('/api/tracker/hourly', authenticate, requireTrackerAccess, productionTrackerController.getHourlyPerformance.bind(productionTrackerController));
+app.get('/api/tracker/workstations', authenticate, requireTrackerAccess, productionTrackerController.getWorkstationPerformance.bind(productionTrackerController));
+app.get('/api/tracker/stoppages', authenticate, requireTrackerAccess, productionTrackerController.getStoppageReasons.bind(productionTrackerController));
+app.get('/api/tracker/line-performance', authenticate, requireTrackerAccess, productionTrackerController.getLinePerformance.bind(productionTrackerController));
+app.post('/api/tracker/alert-actions/query', authenticate, requireTrackerAccess, productionTrackerController.getAlertActions.bind(productionTrackerController));
+app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, productionTrackerController.acknowledgeAlert.bind(productionTrackerController));
+app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
 app.get('/api/missed-actions', missedActionsController.getMissedActions);
 app.post('/api/missed-actions/ack', missedActionsController.acknowledgeMissedAction);
 app.post('/api/missed-actions/snooze', missedActionsController.snoozeMissedAction);
@@ -425,41 +532,41 @@ app.get('/api/hourly-output/:workCentreId', hourlyOutputController.getHourlyOutp
 app.get('/api/hourly-output/:workCentreId/machines', hourlyOutputController.getMachineHourlyOutput);
 
 // Rework Rejection routes
-app.get('/api/rework-rejection/summary', reworkRejectionController.getSummaryByWorkCentre);
-app.get('/api/rework-rejection', reworkRejectionController.getAll);
-app.post('/api/rework-rejection', validate(validate.schemas.reworkRejection), checkDayLock('production_date', 'work_centre_id'), reworkRejectionController.save);
-app.put('/api/rework-rejection/:id', validate.numericId, reworkRejectionController.update);
-app.delete('/api/rework-rejection/:id', validate.numericId, reworkRejectionController.delete);
+app.get('/api/rework-rejection/summary', authenticate, requireReworkAccess, reworkRejectionController.getSummaryByWorkCentre.bind(reworkRejectionController));
+app.get('/api/rework-rejection', authenticate, requireReworkAccess, reworkRejectionController.getAll.bind(reworkRejectionController));
+app.post('/api/rework-rejection', authenticate, requireReworkAccess, validate(validate.schemas.reworkRejection), checkDayLock('production_date', 'work_centre_id'), reworkRejectionController.save.bind(reworkRejectionController));
+app.put('/api/rework-rejection/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.update.bind(reworkRejectionController));
+app.delete('/api/rework-rejection/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.delete.bind(reworkRejectionController));
 
 // Role routes
-app.get('/api/roles', roleController.getAll);
-app.get('/api/roles/:id', roleController.getById);
-app.post('/api/roles', roleController.create);
-app.put('/api/roles/:id', roleController.update);
-app.delete('/api/roles/:id', roleController.delete);
+app.get('/api/roles', authenticate, requireAdminAccess, roleController.getAll);
+app.get('/api/roles/:id', authenticate, requireAdminAccess, roleController.getById);
+app.post('/api/roles', authenticate, requireAdminAccess, roleController.create);
+app.put('/api/roles/:id', authenticate, requireAdminAccess, roleController.update);
+app.delete('/api/roles/:id', authenticate, requireAdminAccess, roleController.delete);
 
 // Auth — password management
-app.post('/api/auth/change-password', authController.changePassword.bind(authController));
-app.post('/api/auth/reset-password/:userId', authController.resetPassword.bind(authController));
+app.post('/api/auth/change-password', authenticate, authController.changePassword.bind(authController));
+app.post('/api/auth/reset-password/:userId', authenticate, authController.resetPassword.bind(authController));
 
 // Production day lock routes
-app.get('/api/production-lock', productionLockController.isLocked.bind(productionLockController));
-app.get('/api/production-lock/all', productionLockController.getAll.bind(productionLockController));
-app.post('/api/production-lock/lock', productionLockController.lockDay.bind(productionLockController));
-app.post('/api/production-lock/unlock', productionLockController.unlockDay.bind(productionLockController));
+app.get('/api/production-lock', authenticate, requireProductionLockAccess, productionLockController.isLocked.bind(productionLockController));
+app.get('/api/production-lock/all', authenticate, requireProductionLockAccess, productionLockController.getAll.bind(productionLockController));
+app.post('/api/production-lock/lock', authenticate, requireProductionLockAccess, productionLockController.lockDay.bind(productionLockController));
+app.post('/api/production-lock/unlock', authenticate, requireAdminAccess, productionLockController.unlockDay.bind(productionLockController));
 
 // Alert routes (protected - only admin can mark read or run checks)
-app.post('/api/alerts/mark-read', alertController.markRead.bind(alertController));
-app.post('/api/alerts/run-checks', alertController.runChecks.bind(alertController));
+app.post('/api/alerts/mark-read', authenticate, alertController.markRead.bind(alertController));
+app.post('/api/alerts/run-checks', authenticate, requireAdminAccess, alertController.runChecks.bind(alertController));
 
 // Backup routes (admin only)
-app.post('/api/backup/trigger', backupController.triggerBackup.bind(backupController));
-app.get('/api/backup/list', backupController.getBackups.bind(backupController));
+app.post('/api/backup/trigger', authenticate, requireAdminAccess, backupController.triggerBackup.bind(backupController));
+app.get('/api/backup/list', authenticate, requireAdminAccess, backupController.getBackups.bind(backupController));
 
-// Health check endpoints (no auth required)
+// Health check endpoints
 app.get('/health', healthController.basic.bind(healthController));
-app.get('/health/detailed', healthController.detailed.bind(healthController));
-app.get('/health/metrics', healthController.metrics.bind(healthController));
+app.get('/health/detailed', authenticate, requireMonitoringAccess, healthController.detailed.bind(healthController));
+app.get('/health/metrics', authenticate, requireMonitoringAccess, healthController.metrics.bind(healthController));
 
 app.use(errorHandler);
 

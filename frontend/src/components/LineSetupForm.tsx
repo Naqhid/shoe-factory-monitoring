@@ -120,7 +120,11 @@ export const LineSetupForm: React.FC = () => {
           smv_per_pair: '',
         });
       } else {
-        toast.error(result.error || 'Failed to create line setup');
+        if (response.status === 409) {
+          toast.error(result.error || 'Active setup conflict: employee or machine is already active.');
+        } else {
+          toast.error(result.error || 'Failed to create line setup');
+        }
       }
     } catch (error) {
       toast.error('Network error');

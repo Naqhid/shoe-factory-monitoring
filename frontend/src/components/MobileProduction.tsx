@@ -1291,6 +1291,14 @@ export const MobileProduction: React.FC = () => {
         !productionData.is_paused &&
         Number(productionData.target_mins || 0) > 0 &&
         actualTimeCounter / 60 > Number(productionData.target_mins || 0);
+    const isCarryOverCycle = (() => {
+        if (!productionData || !productionData.prod_date) return false;
+        if (productionData.button_status === 2) return false;
+        const today = new Date();
+        const todayLocal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const recordDate = String(productionData.prod_date).slice(0, 10);
+        return recordDate !== todayLocal;
+    })();
 
     const currentLoggedInUser = (() => {
         try {
@@ -1518,6 +1526,13 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Metrics Section */}
                     <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
+                        {isCarryOverCycle && (
+                            <div className="mb-4 rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-amber-900 shadow-sm">
+                                <p className="text-sm font-semibold">
+                                    Previous day cycle resumed. Please tap <span className="font-bold">FINISH</span> or <span className="font-bold">RESET</span> before starting a new cycle.
+                                </p>
+                            </div>
+                        )}
                         {/* Progress Bar — red when actual time exceeds target */}
                         {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (
                             <div className="mb-4">

@@ -4,6 +4,20 @@ const requestLogger = require('../middleware/requestLogger');
 const os = require('os');
 
 class HealthController {
+  _sanitizeRequests(metrics) {
+    const recentRequests = Array.isArray(metrics?.recentRequests) ? metrics.recentRequests : [];
+    return {
+      ...metrics,
+      recentRequests: recentRequests.map(({ ts, method, url, status, duration }) => ({
+        ts,
+        method,
+        url,
+        status,
+        duration,
+      })),
+    };
+  }
+
   // GET /health — simple liveness probe
   async basic(req, res) {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
@@ -24,7 +38,7 @@ class HealthController {
 
     const memUsage = process.memoryUsage();
     const logStats = logger.getStats();
-    const reqMetrics = requestLogger.getMetrics();
+    const reqMetrics = this._sanitizeRequests(requestLogger.getMetrics());
 
     res.status(allHealthy ? 200 : 503).json({
       status: allHealthy ? 'healthy' : 'degraded',
@@ -53,7 +67,7 @@ class HealthController {
   async metrics(req, res) {
     const memUsage = process.memoryUsage();
     const logStats = logger.getStats();
-    const reqMetrics = requestLogger.getMetrics();
+    const reqMetrics = this._sanitizeRequests(requestLogger.getMetrics());
 
     res.json({
       timestamp: new Date().toISOString(),

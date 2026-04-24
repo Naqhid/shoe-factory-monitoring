@@ -5,10 +5,10 @@ class ProductionRoutingController {
   async ensureUniqueStyle(connection, { styleId, excludeId = null }) {
     const query = excludeId
       ? `SELECT id FROM production_routing_header
-         WHERE style_id = ? AND id <> ?
+         WHERE style_id = ? AND id <> ? AND deleted_at IS NULL
          LIMIT 1`
       : `SELECT id FROM production_routing_header
-         WHERE style_id = ?
+         WHERE style_id = ? AND deleted_at IS NULL
          LIMIT 1`;
     const params = excludeId ? [styleId, excludeId] : [styleId];
     const [dupRows] = await connection.execute(query, params);
@@ -38,6 +38,23 @@ class ProductionRoutingController {
     return null;
   }
 
+  validateHeader(header) {
+    if (!header) return 'Header is required';
+    const requiredIds = ['customer_id', 'group_id', 'leather_id', 'style_id', 'color_id'];
+    for (const key of requiredIds) {
+      if (!header[key]) return `Header field "${key}" is required`;
+    }
+    const targetPerDay = Number(header.target_per_day);
+    const totalSmv = Number(header.tot_smv);
+    if (!Number.isFinite(targetPerDay) || targetPerDay <= 0) {
+      return 'Target per day must be greater than 0';
+    }
+    if (!Number.isFinite(totalSmv) || totalSmv <= 0) {
+      return 'Total SMV must be greater than 0';
+    }
+    return null;
+  }
+
   async validateMachineCentresExist(connection, lines) {
     const machineIds = Array.from(new Set(lines.map((line) => String(line.machine_centre_id || '').trim()).filter(Boolean)));
     if (machineIds.length === 0) return 'At least one valid machine centre is required';
@@ -59,10 +76,28 @@ class ProductionRoutingController {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const offset = (page - 1) * limit;
+      const search = String(req.query.search || '').trim();
+      const includeDeleted = String(req.query.include_deleted || '').trim() === '1';
+      const whereParts = includeDeleted ? [] : ['prh.deleted_at IS NULL'];
+      const params = [];
+
+      if (search) {
+        whereParts.push(`(
+          c.name LIKE ? OR
+          s.name LIKE ? OR
+          col.name LIKE ? OR
+          prh.target_per_day LIKE ? OR
+          prh.tot_smv LIKE ?
+        )`);
+        const searchLike = `%${search}%`;
+        params.push(searchLike, searchLike, searchLike, searchLike, searchLike);
+      }
+      const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
 
       const [rows] = await db.query(`
         SELECT 
           prh.*,
+          CASE WHEN prh.deleted_at IS NULL THEN 0 ELSE 1 END as is_deleted,
           c.name as customer_name,
           g.name as group_name,
           l.name as leather_name,
@@ -76,12 +111,21 @@ class ProductionRoutingController {
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
         LEFT JOIN production_routing_lines prl ON prl.routing_header_id = prh.id
+        ${whereClause}
         GROUP BY prh.id
         ORDER BY prh.created_on DESC
         LIMIT ? OFFSET ?
-      `, [limit, offset]);
+      `, [...params, limit, offset]);
 
-      const [countResult] = await db.query('SELECT COUNT(*) as total FROM production_routing_header');
+      const [countResult] = await db.query(
+        `SELECT COUNT(DISTINCT prh.id) as total
+         FROM production_routing_header prh
+         LEFT JOIN customers c ON prh.customer_id = c.id
+         LEFT JOIN styles s ON prh.style_id = s.id
+         LEFT JOIN colors col ON prh.color_id = col.id
+         ${whereClause}`,
+        params
+      );
       const total = countResult[0].total;
       
       res.json({ 
@@ -120,7 +164,7 @@ class ProductionRoutingController {
         LEFT JOIN leather l ON prh.leather_id = l.id
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
-        WHERE prh.id = ?
+        WHERE prh.id = ? AND prh.deleted_at IS NULL
       `, [id]);
       
       if (headers.length === 0) {
@@ -167,21 +211,26 @@ class ProductionRoutingController {
         });
       }
 
-      // const lineError = this.validateLines(lines);
-      // if (lineError) {
-      //   await connection.rollback();
-      //   return res.status(400).json({ success: false, error: lineError });
-      // }
-      // const machineError = await this.validateMachineCentresExist(connection, lines);
-      // if (machineError) {
-      //   await connection.rollback();
-      //   return res.status(400).json({ success: false, error: machineError });
-      // }
-      // const uniquenessError = await this.ensureUniqueStyle(connection, { styleId: header.style_id });
-      // if (uniquenessError) {
-      //   await connection.rollback();
-      //   return res.status(409).json({ success: false, error: uniquenessError });
-      // }
+      const headerError = this.validateHeader(header);
+      if (headerError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: headerError });
+      }
+      const lineError = this.validateLines(lines);
+      if (lineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: lineError });
+      }
+      const machineError = await this.validateMachineCentresExist(connection, lines);
+      if (machineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: machineError });
+      }
+      const uniquenessError = await this.ensureUniqueStyle(connection, { styleId: header.style_id });
+      if (uniquenessError) {
+        await connection.rollback();
+        return res.status(409).json({ success: false, error: uniquenessError });
+      }
       
       // Insert header
       const [headerResult] = await connection.execute(
@@ -223,7 +272,7 @@ class ProductionRoutingController {
       await connection.rollback();
       logger.error('Error creating production routing:', error);
       if (error.code === 'ER_DUP_ENTRY') {
-        return res.status(400).json({ success: false, error: 'A routing already exists for this style in the selected machine centre. Please edit the existing one or choose a different machine centre.' });
+        return res.status(409).json({ success: false, error: 'A routing already exists for this style. Please edit the existing routing.' });
       }
       res.status(500).json({ success: false, error: error.message });
     } finally {
@@ -248,31 +297,36 @@ class ProductionRoutingController {
         });
       }
 
-      // const lineError = this.validateLines(lines);
-      // if (lineError) {
-      //   await connection.rollback();
-      //   return res.status(400).json({ success: false, error: lineError });
-      // }
-      // const machineError = await this.validateMachineCentresExist(connection, lines);
-      // if (machineError) {
-      //   await connection.rollback();
-      //   return res.status(400).json({ success: false, error: machineError });
-      // }
-      // const uniquenessError = await this.ensureUniqueStyle(connection, {
-      //   styleId: header.style_id,
-      //   excludeId: id
-      // });
-      // if (uniquenessError) {
-      //   await connection.rollback();
-      //   return res.status(409).json({ success: false, error: uniquenessError });
-      // }
+      const headerError = this.validateHeader(header);
+      if (headerError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: headerError });
+      }
+      const lineError = this.validateLines(lines);
+      if (lineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: lineError });
+      }
+      const machineError = await this.validateMachineCentresExist(connection, lines);
+      if (machineError) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: machineError });
+      }
+      const uniquenessError = await this.ensureUniqueStyle(connection, {
+        styleId: header.style_id,
+        excludeId: id
+      });
+      if (uniquenessError) {
+        await connection.rollback();
+        return res.status(409).json({ success: false, error: uniquenessError });
+      }
       
       // Update header
       const [result] = await connection.execute(
         `UPDATE production_routing_header 
         SET customer_id = ?, group_id = ?, leather_id = ?, style_id = ?, color_id = ?, 
             created_on = ?, category = ?, target_per_day = ?, tot_smv = ?
-        WHERE id = ?`,
+        WHERE id = ? AND deleted_at IS NULL`,
         [
           header.customer_id,
           header.group_id,
@@ -325,7 +379,7 @@ class ProductionRoutingController {
     try {
       const { id } = req.params;
       const [headerRows] = await db.execute(
-        'SELECT id, style_id, created_on FROM production_routing_header WHERE id = ?',
+        'SELECT id, style_id, created_on FROM production_routing_header WHERE id = ? AND deleted_at IS NULL',
         [id]
       );
       if (headerRows.length === 0) {
@@ -334,7 +388,7 @@ class ProductionRoutingController {
       const header = headerRows[0];
 
       const [planRefs] = await db.execute(
-        'SELECT COUNT(*) as cnt FROM production_plan WHERE style_id = ?',
+        'SELECT COUNT(*) as cnt FROM production_plan WHERE style_id = ? AND deleted_at IS NULL',
         [header.style_id]
       );
       if ((planRefs[0]?.cnt || 0) > 0) {
@@ -345,7 +399,7 @@ class ProductionRoutingController {
       }
 
       const [result] = await db.execute(
-        'DELETE FROM production_routing_header WHERE id = ?',
+        'UPDATE production_routing_header SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL',
         [id]
       );
       
@@ -353,10 +407,49 @@ class ProductionRoutingController {
         return res.status(404).json({ success: false, error: 'Routing not found' });
       }
       
-      res.json({ success: true, message: 'Routing deleted successfully' });
+      res.json({ success: true, message: 'Routing moved to deleted records' });
     } catch (error) {
       logger.error('Error deleting production routing:', error);
       res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  // Restore soft-deleted production routing
+  async restore(req, res) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const { id } = req.params;
+      const [rows] = await connection.execute(
+        'SELECT id, style_id, deleted_at FROM production_routing_header WHERE id = ?',
+        [id]
+      );
+      if (rows.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ success: false, error: 'Routing not found' });
+      }
+      const header = rows[0];
+      if (!header.deleted_at) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, error: 'Routing is already active' });
+      }
+      const uniquenessError = await this.ensureUniqueStyle(connection, { styleId: header.style_id, excludeId: id });
+      if (uniquenessError) {
+        await connection.rollback();
+        return res.status(409).json({ success: false, error: uniquenessError });
+      }
+      await connection.execute(
+        'UPDATE production_routing_header SET deleted_at = NULL WHERE id = ?',
+        [id]
+      );
+      await connection.commit();
+      res.json({ success: true, message: 'Routing restored successfully' });
+    } catch (error) {
+      await connection.rollback();
+      logger.error('Error restoring production routing:', error);
+      res.status(500).json({ success: false, error: error.message });
+    } finally {
+      connection.release();
     }
   }
 
@@ -379,7 +472,7 @@ class ProductionRoutingController {
         LEFT JOIN leather l ON prh.leather_id = l.id
         LEFT JOIN styles s ON prh.style_id = s.id
         LEFT JOIN colors col ON prh.color_id = col.id
-        WHERE prh.style_id = ?
+        WHERE prh.style_id = ? AND prh.deleted_at IS NULL
         ORDER BY prh.id DESC
         LIMIT 1
       `, [styleId]);

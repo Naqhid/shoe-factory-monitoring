@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Trash2, Save, RefreshCw, Edit, X } from 'lucide-react';
+import { Plus, Trash2, Save, RefreshCw, Edit, X, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -125,9 +125,12 @@ export const ProductionRoutingForm: React.FC = () => {
   const [refreshing, setRefreshing] = React.useState(false);
   const hasFetched = React.useRef(false);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [restoreId, setRestoreId] = React.useState<number | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(10);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [showDeleted, setShowDeleted] = React.useState(false);
 
   const [headerData, setHeaderData] = React.useState<HeaderData>({
     customer_id: '',
@@ -156,13 +159,19 @@ export const ProductionRoutingForm: React.FC = () => {
     if (hasFetched.current) {
       fetchRoutings();
     }
-  }, [currentPage, itemsPerPage]);
+  }, [currentPage, itemsPerPage, searchTerm, showDeleted]);
 
   const fetchRoutings = async () => {
     setRefreshing(true);
     try {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(itemsPerPage),
+      });
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      if (showDeleted) params.set('include_deleted', '1');
       const [res] = await Promise.all([
-        apiFetch(`${API_BASE}/api/production-routing?page=${currentPage}&limit=${itemsPerPage}`),
+        apiFetch(`${API_BASE}/api/production-routing?${params.toString()}`),
         new Promise(resolve => setTimeout(resolve, 500))
       ]);
       const result = await res.json();
@@ -288,6 +297,23 @@ export const ProductionRoutingForm: React.FC = () => {
     }
   };
 
+  const confirmRestore = async () => {
+    if (!restoreId) return;
+    setRestoreId(null);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/production-routing/${restoreId}/restore`, { method: 'POST' });
+      const result = await res.json();
+      if (result.success) {
+        toast.success('Routing restored');
+        fetchRoutings();
+      } else {
+        toast.error(result.error || 'Restore failed');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!headerData.customer_id || !headerData.style_id || !headerData.target_per_day || !headerData.tot_smv) {
@@ -365,11 +391,40 @@ export const ProductionRoutingForm: React.FC = () => {
         onCancel={() => setDeleteId(null)}
         confirmText="Delete"
       />
+      <ConfirmDialog
+        isOpen={restoreId !== null}
+        title="Restore Routing"
+        message="Restore this routing back to active records?"
+        onConfirm={confirmRestore}
+        onCancel={() => setRestoreId(null)}
+        confirmText="Restore"
+      />
       
       <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">Production Routing</h1>
-          <div className="flex gap-2">
+          <div className="flex flex-col md:flex-row gap-2 md:items-center">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search by style, customer, color, target..."
+              className="w-full md:w-72 px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showDeleted}
+                onChange={(e) => {
+                  setShowDeleted(e.target.checked);
+                  setCurrentPage(1);
+                }}
+              />
+              Show deleted
+            </label>
             <button onClick={fetchRoutings} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
@@ -400,6 +455,7 @@ export const ProductionRoutingForm: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total SMV</th>
                 <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Lines</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Record</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
@@ -418,20 +474,35 @@ export const ProductionRoutingForm: React.FC = () => {
                   </td>
                   <td className="px-4 py-2 text-sm">{new Date(r.created_on).toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-sm">
+                    {r.is_deleted ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Deleted</span>
+                    ) : (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-sm">
                     <div className="flex gap-2">
-                      <button onClick={() => handleEdit(r.id)} className="text-blue-600 hover:text-blue-900">
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-900">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {r.is_deleted ? (
+                        <button onClick={() => setRestoreId(r.id)} className="text-emerald-600 hover:text-emerald-900" title="Restore">
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <>
+                          <button onClick={() => handleEdit(r.id)} className="text-blue-600 hover:text-blue-900" title="Edit">
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-900" title="Delete">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
               {routings.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
                 </tr>
               )}
             </tbody>

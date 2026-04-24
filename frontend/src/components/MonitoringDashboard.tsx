@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, AlertCircle, CheckCircle, Clock, Cpu, Database, HardDrive, RefreshCw, TrendingUp, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
-import { API_BASE_URL } from '../services/api';
+import { API_BASE_URL, apiFetch } from '../services/api';
 
 interface HealthData {
   status: string;
@@ -24,7 +24,7 @@ interface HealthData {
     avgResponseTime: string;
     p95ResponseTime: string;
     p99ResponseTime: string;
-    recentRequests: Array<{ ts: number; method: string; url: string; status: number; duration: number; ip: string }>;
+    recentRequests: Array<{ ts: number; method: string; url: string; status: number; duration: number }>;
   };
 }
 
@@ -56,9 +56,16 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
+const statCardIconColors: Record<string, string> = {
+  blue: 'bg-blue-50 text-blue-600',
+  green: 'bg-green-50 text-green-600',
+  purple: 'bg-purple-50 text-purple-600',
+  red: 'bg-red-50 text-red-600',
+};
+
 const StatCard: React.FC<{ label: string; value: string | number; sub?: string; icon: React.ReactNode; color?: string }> = ({ label, value, sub, icon, color = 'blue' }) => (
   <div className="bg-white rounded-lg border p-4 flex items-start gap-3">
-    <div className={`p-2 rounded-lg bg-${color}-50 text-${color}-600`}>{icon}</div>
+    <div className={`p-2 rounded-lg ${statCardIconColors[color] || statCardIconColors.blue}`}>{icon}</div>
     <div>
       <p className="text-xs text-gray-500">{label}</p>
       <p className="text-xl font-bold text-gray-900">{value}</p>
@@ -76,15 +83,18 @@ export const MonitoringDashboard: React.FC = () => {
 
   const fetchHealth = useCallback(async () => {
     try {
-      const token = localStorage.getItem('jwt_token');
-      const res = await fetch(`${API_BASE_URL}/health/detailed`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await apiFetch(`${API_BASE_URL}/health/detailed`);
+      if (!res.ok) {
+        const message = res.status === 403
+          ? 'You do not have permission to view monitoring data'
+          : 'Cannot reach backend server';
+        throw new Error(message);
+      }
       const data = await res.json();
       setHealth(data);
       setError(null);
     } catch (e: any) {
-      setError('Cannot reach backend server');
+      setError(e?.message || 'Cannot reach backend server');
     } finally {
       setLoading(false);
       setLastRefresh(new Date());
@@ -209,7 +219,7 @@ export const MonitoringDashboard: React.FC = () => {
           <table className="min-w-full text-xs">
             <thead className="bg-gray-50">
               <tr>
-                {['Time', 'Method', 'URL', 'Status', 'Duration', 'IP'].map(h => (
+                {['Time', 'Method', 'URL', 'Status', 'Duration'].map(h => (
                   <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium uppercase">{h}</th>
                 ))}
               </tr>
@@ -226,7 +236,6 @@ export const MonitoringDashboard: React.FC = () => {
                     <span className={`font-medium ${r.status < 300 ? 'text-green-600' : r.status < 400 ? 'text-blue-600' : r.status < 500 ? 'text-yellow-600' : 'text-red-600'}`}>{r.status}</span>
                   </td>
                   <td className="px-3 py-1.5 text-gray-500">{r.duration}ms</td>
-                  <td className="px-3 py-1.5 text-gray-400">{r.ip}</td>
                 </tr>
               ))}
             </tbody>

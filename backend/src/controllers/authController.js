@@ -3,7 +3,10 @@ const logger = require('../utils/logger');
 const jwt = require('jsonwebtoken');
 const { hashPassword, verifyPassword } = require('../utils/password');
 
-const SECRET = process.env.JWT_SECRET || 'prodpulse_jwt_secret_key_2026';
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) {
+    throw new Error('JWT_SECRET is required');
+}
 const ACCESS_EXPIRES = process.env.JWT_EXPIRES_IN || '8h';
 const REFRESH_EXPIRES = '7d';
 
@@ -117,7 +120,8 @@ class AuthController {
     // Admin: reset any user's password (role=admin only)
     async resetPassword(req, res) {
         try {
-            if (req.user.role !== 'admin') {
+            const role = String(req.user?.role || '').toLowerCase();
+            if (role !== 'admin') {
                 return res.status(403).json({ success: false, message: 'Admin access required' });
             }
             const { userId } = req.params;

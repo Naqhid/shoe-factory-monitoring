@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
 
-const SECRET = process.env.JWT_SECRET || 'prodpulse_jwt_secret_key_2026';
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) {
+  throw new Error('JWT_SECRET is required');
+}
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers['authorization'];

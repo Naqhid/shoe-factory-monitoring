@@ -46,7 +46,6 @@ export const ProductionTracker: React.FC = () => {
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isSmallScreen, setIsSmallScreen] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [alertActionState, setAlertActionState] = useState<Record<string, { ack?: boolean; escalated?: boolean }>>({});
-  const ALERT_ACTION_KEY = 'production_tracker_alert_actions_v1';
 
   const logAuditEvent = (event: string, payload: Record<string, any> = {}) => {
     try {
@@ -63,18 +62,12 @@ export const ProductionTracker: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(ALERT_ACTION_KEY);
-      if (raw) setAlertActionState(JSON.parse(raw));
-    } catch {
-      setAlertActionState({});
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(ALERT_ACTION_KEY, JSON.stringify(alertActionState));
-  }, [alertActionState]);
+  const buildAlertIssueKey = (item: any, lineId: string | number, date: string) => {
+    const reason = String(item?.stoppage_reason || 'unknown').trim().toLowerCase();
+    const machine = String(item?.machine_id || item?.machine_name || 'unknown').trim().toLowerCase();
+    const emp = String(item?.emp_id || item?.employee_name || 'unknown').trim().toLowerCase();
+    return `tracker:${date}:${lineId}:${machine}:${emp}:${reason}`;
+  };
 
   useEffect(() => {
     const loadWorkCentres = async () => {
@@ -162,8 +155,19 @@ export const ProductionTracker: React.FC = () => {
       const res = await apiFetch(`${API_BASE}/api/tracker/stoppages?date=${selectedDate}&workCentreId=${workCentreId}`);
       const result = await res.json();
       if (result.success) {
-        setStoppageData(result.data);
+        const rows = result.data || [];
+        setStoppageData(rows);
         setAlertsLastUpdated(new Date());
+        const keys = rows.map((item: any) => buildAlertIssueKey(item, workCentreId, selectedDate));
+        const actionsRes = await apiFetch(`${API_BASE}/api/tracker/alert-actions/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys })
+        });
+        const actionsJson = await actionsRes.json();
+        if (actionsJson.success) {
+          setAlertActionState(actionsJson.data || {});
+        }
       }
     } catch {}
   };
@@ -546,8 +550,14 @@ export const ProductionTracker: React.FC = () => {
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            setAlertActionState((prev) => ({ ...prev, [`${idx}`]: { ...prev[`${idx}`], ack: true } }));
+                          onClick={async () => {
+                            const issueKey = buildAlertIssueKey(item, currentWorkCentreId, selectedDate);
+                            await apiFetch(`${API_BASE}/api/tracker/alert-actions/ack`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ issue_key: issueKey })
+                            });
+                            setAlertActionState((prev) => ({ ...prev, [issueKey]: { ...prev[issueKey], ack: true } }));
                             logAuditEvent('alert_acknowledged', { index: idx, reason: item.stoppage_reason, machine: item.machine_id || item.machine_name });
                             toast.success('Alert acknowledged');
                           }}
@@ -557,8 +567,14 @@ export const ProductionTracker: React.FC = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            setAlertActionState((prev) => ({ ...prev, [`${idx}`]: { ...prev[`${idx}`], escalated: true } }));
+                          onClick={async () => {
+                            const issueKey = buildAlertIssueKey(item, currentWorkCentreId, selectedDate);
+                            await apiFetch(`${API_BASE}/api/tracker/alert-actions/escalate`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ issue_key: issueKey })
+                            });
+                            setAlertActionState((prev) => ({ ...prev, [issueKey]: { ...prev[issueKey], escalated: true } }));
                             logAuditEvent('alert_escalated', { index: idx, reason: item.stoppage_reason, machine: item.machine_id || item.machine_name });
                             toast.error('Alert escalated to supervisor queue');
                           }}
@@ -566,8 +582,8 @@ export const ProductionTracker: React.FC = () => {
                         >
                           <ShieldAlert className="h-3.5 w-3.5" /> Escalate
                         </button>
-                        {alertActionState[`${idx}`]?.ack && <span className="text-[11px] text-emerald-600 font-semibold">Acknowledged</span>}
-                        {alertActionState[`${idx}`]?.escalated && <span className="text-[11px] text-red-600 font-semibold">Escalated</span>}
+                        {alertActionState[buildAlertIssueKey(item, currentWorkCentreId, selectedDate)]?.ack && <span className="text-[11px] text-emerald-600 font-semibold">Acknowledged</span>}
+                        {alertActionState[buildAlertIssueKey(item, currentWorkCentreId, selectedDate)]?.escalated && <span className="text-[11px] text-red-600 font-semibold">Escalated</span>}
                       </div>
                     </div>
                   ))}
