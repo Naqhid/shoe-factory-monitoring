@@ -169,7 +169,9 @@ export const ProductionTracker: React.FC = () => {
           setAlertActionState(actionsJson.data || {});
         }
       }
-    } catch {}
+    } catch (error) {
+      console.warn('Failed to load alert actions for stoppage rows:', error);
+    }
   };
 
   const loadLineMachines = async (workCentreId: number) => {

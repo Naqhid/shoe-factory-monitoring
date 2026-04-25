@@ -34,7 +34,9 @@ export const TVDashboard: React.FC = () => {
                 const parsed = Number(raw);
                 if (!Number.isNaN(parsed) && parsed > 0) setPinnedWorkCentreId(parsed);
             }
-        } catch {}
+        } catch (error) {
+            console.warn('Failed to restore pinned work centre preference:', error);
+        }
     }, []);
 
     useEffect(() => {
@@ -268,7 +270,9 @@ export const TVDashboard: React.FC = () => {
                                 try {
                                     if (next && next > 0) localStorage.setItem(PINNED_LINE_STORAGE_KEY, String(next));
                                     else localStorage.removeItem(PINNED_LINE_STORAGE_KEY);
-                                } catch {}
+                                } catch (error) {
+                                    console.warn('Failed to persist pinned work centre preference:', error);
+                                }
                             }}
                             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${pinnedWorkCentreId ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-slate-100 text-slate-700'}`}
                         >

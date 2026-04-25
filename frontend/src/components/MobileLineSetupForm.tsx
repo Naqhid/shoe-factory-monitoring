@@ -29,6 +29,28 @@ export const MobileLineSetupForm: React.FC = () => {
   const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
   const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
 
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const fetchWithRetry = async (url: string, init?: RequestInit, retries = 2): Promise<Response> => {
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await apiFetch(url, init);
+        if (!response.ok) {
+          // Server is reachable; let caller handle API-level errors.
+          return response;
+        }
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt < retries) {
+          await wait(350 * (attempt + 1));
+        }
+      }
+    }
+    throw lastError || new Error('Network request failed');
+  };
+
   const [formData, setFormData] = React.useState<FormData>({
     employee_id: '',
     employee_name: '',
@@ -64,7 +86,7 @@ export const MobileLineSetupForm: React.FC = () => {
       const loadingToast = toast.loading(`Fetching employee ${empId}...`);
 
       try {
-        const response = await apiFetch(`${API_BASE}/api/masters/employees/emp_id/${empId}`);
+        const response = await fetchWithRetry(`${API_BASE}/api/masters/employees/emp_id/${encodeURIComponent(empId)}`);
         const result = await response.json();
 
         if (result.success && result.data) {
@@ -81,7 +103,7 @@ export const MobileLineSetupForm: React.FC = () => {
           toast.error(`Employee ${empId} not found`, { id: loadingToast });
         }
       } catch (error) {
-        toast.error('Connection error', { id: loadingToast });
+        toast.error('Connection error while fetching employee. Please try again.', { id: loadingToast });
       } finally {
         setIsProcessing(false);
       }
@@ -96,7 +118,7 @@ export const MobileLineSetupForm: React.FC = () => {
       const loadingToast = toast.loading(`Fetching machine ${machId}...`);
 
       try {
-        const response = await apiFetch(`${API_BASE}/api/masters/machine_centres/machine_id/${machId}`);
+        const response = await fetchWithRetry(`${API_BASE}/api/masters/machine_centres/machine_id/${encodeURIComponent(machId)}`);
         const result = await response.json();
 
         if (result.success && result.data) {
@@ -135,7 +157,9 @@ export const MobileLineSetupForm: React.FC = () => {
         try {
           const urlParams = new URLSearchParams(finalMachineId.split('?')[1]);
           finalMachineId = urlParams.get('machine') || finalMachineId;
-        } catch (e) { }
+        } catch (e) {
+          console.warn('Failed to parse machine id from scanned URL, using raw value:', e);
+        }
       }
 
       const payload = {

@@ -72,7 +72,9 @@ const QRWaitScreen: React.FC<{
                     const record = json.data.find((m: any) => m.machine_id === machineId);
                     if (record) setMachineName(record.machine_name || record.name || '');
                 }
-            } catch {}
+            } catch (error) {
+                console.warn('Failed to fetch machine name for QR wait screen:', error);
+            }
         };
         fetchMachineName();
     }, [machineId, API_BASE]);
@@ -89,7 +91,9 @@ const QRWaitScreen: React.FC<{
                     clearInterval(interval);
                     onSessionActive(json.data.emp_code, json.data.session_id);
                 }
-            } catch {}
+            } catch (error) {
+                console.warn('Session polling failed while waiting for employee scan:', error);
+            }
         }, 1000);
         return () => clearInterval(interval);
     }, [machineId, onSessionActive]);
@@ -139,6 +143,7 @@ export const MobileProduction: React.FC = () => {
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
     const overTargetToastShownRef = React.useRef(false);
+    const pendingOverTargetAlarmRef = React.useRef(false);
     const hasUserInteractedRef = React.useRef(false);
     const alertAudioContextRef = React.useRef<AudioContext | null>(null);
     const alertSoundTimeoutsRef = React.useRef<number[]>([]);
@@ -440,6 +445,21 @@ export const MobileProduction: React.FC = () => {
     useEffect(() => {
         const unlockAudio = () => {
             hasUserInteractedRef.current = true;
+            if (!pendingOverTargetAlarmRef.current || overTargetToastShownRef.current) return;
+            if (!productionData) return;
+            const targetMins = Number(productionData.target_mins || 0);
+            const exceeded =
+                productionData.button_status === 1 &&
+                !productionData.is_paused &&
+                targetMins > 0 &&
+                actualTimeCounter / 60 > targetMins;
+            if (!exceeded) {
+                pendingOverTargetAlarmRef.current = false;
+                return;
+            }
+            overTargetToastShownRef.current = true;
+            pendingOverTargetAlarmRef.current = false;
+            playAlertSound('finish');
         };
 
         window.addEventListener('pointerdown', unlockAudio, { passive: true });
@@ -451,16 +471,42 @@ export const MobileProduction: React.FC = () => {
             window.removeEventListener('touchstart', unlockAudio);
             window.removeEventListener('keydown', unlockAudio);
         };
-    }, []);
+    }, [productionData, actualTimeCounter, playAlertSound]);
+
+    // If the threshold was crossed while hidden/backgrounded, fire alarm when tab becomes visible again.
+    useEffect(() => {
+        const onVisible = () => {
+            if (document.visibilityState !== 'visible') return;
+            if (!pendingOverTargetAlarmRef.current || overTargetToastShownRef.current) return;
+            if (!hasUserInteractedRef.current || !productionData) return;
+            const targetMins = Number(productionData.target_mins || 0);
+            const exceeded =
+                productionData.button_status === 1 &&
+                !productionData.is_paused &&
+                targetMins > 0 &&
+                actualTimeCounter / 60 > targetMins;
+            if (!exceeded) {
+                pendingOverTargetAlarmRef.current = false;
+                return;
+            }
+            overTargetToastShownRef.current = true;
+            pendingOverTargetAlarmRef.current = false;
+            playAlertSound('finish');
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, [productionData, actualTimeCounter, playAlertSound]);
 
     useEffect(() => {
         if (!productionData || productionData.button_status !== 1 || productionData.is_paused) {
             overTargetToastShownRef.current = false;
+            pendingOverTargetAlarmRef.current = false;
             stopAlertSound();
             return;
         }
         const targetMins = Number(productionData.target_mins || 0);
         if (targetMins <= 0) {
+            pendingOverTargetAlarmRef.current = false;
             stopAlertSound();
             return;
         }
@@ -468,12 +514,18 @@ export const MobileProduction: React.FC = () => {
         const exceeded = actualMins > targetMins;
         if (!exceeded) {
             overTargetToastShownRef.current = false;
+            pendingOverTargetAlarmRef.current = false;
             stopAlertSound();
             return;
         }
         if (overTargetToastShownRef.current) return;
-        overTargetToastShownRef.current = true;
-        playAlertSound('finish');
+        if (hasUserInteractedRef.current) {
+            overTargetToastShownRef.current = true;
+            pendingOverTargetAlarmRef.current = false;
+            playAlertSound('finish');
+        } else {
+            pendingOverTargetAlarmRef.current = true;
+        }
         toast.error('Target time exceeded — tap FINISH when your cycle is complete.', {
             duration: 8000,
             id: 'mobile-over-target',
@@ -933,6 +985,19 @@ export const MobileProduction: React.FC = () => {
         throw lastError;
     };
 
+    const getReadableErrorMessage = (error: unknown, fallback: string) => {
+        if (error instanceof Error && error.message) {
+            const msg = error.message.trim();
+            if (msg && msg !== 'Failed') return msg;
+        }
+        return fallback;
+    };
+
+    const getLocalDateString = () => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    };
+
     const handleStart = async () => {
         // If no production data ID (first time) or after FINISH, create new record
         if (!productionData?.id || productionData.button_status === 2) {
@@ -951,13 +1016,28 @@ export const MobileProduction: React.FC = () => {
             setLoading(true);
             try {
                 const result = await withRetry(async () => {
+                    const payload = {
+                        ...productionData,
+                        // Always stamp new cycle with current local date from browser session.
+                        // This avoids stale in-memory prod_date causing false duplicate conflicts.
+                        prod_date: getLocalDateString(),
+                        button_status: 1
+                    };
                     const response = await apiFetch(`${API_BASE}/api/mobile-production`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...productionData, button_status: 1 })
+                        body: JSON.stringify(payload)
                     });
                     const data = await response.json();
-                    if (!data.success) throw new Error(data.message || 'Failed to start');
+                    if (!data.success) {
+                        const err = new Error(data.message || 'Failed to start') as Error & {
+                            status?: number;
+                            responseData?: any;
+                        };
+                        err.status = response.status;
+                        err.responseData = data;
+                        throw err;
+                    }
                     return data;
                 });
                 setProductionData({ ...productionData!, id: result.data.id, button_status: 1, is_paused: false });
@@ -965,8 +1045,51 @@ export const MobileProduction: React.FC = () => {
                 runningSinceMsRef.current = Date.now();
                 toast.success('Production started');
             } catch (error) {
+                const err = error as Error & {
+                    status?: number;
+                    responseData?: any;
+                };
+                const existingId = err?.responseData?.data?.existing_id;
+                const isActiveConflict =
+                    err?.status === 409 ||
+                    (err?.message || '').toLowerCase().includes('active production record already exists');
+
+                // Auto-recover from race/conflict: attach to already-created active record
+                // instead of requiring manual refresh.
+                if (isActiveConflict && existingId) {
+                    try {
+                        const existingRes = await apiFetch(`${API_BASE}/api/mobile-production/${existingId}`);
+                        const existingJson = await existingRes.json();
+                        if (existingJson.success && existingJson.data) {
+                            const existingRecord = normalizePauseState(existingJson.data);
+                            setProductionData((prev) => prev ? ({
+                                ...prev,
+                                id: existingRecord.id,
+                                button_status: existingRecord.button_status,
+                                is_paused: existingRecord.is_paused || false,
+                                start_time: existingRecord.start_time,
+                                finish_time: existingRecord.finish_time,
+                                idle_start_time: existingRecord.idle_start_time,
+                                actual_time: existingRecord.actual_time ?? prev.actual_time,
+                            }) : prev);
+                            runningSinceMsRef.current = existingRecord.start_time
+                                ? new Date(existingRecord.start_time).getTime()
+                                : null;
+                            recomputeActualTimeCounter();
+                            toast.success('Production already started. Resumed existing active cycle.');
+                            return;
+                        }
+                    } catch (recoveryError) {
+                        console.warn('Failed to recover existing active production record:', recoveryError);
+                    }
+                }
+
                 // UI stays in idle state — no sync issue since we never updated state
-                toast.error('Failed to start production. Check network and try again.');
+                const message = getReadableErrorMessage(
+                    error,
+                    'Failed to start production. Check network and try again.'
+                );
+                toast.error(message);
             } finally {
                 setLoading(false);
                 isCreatingRecordRef.current = false; // Reset flag
@@ -1174,6 +1297,7 @@ export const MobileProduction: React.FC = () => {
             const resetData: ProductionData = {
                 ...productionData,
                 id: undefined, // Remove ID so next START creates new record
+                prod_date: getLocalDateString(),
                 output_pairs: 0,
                 actual_time: 0,
                 button_status: 3,
@@ -1291,15 +1415,6 @@ export const MobileProduction: React.FC = () => {
         !productionData.is_paused &&
         Number(productionData.target_mins || 0) > 0 &&
         actualTimeCounter / 60 > Number(productionData.target_mins || 0);
-    const isCarryOverCycle = (() => {
-        if (!productionData || !productionData.prod_date) return false;
-        if (productionData.button_status === 2) return false;
-        const today = new Date();
-        const todayLocal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        const recordDate = String(productionData.prod_date).slice(0, 10);
-        return recordDate !== todayLocal;
-    })();
-
     const currentLoggedInUser = (() => {
         try {
             if (typeof localStorage === 'undefined') return null;
@@ -1526,13 +1641,6 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Metrics Section */}
                     <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
-                        {isCarryOverCycle && (
-                            <div className="mb-4 rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-amber-900 shadow-sm">
-                                <p className="text-sm font-semibold">
-                                    Previous day cycle resumed. Please tap <span className="font-bold">FINISH</span> or <span className="font-bold">RESET</span> before starting a new cycle.
-                                </p>
-                            </div>
-                        )}
                         {/* Progress Bar — red when actual time exceeds target */}
                         {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (
                             <div className="mb-4">

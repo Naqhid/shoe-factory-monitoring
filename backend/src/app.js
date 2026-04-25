@@ -144,6 +144,7 @@ const PRODUCTION_PLANNING_ALLOWED_ROLES = new Set(['Admin', 'Planner']);
 const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
 const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED']);
 const ADMIN_ALLOWED_ROLES = new Set(['Admin']);
+const LINE_SETUP_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
 
 const requireLogsAccess = (req, res, next) => {
   const role = req.user?.role;
@@ -181,6 +182,14 @@ const requireReworkAccess = (req, res, next) => {
   const role = req.user?.role;
   if (!role || !REWORK_ALLOWED_ROLES.has(role)) {
     return res.status(403).json({ success: false, message: 'Access denied for rework rejection tracker' });
+  }
+  next();
+};
+
+const requireLineSetupAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !LINE_SETUP_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for line setup' });
   }
   next();
 };
@@ -242,6 +251,9 @@ const AUTO_CLOSE_ENABLED = (process.env.MOBILE_SESSION_AUTO_CLOSE_ENABLED || 'tr
 const AUTO_CLOSE_TIME = process.env.MOBILE_SESSION_AUTO_CLOSE_TIME || '18:35'; // HH:mm (24h)
 const AUTO_FINISH_ENABLED = (process.env.MOBILE_PRODUCTION_AUTO_FINISH_ENABLED || 'true').toLowerCase() !== 'false';
 const AUTO_FINISH_TIME = process.env.MOBILE_PRODUCTION_AUTO_FINISH_TIME || '18:30'; // HH:mm (24h)
+const SESSION_CLEANUP_ENABLED = (process.env.MOBILE_SESSION_CLEANUP_ENABLED || 'true').toLowerCase() !== 'false';
+const SESSION_EXPIRED_RETENTION_DAYS = Number.parseInt(process.env.MOBILE_SESSION_EXPIRED_RETENTION_DAYS || '60', 10);
+const SESSION_CLEANUP_INTERVAL_MINUTES = Number.parseInt(process.env.MOBILE_SESSION_CLEANUP_INTERVAL_MINUTES || '360', 10);
 
 const parseAutoCloseTime = (timeValue) => {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec((timeValue || '').trim());
@@ -305,6 +317,19 @@ const runAutoProductionFinishCheck = async () => {
   }
 };
 
+const runExpiredSessionCleanup = async () => {
+  try {
+    if (!SESSION_CLEANUP_ENABLED) return;
+    const retentionDays = Number.isFinite(SESSION_EXPIRED_RETENTION_DAYS) && SESSION_EXPIRED_RETENTION_DAYS > 0
+      ? SESSION_EXPIRED_RETENTION_DAYS
+      : 60;
+    const removed = await mobileSessionController.cleanupExpiredSessionsHistory(retentionDays);
+    logger.info(`Session cleanup check completed. Removed: ${removed}`);
+  } catch (error) {
+    logger.error(`Session cleanup scheduler error: ${error.message}`);
+  }
+};
+
 if (AUTO_CLOSE_ENABLED) {
   logger.info(`Mobile session auto-close is enabled. Daily cutoff: ${AUTO_CLOSE_TIME} (server local time).`);
   setInterval(runAutoSessionCloseCheck, 60 * 1000); // check every minute
@@ -319,6 +344,17 @@ if (AUTO_FINISH_ENABLED) {
   setTimeout(runAutoProductionFinishCheck, 15 * 1000); // run once shortly after startup
 } else {
   logger.info('Mobile production auto-finish is disabled via MOBILE_PRODUCTION_AUTO_FINISH_ENABLED=false.');
+}
+
+if (SESSION_CLEANUP_ENABLED) {
+  const intervalMinutes = Number.isFinite(SESSION_CLEANUP_INTERVAL_MINUTES) && SESSION_CLEANUP_INTERVAL_MINUTES > 0
+    ? SESSION_CLEANUP_INTERVAL_MINUTES
+    : 360;
+  logger.info(`Mobile session history cleanup is enabled. Retention: ${SESSION_EXPIRED_RETENTION_DAYS || 60} day(s), interval: ${intervalMinutes} minute(s).`);
+  setInterval(runExpiredSessionCleanup, intervalMinutes * 60 * 1000);
+  setTimeout(runExpiredSessionCleanup, 20 * 1000); // run once shortly after startup
+} else {
+  logger.info('Mobile session history cleanup is disabled via MOBILE_SESSION_CLEANUP_ENABLED=false.');
 }
 
 // Email alerts DISABLED - re-enable by uncommenting below code and setting EMAIL_USER/EMAIL_PASS in .env
@@ -405,13 +441,13 @@ app.post('/api/auth/refresh', authController.refresh.bind(authController));
 //   }
 // });
 
-app.get('/api/reports/hourly-production', validate(validate.schemas.dateQuery), apiController.getHourlyProductionStatus.bind(apiController));
-app.get('/api/reports/line-efficiency', validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency.bind(apiController));
-app.get('/api/reports/attendance', validate(validate.schemas.dateQuery), apiController.getAttendanceReport.bind(apiController));
-app.get('/api/reports/rework-rejection', validate(validate.schemas.dateQuery), apiController.getReworkRejectionReport.bind(apiController));
-app.get('/api/reports/machine-output', validate(validate.schemas.dateQuery), apiController.getMachineOutputReport.bind(apiController));
-app.get('/api/reports/employee-output', validate(validate.schemas.dateQuery), apiController.getEmployeeOutputReport.bind(apiController));
-app.get('/api/reports/employee-performance', validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
+app.get('/api/reports/hourly-production', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getHourlyProductionStatus.bind(apiController));
+app.get('/api/reports/line-efficiency', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency.bind(apiController));
+app.get('/api/reports/attendance', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getAttendanceReport.bind(apiController));
+app.get('/api/reports/rework-rejection', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getReworkRejectionReport.bind(apiController));
+app.get('/api/reports/machine-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getMachineOutputReport.bind(apiController));
+app.get('/api/reports/employee-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeeOutputReport.bind(apiController));
+app.get('/api/reports/employee-performance', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
 
 // Master routes — table whitelist on all master endpoints
 app.get('/api/masters/:table', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.pagination, masterController.getAll.bind(masterController));
@@ -445,12 +481,12 @@ app.put('/api/production-planning/:id', authenticate, requireProductionPlanningA
 app.delete('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.delete.bind(productionPlanningController));
 
 // Line setup routes
-app.get('/api/line-setup', lineSetupController.getAll);
-app.get('/api/line-setup/:id', lineSetupController.getById);
-app.post('/api/line-setup', lineSetupController.create);
-app.put('/api/line-setup/:id', lineSetupController.update);
-app.delete('/api/line-setup/:id', lineSetupController.delete);
-app.post('/api/shift-start', lineSetupController.createShift);
+app.get('/api/line-setup', authenticate, requireLineSetupAccess, lineSetupController.getAll);
+app.get('/api/line-setup/:id', authenticate, requireLineSetupAccess, lineSetupController.getById);
+app.post('/api/line-setup', authenticate, requireLineSetupAccess, lineSetupController.create);
+app.put('/api/line-setup/:id', authenticate, requireLineSetupAccess, lineSetupController.update);
+app.delete('/api/line-setup/:id', authenticate, requireLineSetupAccess, lineSetupController.delete);
+app.post('/api/shift-start', authenticate, requireLineSetupAccess, lineSetupController.createShift);
 
 // User rights routes
 app.get('/api/user-rights', authenticate, requireAdminAccess, userRightsController.getAll);
@@ -485,6 +521,7 @@ app.get('/api/mobile-production/machine/:machineId/date/:date', mobileProduction
 app.get('/api/mobile-production/summary/:machineId/date/:date', mobileProductionController.getSummaryByMachineAndDate);
 app.get('/api/mobile-production/live-status/:machineId', mobileProductionController.getLiveMachineStatus);
 app.post('/api/mobile-production', mobileProductionController.create);
+app.post('/api/mobile-production/manual-entry', authenticate, requireLineSetupAccess, mobileProductionController.createManualEntry);
 app.put('/api/mobile-production/:id', mobileProductionController.update);
 app.patch('/api/mobile-production/:id/status', mobileProductionController.updateStatus);
 app.delete('/api/mobile-production/:id', mobileProductionController.delete);
@@ -502,9 +539,9 @@ app.get('/api/tracker/line-performance', authenticate, requireTrackerAccess, pro
 app.post('/api/tracker/alert-actions/query', authenticate, requireTrackerAccess, productionTrackerController.getAlertActions.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, productionTrackerController.acknowledgeAlert.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
-app.get('/api/missed-actions', missedActionsController.getMissedActions);
-app.post('/api/missed-actions/ack', missedActionsController.acknowledgeMissedAction);
-app.post('/api/missed-actions/snooze', missedActionsController.snoozeMissedAction);
+app.get('/api/missed-actions', authenticate, requireLogsAccess, missedActionsController.getMissedActions);
+app.post('/api/missed-actions/ack', authenticate, requireLogsAccess, missedActionsController.acknowledgeMissedAction);
+app.post('/api/missed-actions/snooze', authenticate, requireLogsAccess, missedActionsController.snoozeMissedAction);
 
 // Machine Centre routes (public - no JWT for factory floor use)
 app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);

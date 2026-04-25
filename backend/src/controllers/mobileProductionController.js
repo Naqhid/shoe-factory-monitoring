@@ -68,7 +68,7 @@ exports.getByMachineAndDate = async (req, res, next) => {
   }
 };
 
-// Get latest unfinished production data by machine (date-agnostic)
+// Get latest unfinished production data by machine (today only)
 exports.getLatestUnfinishedByMachine = async (req, res, next) => {
   try {
     const { machineId } = req.params;
@@ -79,7 +79,9 @@ exports.getLatestUnfinishedByMachine = async (req, res, next) => {
       FROM machine_centre_production pd
       LEFT JOIN work_centres wc ON pd.work_centre_id = wc.id
       LEFT JOIN employees e ON pd.emp_id = e.code
-      WHERE pd.machine_id = ? AND pd.button_status != 2
+      WHERE pd.machine_id = ?
+        AND pd.button_status != 2
+        AND DATE(pd.prod_date) = CURDATE()
       ORDER BY pd.created_at DESC
       LIMIT 1
     `, [machineId]);
@@ -119,12 +121,24 @@ exports.create = async (req, res, next) => {
       });
     }
 
-    // Check for existing active record for this machine/employee/date to prevent duplicates
-    const [existingRows] = await db.query(
-      `SELECT id, button_status FROM machine_centre_production 
-       WHERE machine_id = ? AND emp_id = ? AND prod_date = ? AND button_status != 2`,
-      [machine_id, emp_id, prod_date ? prod_date.split('T')[0] : new Date().toISOString().split('T')[0]]
-    );
+    // Check for existing active record for this machine/employee/date to prevent duplicates.
+    // Use DB local date (CURDATE) when prod_date isn't provided to avoid UTC day drift.
+    let existingRows;
+    if (prod_date) {
+      const [rows] = await db.query(
+        `SELECT id, button_status FROM machine_centre_production 
+         WHERE machine_id = ? AND emp_id = ? AND prod_date = ? AND button_status != 2`,
+        [machine_id, emp_id, prod_date.split('T')[0]]
+      );
+      existingRows = rows;
+    } else {
+      const [rows] = await db.query(
+        `SELECT id, button_status FROM machine_centre_production 
+         WHERE machine_id = ? AND emp_id = ? AND prod_date = CURDATE() AND button_status != 2`,
+        [machine_id, emp_id]
+      );
+      existingRows = rows;
+    }
     
     if (existingRows.length > 0) {
       logger.warn(`BLOCKED: Duplicate record creation attempt for machine ${machine_id}, emp ${emp_id}. Existing record: ${existingRows[0].id}`);
@@ -159,6 +173,136 @@ exports.create = async (req, res, next) => {
     });
   } catch (error) {
     logger.error('Error creating production data:', error);
+    next(error);
+  }
+};
+
+// Manual entry for supervisors/admins: directly save a finished production cycle.
+exports.createManualEntry = async (req, res, next) => {
+  try {
+    const {
+      work_centre_id,
+      machine_id,
+      emp_id,
+      start_time,
+      finish_time,
+      target_mins,
+      output_pairs,
+      stoppage_reason
+    } = req.body;
+
+    if (!work_centre_id || !machine_id || !emp_id || !start_time || !finish_time) {
+      return res.status(400).json({
+        success: false,
+        message: 'work_centre_id, machine_id, emp_id, start_time and finish_time are required'
+      });
+    }
+
+    const start = new Date(start_time);
+    const finish = new Date(finish_time);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid start_time or finish_time' });
+    }
+    if (finish <= start) {
+      return res.status(400).json({ success: false, message: 'finish_time must be later than start_time' });
+    }
+
+    const safeOutputPairs = Number.isFinite(Number(output_pairs)) ? Math.max(0, Number(output_pairs)) : 12;
+    const safeTargetMins = Number.isFinite(Number(target_mins)) ? Math.max(0, Number(target_mins)) : 0;
+    const prodDate = start_time.split('T')[0];
+
+    const [machineRows] = await db.query(
+      'SELECT machine_id FROM machine_centres WHERE machine_id = ? OR code = ? LIMIT 1',
+      [machine_id, machine_id]
+    );
+    if (machineRows.length === 0) {
+      return res.status(400).json({ success: false, message: `Machine ${machine_id} not found` });
+    }
+
+    const [empRows] = await db.query(
+      'SELECT code FROM employees WHERE code = ? LIMIT 1',
+      [emp_id]
+    );
+    if (empRows.length === 0) {
+      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found` });
+    }
+
+    let insertedId = null;
+    let summaryData = null;
+
+    await withTransaction(async (conn) => {
+      const [insertResult] = await conn.execute(
+        `INSERT INTO machine_centre_production
+         (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
+          start_time, finish_time, idle_start_time, idle_stop_time, stoppage_reason, button_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 2)`,
+        [
+          prodDate,
+          work_centre_id,
+          machine_id,
+          emp_id,
+          safeOutputPairs,
+          safeTargetMins,
+          start_time,
+          finish_time,
+          stoppage_reason || null
+        ]
+      );
+      insertedId = insertResult.insertId;
+
+      const [finishedRecords] = await conn.execute(
+        `SELECT
+          output_pairs,
+          target_mins,
+          TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
+          COALESCE(idle_mins, 0) as idle_mins
+         FROM machine_centre_production
+         WHERE DATE(prod_date) = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
+        [prodDate, work_centre_id, machine_id, emp_id]
+      );
+
+      let totalOutput = 0;
+      let totalTargetMins = 0;
+      let totalActualMins = 0;
+      let totalIdleMins = 0;
+
+      finishedRecords.forEach((record) => {
+        totalOutput += parseInt(record.output_pairs) || 0;
+        totalTargetMins += parseFloat(record.target_mins) || 0;
+        totalActualMins += parseFloat(record.actual_mins) || 0;
+        totalIdleMins += parseFloat(record.idle_mins) || 0;
+      });
+
+      const cumAvgTime = totalOutput > 0 ? (totalActualMins / totalOutput) : 0;
+
+      await conn.execute(
+        `INSERT INTO machine_centre_summary
+         (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 2)
+         ON DUPLICATE KEY UPDATE
+           total_output_pairs = VALUES(total_output_pairs),
+           total_target_mins = VALUES(total_target_mins),
+           total_actual_mins = VALUES(total_actual_mins),
+           total_idle_mins = VALUES(total_idle_mins),
+           cum_avg_time = VALUES(cum_avg_time),
+           button_status = VALUES(button_status),
+           updated_at = CURRENT_TIMESTAMP`,
+        [prodDate, work_centre_id, machine_id, emp_id, totalOutput, totalTargetMins, totalActualMins, totalIdleMins, cumAvgTime]
+      );
+
+      summaryData = {
+        total_output_pairs: totalOutput,
+        total_cycles: finishedRecords.length,
+      };
+    }, { isolationLevel: 'READ COMMITTED' });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Manual production entry saved successfully',
+      data: { id: insertedId, ...summaryData }
+    });
+  } catch (error) {
+    logger.error('Error creating manual production entry:', error);
     next(error);
   }
 };
@@ -450,15 +594,14 @@ exports.refreshPivotData = async (req, res, next) => {
 exports.getLiveMachineStatus = async (req, res, next) => {
   try {
     const { machineId } = req.params;
-    const today = new Date().toISOString().split('T')[0];
 
     const [rows] = await db.query(`
       SELECT pd.*, e.name as emp_name, e.code as emp_code
       FROM machine_centre_production pd
       JOIN employees e ON pd.emp_id = e.code
-      WHERE pd.machine_id = ? AND pd.prod_date = ?
+      WHERE pd.machine_id = ? AND pd.prod_date = CURDATE()
       ORDER BY pd.created_at DESC LIMIT 1
-    `, [machineId, today]);
+    `, [machineId]);
 
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'No live data for this machine today' });
@@ -540,13 +683,12 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
 exports.getInitData = async (req, res, next) => {
   try {
     const { machineId, empCode } = req.params;
-    const today = new Date().toISOString().split('T')[0];
 
     // Fetch all data in parallel
     const [employeeRows, machineRows, existingRows] = await Promise.all([
       db.query('SELECT id, code, name FROM employees WHERE code = ?', [empCode]),
       db.query('SELECT machine_id, code, name, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?', [machineId, machineId]),
-      db.query('SELECT * FROM machine_centre_production WHERE machine_id = ? AND prod_date = ? AND button_status != 2 ORDER BY created_at DESC LIMIT 1', [machineId, today])
+      db.query('SELECT * FROM machine_centre_production WHERE machine_id = ? AND prod_date = CURDATE() AND button_status != 2 ORDER BY created_at DESC LIMIT 1', [machineId])
     ]);
 
     const employee = employeeRows[0][0];

@@ -9,11 +9,11 @@ export interface RoleConfig {
 export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Admin': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'production_routing', 'production_planning', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
+    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'production_routing', 'production_planning', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
   },
   'Line Supervisor': {
     defaultRoute: '/line_setup_form',
-    allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs']
+    allowedMenus: ['overview', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs']
   },
   'Machine Centre User': {
     defaultRoute: '/mobile',

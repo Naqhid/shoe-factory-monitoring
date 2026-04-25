@@ -19,6 +19,12 @@ const mobileSessionController = {
                 data: { session_id: sessionId }
             });
         } catch (error) {
+            if (error?.code === 'ER_DUP_ENTRY') {
+                return res.status(409).json({
+                    success: false,
+                    message: 'Active setup conflict: machine or operator is already active. Please complete the previous setup first.'
+                });
+            }
             next(error);
         }
     },
@@ -136,6 +142,27 @@ const mobileSessionController = {
                     message: `Operator ${emp_id} is already active on machine ${employeeActiveRows[0].machine_id}. Please finish/logout there first.`
                 });
             }
+
+            // 2.6 Hygiene: expire older active sessions for this operator from previous days.
+            // Keeps session table clean and avoids stale "active" rows accumulating.
+            await pool.execute(
+                `UPDATE mobile_sessions
+                 SET status = 'expired'
+                 WHERE emp_code = ?
+                   AND status = 'active'
+                   AND DATE(activated_at) < CURDATE()`,
+                [emp_id]
+            );
+
+            // Also expire older active rows for this machine from previous days.
+            await pool.execute(
+                `UPDATE mobile_sessions
+                 SET status = 'expired'
+                 WHERE machine_id = ?
+                   AND status = 'active'
+                   AND DATE(activated_at) < CURDATE()`,
+                [parsedMachineId]
+            );
 
             // 3. Upsert session by machine_id
             const [existing] = await pool.execute('SELECT session_id FROM mobile_sessions WHERE machine_id = ?', [parsedMachineId]);
@@ -477,6 +504,28 @@ const mobileSessionController = {
             logger.warn(`Auto-finish: closed ${result.affectedRows} unfinished production cycle(s).`);
         } else {
             logger.info('Auto-finish: no unfinished production cycles found.');
+        }
+
+        return result.affectedRows || 0;
+    },
+
+    // Internal utility: purge old expired sessions to keep table size manageable
+    cleanupExpiredSessionsHistory: async (retentionDays = 60) => {
+        const safeRetentionDays = Number.isFinite(Number(retentionDays))
+            ? Math.max(1, Math.floor(Number(retentionDays)))
+            : 60;
+
+        const [result] = await pool.execute(
+            `DELETE FROM mobile_sessions
+             WHERE status = 'expired'
+               AND COALESCE(activated_at, created_at) < (NOW() - INTERVAL ? DAY)`,
+            [safeRetentionDays]
+        );
+
+        if (result.affectedRows > 0) {
+            logger.info(`Session cleanup: removed ${result.affectedRows} expired mobile session(s) older than ${safeRetentionDays} day(s).`);
+        } else {
+            logger.info(`Session cleanup: no expired sessions older than ${safeRetentionDays} day(s) found.`);
         }
 
         return result.affectedRows || 0;

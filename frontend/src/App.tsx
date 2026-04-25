@@ -1,40 +1,39 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { Header } from './components/Header';
-import { StatsPanel } from './components/StatsPanel';
-import { MachineCard } from './components/MachineCard';
-import { EfficiencyChart } from './components/EfficiencyChart';
-import { MachineDetailModal } from './components/MachineDetailModal';
 import { Layout } from './components/Layout';
-import { MasterForm } from './components/MasterForm';
-import { ProductionPlanningForm } from './components/ProductionPlanningForm';
-import { Reports } from './components/Reports';
-import { ProductionRoutingForm } from './components/ProductionRoutingForm';
-import { MobileLineSetupForm } from './components/MobileLineSetupForm';
-import { MobileLiveDashboard } from './components/MobileLiveDashboard';
-import { MobileLineSelector } from './components/MobileLineSelector';
-import { MobileLineProduction } from './components/MobileLineProduction';
-import { MobileProduction } from './components/MobileProduction';
-import { MobileRemoteSetup } from './components/MobileRemoteSetup';
-import { LoginForm } from './components/LoginForm';
-import { TrackerApp } from './components/TrackerApp';
-import { ProductionTracker } from './components/ProductionTracker';
-import { UsersMasterForm } from './components/UsersMasterForm';
-import { FormsMasterForm } from './components/FormsMasterForm';
-import { UserRightsForm } from './components/UserRightsForm';
-import { RolesMasterForm } from './components/RolesMasterForm';
-import { TVDashboard } from './components/TVDashboard';
-import { ReworkRejectionTrackerPage } from './components/ReworkRejectionTrackerPage';
-import { MonitoringDashboard } from './components/MonitoringDashboard';
-import LogPage from './components/LogPage';
-import { MissedActionsPage } from './components/MissedActionsPage';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
 import { isMenuAllowed, getDefaultRoute } from './utils/roleConfig';
 import { API_BASE_URL, apiFetch } from './services/api';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
+
+const MasterForm = lazy(() => import('./components/MasterForm').then(m => ({ default: m.MasterForm })));
+const ProductionPlanningForm = lazy(() => import('./components/ProductionPlanningForm').then(m => ({ default: m.ProductionPlanningForm })));
+const Reports = lazy(() => import('./components/Reports').then(m => ({ default: m.Reports })));
+const ProductionRoutingForm = lazy(() => import('./components/ProductionRoutingForm').then(m => ({ default: m.ProductionRoutingForm })));
+const MobileLineSetupForm = lazy(() => import('./components/MobileLineSetupForm').then(m => ({ default: m.MobileLineSetupForm })));
+const MobileLiveDashboard = lazy(() => import('./components/MobileLiveDashboard').then(m => ({ default: m.MobileLiveDashboard })));
+const MobileLineSelector = lazy(() => import('./components/MobileLineSelector').then(m => ({ default: m.MobileLineSelector })));
+const MobileLineProduction = lazy(() => import('./components/MobileLineProduction').then(m => ({ default: m.MobileLineProduction })));
+const MobileProduction = lazy(() => import('./components/MobileProduction').then(m => ({ default: m.MobileProduction })));
+const MobileRemoteSetup = lazy(() => import('./components/MobileRemoteSetup').then(m => ({ default: m.MobileRemoteSetup })));
+const LoginForm = lazy(() => import('./components/LoginForm').then(m => ({ default: m.LoginForm })));
+const TrackerApp = lazy(() => import('./components/TrackerApp').then(m => ({ default: m.TrackerApp })));
+const ProductionTracker = lazy(() => import('./components/ProductionTracker').then(m => ({ default: m.ProductionTracker })));
+const ManualProductionEntryForm = lazy(() => import('./components/ManualProductionEntryForm').then(m => ({ default: m.ManualProductionEntryForm })));
+const UsersMasterForm = lazy(() => import('./components/UsersMasterForm').then(m => ({ default: m.UsersMasterForm })));
+const FormsMasterForm = lazy(() => import('./components/FormsMasterForm').then(m => ({ default: m.FormsMasterForm })));
+const UserRightsForm = lazy(() => import('./components/UserRightsForm').then(m => ({ default: m.UserRightsForm })));
+const RolesMasterForm = lazy(() => import('./components/RolesMasterForm').then(m => ({ default: m.RolesMasterForm })));
+const TVDashboard = lazy(() => import('./components/TVDashboard').then(m => ({ default: m.TVDashboard })));
+const ReworkRejectionTrackerPage = lazy(() => import('./components/ReworkRejectionTrackerPage').then(m => ({ default: m.ReworkRejectionTrackerPage })));
+const MonitoringDashboard = lazy(() => import('./components/MonitoringDashboard').then(m => ({ default: m.MonitoringDashboard })));
+const LogPage = lazy(() => import('./components/LogPage'));
+const MissedActionsPage = lazy(() => import('./components/MissedActionsPage').then(m => ({ default: m.MissedActionsPage })));
+const MachineDetailModal = lazy(() => import('./components/MachineDetailModal').then(m => ({ default: m.MachineDetailModal })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -190,6 +189,7 @@ function App() {
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
   const isTrackerApp = activeMenu === 'tracker_app';
   const isProductionTracker = activeMenu === 'production_tracker';
+  const isManualProductionEntry = activeMenu === 'manual_production_entry';
   const isReworkRejectionTracker = activeMenu === 'rework_rejection_tracker';
   const isUsers = activeMenu === 'users';
   const isFormsMaster = activeMenu === 'forms_master';
@@ -218,7 +218,11 @@ function App() {
 
   // Show login first when app opens; after login, show the main app
   if (!isAuthenticated) {
-    return <LoginForm />;
+    return (
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>}>
+        <LoginForm />
+      </Suspense>
+    );
   }
 
   if (machinesError) {
@@ -247,6 +251,7 @@ function App() {
 
   return (
     <Layout activeMenu={activeMenu} hideTopHeader={hideTopHeader} hideLogout={hideLogout}>
+      <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>}>
       {isProductionDashboard ? (
         <TVDashboard />
       ) : isReports ? (
@@ -275,6 +280,8 @@ function App() {
         <TrackerApp />
       ) : isProductionTracker ? (
         <ProductionTracker />
+      ) : isManualProductionEntry ? (
+        <ManualProductionEntryForm />
       ) : isReworkRejectionTracker ? (
         <ReworkRejectionTrackerPage />
       ) : isUsers ? (
@@ -306,14 +313,17 @@ function App() {
           <p className="text-gray-500">Select a menu item</p>
         </div>
       )}
+      </Suspense>
 
       {selectedMachine && (
-        <MachineDetailModal
-          machine={selectedMachine}
-          efficiency={efficiencyMap.get(selectedMachine.machine_id)}
-          isOpen={!!selectedMachine}
-          onClose={handleCloseModal}
-        />
+        <Suspense fallback={null}>
+          <MachineDetailModal
+            machine={selectedMachine}
+            efficiency={efficiencyMap.get(selectedMachine.machine_id)}
+            isOpen={!!selectedMachine}
+            onClose={handleCloseModal}
+          />
+        </Suspense>
       )}
     </Layout>
   );
