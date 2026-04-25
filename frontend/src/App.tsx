@@ -31,6 +31,7 @@ const RolesMasterForm = lazy(() => import('./components/RolesMasterForm').then(m
 const TVDashboard = lazy(() => import('./components/TVDashboard').then(m => ({ default: m.TVDashboard })));
 const ReworkRejectionTrackerPage = lazy(() => import('./components/ReworkRejectionTrackerPage').then(m => ({ default: m.ReworkRejectionTrackerPage })));
 const MonitoringDashboard = lazy(() => import('./components/MonitoringDashboard').then(m => ({ default: m.MonitoringDashboard })));
+const RealtimeAlertCenter = lazy(() => import('./components/RealtimeAlertCenter').then(m => ({ default: m.RealtimeAlertCenter })));
 const LogPage = lazy(() => import('./components/LogPage'));
 const MissedActionsPage = lazy(() => import('./components/MissedActionsPage').then(m => ({ default: m.MissedActionsPage })));
 const MachineDetailModal = lazy(() => import('./components/MachineDetailModal').then(m => ({ default: m.MachineDetailModal })));
@@ -197,6 +198,7 @@ function App() {
   const isUserRights = activeMenu === 'user_rights';
   const isRoles = activeMenu === 'roles';
   const isMonitoring = activeMenu === 'monitoring';
+  const isAlertCenter = activeMenu === 'alert_center';
   const isLogs = activeMenu === 'logs';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
@@ -301,6 +303,8 @@ function App() {
         <RolesMasterForm />
       ) : isMonitoring ? (
         <MonitoringDashboard />
+      ) : isAlertCenter ? (
+        <RealtimeAlertCenter />
       ) : isLogs ? (
         <LogPage />
       ) : isMasterView ? (

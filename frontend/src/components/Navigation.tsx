@@ -16,6 +16,7 @@ const processMenus = [
   { key: 'overview', label: 'TV Dashboard', icon: Tv },
   { key: 'reports', label: 'Reports', icon: TrendingUp },
   { key: 'missed_actions', label: 'Missed Actions', icon: AlertTriangle },
+  { key: 'alert_center', label: 'Alert Center', icon: AlertTriangle },
   { key: 'logs', label: 'Login Logs', icon: FileText },
   { key: 'production_routing', label: 'Routing', icon: Route },
   { key: 'production_planning', label: 'Planning', icon: Calendar },

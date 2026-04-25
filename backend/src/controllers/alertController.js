@@ -33,6 +33,25 @@ const initTable = async () => {
       CONSTRAINT fk_alert_reads_alert FOREIGN KEY (alert_id) REFERENCES production_alerts(id) ON DELETE CASCADE
     )
   `);
+  // Ensure enum contains newer realtime alert types.
+  try {
+    await db.execute(`
+      ALTER TABLE production_alerts
+      MODIFY COLUMN alert_type ENUM(
+        'efficiency_low',
+        'headcount_low',
+        'machine_idle',
+        'idle_too_long',
+        'over_target',
+        'no_scan_heartbeat',
+        'machine_offline',
+        'target_at_risk',
+        'custom'
+      ) NOT NULL
+    `);
+  } catch (e) {
+    logger.warn('alertController enum migration skipped:', e.message);
+  }
 };
 initTable().catch(e => logger.error('alertController initTable:', e.message));
 
@@ -41,6 +60,8 @@ const EFFICIENCY_WARN_THRESHOLD = parseFloat(process.env.ALERT_EFFICIENCY_WARN |
 const EFFICIENCY_CRIT_THRESHOLD = parseFloat(process.env.ALERT_EFFICIENCY_CRIT || 50);
 const HEADCOUNT_WARN_RATIO      = parseFloat(process.env.ALERT_HEADCOUNT_RATIO || 0.8); // 80% of target
 const IDLE_WARN_MINUTES         = parseFloat(process.env.ALERT_IDLE_MINUTES || 30);
+const HEARTBEAT_WARN_MINUTES    = parseFloat(process.env.ALERT_HEARTBEAT_MINUTES || 10);
+const OVER_TARGET_GRACE_MINUTES = parseFloat(process.env.ALERT_OVER_TARGET_GRACE_MINUTES || 2);
 const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
 const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '0', 10);
 const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
@@ -49,6 +70,7 @@ const ALERT_WINDOW_BEFORE_SHIFT_END_MINUTES = parseInt(
   process.env.ALERT_WINDOW_BEFORE_SHIFT_END_MINUTES || '60',
   10
 );
+const REALTIME_CHECK_COOLDOWN_MS = parseInt(process.env.ALERT_REALTIME_CHECK_COOLDOWN_MS || '60000', 10);
 
 const formatDateOnly = (d) => {
   const y = d.getFullYear();
@@ -65,6 +87,12 @@ const formatDateTime = (d) => {
   const mm = `${d.getMinutes()}`.padStart(2, '0');
   const ss = `${d.getSeconds()}`.padStart(2, '0');
   return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+};
+
+const toFixedSafe = (value, digits = 1) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  return n.toFixed(digits);
 };
 
 const getShiftWindow = (baseDate = new Date(), now = new Date()) => {
@@ -88,6 +116,15 @@ const isWithinPreShiftEndWindow = (now = new Date()) => {
 };
 
 class AlertController {
+  static _lastRealtimeCheckAt = 0;
+
+  static async _runChecksThrottled(date) {
+    const now = Date.now();
+    if (now - AlertController._lastRealtimeCheckAt < REALTIME_CHECK_COOLDOWN_MS) return;
+    AlertController._lastRealtimeCheckAt = now;
+    await AlertController._runChecks(date);
+  }
+
   // Get alerts (unread by default) - supports public access (no auth required)
   async getAlerts(req, res) {
     try {
@@ -183,6 +220,156 @@ class AlertController {
     }
   }
 
+  // Realtime alert center API (authenticated): supports filters + acknowledge state.
+  async getRealtimeCenterAlerts(req, res) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+      const {
+        date,
+        severity,
+        alert_type,
+        work_centre_id,
+        include_acknowledged = 'false',
+        limit = 200,
+      } = req.query;
+
+      const now = new Date();
+      const alertDate = date || formatDateOnly(now);
+      if (!date || alertDate === formatDateOnly(now)) {
+        await AlertController._runChecksThrottled(formatDateOnly(now));
+      }
+
+      const limitInt = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500);
+      let query = `
+        SELECT
+          pa.*,
+          wc.name AS work_centre_name,
+          CASE WHEN ar.alert_id IS NULL THEN 0 ELSE 1 END AS is_acknowledged,
+          ar.read_at AS acknowledged_at,
+          u.name AS acknowledged_by
+        FROM production_alerts pa
+        LEFT JOIN work_centres wc ON wc.id = pa.work_centre_id
+        LEFT JOIN alert_reads ar ON ar.alert_id = pa.id AND ar.user_id = ?
+        LEFT JOIN users u ON u.id = ar.user_id
+        WHERE pa.alert_date = ?
+      `;
+      const params = [userId, alertDate];
+
+      if (severity) {
+        query += ' AND pa.severity = ?';
+        params.push(String(severity));
+      }
+      if (alert_type) {
+        query += ' AND pa.alert_type = ?';
+        params.push(String(alert_type));
+      }
+      if (work_centre_id) {
+        query += ' AND pa.work_centre_id = ?';
+        params.push(Number(work_centre_id));
+      }
+      if (String(include_acknowledged).toLowerCase() !== 'true') {
+        query += ' AND ar.alert_id IS NULL';
+      }
+
+      query += ` ORDER BY
+        CASE pa.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END ASC,
+        pa.created_at DESC
+        LIMIT ${limitInt}`;
+
+      const [rows] = await db.execute(query, params);
+
+      let filteredRows = rows;
+      // Avoid stale false positives: hide heartbeat alerts once machine activity is healthy again.
+      if (alertDate === formatDateOnly(now)) {
+        const heartbeatRows = rows.filter((r) => r.alert_type === 'no_scan_heartbeat' && r.machine_id);
+        if (heartbeatRows.length > 0) {
+          const uniqueMachines = Array.from(new Set(heartbeatRows.map((r) => String(r.machine_id))));
+          const placeholders = uniqueMachines.map(() => '?').join(',');
+          const [freshHeartbeat] = await db.execute(
+            `SELECT
+               ms.machine_id,
+               TIMESTAMPDIFF(
+                 MINUTE,
+                 COALESCE(latest.updated_at, latest.start_time, ms.activated_at),
+                 NOW()
+               ) AS heartbeat_gap_mins
+             FROM mobile_sessions ms
+             LEFT JOIN (
+               SELECT machine_id, emp_id, MAX(id) AS max_id
+               FROM machine_centre_production
+               WHERE DATE(prod_date) = ?
+               GROUP BY machine_id, emp_id
+             ) latest_idx
+               ON latest_idx.machine_id = ms.machine_id
+               AND latest_idx.emp_id = ms.emp_code
+             LEFT JOIN machine_centre_production latest ON latest.id = latest_idx.max_id
+             WHERE ms.status = 'active'
+               AND DATE(ms.activated_at) = ?
+               AND ms.machine_id IN (${placeholders})`,
+            [alertDate, alertDate, ...uniqueMachines]
+          );
+          const gapByMachine = new Map(
+            freshHeartbeat.map((r) => [String(r.machine_id), Number(r.heartbeat_gap_mins || 0)])
+          );
+          filteredRows = rows.filter((row) => {
+            if (row.alert_type !== 'no_scan_heartbeat' || !row.machine_id) return true;
+            const currentGap = gapByMachine.get(String(row.machine_id));
+            // If machine is now active with healthy gap, hide this stale heartbeat alert.
+            if (typeof currentGap === 'number' && currentGap < HEARTBEAT_WARN_MINUTES) return false;
+            return true;
+          });
+        }
+
+        // Hide stale over-target alerts when current running cycle is no longer above target.
+        const overTargetRows = filteredRows.filter((r) => r.alert_type === 'over_target' && r.machine_id);
+        if (overTargetRows.length > 0) {
+          const uniqueMachines = Array.from(new Set(overTargetRows.map((r) => String(r.machine_id))));
+          const placeholders = uniqueMachines.map(() => '?').join(',');
+          const [currentOverTarget] = await db.execute(
+            `SELECT
+               mcp.machine_id,
+               TIMESTAMPDIFF(MINUTE, mcp.start_time, NOW()) AS actual_mins,
+               COALESCE(mcp.target_mins, 0) AS target_mins
+             FROM machine_centre_production mcp
+             INNER JOIN (
+               SELECT machine_id, MAX(id) AS max_id
+               FROM machine_centre_production
+               WHERE DATE(prod_date) = ?
+                 AND button_status IN (1, 3)
+                 AND machine_id IN (${placeholders})
+               GROUP BY machine_id
+             ) latest ON latest.max_id = mcp.id`,
+            [alertDate, ...uniqueMachines]
+          );
+          const stateByMachine = new Map(
+            currentOverTarget.map((r) => [
+              String(r.machine_id),
+              {
+                actual: Number(r.actual_mins || 0),
+                target: Number(r.target_mins || 0),
+              },
+            ])
+          );
+          filteredRows = filteredRows.filter((row) => {
+            if (row.alert_type !== 'over_target' || !row.machine_id) return true;
+            const state = stateByMachine.get(String(row.machine_id));
+            if (!state) return false; // no active cycle now => over-target alert is stale
+            return state.target > 0 && state.actual >= (state.target + OVER_TARGET_GRACE_MINUTES);
+          });
+        }
+      }
+
+      const unacked = filteredRows.filter((r) => Number(r.is_acknowledged || 0) === 0).length;
+      return res.json({ success: true, data: filteredRows, unacknowledged_count: unacked });
+    } catch (error) {
+      logger.error('getRealtimeCenterAlerts error:', error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
   // Mark alert(s) as read
   async markRead(req, res) {
     try {
@@ -217,6 +404,10 @@ class AlertController {
     }
   }
 
+  async acknowledge(req, res) {
+    return this.markRead(req, res);
+  }
+
   // Run alert checks for a given date (called manually or by scheduler)
   async runChecks(req, res) {
     try {
@@ -244,13 +435,14 @@ class AlertController {
       `, [date]);
 
       for (const row of effRows) {
+        const efficiency = Number(row.avg_efficiency_percent || 0);
         if (row.avg_efficiency_percent < EFFICIENCY_CRIT_THRESHOLD) {
           await AlertController._upsertAlert({
             alert_type: 'efficiency_low', severity: 'critical',
             work_centre_id: row.work_centre_id, machine_id: row.machine_id,
             alert_date: date,
-            message: `Machine ${row.machine_id} efficiency critically low at ${row.avg_efficiency_percent}% (threshold: ${EFFICIENCY_CRIT_THRESHOLD}%)`,
-            threshold_value: EFFICIENCY_CRIT_THRESHOLD, actual_value: row.avg_efficiency_percent
+            message: `Machine ${row.machine_id} efficiency critically low at ${toFixedSafe(efficiency, 1)}% (threshold: ${toFixedSafe(EFFICIENCY_CRIT_THRESHOLD, 1)}%)`,
+            threshold_value: EFFICIENCY_CRIT_THRESHOLD, actual_value: efficiency
           });
           count++;
         } else if (row.avg_efficiency_percent < EFFICIENCY_WARN_THRESHOLD && allowEndShiftRiskAlerts) {
@@ -258,8 +450,8 @@ class AlertController {
             alert_type: 'efficiency_low', severity: 'warning',
             work_centre_id: row.work_centre_id, machine_id: row.machine_id,
             alert_date: date,
-            message: `Machine ${row.machine_id} efficiency below target at ${row.avg_efficiency_percent}% (threshold: ${EFFICIENCY_WARN_THRESHOLD}%)`,
-            threshold_value: EFFICIENCY_WARN_THRESHOLD, actual_value: row.avg_efficiency_percent
+            message: `Machine ${row.machine_id} efficiency below target at ${toFixedSafe(efficiency, 1)}% (threshold: ${toFixedSafe(EFFICIENCY_WARN_THRESHOLD, 1)}%)`,
+            threshold_value: EFFICIENCY_WARN_THRESHOLD, actual_value: efficiency
           });
           count++;
         }
@@ -285,7 +477,7 @@ class AlertController {
 
         for (const row of idleRows) {
           await AlertController._upsertAlert({
-            alert_type: 'machine_idle',
+            alert_type: 'idle_too_long',
             severity: row.idle_minutes >= (IDLE_WARN_MINUTES * 2) ? 'critical' : 'warning',
             work_centre_id: row.work_centre_id,
             machine_id: row.machine_id,
@@ -293,6 +485,118 @@ class AlertController {
             message: `Machine ${row.machine_id} idle for ${row.idle_minutes} minutes`,
             threshold_value: IDLE_WARN_MINUTES,
             actual_value: row.idle_minutes
+          });
+          count++;
+        }
+
+        // 1c. Over-target alerts for running/idle cycles.
+        const [overTargetRows] = await db.execute(`
+          SELECT
+            mcp.work_centre_id,
+            mcp.machine_id,
+            mcp.emp_id,
+            mcp.target_mins,
+            TIMESTAMPDIFF(MINUTE, mcp.start_time, NOW()) AS actual_mins
+          FROM machine_centre_production mcp
+          INNER JOIN (
+            SELECT machine_id, MAX(id) AS max_id
+            FROM machine_centre_production
+            WHERE DATE(prod_date) = ? AND button_status IN (1, 3)
+            GROUP BY machine_id
+          ) latest ON latest.max_id = mcp.id
+          WHERE DATE(mcp.prod_date) = ?
+            AND mcp.start_time IS NOT NULL
+            AND COALESCE(mcp.target_mins, 0) > 0
+            AND TIMESTAMPDIFF(MINUTE, mcp.start_time, NOW()) >= (mcp.target_mins + ?)
+        `, [date, date, OVER_TARGET_GRACE_MINUTES]);
+
+        for (const row of overTargetRows) {
+          const actualMins = Number(row.actual_mins || 0);
+          const targetMins = Number(row.target_mins || 0);
+          const delta = Math.max(0, actualMins - targetMins);
+          await AlertController._upsertAlert({
+            alert_type: 'over_target',
+            severity: delta >= 10 ? 'critical' : 'warning',
+            work_centre_id: row.work_centre_id,
+            machine_id: row.machine_id,
+            alert_date: date,
+            message: `Machine ${row.machine_id} cycle exceeded target by ${toFixedSafe(delta, 1)} min (actual ${toFixedSafe(actualMins, 1)} vs target ${toFixedSafe(targetMins, 1)})`,
+            threshold_value: targetMins,
+            actual_value: actualMins,
+          });
+          count++;
+        }
+
+        // 1d. No-scan heartbeat alerts: active session but no recent production updates.
+        const [heartbeatRows] = await db.execute(`
+          SELECT
+            ms.work_centre_id,
+            ms.machine_id,
+            ms.emp_code,
+            TIMESTAMPDIFF(
+              MINUTE,
+              COALESCE(latest.updated_at, latest.start_time, ms.activated_at),
+              NOW()
+            ) AS heartbeat_gap_mins
+          FROM mobile_sessions ms
+          LEFT JOIN (
+            SELECT machine_id, emp_id, MAX(id) AS max_id
+            FROM machine_centre_production
+            WHERE DATE(prod_date) = ?
+            GROUP BY machine_id, emp_id
+          ) latest_idx
+            ON latest_idx.machine_id = ms.machine_id
+            AND latest_idx.emp_id = ms.emp_code
+          LEFT JOIN machine_centre_production latest ON latest.id = latest_idx.max_id
+          WHERE ms.status = 'active'
+            AND DATE(ms.activated_at) = ?
+            AND TIMESTAMPDIFF(
+              MINUTE,
+              COALESCE(latest.updated_at, latest.start_time, ms.activated_at),
+              NOW()
+            ) >= ?
+        `, [date, date, HEARTBEAT_WARN_MINUTES]);
+
+        for (const row of heartbeatRows) {
+          await AlertController._upsertAlert({
+            alert_type: 'no_scan_heartbeat',
+            severity: Number(row.heartbeat_gap_mins || 0) >= (HEARTBEAT_WARN_MINUTES * 2) ? 'critical' : 'warning',
+            work_centre_id: row.work_centre_id,
+            machine_id: row.machine_id,
+            alert_date: date,
+            message: `Machine ${row.machine_id} has no cycle update for ${row.heartbeat_gap_mins} minutes (Finish/next action may be pending)`,
+            threshold_value: HEARTBEAT_WARN_MINUTES,
+            actual_value: row.heartbeat_gap_mins,
+          });
+          count++;
+        }
+
+        // 1e. Machine offline alerts: planned work-centre machine has no active session.
+        const [offlineRows] = await db.execute(`
+          SELECT mc.work_centre_id, mc.machine_id
+          FROM machine_centres mc
+          INNER JOIN production_plan pp
+            ON pp.work_centre_id = mc.work_centre_id
+           AND DATE(pp.plan_date) = ?
+           AND pp.deleted_at IS NULL
+          LEFT JOIN mobile_sessions ms
+            ON ms.machine_id = mc.machine_id
+           AND ms.status = 'active'
+           AND DATE(ms.activated_at) = ?
+          WHERE ms.session_id IS NULL
+          GROUP BY mc.work_centre_id, mc.machine_id
+        `, [date, date]);
+
+        for (const row of offlineRows) {
+          await AlertController._upsertAlert({
+            alert_type: 'machine_offline',
+            severity: 'critical',
+            work_centre_id: row.work_centre_id,
+            machine_id: row.machine_id,
+            alert_date: date,
+            message: `Machine ${row.machine_id} appears offline (no active session for planned line)`,
+            threshold_value: 1,
+            actual_value: 0,
           });
           count++;
         }

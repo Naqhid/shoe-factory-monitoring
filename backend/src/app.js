@@ -31,6 +31,7 @@ const checkDayLock = require('./middleware/checkDayLock');
 const backupService = require('./services/backupService');
 const errorHandler = require('./middleware/errorHandler');
 const authenticate = require('./middleware/authenticate');
+const optionalAuthenticate = require('./middleware/optionalAuthenticate');
 const requestLogger = require('./middleware/requestLogger');
 const sanitize = require('./middleware/sanitize');
 const validate = require('./middleware/validate');
@@ -584,7 +585,8 @@ app.post('/api/machine-centre/update-time', machineCentreController.updateActual
 app.get('/api/machine-centre/plan/:workCentreId/:machineId', machineCentreController.getProductionPlan);
 
 // Alert routes (public - factory floor can see alerts)
-app.get('/api/alerts', alertController.getAlerts.bind(alertController));
+app.get('/api/alerts', optionalAuthenticate, alertController.getAlerts.bind(alertController));
+app.get('/api/alerts/center', authenticate, requireLogsAccess, alertController.getRealtimeCenterAlerts.bind(alertController));
 
 // Logs routes (protected)
 app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSessionController.getSessionLogs);
@@ -626,6 +628,7 @@ app.post('/api/production-lock/unlock', authenticate, requireAdminAccess, produc
 
 // Alert routes (protected - only admin can mark read or run checks)
 app.post('/api/alerts/mark-read', authenticate, alertController.markRead.bind(alertController));
+app.post('/api/alerts/acknowledge', authenticate, requireLogsAccess, alertController.acknowledge.bind(alertController));
 app.post('/api/alerts/run-checks', authenticate, requireAdminAccess, alertController.runChecks.bind(alertController));
 
 // Backup routes (admin only)
