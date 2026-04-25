@@ -56,6 +56,13 @@ interface ManualEntryAuditRow {
   created_at: string;
 }
 
+interface AuditChangeRow {
+  key: string;
+  label: string;
+  beforeValue: string;
+  afterValue: string;
+}
+
 const getNowLocalDateTime = () => {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -74,20 +81,26 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const [showForm, setShowForm] = React.useState(false);
   const [tableDateFilter, setTableDateFilter] = React.useState(getNowLocalDateTime().split('T')[0]);
+  const [tableToDateFilter, setTableToDateFilter] = React.useState(getNowLocalDateTime().split('T')[0]);
   const [tableWorkCentreFilter, setTableWorkCentreFilter] = React.useState('');
   const [tableSearchInput, setTableSearchInput] = React.useState('');
   const [tableSearch, setTableSearch] = React.useState('');
   const [tablePage, setTablePage] = React.useState(1);
   const [tableLimit, setTableLimit] = React.useState<string>('10');
+  const [tableSortBy, setTableSortBy] = React.useState<string>('created_at');
+  const [tableSortOrder, setTableSortOrder] = React.useState<'asc' | 'desc'>('desc');
   const [tableTotal, setTableTotal] = React.useState(0);
   const [tableTotalPages, setTableTotalPages] = React.useState(1);
   const [tableFilteredOutputTotal, setTableFilteredOutputTotal] = React.useState(0);
-  const [showAuditModal, setShowAuditModal] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit'>('entries');
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
+  const [showRawAuditJson, setShowRawAuditJson] = React.useState(false);
+  const [restoreCandidate, setRestoreCandidate] = React.useState<ManualEntryAuditRow | null>(null);
   const [deleteCandidate, setDeleteCandidate] = React.useState<ManualEntryRow | null>(null);
   const [pageInput, setPageInput] = React.useState('1');
+  const FILTER_PRESET_KEY = 'manual_entry_filters_v1';
 
   const handleUnauthorized = React.useCallback((message?: string) => {
     toast.error(message || 'Session expired. Please login again.');
@@ -223,6 +236,66 @@ export const ManualProductionEntryForm: React.FC = () => {
     }
   };
 
+  const formatMachineDisplay = (value: any): string => {
+    const machineIdValue = String(value || '').trim();
+    if (!machineIdValue) return '-';
+    const matched = machines.find((m) => {
+      const id = String(m.machine_id || '').trim();
+      const code = String((m as any).code || '').trim();
+      return machineIdValue === id || (code && machineIdValue === code);
+    });
+    const machineName = matched?.machine_name || matched?.name || '';
+    return machineName ? `${machineIdValue} - ${machineName}` : machineIdValue;
+  };
+
+  const prettyAuditValue = (value: any, key: string): string => {
+    if (value === null || value === undefined || value === '') return '-';
+    if (key === 'machine_id') {
+      return formatMachineDisplay(value);
+    }
+    if (key.includes('time') || key.includes('date')) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return formatDisplayDateTime(parsed.toISOString());
+      }
+    }
+    return String(value);
+  };
+
+  const toAuditChanges = (log: ManualEntryAuditRow): AuditChangeRow[] => {
+    const beforeObj = parseAuditJson(log.before_data);
+    const afterObj = parseAuditJson(log.after_data);
+    const before = beforeObj && typeof beforeObj === 'object' ? beforeObj : {};
+    const after = afterObj && typeof afterObj === 'object' ? afterObj : {};
+
+    const labelMap: Record<string, string> = {
+      prod_date: 'Production Date',
+      work_centre_id: 'Line',
+      machine_id: 'Machine',
+      emp_id: 'Employee',
+      start_time: 'Start Time',
+      finish_time: 'End Time',
+      target_mins: 'Target Time',
+      output_pairs: 'Target Pairs',
+      stoppage_reason: 'Reason',
+    };
+
+    const keys = new Set<string>([...Object.keys(before), ...Object.keys(after)]);
+    const rows: AuditChangeRow[] = [];
+    keys.forEach((key) => {
+      const beforeVal = before[key];
+      const afterVal = after[key];
+      if (log.action === 'UPDATE' && JSON.stringify(beforeVal) === JSON.stringify(afterVal)) return;
+      rows.push({
+        key,
+        label: labelMap[key] || key,
+        beforeValue: prettyAuditValue(beforeVal, key),
+        afterValue: prettyAuditValue(afterVal, key),
+      });
+    });
+    return rows;
+  };
+
   const clearForm = () => {
     setMachineId('');
     setEmpId('');
@@ -247,11 +320,18 @@ export const ManualProductionEntryForm: React.FC = () => {
     setLoadingEntries(true);
     try {
       const params = new URLSearchParams();
-      params.set('date', tableDateFilter);
+      if (tableDateFilter && tableToDateFilter && tableDateFilter === tableToDateFilter) {
+        params.set('date', tableDateFilter);
+      } else {
+        if (tableDateFilter) params.set('from_date', tableDateFilter);
+        if (tableToDateFilter) params.set('to_date', tableToDateFilter);
+      }
       if (tableWorkCentreFilter) params.set('work_centre_id', tableWorkCentreFilter);
       if (tableSearch.trim()) params.set('search', tableSearch.trim());
       params.set('page', String(tablePage));
       params.set('limit', tableLimit);
+      params.set('sort_by', tableSortBy);
+      params.set('sort_order', tableSortOrder);
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry?${params.toString()}`);
       const json = await res.json();
       if (res.status === 401) {
@@ -299,7 +379,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     } finally {
       setLoadingEntries(false);
     }
-  }, [tableDateFilter, tableWorkCentreFilter, tableSearch, tablePage, tableLimit, handleUnauthorized]);
+  }, [tableDateFilter, tableToDateFilter, tableWorkCentreFilter, tableSearch, tablePage, tableLimit, tableSortBy, tableSortOrder, handleUnauthorized]);
 
   React.useEffect(() => {
     const loadTargetMins = async () => {
@@ -347,6 +427,23 @@ export const ManualProductionEntryForm: React.FC = () => {
   React.useEffect(() => {
     setPageInput(String(tablePage));
   }, [tablePage]);
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FILTER_PRESET_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.tableDateFilter) setTableDateFilter(saved.tableDateFilter);
+      if (saved.tableToDateFilter) setTableToDateFilter(saved.tableToDateFilter);
+      if (typeof saved.tableWorkCentreFilter === 'string') setTableWorkCentreFilter(saved.tableWorkCentreFilter);
+      if (typeof saved.tableSearchInput === 'string') setTableSearchInput(saved.tableSearchInput);
+      if (saved.tableLimit) setTableLimit(saved.tableLimit);
+      if (saved.tableSortBy) setTableSortBy(saved.tableSortBy);
+      if (saved.tableSortOrder === 'asc' || saved.tableSortOrder === 'desc') setTableSortOrder(saved.tableSortOrder);
+    } catch (error) {
+      console.warn('Failed to load manual entry filter preset:', error);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,7 +545,7 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   const handleOpenAudit = async (entryId?: number) => {
     setAuditLoading(true);
-    setShowAuditModal(true);
+    setActiveTab('audit');
     setAuditEntryId(entryId || null);
     try {
       const params = new URLSearchParams();
@@ -474,6 +571,33 @@ export const ManualProductionEntryForm: React.FC = () => {
     }
   };
 
+  const handleRestoreFromAudit = async (log: ManualEntryAuditRow) => {
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/audit-logs/${log.id}/restore`, {
+        method: 'POST',
+      });
+      const json = await res.json();
+      if (res.status === 401) {
+        handleUnauthorized(json.message);
+        return;
+      }
+      if (!json.success) {
+        toast.error(json.message || 'Failed to restore entry');
+        return;
+      }
+      toast.success('Manual entry restored');
+      await Promise.all([loadManualEntries(), handleOpenAudit(auditEntryId || undefined)]);
+      setRestoreCandidate(null);
+      setActiveTab('entries');
+    } catch (error) {
+      console.error('Failed to restore manual entry:', error);
+      toast.error('Failed to restore entry');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleExportCsv = () => {
     const run = async () => {
       try {
@@ -483,6 +607,8 @@ export const ManualProductionEntryForm: React.FC = () => {
         if (tableSearch.trim()) params.set('search', tableSearch.trim());
         params.set('page', '1');
         params.set('limit', 'all');
+        params.set('sort_by', tableSortBy);
+        params.set('sort_order', tableSortOrder);
         const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry?${params.toString()}`);
         const json = await res.json();
         if (res.status === 401) {
@@ -522,7 +648,7 @@ export const ManualProductionEntryForm: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `manual_entries_${tableDateFilter || 'all'}_filtered.csv`;
+        a.download = `manual_entries_${tableDateFilter || 'all'}_to_${tableToDateFilter || tableDateFilter || 'all'}_filtered.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -535,8 +661,59 @@ export const ManualProductionEntryForm: React.FC = () => {
     run();
   };
 
+  const handleExportAuditCsv = () => {
+    const headers = ['Action', 'Entry ID', 'User', 'Role', 'Reason', 'Time', 'Before JSON', 'After JSON'];
+    const csvBody = [
+      headers.join(','),
+      ...auditLogs.map((log) => {
+        const row = [
+          log.action,
+          log.entry_id ?? '',
+          log.actor_username || '',
+          log.actor_role || '',
+          log.reason || '',
+          formatDisplayDateTime(log.created_at),
+          JSON.stringify(parseAuditJson(log.before_data)),
+          JSON.stringify(parseAuditJson(log.after_data)),
+        ];
+        return row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',');
+      }),
+    ].join('\n');
+
+    const blob = new Blob([csvBody], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = auditEntryId ? `manual_entry_audit_${auditEntryId}.csv` : 'manual_entry_audit_logs.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSort = (field: string) => {
+    if (tableSortBy === field) {
+      setTableSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setTableSortBy(field);
+      setTableSortOrder('desc');
+    }
+    setTablePage(1);
+  };
+
+  const sortLabel = (field: string, label: string) => (
+    <button
+      type="button"
+      onClick={() => handleSort(field)}
+      className="font-semibold hover:text-blue-700"
+      title={`Sort by ${label}`}
+    >
+      {label}{tableSortBy === field ? (tableSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+    </button>
+  );
+
   return (
-    <div className="w-full px-2 md:px-4">
+    <div className="w-full px-2 sm:px-3 md:px-4">
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto p-6">
@@ -700,77 +877,35 @@ export const ManualProductionEntryForm: React.FC = () => {
           </div>
         </div>
       )}
-      {showAuditModal && (
+      {restoreCandidate && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Manual Entry Audit Logs</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  {auditEntryId ? `Showing history for entry #${auditEntryId}` : 'Showing latest manual entry audit history'}
-                </p>
-              </div>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-gray-900">Restore Manual Entry</h2>
+            <p className="text-sm text-gray-600 mt-2">
+              Restore deleted entry from audit log{' '}
+              <span className="font-semibold">#{restoreCandidate.id}</span>?
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              This will recreate the deleted production row and recalculate summary totals.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowAuditModal(false)}
-                className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2"
-                aria-label="Close"
+                onClick={() => setRestoreCandidate(null)}
+                disabled={loading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
               >
-                ×
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRestoreFromAudit(restoreCandidate)}
+                disabled={loading}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
+              >
+                {loading ? 'Restoring...' : 'Restore'}
               </button>
             </div>
-            {auditLoading ? (
-              <p className="text-sm text-gray-500">Loading audit logs...</p>
-            ) : auditLogs.length === 0 ? (
-              <p className="text-sm text-gray-500">No audit logs found.</p>
-            ) : (
-              <div className="space-y-3">
-                {auditLogs.map((log) => (
-                  <div key={log.id} className="border border-gray-200 rounded-lg p-3">
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
-                      <div className="col-span-2 md:col-span-1">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${getAuditActionBadgeClass(log.action)}`}>
-                          {log.action}
-                        </span>
-                      </div>
-                      <div><strong>Entry:</strong> {log.entry_id ?? '-'}</div>
-                      <div><strong>User:</strong> {log.actor_username || '-'}</div>
-                      <div><strong>Role:</strong> {log.actor_role || '-'}</div>
-                      <div><strong>Time:</strong> {formatDisplayDateTime(log.created_at)} IST</div>
-                    </div>
-                    {log.reason ? <p className="text-sm mt-1"><strong>Reason:</strong> {log.reason}</p> : null}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 text-xs">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="font-semibold text-gray-700">Before</p>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.before_data), null, 2), 'Before JSON copied')}
-                            className="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                          >
-                            Copy JSON
-                          </button>
-                        </div>
-                        <pre className="bg-gray-100 rounded p-2 overflow-auto max-h-40 font-mono text-[11px] leading-4">{JSON.stringify(parseAuditJson(log.before_data), null, 2)}</pre>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="font-semibold text-gray-700">After</p>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.after_data), null, 2), 'After JSON copied')}
-                            className="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                          >
-                            Copy JSON
-                          </button>
-                        </div>
-                        <pre className="bg-gray-100 rounded p-2 overflow-auto max-h-40 font-mono text-[11px] leading-4">{JSON.stringify(parseAuditJson(log.after_data), null, 2)}</pre>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -816,27 +951,67 @@ export const ManualProductionEntryForm: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow p-6 mt-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900">Manual Entries</h3>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <input
-              type="date"
-              value={tableDateFilter}
-              onChange={(e) => {
-                setTableDateFilter(e.target.value);
-                setTablePage(1);
-              }}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-              title="Filter by date"
-            />
+      <div className="bg-white rounded-xl shadow p-3 sm:p-4 md:p-6 mt-4">
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('entries')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'entries' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Manual Entries
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenAudit()}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'audit' ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
+            >
+              Audit Logs
+            </button>
+          </div>
+
+          {activeTab === 'entries' ? (
+          <>
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-3">
+            <h3 className="text-lg font-bold text-gray-900">Manual Entries</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full lg:w-auto">
+              <label className="text-xs text-gray-600 flex flex-col items-start gap-1 min-w-0">
+                <span className="leading-none text-[11px] font-medium tracking-wide uppercase text-gray-500">From</span>
+                <input
+                  type="date"
+                  value={tableDateFilter}
+                  onChange={(e) => {
+                    setTableDateFilter(e.target.value);
+                    setTablePage(1);
+                  }}
+                  className="h-9 w-full border border-gray-300 rounded-lg px-2 text-sm shadow-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 bg-white"
+                  title="From date"
+                />
+              </label>
+              <label className="text-xs text-gray-600 flex flex-col items-start gap-1 min-w-0">
+                <span className="leading-none text-[11px] font-medium tracking-wide uppercase text-gray-500">To</span>
+                <input
+                  type="date"
+                  value={tableToDateFilter}
+                  onChange={(e) => {
+                    setTableToDateFilter(e.target.value);
+                    setTablePage(1);
+                  }}
+                  className="h-9 w-full border border-gray-300 rounded-lg px-2 text-sm shadow-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 bg-white"
+                  title="To date"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-9 gap-2">
             <select
               value={tableWorkCentreFilter}
               onChange={(e) => {
                 setTableWorkCentreFilter(e.target.value);
                 setTablePage(1);
               }}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-full col-span-2 sm:col-span-1"
               title="Filter by line"
             >
               <option value="">All lines</option>
@@ -850,14 +1025,14 @@ export const ManualProductionEntryForm: React.FC = () => {
                 setShowForm(true);
                 setEditingId(null);
               }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full"
             >
               Add New Entry
             </button>
             <button
               type="button"
               onClick={loadManualEntries}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-semibold"
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg text-sm font-semibold w-full"
               disabled={loadingEntries}
             >
               {loadingEntries ? 'Refreshing...' : 'Refresh'}
@@ -865,26 +1040,19 @@ export const ManualProductionEntryForm: React.FC = () => {
             <button
               type="button"
               onClick={handleExportCsv}
-              className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-lg text-sm font-semibold"
+              className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-2 rounded-lg text-sm font-semibold w-full"
               disabled={manualEntries.length === 0}
             >
               Export CSV
             </button>
-            <button
-              type="button"
-              onClick={() => handleOpenAudit()}
-              className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1.5 rounded-lg text-sm font-semibold"
-            >
-              Audit Logs
-            </button>
-            <div className="relative min-w-[180px]">
+            <div className="relative col-span-2 sm:col-span-2 md:col-span-2 xl:col-span-3 min-w-0">
               <input
                 type="text"
-              value={tableSearchInput}
+                value={tableSearchInput}
                 onChange={(e) => {
-                setTableSearchInput(e.target.value);
+                  setTableSearchInput(e.target.value);
                 }}
-                className="border border-gray-300 rounded-lg px-2 py-1.5 pr-7 text-sm w-full"
+                className="border border-gray-300 rounded-lg px-2 py-2 pr-7 text-sm w-full"
                 placeholder="Search machine/employee/line"
                 title="Search by machine, employee or line"
               />
@@ -908,29 +1076,177 @@ export const ManualProductionEntryForm: React.FC = () => {
               type="button"
               onClick={() => {
                 setTableDateFilter(getNowLocalDateTime().split('T')[0]);
+                setTableToDateFilter(getNowLocalDateTime().split('T')[0]);
                 setTableWorkCentreFilter('');
                 setTableSearch('');
+                setTableSearchInput('');
+                setTableSortBy('created_at');
+                setTableSortOrder('desc');
                 setTablePage(1);
               }}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-semibold"
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg text-sm font-semibold w-full"
             >
               Clear Filters
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const payload = {
+                  tableDateFilter,
+                  tableToDateFilter,
+                  tableWorkCentreFilter,
+                  tableSearchInput,
+                  tableLimit,
+                  tableSortBy,
+                  tableSortOrder,
+                };
+                localStorage.setItem(FILTER_PRESET_KEY, JSON.stringify(payload));
+                toast.success('Filter preset saved');
+              }}
+              className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap w-full"
+            >
+              Save Filters
+            </button>
           </div>
+          </>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Manual Entry Audit Logs</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {auditEntryId ? `Showing history for entry #${auditEntryId}` : 'Showing latest manual entry audit history'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAudit(auditEntryId || undefined)}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportAuditCsv}
+                    className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    disabled={auditLogs.length === 0}
+                  >
+                    Export Audit CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRawAuditJson((prev) => !prev)}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  >
+                    {showRawAuditJson ? 'Hide Raw JSON' : 'Show Raw JSON'}
+                  </button>
+                </div>
+              </div>
+              {auditLoading ? (
+                <p className="text-sm text-gray-500">Loading audit logs...</p>
+              ) : auditLogs.length === 0 ? (
+                <p className="text-sm text-gray-500">No audit logs found.</p>
+              ) : (
+                <div className="space-y-3">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="border border-gray-200 rounded-lg p-3">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                        <div className="col-span-2 md:col-span-1">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${getAuditActionBadgeClass(log.action)}`}>
+                            {log.action}
+                          </span>
+                        </div>
+                        <div><strong>Entry:</strong> {log.entry_id ?? '-'}</div>
+                        <div><strong>User:</strong> {log.actor_username || '-'}</div>
+                        <div><strong>Role:</strong> {log.actor_role || '-'}</div>
+                        <div><strong>Time:</strong> {formatDisplayDateTime(log.created_at)} IST</div>
+                      </div>
+                      {log.action === 'DELETE' ? (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setRestoreCandidate(log)}
+                            disabled={loading}
+                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2.5 py-1 rounded text-xs font-semibold disabled:opacity-50"
+                          >
+                            Restore Entry
+                          </button>
+                        </div>
+                      ) : null}
+                      {log.reason ? <p className="text-sm mt-1"><strong>Reason:</strong> {log.reason}</p> : null}
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="min-w-full text-xs border border-gray-200 rounded">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-2 py-1 border-b">Field</th>
+                              <th className="text-left px-2 py-1 border-b">Before</th>
+                              <th className="text-left px-2 py-1 border-b">After</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {toAuditChanges(log).map((row) => (
+                              <tr key={`${log.id}-${row.key}`} className="border-b">
+                                <td className="px-2 py-1 font-medium text-gray-700">{row.label}</td>
+                                <td className="px-2 py-1 text-gray-600">{row.beforeValue}</td>
+                                <td className="px-2 py-1 text-gray-900">{row.afterValue}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {showRawAuditJson ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 text-xs">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-semibold text-gray-700">Before (Raw)</p>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.before_data), null, 2), 'Before JSON copied')}
+                                className="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                              >
+                                Copy JSON
+                              </button>
+                            </div>
+                            <pre className="bg-gray-100 rounded p-2 overflow-auto max-h-40 font-mono text-[11px] leading-4">{JSON.stringify(parseAuditJson(log.before_data), null, 2)}</pre>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-semibold text-gray-700">After (Raw)</p>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.after_data), null, 2), 'After JSON copied')}
+                                className="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                              >
+                                Copy JSON
+                              </button>
+                            </div>
+                            <pre className="bg-gray-100 rounded p-2 overflow-auto max-h-40 font-mono text-[11px] leading-4">{JSON.stringify(parseAuditJson(log.after_data), null, 2)}</pre>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="overflow-x-auto -mx-2 md:mx-0">
-          <table className="min-w-full text-sm border border-gray-200 rounded-lg">
+        {activeTab === 'entries' ? (
+        <>
+        <div className="overflow-x-auto -mx-1 sm:-mx-2 md:mx-0">
+          <table className="min-w-[900px] w-full text-sm border border-gray-200 rounded-lg">
             <thead className="bg-gray-50">
               <tr>
-                <th className="text-left p-2 border-b">Date</th>
+                <th className="text-left p-2 border-b">{sortLabel('created_at', 'Date')}</th>
                 <th className="text-left p-2 border-b">Line</th>
-                <th className="text-left p-2 border-b">Machine</th>
+                <th className="text-left p-2 border-b">{sortLabel('machine_id', 'Machine')}</th>
                 <th className="text-left p-2 border-b">Employee</th>
-                <th className="text-left p-2 border-b">Start</th>
-                <th className="text-left p-2 border-b">End</th>
-                <th className="text-left p-2 border-b">Target</th>
-                <th className="text-left p-2 border-b">Output</th>
+                <th className="text-left p-2 border-b">{sortLabel('start_time', 'Start')}</th>
+                <th className="text-left p-2 border-b">{sortLabel('finish_time', 'End')}</th>
+                <th className="text-left p-2 border-b">{sortLabel('target_mins', 'Target')}</th>
+                <th className="text-left p-2 border-b">{sortLabel('output_pairs', 'Output')}</th>
                 <th className="text-left p-2 border-b">Actions</th>
               </tr>
             </thead>
@@ -955,7 +1271,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                     <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
                     <td className="p-2">{Number(row.output_pairs || 0)}</td>
                     <td className="p-2">
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
                         <button
                           type="button"
                           onClick={() => handleEdit(row)}
@@ -999,11 +1315,11 @@ export const ManualProductionEntryForm: React.FC = () => {
             ) : null}
           </table>
         </div>
-        <div className="flex items-center justify-between mt-3 text-sm text-gray-600">
-          <div>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-3 text-sm text-gray-600">
+          <div className="text-xs sm:text-sm">
             Showing page {tablePage} of {tableTotalPages} ({manualEntries.length} rows on this page, {tableTotal} total)
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={tableLimit}
               onChange={(e) => {
@@ -1023,11 +1339,11 @@ export const ManualProductionEntryForm: React.FC = () => {
               type="button"
               onClick={() => setTablePage((p) => Math.max(1, p - 1))}
               disabled={tableLimit === 'all' || tablePage <= 1 || loadingEntries}
-              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50"
+              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
             >
               Previous
             </button>
-            <span className="min-w-[90px] text-center">Page {tablePage}</span>
+            <span className="min-w-[70px] sm:min-w-[90px] text-center text-xs sm:text-sm">Page {tablePage}</span>
             <input
               type="number"
               min={1}
@@ -1045,19 +1361,21 @@ export const ManualProductionEntryForm: React.FC = () => {
                 }
               }}
               disabled={tableLimit === 'all' || loadingEntries}
-              className="w-16 px-2 py-1.5 rounded border border-gray-300 text-center disabled:opacity-50"
+              className="w-14 sm:w-16 px-2 py-1.5 rounded border border-gray-300 text-center disabled:opacity-50 text-xs sm:text-sm"
               title="Go to page"
             />
             <button
               type="button"
               onClick={() => setTablePage((p) => Math.min(tableTotalPages, p + 1))}
               disabled={tableLimit === 'all' || tablePage >= tableTotalPages || loadingEntries}
-              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50"
+              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
             >
               Next
             </button>
           </div>
         </div>
+        </>
+        ) : null}
       </div>
     </div>
   );

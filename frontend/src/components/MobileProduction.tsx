@@ -144,10 +144,13 @@ export const MobileProduction: React.FC = () => {
     const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
     const overTargetToastShownRef = React.useRef(false);
     const pendingOverTargetAlarmRef = React.useRef(false);
+    const pendingStartReminderAlarmRef = React.useRef(false);
     const hasUserInteractedRef = React.useRef(false);
     const alertAudioContextRef = React.useRef<AudioContext | null>(null);
     const alertSoundTimeoutsRef = React.useRef<number[]>([]);
     const startReminderAnchorRef = React.useRef<number | null>(null);
+    const lastFinishedCycleMsRef = React.useRef<number | null>(null);
+    const previousButtonStatusRef = React.useRef<number | null>(null);
     const [machineBusyRecord, setMachineBusyRecord] = useState<{ emp_id: string | number; employee_name?: string; machine_id: string } | null>(null);
     const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
     const [hasTabSessionBinding, setHasTabSessionBinding] = useState(false);
@@ -445,21 +448,41 @@ export const MobileProduction: React.FC = () => {
     useEffect(() => {
         const unlockAudio = () => {
             hasUserInteractedRef.current = true;
-            if (!pendingOverTargetAlarmRef.current || overTargetToastShownRef.current) return;
-            if (!productionData) return;
-            const targetMins = Number(productionData.target_mins || 0);
-            const exceeded =
-                productionData.button_status === 1 &&
-                !productionData.is_paused &&
-                targetMins > 0 &&
-                actualTimeCounter / 60 > targetMins;
-            if (!exceeded) {
-                pendingOverTargetAlarmRef.current = false;
-                return;
+            if (pendingOverTargetAlarmRef.current && !overTargetToastShownRef.current && productionData) {
+                const targetMins = Number(productionData.target_mins || 0);
+                const exceeded =
+                    productionData.button_status === 1 &&
+                    !productionData.is_paused &&
+                    targetMins > 0 &&
+                    actualTimeCounter / 60 > targetMins;
+                if (!exceeded) {
+                    pendingOverTargetAlarmRef.current = false;
+                } else {
+                    overTargetToastShownRef.current = true;
+                    pendingOverTargetAlarmRef.current = false;
+                    playAlertSound('finish');
+                }
             }
-            overTargetToastShownRef.current = true;
-            pendingOverTargetAlarmRef.current = false;
-            playAlertSound('finish');
+
+            if (pendingStartReminderAlarmRef.current && productionData && idleReminderEnabled) {
+                const isRunning = productionData.button_status === 1 && !productionData.is_paused;
+                if (isRunning) {
+                    pendingStartReminderAlarmRef.current = false;
+                    return;
+                }
+                pendingStartReminderAlarmRef.current = false;
+                playAlertSound('start');
+                toast.error(
+                    productionData.button_status === 2
+                        ? 'Cycle completed. Tap RESET, then START for next cycle.'
+                        : 'Production not started. Tap START to begin cycle.',
+                    {
+                        duration: 8000,
+                        id: 'mobile-start-reminder',
+                    }
+                );
+                startReminderAnchorRef.current = Date.now();
+            }
         };
 
         window.addEventListener('pointerdown', unlockAudio, { passive: true });
@@ -471,31 +494,51 @@ export const MobileProduction: React.FC = () => {
             window.removeEventListener('touchstart', unlockAudio);
             window.removeEventListener('keydown', unlockAudio);
         };
-    }, [productionData, actualTimeCounter, playAlertSound]);
+    }, [productionData, actualTimeCounter, playAlertSound, idleReminderEnabled]);
 
     // If the threshold was crossed while hidden/backgrounded, fire alarm when tab becomes visible again.
     useEffect(() => {
         const onVisible = () => {
             if (document.visibilityState !== 'visible') return;
-            if (!pendingOverTargetAlarmRef.current || overTargetToastShownRef.current) return;
-            if (!hasUserInteractedRef.current || !productionData) return;
-            const targetMins = Number(productionData.target_mins || 0);
-            const exceeded =
-                productionData.button_status === 1 &&
-                !productionData.is_paused &&
-                targetMins > 0 &&
-                actualTimeCounter / 60 > targetMins;
-            if (!exceeded) {
-                pendingOverTargetAlarmRef.current = false;
-                return;
+            if (pendingOverTargetAlarmRef.current && !overTargetToastShownRef.current && hasUserInteractedRef.current && productionData) {
+                const targetMins = Number(productionData.target_mins || 0);
+                const exceeded =
+                    productionData.button_status === 1 &&
+                    !productionData.is_paused &&
+                    targetMins > 0 &&
+                    actualTimeCounter / 60 > targetMins;
+                if (!exceeded) {
+                    pendingOverTargetAlarmRef.current = false;
+                } else {
+                    overTargetToastShownRef.current = true;
+                    pendingOverTargetAlarmRef.current = false;
+                    playAlertSound('finish');
+                }
             }
-            overTargetToastShownRef.current = true;
-            pendingOverTargetAlarmRef.current = false;
-            playAlertSound('finish');
+
+            if (pendingStartReminderAlarmRef.current && hasUserInteractedRef.current && productionData && idleReminderEnabled) {
+                const isRunning = productionData.button_status === 1 && !productionData.is_paused;
+                if (isRunning) {
+                    pendingStartReminderAlarmRef.current = false;
+                    return;
+                }
+                pendingStartReminderAlarmRef.current = false;
+                playAlertSound('start');
+                toast.error(
+                    productionData.button_status === 2
+                        ? 'Cycle completed. Tap RESET, then START for next cycle.'
+                        : 'Production not started. Tap START to begin cycle.',
+                    {
+                        duration: 8000,
+                        id: 'mobile-start-reminder',
+                    }
+                );
+                startReminderAnchorRef.current = Date.now();
+            }
         };
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
-    }, [productionData, actualTimeCounter, playAlertSound]);
+    }, [productionData, actualTimeCounter, playAlertSound, idleReminderEnabled]);
 
     useEffect(() => {
         if (!productionData || productionData.button_status !== 1 || productionData.is_paused) {
@@ -543,8 +586,74 @@ export const MobileProduction: React.FC = () => {
     // Repeating reminder every 10 minutes whenever production is not running.
     // Covers cases like: cycle finished, paused, or never started.
     useEffect(() => {
+        if (!effectiveMachineId || !urlEmpId) return;
+        let cancelled = false;
+
+        const localDate = new Date();
+        const today = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+
+        // If current row already has finish_time, prefer that and avoid extra fetch.
+        if (productionData?.finish_time) {
+            const localFinishMs = new Date(productionData.finish_time).getTime();
+            if (Number.isFinite(localFinishMs) && localFinishMs > 0) {
+                lastFinishedCycleMsRef.current = localFinishMs;
+            }
+            return;
+        }
+
+        const fetchLatestFinishedCycle = async () => {
+            try {
+                const res = await apiFetch(`${API_BASE}/api/mobile-production/machine/${effectiveMachineId}/date/${today}`);
+                const json = await res.json();
+                if (!json?.success || !Array.isArray(json.data) || cancelled) return;
+
+                const latestFinished = json.data
+                    .filter((row: any) =>
+                        String(row.emp_id) === String(urlEmpId) &&
+                        Number(row.button_status) === 2 &&
+                        !!row.finish_time
+                    )
+                    .sort((a: any, b: any) => new Date(b.finish_time).getTime() - new Date(a.finish_time).getTime())[0];
+
+                if (!latestFinished?.finish_time || cancelled) return;
+                const finishMs = new Date(latestFinished.finish_time).getTime();
+                if (Number.isFinite(finishMs) && finishMs > 0) {
+                    lastFinishedCycleMsRef.current = finishMs;
+                    // If reminder hasn't started yet, align anchor immediately.
+                    if (startReminderAnchorRef.current === null) {
+                        startReminderAnchorRef.current = finishMs;
+                    }
+                }
+            } catch {
+                // Non-fatal fallback: reminder will use local anchor if lookup fails.
+            }
+        };
+
+        fetchLatestFinishedCycle();
+        return () => {
+            cancelled = true;
+        };
+    }, [API_BASE, effectiveMachineId, urlEmpId, productionData?.finish_time]);
+
+    useEffect(() => {
+        const currentStatus = productionData?.button_status ?? null;
+        const previousStatus = previousButtonStatusRef.current;
+        previousButtonStatusRef.current = currentStatus;
+
+        // Fresh transition into FINISH should always start a new 10-minute gap window.
+        if (currentStatus === 2 && previousStatus !== 2) {
+            const finishMs = productionData?.finish_time ? new Date(productionData.finish_time).getTime() : NaN;
+            const anchor = Number.isFinite(finishMs) && finishMs > 0 ? finishMs : Date.now();
+            startReminderAnchorRef.current = anchor;
+            lastFinishedCycleMsRef.current = anchor;
+            pendingStartReminderAlarmRef.current = false;
+        }
+    }, [productionData?.button_status, productionData?.finish_time]);
+
+    useEffect(() => {
         if (!productionData || initializing || loading || !idleReminderEnabled) {
             startReminderAnchorRef.current = null;
+            pendingStartReminderAlarmRef.current = false;
             return;
         }
 
@@ -553,11 +662,21 @@ export const MobileProduction: React.FC = () => {
 
         if (!needsStartReminder) {
             startReminderAnchorRef.current = null;
+            pendingStartReminderAlarmRef.current = false;
             return;
         }
 
         if (startReminderAnchorRef.current === null) {
-            startReminderAnchorRef.current = Date.now();
+            // For finished state, use current row finish_time (or now) to enforce full 10-minute gap.
+            // For other idle states, fall back to latest finished cycle snapshot if available.
+            if (productionData.button_status === 2) {
+                const finishMs = productionData.finish_time ? new Date(productionData.finish_time).getTime() : NaN;
+                startReminderAnchorRef.current =
+                    Number.isFinite(finishMs) && finishMs > 0 ? finishMs : Date.now();
+            } else {
+                const fallbackFinish = lastFinishedCycleMsRef.current;
+                startReminderAnchorRef.current = fallbackFinish && fallbackFinish > 0 ? fallbackFinish : Date.now();
+            }
         }
 
         const REMINDER_MS = 10 * 60 * 1000;
@@ -567,7 +686,12 @@ export const MobileProduction: React.FC = () => {
             const elapsed = Date.now() - startReminderAnchorRef.current;
             if (elapsed < REMINDER_MS) return;
 
-            playAlertSound('start');
+            if (hasUserInteractedRef.current) {
+                pendingStartReminderAlarmRef.current = false;
+                playAlertSound('start');
+            } else {
+                pendingStartReminderAlarmRef.current = true;
+            }
             toast.error(
                 productionData.button_status === 2
                     ? 'Cycle completed. Tap RESET, then START for next cycle.'
@@ -619,7 +743,8 @@ export const MobileProduction: React.FC = () => {
                 stopAlertSound();
                 toast('Idle reminder muted');
             } else {
-                startReminderAnchorRef.current = Date.now();
+                // Recompute anchor from current production state in reminder effect.
+                startReminderAnchorRef.current = null;
                 toast.success('Idle reminder enabled (every 10 minutes)');
             }
             return next;

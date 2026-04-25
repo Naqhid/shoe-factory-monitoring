@@ -475,18 +475,40 @@ exports.createManualEntry = async (req, res, next) => {
 
 exports.getManualEntries = async (req, res, next) => {
   try {
-    const { date, work_centre_id, machine_id, emp_id, search } = req.query;
+    const { date, from_date, to_date, work_centre_id, machine_id, emp_id, search } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const rawLimit = String(req.query.limit || '20').trim().toLowerCase();
     const useAll = rawLimit === 'all';
     const limit = useAll ? null : Math.min(200, Math.max(1, parseInt(rawLimit, 10) || 20));
     const offset = useAll ? 0 : (page - 1) * limit;
+    const sortByRaw = String(req.query.sort_by || 'created_at').trim();
+    const sortOrder = String(req.query.sort_order || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    const sortByMap = {
+      created_at: 'mcp.created_at',
+      start_time: 'mcp.start_time',
+      finish_time: 'mcp.finish_time',
+      output_pairs: 'mcp.output_pairs',
+      target_mins: 'mcp.target_mins',
+      machine_id: 'mcp.machine_id',
+      emp_id: 'mcp.emp_id',
+    };
+    const sortBy = sortByMap[sortByRaw] || sortByMap.created_at;
 
     let where = 'WHERE mcp.button_status = 2 AND mcp.stoppage_reason IS NOT NULL AND mcp.stoppage_reason LIKE ?';
     const params = ['MANUAL:%'];
     if (date) {
       where += ' AND DATE(mcp.prod_date) = ?';
       params.push(date);
+    } else {
+      if (from_date) {
+        where += ' AND DATE(mcp.prod_date) >= ?';
+        params.push(from_date);
+      }
+      if (to_date) {
+        where += ' AND DATE(mcp.prod_date) <= ?';
+        params.push(to_date);
+      }
     }
     if (work_centre_id) {
       where += ' AND mcp.work_centre_id = ?';
@@ -555,7 +577,7 @@ exports.getManualEntries = async (req, res, next) => {
        LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
        LEFT JOIN employees e ON e.code = mcp.emp_id
        ${where}
-       ORDER BY mcp.created_at DESC`;
+       ORDER BY ${sortBy} ${sortOrder}, mcp.id DESC`;
     const [rows] = useAll
       ? await db.query(dataSql, params)
       : await db.query(`${dataSql} LIMIT ? OFFSET ?`, [...params, limit, offset]);
@@ -794,6 +816,201 @@ exports.getManualEntryAuditLogs = async (req, res, next) => {
     res.json({ success: true, data: rows });
   } catch (error) {
     logger.error('Error fetching manual entry audit logs:', error);
+    next(error);
+  }
+};
+
+exports.restoreManualEntryFromAuditLog = async (req, res, next) => {
+  try {
+    const { logId } = req.params;
+    const [logRows] = await db.query(
+      `SELECT id, entry_id, action, before_data, after_data
+       FROM manual_entry_audit_logs
+       WHERE id = ?
+       LIMIT 1`,
+      [logId]
+    );
+    if (logRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Audit log not found' });
+    }
+
+    const log = logRows[0];
+    if (log.action !== 'DELETE') {
+      return res.status(400).json({ success: false, message: 'Only DELETE audit logs can be restored' });
+    }
+
+    let snapshot = null;
+    try {
+      snapshot = log.before_data ? JSON.parse(log.before_data) : null;
+    } catch {
+      snapshot = null;
+    }
+
+    const hasRequiredSnapshotFields = (obj) => {
+      if (!obj || typeof obj !== 'object') return false;
+      return !!(
+        obj.prod_date &&
+        obj.work_centre_id &&
+        obj.machine_id &&
+        obj.emp_id &&
+        obj.start_time &&
+        obj.finish_time
+      );
+    };
+
+    // Backward compatibility: older DELETE logs may only contain minimal fields.
+    // If required fields are missing, recover from the latest CREATE/UPDATE after_data for same entry.
+    if (!hasRequiredSnapshotFields(snapshot) && log.entry_id) {
+      const [fallbackRows] = await db.query(
+        `SELECT id, action, after_data
+         FROM manual_entry_audit_logs
+         WHERE entry_id = ?
+           AND action IN ('CREATE', 'UPDATE')
+           AND after_data IS NOT NULL
+         ORDER BY id DESC
+         LIMIT 1`,
+        [log.entry_id]
+      );
+
+      if (fallbackRows.length > 0) {
+        try {
+          const fallbackSnapshot = JSON.parse(fallbackRows[0].after_data);
+          if (hasRequiredSnapshotFields(fallbackSnapshot)) {
+            snapshot = fallbackSnapshot;
+          }
+        } catch {
+          // ignore and continue with validation below
+        }
+      }
+    }
+
+    if (!hasRequiredSnapshotFields(snapshot)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Audit snapshot does not contain required fields',
+      });
+    }
+
+    const prodDate = String(snapshot.prod_date || '').split('T')[0];
+    const workCentreId = Number(snapshot.work_centre_id);
+    const machineId = String(snapshot.machine_id || '');
+    const empId = String(snapshot.emp_id || '');
+    const startTime = snapshot.start_time;
+    const finishTime = snapshot.finish_time;
+    const targetMins = Number(snapshot.target_mins || 0);
+    const outputPairs = Number(snapshot.output_pairs || 0);
+    const stoppageReason = String(snapshot.stoppage_reason || 'MANUAL:Restored from audit log');
+
+    if (!prodDate || !workCentreId || !machineId || !empId || !startTime || !finishTime) {
+      return res.status(400).json({ success: false, message: 'Audit snapshot does not contain required fields' });
+    }
+
+    const [lockRows] = await db.query(
+      'SELECT id FROM production_day_locks WHERE lock_date = ? AND work_centre_id = ? LIMIT 1',
+      [prodDate, workCentreId]
+    );
+    if (lockRows.length > 0) {
+      return res.status(423).json({
+        success: false,
+        message: `Production for ${prodDate} is locked and cannot be modified.`
+      });
+    }
+
+    const [machineRows] = await db.query(
+      'SELECT machine_id FROM machine_centres WHERE (machine_id = ? OR code = ?) AND work_centre_id = ? LIMIT 1',
+      [machineId, machineId, workCentreId]
+    );
+    if (machineRows.length === 0) {
+      return res.status(400).json({ success: false, message: `Machine ${machineId} not found for selected line` });
+    }
+
+    const [empRows] = await db.query(
+      'SELECT code FROM employees WHERE code = ? AND work_centre_id = ? LIMIT 1',
+      [empId, workCentreId]
+    );
+    if (empRows.length === 0) {
+      return res.status(400).json({ success: false, message: `Employee ${empId} not found for selected line` });
+    }
+
+    const [unfinishedRows] = await db.query(
+      `SELECT id
+       FROM machine_centre_production
+       WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = ? AND button_status != 2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [machineId, empId, prodDate]
+    );
+    if (unfinishedRows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Cannot restore while an active production cycle exists for this machine and employee',
+        data: { existing_id: unfinishedRows[0].id }
+      });
+    }
+
+    let restoredId = null;
+    let summaryData = null;
+    await withTransaction(async (conn) => {
+      const overlapping = await findOverlappingManualEntry(conn, {
+        prodDate,
+        workCentreId,
+        machineId,
+        empId,
+        startTime,
+        finishTime,
+      });
+      if (overlapping) {
+        throw Object.assign(new Error('Cannot restore because it overlaps an existing cycle'), {
+          statusCode: 409,
+          exposeMessage: 'Cannot restore because it overlaps an existing cycle',
+        });
+      }
+
+      const [insertResult] = await conn.execute(
+        `INSERT INTO machine_centre_production
+         (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
+          start_time, finish_time, idle_start_time, idle_stop_time, stoppage_reason, button_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 2)`,
+        [prodDate, workCentreId, machineId, empId, Math.max(0, outputPairs), Math.max(0, targetMins), startTime, finishTime, stoppageReason]
+      );
+      restoredId = insertResult.insertId;
+
+      await writeManualAuditLog(conn, {
+        req,
+        action: 'CREATE',
+        entryId: restoredId,
+        afterData: {
+          prod_date: prodDate,
+          work_centre_id: workCentreId,
+          machine_id: machineId,
+          emp_id: empId,
+          start_time: startTime,
+          finish_time: finishTime,
+          target_mins: Math.max(0, targetMins),
+          output_pairs: Math.max(0, outputPairs),
+          stoppage_reason: stoppageReason,
+        },
+        reason: `Restored from audit log #${log.id}${log.entry_id ? ` (entry ${log.entry_id})` : ''}`,
+      });
+
+      summaryData = await recalcSummaryForDayMachineEmployee(conn, {
+        prodDate,
+        workCentreId,
+        machineId,
+        empId,
+      });
+    }, { isolationLevel: 'READ COMMITTED' });
+
+    return res.json({
+      success: true,
+      message: 'Manual entry restored successfully',
+      data: { id: restoredId, restored_from_log_id: Number(log.id), ...summaryData },
+    });
+  } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.exposeMessage || error.message });
+    }
+    logger.error('Error restoring manual entry from audit log:', error);
     next(error);
   }
 };
