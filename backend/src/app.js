@@ -118,6 +118,23 @@ const initDb = async () => {
       )
     `);
     logger.info('tracker_alert_actions table ready');
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS manual_entry_audit_logs (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        entry_id BIGINT NULL,
+        action ENUM('CREATE','UPDATE','DELETE') NOT NULL,
+        actor_user_id BIGINT NULL,
+        actor_username VARCHAR(255) NULL,
+        actor_role VARCHAR(100) NULL,
+        reason VARCHAR(255) NULL,
+        before_data LONGTEXT NULL,
+        after_data LONGTEXT NULL,
+        created_at DATETIME NOT NULL,
+        INDEX idx_manual_entry_audit_entry (entry_id),
+        INDEX idx_manual_entry_audit_created (created_at)
+      )
+    `);
+    logger.info('manual_entry_audit_logs table ready');
     
     // Archive old machine centre summary data on startup
     try {
@@ -145,6 +162,7 @@ const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Plann
 const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED']);
 const ADMIN_ALLOWED_ROLES = new Set(['Admin']);
 const LINE_SETUP_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
+const MANUAL_ENTRY_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
 
 const requireLogsAccess = (req, res, next) => {
   const role = req.user?.role;
@@ -190,6 +208,14 @@ const requireLineSetupAccess = (req, res, next) => {
   const role = req.user?.role;
   if (!role || !LINE_SETUP_ALLOWED_ROLES.has(role)) {
     return res.status(403).json({ success: false, message: 'Access denied for line setup' });
+  }
+  next();
+};
+
+const requireManualEntryAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !MANUAL_ENTRY_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for manual production entry' });
   }
   next();
 };
@@ -516,12 +542,16 @@ app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionSt
 app.get('/api/mobile-production', mobileProductionController.getAll);
 app.get('/api/mobile-production/init/:machineId/:empCode', mobileProductionController.getInitData);
 app.get('/api/mobile-production/machine/:machineId/latest-unfinished', mobileProductionController.getLatestUnfinishedByMachine);
+app.get('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntries);
+app.get('/api/mobile-production/manual-entry/audit-logs', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntryAuditLogs);
 app.get('/api/mobile-production/:id', mobileProductionController.getById);
 app.get('/api/mobile-production/machine/:machineId/date/:date', mobileProductionController.getByMachineAndDate);
 app.get('/api/mobile-production/summary/:machineId/date/:date', mobileProductionController.getSummaryByMachineAndDate);
 app.get('/api/mobile-production/live-status/:machineId', mobileProductionController.getLiveMachineStatus);
 app.post('/api/mobile-production', mobileProductionController.create);
-app.post('/api/mobile-production/manual-entry', authenticate, requireLineSetupAccess, mobileProductionController.createManualEntry);
+app.post('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.createManualEntry);
+app.put('/api/mobile-production/manual-entry/:id', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.updateManualEntry);
+app.delete('/api/mobile-production/manual-entry/:id', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.deleteManualEntry);
 app.put('/api/mobile-production/:id', mobileProductionController.update);
 app.patch('/api/mobile-production/:id/status', mobileProductionController.updateStatus);
 app.delete('/api/mobile-production/:id', mobileProductionController.delete);
@@ -558,6 +588,7 @@ app.get('/api/alerts', alertController.getAlerts.bind(alertController));
 // Logs routes (protected)
 app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSessionController.getSessionLogs);
 app.get('/api/mobile-sessions/cycles', authenticate, requireLogsAccess, mobileSessionController.getCycleDetails);
+app.get('/api/mobile-sessions/active-snapshot', authenticate, requireManualEntryAccess, mobileSessionController.getActiveSessionsSnapshot);
 
 // TV Dashboard routes
 app.get('/api/tv-dashboard/work-centres', tvDashboardController.getWorkCentres);

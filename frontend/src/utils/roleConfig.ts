@@ -21,15 +21,15 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   },
   'IED': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'production_routing', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs']
+    allowedMenus: ['overview', 'production_routing', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs']
   },
   'Planner': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'production_planning', 'production_tracker','reports', 'missed_actions', 'logs', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
+    allowedMenus: ['overview', 'production_planning', 'manual_production_entry', 'production_tracker','reports', 'missed_actions', 'logs', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
   },
   'Unit Head': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'production_tracker','reports', 'missed_actions', 'logs']
+    allowedMenus: ['overview', 'manual_production_entry', 'production_tracker','reports', 'missed_actions', 'logs']
   }
 };
 

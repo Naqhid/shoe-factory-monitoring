@@ -2,6 +2,136 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
 
+const resolveTargetsFromPlan = async (conn, { machineId, workCentreId, prodDate }) => {
+  let targetMins = 0;
+  let targetPairs = 0;
+
+  const [routingRows] = await conn.execute(
+    `SELECT prl.mins_12_prs_box
+     FROM production_plan pp
+     JOIN production_routing_header prh ON prh.style_id = pp.style_id AND prh.deleted_at IS NULL
+     JOIN production_routing_lines prl
+       ON prl.routing_header_id = prh.id
+       AND prl.machine_centre_id = ?
+     WHERE pp.work_centre_id = ?
+       AND pp.deleted_at IS NULL
+       AND pp.plan_date = ?
+     ORDER BY
+       CASE WHEN prh.created_on <= pp.plan_date THEN 0 ELSE 1 END ASC,
+       ABS(DATEDIFF(prh.created_on, pp.plan_date)) ASC,
+       prh.id DESC
+     LIMIT 1`,
+    [machineId, workCentreId, prodDate]
+  );
+  if (routingRows.length > 0) {
+    targetMins = parseFloat(routingRows[0].mins_12_prs_box || 0) || 0;
+  }
+
+  const [planRows] = await conn.execute(
+    `SELECT target_pairs_per_tray
+     FROM production_plan
+     WHERE work_centre_id = ? AND deleted_at IS NULL AND plan_date = ?
+     ORDER BY id DESC
+     LIMIT 1`,
+    [workCentreId, prodDate]
+  );
+  if (planRows.length > 0) {
+    targetPairs = parseFloat(planRows[0].target_pairs_per_tray || 0) || 0;
+  }
+
+  return {
+    targetMins: Math.max(0, targetMins),
+    targetPairs: Math.max(0, targetPairs),
+  };
+};
+
+const findOverlappingManualEntry = async (conn, { prodDate, workCentreId, machineId, empId, startTime, finishTime, excludeId = null }) => {
+  let query = `
+    SELECT id
+    FROM machine_centre_production
+    WHERE DATE(prod_date) = ?
+      AND work_centre_id = ?
+      AND machine_id = ?
+      AND emp_id = ?
+      AND button_status = 2
+      AND start_time < ?
+      AND finish_time > ?`;
+  const params = [prodDate, workCentreId, machineId, empId, finishTime, startTime];
+  if (excludeId) {
+    query += ' AND id != ?';
+    params.push(excludeId);
+  }
+  query += ' ORDER BY id DESC LIMIT 1';
+  const [rows] = await conn.execute(query, params);
+  return rows[0] || null;
+};
+
+const writeManualAuditLog = async (conn, { req, action, entryId, beforeData = null, afterData = null, reason = null }) => {
+  const actor = req.user || {};
+  await conn.execute(
+    `INSERT INTO manual_entry_audit_logs
+     (entry_id, action, actor_user_id, actor_username, actor_role, reason, before_data, after_data, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+    [
+      entryId || null,
+      action,
+      actor.id || null,
+      actor.username || actor.name || null,
+      actor.role || null,
+      reason || null,
+      beforeData ? JSON.stringify(beforeData) : null,
+      afterData ? JSON.stringify(afterData) : null,
+    ]
+  );
+};
+
+const recalcSummaryForDayMachineEmployee = async (conn, { prodDate, workCentreId, machineId, empId }) => {
+  const [finishedRecords] = await conn.execute(
+    `SELECT
+      output_pairs,
+      target_mins,
+      TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
+      COALESCE(idle_mins, 0) as idle_mins
+     FROM machine_centre_production
+     WHERE DATE(prod_date) = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
+    [prodDate, workCentreId, machineId, empId]
+  );
+
+  let totalOutput = 0;
+  let totalTargetMins = 0;
+  let totalActualMins = 0;
+  let totalIdleMins = 0;
+
+  finishedRecords.forEach((record) => {
+    totalOutput += parseInt(record.output_pairs) || 0;
+    totalTargetMins += parseFloat(record.target_mins) || 0;
+    totalActualMins += parseFloat(record.actual_mins) || 0;
+    totalIdleMins += parseFloat(record.idle_mins) || 0;
+  });
+
+  const cumAvgTime = totalOutput > 0 ? (totalActualMins / totalOutput) : 0;
+
+  await conn.execute(
+    `INSERT INTO machine_centre_summary
+     (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 2)
+     ON DUPLICATE KEY UPDATE
+       total_output_pairs = VALUES(total_output_pairs),
+       total_target_mins = VALUES(total_target_mins),
+       total_actual_mins = VALUES(total_actual_mins),
+       total_idle_mins = VALUES(total_idle_mins),
+       cum_avg_time = VALUES(cum_avg_time),
+       button_status = VALUES(button_status),
+       updated_at = CURRENT_TIMESTAMP`,
+    [prodDate, workCentreId, machineId, empId, totalOutput, totalTargetMins, totalActualMins, totalIdleMins, cumAvgTime]
+  );
+
+  return {
+    total_output_pairs: totalOutput,
+    total_cycles: finishedRecords.length,
+  };
+};
+
 // Get all production data
 exports.getAll = async (req, res, next) => {
   try {
@@ -181,13 +311,12 @@ exports.create = async (req, res, next) => {
 exports.createManualEntry = async (req, res, next) => {
   try {
     const {
+      prod_date,
       work_centre_id,
       machine_id,
       emp_id,
       start_time,
       finish_time,
-      target_mins,
-      output_pairs,
       stoppage_reason
     } = req.body;
 
@@ -207,30 +336,94 @@ exports.createManualEntry = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'finish_time must be later than start_time' });
     }
 
-    const safeOutputPairs = Number.isFinite(Number(output_pairs)) ? Math.max(0, Number(output_pairs)) : 12;
-    const safeTargetMins = Number.isFinite(Number(target_mins)) ? Math.max(0, Number(target_mins)) : 0;
-    const prodDate = start_time.split('T')[0];
+    const startDate = start_time.split('T')[0];
+    const finishDate = finish_time.split('T')[0];
+    const prodDate = (prod_date || startDate).split('T')[0];
+
+    if (startDate !== finishDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start and end time must be on the same date for manual entry'
+      });
+    }
+    if (prodDate !== startDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'prod_date must match the start/end date'
+      });
+    }
 
     const [machineRows] = await db.query(
-      'SELECT machine_id FROM machine_centres WHERE machine_id = ? OR code = ? LIMIT 1',
-      [machine_id, machine_id]
+      'SELECT machine_id, work_centre_id FROM machine_centres WHERE (machine_id = ? OR code = ?) AND work_centre_id = ? LIMIT 1',
+      [machine_id, machine_id, work_centre_id]
     );
     if (machineRows.length === 0) {
-      return res.status(400).json({ success: false, message: `Machine ${machine_id} not found` });
+      return res.status(400).json({ success: false, message: `Machine ${machine_id} not found for selected line` });
     }
 
     const [empRows] = await db.query(
-      'SELECT code FROM employees WHERE code = ? LIMIT 1',
-      [emp_id]
+      'SELECT code, work_centre_id FROM employees WHERE code = ? AND work_centre_id = ? LIMIT 1',
+      [emp_id, work_centre_id]
     );
     if (empRows.length === 0) {
-      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found` });
+      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found for selected line` });
+    }
+
+    // Prevent duplicates when an unfinished cycle already exists.
+    const [unfinishedRows] = await db.query(
+      `SELECT id
+       FROM machine_centre_production
+       WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = ? AND button_status != 2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [machine_id, emp_id, prodDate]
+    );
+    if (unfinishedRows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Cannot add manual entry while an active production cycle exists for this machine and employee',
+        data: { existing_id: unfinishedRows[0].id }
+      });
     }
 
     let insertedId = null;
     let summaryData = null;
+    let enforcedTargets = { targetMins: 0, targetPairs: 0 };
 
     await withTransaction(async (conn) => {
+      enforcedTargets = await resolveTargetsFromPlan(conn, {
+        machineId: machine_id,
+        workCentreId: work_centre_id,
+        prodDate,
+      });
+
+      const overlapping = await findOverlappingManualEntry(conn, {
+        prodDate,
+        workCentreId: work_centre_id,
+        machineId: machine_id,
+        empId: emp_id,
+        startTime: start_time,
+        finishTime: finish_time,
+      });
+      if (overlapping) {
+        throw Object.assign(new Error('Manual entry overlaps an existing manual cycle for this machine and employee'), {
+          statusCode: 409,
+          exposeMessage: 'Manual entry overlaps an existing manual cycle for this machine and employee',
+        });
+      }
+
+      const afterData = {
+        prod_date: prodDate,
+        work_centre_id,
+        machine_id,
+        emp_id,
+        start_time,
+        finish_time,
+        target_mins: enforcedTargets.targetMins,
+        output_pairs: enforcedTargets.targetPairs,
+        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
+      };
+
       const [insertResult] = await conn.execute(
         `INSERT INTO machine_centre_production
          (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
@@ -241,68 +434,366 @@ exports.createManualEntry = async (req, res, next) => {
           work_centre_id,
           machine_id,
           emp_id,
-          safeOutputPairs,
-          safeTargetMins,
+          enforcedTargets.targetPairs,
+          enforcedTargets.targetMins,
           start_time,
           finish_time,
-          stoppage_reason || null
+          afterData.stoppage_reason
         ]
       );
       insertedId = insertResult.insertId;
 
-      const [finishedRecords] = await conn.execute(
-        `SELECT
-          output_pairs,
-          target_mins,
-          TIMESTAMPDIFF(MINUTE, start_time, finish_time) as actual_mins,
-          COALESCE(idle_mins, 0) as idle_mins
-         FROM machine_centre_production
-         WHERE DATE(prod_date) = ? AND work_centre_id = ? AND machine_id = ? AND emp_id = ? AND button_status = 2`,
-        [prodDate, work_centre_id, machine_id, emp_id]
-      );
-
-      let totalOutput = 0;
-      let totalTargetMins = 0;
-      let totalActualMins = 0;
-      let totalIdleMins = 0;
-
-      finishedRecords.forEach((record) => {
-        totalOutput += parseInt(record.output_pairs) || 0;
-        totalTargetMins += parseFloat(record.target_mins) || 0;
-        totalActualMins += parseFloat(record.actual_mins) || 0;
-        totalIdleMins += parseFloat(record.idle_mins) || 0;
+      await writeManualAuditLog(conn, {
+        req,
+        action: 'CREATE',
+        entryId: insertedId,
+        afterData,
+        reason: 'Manual entry created',
       });
 
-      const cumAvgTime = totalOutput > 0 ? (totalActualMins / totalOutput) : 0;
-
-      await conn.execute(
-        `INSERT INTO machine_centre_summary
-         (prod_date, work_centre_id, machine_id, emp_id, total_output_pairs, total_target_mins, total_actual_mins, total_idle_mins, cum_avg_time, button_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 2)
-         ON DUPLICATE KEY UPDATE
-           total_output_pairs = VALUES(total_output_pairs),
-           total_target_mins = VALUES(total_target_mins),
-           total_actual_mins = VALUES(total_actual_mins),
-           total_idle_mins = VALUES(total_idle_mins),
-           cum_avg_time = VALUES(cum_avg_time),
-           button_status = VALUES(button_status),
-           updated_at = CURRENT_TIMESTAMP`,
-        [prodDate, work_centre_id, machine_id, emp_id, totalOutput, totalTargetMins, totalActualMins, totalIdleMins, cumAvgTime]
-      );
-
-      summaryData = {
-        total_output_pairs: totalOutput,
-        total_cycles: finishedRecords.length,
-      };
+      summaryData = await recalcSummaryForDayMachineEmployee(conn, {
+        prodDate,
+        workCentreId: work_centre_id,
+        machineId: machine_id,
+        empId: emp_id,
+      });
     }, { isolationLevel: 'READ COMMITTED' });
 
     return res.status(201).json({
       success: true,
       message: 'Manual production entry saved successfully',
-      data: { id: insertedId, ...summaryData }
+      data: { id: insertedId, target_mins: enforcedTargets.targetMins, output_pairs: enforcedTargets.targetPairs, ...summaryData }
     });
   } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.exposeMessage || error.message });
+    }
     logger.error('Error creating manual production entry:', error);
+    next(error);
+  }
+};
+
+exports.getManualEntries = async (req, res, next) => {
+  try {
+    const { date, work_centre_id, machine_id, emp_id, search } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const rawLimit = String(req.query.limit || '20').trim().toLowerCase();
+    const useAll = rawLimit === 'all';
+    const limit = useAll ? null : Math.min(200, Math.max(1, parseInt(rawLimit, 10) || 20));
+    const offset = useAll ? 0 : (page - 1) * limit;
+
+    let where = 'WHERE mcp.button_status = 2 AND mcp.stoppage_reason IS NOT NULL AND mcp.stoppage_reason LIKE ?';
+    const params = ['MANUAL:%'];
+    if (date) {
+      where += ' AND DATE(mcp.prod_date) = ?';
+      params.push(date);
+    }
+    if (work_centre_id) {
+      where += ' AND mcp.work_centre_id = ?';
+      params.push(work_centre_id);
+    }
+    if (machine_id) {
+      where += ' AND mcp.machine_id = ?';
+      params.push(machine_id);
+    }
+    if (emp_id) {
+      where += ' AND mcp.emp_id = ?';
+      params.push(emp_id);
+    }
+    if (search && String(search).trim()) {
+      const q = `%${String(search).trim()}%`;
+      where += ` AND (
+        mcp.machine_id LIKE ?
+        OR COALESCE(mc.machine_name, mc.name, '') LIKE ?
+        OR mcp.emp_id LIKE ?
+        OR COALESCE(e.name, '') LIKE ?
+        OR COALESCE(wc.name, '') LIKE ?
+      )`;
+      params.push(q, q, q, q, q);
+    }
+
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) as total
+       FROM machine_centre_production mcp
+       LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+       LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+       LEFT JOIN employees e ON e.code = mcp.emp_id
+       ${where}`,
+      params
+    );
+    const total = Number(countRows[0]?.total || 0);
+
+    const [sumRows] = await db.query(
+      `SELECT COALESCE(SUM(mcp.output_pairs), 0) as total_output_pairs
+       FROM machine_centre_production mcp
+       LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+       LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+       LEFT JOIN employees e ON e.code = mcp.emp_id
+       ${where}`,
+      params
+    );
+    const totalOutputPairs = Number(sumRows[0]?.total_output_pairs || 0);
+
+    const dataSql = `SELECT
+        mcp.id,
+        mcp.prod_date,
+        mcp.work_centre_id,
+        wc.name AS work_centre_name,
+        mcp.machine_id,
+        COALESCE(mc.machine_name, mc.name) AS machine_name,
+        mcp.emp_id,
+        e.name AS employee_name,
+        mcp.target_mins,
+        mcp.output_pairs,
+        mcp.start_time,
+        mcp.finish_time,
+        mcp.stoppage_reason,
+        mcp.created_at,
+        mcp.updated_at
+       FROM machine_centre_production mcp
+       LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+       LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+       LEFT JOIN employees e ON e.code = mcp.emp_id
+       ${where}
+       ORDER BY mcp.created_at DESC`;
+    const [rows] = useAll
+      ? await db.query(dataSql, params)
+      : await db.query(`${dataSql} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+
+    const resolvedLimit = useAll ? total : limit;
+    const totalPages = useAll ? 1 : Math.max(1, Math.ceil(total / limit));
+    res.json({
+      success: true,
+      data: rows,
+      meta: {
+        page,
+        limit: useAll ? 'all' : resolvedLimit,
+        total,
+        total_pages: totalPages,
+        total_output_pairs: totalOutputPairs,
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching manual production entries:', error);
+    next(error);
+  }
+};
+
+exports.updateManualEntry = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      prod_date,
+      work_centre_id,
+      machine_id,
+      emp_id,
+      start_time,
+      finish_time,
+      stoppage_reason
+    } = req.body;
+
+    const [existingRows] = await db.query(
+      `SELECT * FROM machine_centre_production WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND stoppage_reason LIKE 'MANUAL:%'`,
+      [id]
+    );
+    if (existingRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Manual entry not found' });
+    }
+
+    if (!prod_date || !work_centre_id || !machine_id || !emp_id || !start_time || !finish_time) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    const start = new Date(start_time);
+    const finish = new Date(finish_time);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime()) || finish <= start) {
+      return res.status(400).json({ success: false, message: 'Invalid start/end time' });
+    }
+    const startDate = start_time.split('T')[0];
+    const finishDate = finish_time.split('T')[0];
+    const prodDate = prod_date.split('T')[0];
+    if (startDate !== finishDate || prodDate !== startDate) {
+      return res.status(400).json({ success: false, message: 'prod_date must match start/end date' });
+    }
+
+    const [machineRows] = await db.query(
+      'SELECT machine_id FROM machine_centres WHERE (machine_id = ? OR code = ?) AND work_centre_id = ? LIMIT 1',
+      [machine_id, machine_id, work_centre_id]
+    );
+    if (machineRows.length === 0) {
+      return res.status(400).json({ success: false, message: `Machine ${machine_id} not found for selected line` });
+    }
+    const [empRows] = await db.query(
+      'SELECT code FROM employees WHERE code = ? AND work_centre_id = ? LIMIT 1',
+      [emp_id, work_centre_id]
+    );
+    if (empRows.length === 0) {
+      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found for selected line` });
+    }
+
+    let summaryData = null;
+    let enforcedTargets = { targetMins: 0, targetPairs: 0 };
+    const beforeData = existingRows[0];
+    await withTransaction(async (conn) => {
+      enforcedTargets = await resolveTargetsFromPlan(conn, {
+        machineId: machine_id,
+        workCentreId: work_centre_id,
+        prodDate,
+      });
+
+      const overlapping = await findOverlappingManualEntry(conn, {
+        prodDate,
+        workCentreId: work_centre_id,
+        machineId: machine_id,
+        empId: emp_id,
+        startTime: start_time,
+        finishTime: finish_time,
+        excludeId: id,
+      });
+      if (overlapping) {
+        throw Object.assign(new Error('Manual entry overlaps an existing manual cycle for this machine and employee'), {
+          statusCode: 409,
+          exposeMessage: 'Manual entry overlaps an existing manual cycle for this machine and employee',
+        });
+      }
+
+      const afterData = {
+        id: Number(id),
+        prod_date: prodDate,
+        work_centre_id,
+        machine_id,
+        emp_id,
+        start_time,
+        finish_time,
+        target_mins: enforcedTargets.targetMins,
+        output_pairs: enforcedTargets.targetPairs,
+        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
+      };
+
+      await conn.execute(
+        `UPDATE machine_centre_production
+         SET prod_date = ?, work_centre_id = ?, machine_id = ?, emp_id = ?, target_mins = ?, output_pairs = ?,
+             start_time = ?, finish_time = ?, stoppage_reason = ?, button_status = 2
+         WHERE id = ?`,
+        [
+          prodDate,
+          work_centre_id,
+          machine_id,
+          emp_id,
+          enforcedTargets.targetMins,
+          enforcedTargets.targetPairs,
+          start_time,
+          finish_time,
+          afterData.stoppage_reason,
+          id,
+        ]
+      );
+
+      await writeManualAuditLog(conn, {
+        req,
+        action: 'UPDATE',
+        entryId: Number(id),
+        beforeData,
+        afterData,
+        reason: 'Manual entry updated',
+      });
+
+      summaryData = await recalcSummaryForDayMachineEmployee(conn, {
+        prodDate,
+        workCentreId: work_centre_id,
+        machineId: machine_id,
+        empId: emp_id,
+      });
+    }, { isolationLevel: 'READ COMMITTED' });
+
+    return res.json({
+      success: true,
+      message: 'Manual entry updated successfully',
+      data: { target_mins: enforcedTargets.targetMins, output_pairs: enforcedTargets.targetPairs, ...summaryData }
+    });
+  } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.exposeMessage || error.message });
+    }
+    logger.error('Error updating manual production entry:', error);
+    next(error);
+  }
+};
+
+exports.deleteManualEntry = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const [existingRows] = await db.query(
+      `SELECT id, prod_date, work_centre_id, machine_id, emp_id
+       FROM machine_centre_production
+       WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND stoppage_reason LIKE 'MANUAL:%'`,
+      [id]
+    );
+    if (existingRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Manual entry not found' });
+    }
+    const existing = existingRows[0];
+
+    let summaryData = null;
+    await withTransaction(async (conn) => {
+      await conn.execute('DELETE FROM machine_centre_production WHERE id = ?', [id]);
+      await writeManualAuditLog(conn, {
+        req,
+        action: 'DELETE',
+        entryId: Number(id),
+        beforeData: existing,
+        reason: 'Manual entry deleted',
+      });
+      summaryData = await recalcSummaryForDayMachineEmployee(conn, {
+        prodDate: existing.prod_date,
+        workCentreId: existing.work_centre_id,
+        machineId: existing.machine_id,
+        empId: existing.emp_id,
+      });
+    }, { isolationLevel: 'READ COMMITTED' });
+
+    return res.json({ success: true, message: 'Manual entry deleted successfully', data: summaryData });
+  } catch (error) {
+    logger.error('Error deleting manual production entry:', error);
+    next(error);
+  }
+};
+
+exports.getManualEntryAuditLogs = async (req, res, next) => {
+  try {
+    const { entry_id, limit } = req.query;
+    const safeLimit = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+    let where = '';
+    const params = [];
+
+    if (entry_id) {
+      where = 'WHERE al.entry_id = ?';
+      params.push(Number(entry_id));
+    }
+
+    params.push(safeLimit);
+    const [rows] = await db.query(
+      `SELECT
+         al.id,
+         al.entry_id,
+         al.action,
+         al.actor_user_id,
+         al.actor_username,
+         al.actor_role,
+         al.reason,
+         al.before_data,
+         al.after_data,
+         al.created_at
+       FROM manual_entry_audit_logs al
+       ${where}
+       ORDER BY al.created_at DESC, al.id DESC
+       LIMIT ?`,
+      params
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    logger.error('Error fetching manual entry audit logs:', error);
     next(error);
   }
 };

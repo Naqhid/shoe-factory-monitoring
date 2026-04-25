@@ -454,6 +454,26 @@ const mobileSessionController = {
         }
     },
 
+    // 9. Active sessions snapshot for manual entry filtering (protected route)
+    getActiveSessionsSnapshot: async (req, res, next) => {
+        try {
+            const [rows] = await pool.execute(
+                `SELECT machine_id, emp_code, activated_at
+                 FROM mobile_sessions
+                 WHERE status = 'active'
+                   AND DATE(activated_at) = CURDATE()
+                 ORDER BY activated_at DESC`
+            );
+
+            res.json({
+                success: true,
+                data: rows
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
     // Internal utility: expire all active sessions (used by scheduler)
     expireAllActiveSessions: async () => {
         const [result] = await pool.execute(

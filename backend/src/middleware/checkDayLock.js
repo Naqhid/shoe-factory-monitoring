@@ -8,9 +8,12 @@ const db = require('../../config/database');
 function checkDayLock(dateField = 'production_date', wcField = 'work_centre_id') {
   return async (req, res, next) => {
     try {
-      const date = req.body[dateField] || req.query[dateField];
+      const rawDate = req.body[dateField] || req.query[dateField];
       const wcId  = req.body[wcField]  || req.query[wcField];
-      if (!date || !wcId) return next(); // can't check — let controller validate
+      if (!rawDate || !wcId) return next(); // can't check — let controller validate
+
+      const dateValue = String(rawDate).trim();
+      const date = dateValue.includes('T') ? dateValue.split('T')[0] : dateValue.split(' ')[0];
 
       const [rows] = await db.execute(
         'SELECT id FROM production_day_locks WHERE lock_date = ? AND work_centre_id = ?',
