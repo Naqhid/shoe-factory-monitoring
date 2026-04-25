@@ -6,6 +6,24 @@ export interface RoleConfig {
   allowedMenus: string[];
 }
 
+const ROLE_ALIASES: Record<string, UserRole> = {
+  administrator: 'Admin',
+  admin: 'Admin',
+  'line supervisor': 'Line Supervisor',
+  'machine centre user': 'Machine Centre User',
+  ied: 'IED',
+  planner: 'Planner',
+  'unit head': 'Unit Head',
+};
+
+const normalizeRole = (role: UserRole | string | null): UserRole | null => {
+  if (!role) return null;
+  const cleaned = String(role).trim();
+  const direct = roleConfigs[cleaned as UserRole] ? (cleaned as UserRole) : null;
+  if (direct) return direct;
+  return ROLE_ALIASES[cleaned.toLowerCase()] || null;
+};
+
 export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Admin': {
     defaultRoute: '/overview',
@@ -34,18 +52,20 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
 };
 
 export const isMenuAllowed = (menuKey: string, role: UserRole | string | null): boolean => {
-  if (!role) return false;
-  const config = roleConfigs[role as UserRole];
+  const normalizedRole = normalizeRole(role);
+  if (!normalizedRole) return false;
+  const config = roleConfigs[normalizedRole];
   return config?.allowedMenus.includes(menuKey) || false;
 };
 
 export const getDefaultRoute = (role: UserRole | string | null, userInfo?: any): string => {
-  if (!role) return '/overview';
+  const normalizedRole = normalizeRole(role);
+  if (!normalizedRole) return '/overview';
   
   // Special handling for Machine Centre Users - redirect to their assigned machine
-  if (role === 'Machine Centre User' && userInfo?.machine_id) {
+  if (normalizedRole === 'Machine Centre User' && userInfo?.machine_id) {
     return `/mobile/${encodeURIComponent(userInfo.machine_id)}`;
   }
   
-  return roleConfigs[role as UserRole]?.defaultRoute || '/overview';
+  return roleConfigs[normalizedRole]?.defaultRoute || '/overview';
 };

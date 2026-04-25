@@ -78,6 +78,7 @@ function App() {
   const [selectedDate] = React.useState(new Date());
   const [selectedMachine, setSelectedMachine] = React.useState<MachineStatus | null>(null);
   const [lastRefresh, setLastRefresh] = React.useState<Date>(new Date());
+  const lastAccessDeniedRef = React.useRef<string | null>(null);
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
@@ -209,8 +210,14 @@ function App() {
         const userRole = user.role || 'Admin';
         if (activeMenu && !isMenuAllowed(activeMenu, userRole)) {
           const defaultRoute = getDefaultRoute(userRole, user);
-          toast.error(`Access denied. You don't have permission to view this page.`);
+          const denialKey = `${userRole}:${activeMenu}`;
+          if (lastAccessDeniedRef.current !== denialKey) {
+            toast.error(`Access denied. You don't have permission to view this page.`);
+            lastAccessDeniedRef.current = denialKey;
+          }
           navigate(defaultRoute, { replace: true });
+        } else {
+          lastAccessDeniedRef.current = null;
         }
       }
     }
