@@ -10,7 +10,6 @@ import {
   WifiOff,
   X,
   Home,
-  Settings,
   TrendingUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -34,7 +33,7 @@ export const ProductionTracker: React.FC = () => {
   const [attendanceData, setAttendanceData] = useState({ present: 0, target_employees: 0 });
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [activeMobileTab, setActiveMobileTab] = useState<'dashboard' | 'trends' | 'alerts' | 'reports' | 'settings'>('dashboard');
+  const [activeMobileTab, setActiveMobileTab] = useState<'dashboard' | 'trends' | 'alerts' | 'reports'>('dashboard');
   const [selectedLineDetail, setSelectedLineDetail] = useState<any | null>(null);
   const [lineMachines, setLineMachines] = useState<any[]>([]);
   const [lineMachinesLoading, setLineMachinesLoading] = useState(false);
@@ -387,17 +386,6 @@ export const ProductionTracker: React.FC = () => {
                 <BarChart3 className="h-5 w-5" />
                 <span className="text-[11px] sm:text-xs">Reports</span>
               </button>
-              <button
-                className={`flex flex-col items-center gap-1 rounded-xl py-1.5 px-2 min-w-[64px] transition-colors ${activeMobileTab === 'settings' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600'}`}
-                onClick={() => {
-                  setActiveMobileTab('settings');
-                  logAuditEvent('tab_changed', { tab: 'settings' });
-                }}
-                type="button"
-              >
-                <Settings className="h-5 w-5" />
-                <span className="text-[11px] sm:text-xs">Settings</span>
-              </button>
               </div>
             </div>
           </div>
@@ -458,7 +446,7 @@ export const ProductionTracker: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {linePerformance.map((line: any, index: number) => {
                     const efficiency = Number(line.efficiency) || 0;
                     const target = Number(line.target) || 0;
@@ -474,29 +462,31 @@ export const ProductionTracker: React.FC = () => {
                           loadLineMachines(wcId);
                           logAuditEvent('line_detail_opened', { line: line.line_name, workCentreId: wcId });
                         }}
-                        className="relative bg-slate-50 rounded-2xl p-3 border border-slate-200 w-full hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center min-h-[168px]"
+                        className="relative bg-slate-50 rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-slate-200 w-full hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center min-h-[132px] sm:min-h-[168px]"
                       >
-                        <span className={`absolute top-3 right-3 h-3 w-3 rounded-full ${statusDotClass(efficiency)}`} />
-                        <div className="text-lg sm:text-xl font-bold text-slate-800 mb-2">{line.line_name || `Line ${index + 1}`}</div>
+                        <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(efficiency)}`} />
+                        <div className="text-xs sm:text-xl font-bold text-slate-800 mb-1 sm:mb-2 leading-tight">
+                          {line.line_name || `Line ${index + 1}`}
+                        </div>
 
-                        <div className={`text-4xl sm:text-5xl font-extrabold leading-none ${efficiency >= 90 ? 'text-green-600' : efficiency >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
+                        <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${efficiency >= 90 ? 'text-green-600' : efficiency >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
                           {efficiency}%
                         </div>
 
-                        <div className="text-xl sm:text-2xl font-bold text-slate-800 mt-2">
+                        <div className="text-xs sm:text-2xl font-bold text-slate-800 mt-1 sm:mt-2">
                           {output} / {target}
                         </div>
 
-                        <div className="mt-2 h-2.5 bg-slate-200 rounded-full overflow-hidden w-full">
+                        <div className="mt-1.5 sm:mt-2 h-1.5 sm:h-2.5 bg-slate-200 rounded-full overflow-hidden w-full">
                           <div
                             className={`h-full rounded-full ${outputPct >= 90 ? 'bg-green-500' : outputPct >= 80 ? 'bg-amber-400' : 'bg-orange-500'}`}
                             style={{ width: `${Math.min(Math.max(outputPct, 0), 100)}%` }}
                           />
                         </div>
 
-                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-800 font-semibold text-sm">
-                          <Briefcase className="h-4 w-4" />
-                          <span>WIP: {Number(line.wip || 0)}</span>
+                        <div className="mt-1.5 sm:mt-2 inline-flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold text-[10px] sm:text-sm">
+                          <Briefcase className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span>WIP {Number(line.wip || 0)}</span>
                         </div>
                       </button>
                     );
@@ -504,7 +494,7 @@ export const ProductionTracker: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-3">
+              <div className="grid grid-cols-2 gap-2.5 mt-3">
                 <div className="bg-white rounded-2xl p-3.5 text-slate-900 shadow-sm min-h-[118px] flex flex-col justify-center">
                   <div className="text-xs sm:text-sm text-slate-500 font-semibold mb-1">Projected Output</div>
                   <div className="text-4xl sm:text-5xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>

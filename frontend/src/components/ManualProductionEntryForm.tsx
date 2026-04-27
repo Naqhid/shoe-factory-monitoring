@@ -69,6 +69,17 @@ const getNowLocalDateTime = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 };
 
+const getTodayLocalDate = () => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+const HOURLY_SLOTS = Array.from({ length: 24 }, (_, hour) => ({
+  value: `${hour}`,
+  label: `${hour}-${hour + 1}`,
+}));
+
 export const ManualProductionEntryForm: React.FC = () => {
   const navigate = useNavigate();
   const [workCentres, setWorkCentres] = React.useState<WorkCentre[]>([]);
@@ -96,6 +107,13 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
+  const [auditSearchInput, setAuditSearchInput] = React.useState('');
+  const [auditSearch, setAuditSearch] = React.useState('');
+  const [auditPage, setAuditPage] = React.useState(1);
+  const [auditLimit, setAuditLimit] = React.useState<string>('20');
+  const [auditTotal, setAuditTotal] = React.useState(0);
+  const [auditTotalPages, setAuditTotalPages] = React.useState(1);
+  const [auditPageInput, setAuditPageInput] = React.useState('1');
   const [showRawAuditJson, setShowRawAuditJson] = React.useState(false);
   const [restoreCandidate, setRestoreCandidate] = React.useState<ManualEntryAuditRow | null>(null);
   const [deleteCandidate, setDeleteCandidate] = React.useState<ManualEntryRow | null>(null);
@@ -114,10 +132,10 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [workCentreId, setWorkCentreId] = React.useState('');
   const [machineId, setMachineId] = React.useState('');
   const [empId, setEmpId] = React.useState('');
-  const [startTime, setStartTime] = React.useState(getNowLocalDateTime());
-  const [finishTime, setFinishTime] = React.useState(getNowLocalDateTime());
+  const [entryDate] = React.useState(getTodayLocalDate());
+  const [hourlySlot, setHourlySlot] = React.useState('');
   const [targetMins, setTargetMins] = React.useState('0');
-  const [outputPairs, setOutputPairs] = React.useState('12');
+  const [outputPairs, setOutputPairs] = React.useState('0');
   const [stoppageReason, setStoppageReason] = React.useState('');
   const [loadingTargetMins, setLoadingTargetMins] = React.useState(false);
 
@@ -173,16 +191,8 @@ export const ManualProductionEntryForm: React.FC = () => {
     return byLine.filter((e) => !blockedEmpCodes.has(String(e.code)));
   }, [employees, workCentreId, activeSessions, machineId]);
 
-  const timeIsValid = React.useMemo(() => {
-    if (!startTime || !finishTime) return false;
-    const start = new Date(startTime);
-    const end = new Date(finishTime);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
-    return end > start;
-  }, [startTime, finishTime]);
-
   const canSubmit =
-    !!workCentreId && !!machineId && !!empId && !!startTime && !!finishTime && timeIsValid && !loading;
+    !!workCentreId && !!machineId && !!empId && !!hourlySlot && !loading;
 
   const totalManualOutput = React.useMemo(
     () => manualEntries.reduce((sum, row) => sum + Number(row.output_pairs || 0), 0),
@@ -276,7 +286,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       start_time: 'Start Time',
       finish_time: 'End Time',
       target_mins: 'Target Time',
-      output_pairs: 'Target Pairs',
+      output_pairs: 'Output Pairs',
       stoppage_reason: 'Reason',
     };
 
@@ -299,21 +309,12 @@ export const ManualProductionEntryForm: React.FC = () => {
   const clearForm = () => {
     setMachineId('');
     setEmpId('');
-    setStartTime(getNowLocalDateTime());
-    setFinishTime(getNowLocalDateTime());
+    setHourlySlot('');
     setTargetMins('0');
-    setOutputPairs('12');
+    setOutputPairs('0');
     setStoppageReason('');
     setEditingId(null);
     setShowForm(false);
-  };
-
-  const toInputDateTime = (value?: string) => {
-    if (!value) return getNowLocalDateTime();
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return getNowLocalDateTime();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
   const loadManualEntries = React.useCallback(async () => {
@@ -385,7 +386,6 @@ export const ManualProductionEntryForm: React.FC = () => {
     const loadTargetMins = async () => {
       if (!machineId || !empId) {
         setTargetMins('0.0');
-        setOutputPairs('0');
         return;
       }
       setLoadingTargetMins(true);
@@ -400,8 +400,6 @@ export const ManualProductionEntryForm: React.FC = () => {
             ? (Math.round(nextTargetMins * 10) / 10).toFixed(1)
             : '0.0';
           setTargetMins(rounded);
-          const nextTargetPairs = Number(json.data.targetPairs || 0);
-          setOutputPairs(String(Number.isFinite(nextTargetPairs) ? Math.max(0, nextTargetPairs) : 0));
         }
       } catch (error) {
         console.warn('Failed to auto-load target minutes for manual entry:', error);
@@ -433,8 +431,11 @@ export const ManualProductionEntryForm: React.FC = () => {
       const raw = localStorage.getItem(FILTER_PRESET_KEY);
       if (!raw) return;
       const saved = JSON.parse(raw);
-      if (saved.tableDateFilter) setTableDateFilter(saved.tableDateFilter);
-      if (saved.tableToDateFilter) setTableToDateFilter(saved.tableToDateFilter);
+      // Always default date filters to today on fresh open.
+      // Do not restore older saved dates to avoid confusing stale ranges.
+      const today = getNowLocalDateTime().split('T')[0];
+      setTableDateFilter(today);
+      setTableToDateFilter(today);
       if (typeof saved.tableWorkCentreFilter === 'string') setTableWorkCentreFilter(saved.tableWorkCentreFilter);
       if (typeof saved.tableSearchInput === 'string') setTableSearchInput(saved.tableSearchInput);
       if (saved.tableLimit) setTableLimit(saved.tableLimit);
@@ -447,24 +448,33 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!workCentreId || !machineId || !empId || !startTime || !finishTime) {
+    if (!workCentreId || !machineId || !empId || !hourlySlot) {
       toast.error('Please fill required fields');
       return;
     }
-    if (!timeIsValid) {
-      toast.error('End Time must be greater than Start Time');
+    const slotHour = Number(hourlySlot);
+    if (!Number.isInteger(slotHour) || slotHour < 0 || slotHour > 23) {
+      toast.error('Please choose a valid hourly slot');
       return;
     }
+    const outputValue = Math.round(Number(outputPairs || 0));
+    if (Number.isNaN(outputValue) || outputValue < 0) {
+      toast.error('Output pairs must be 0 or greater');
+      return;
+    }
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const startTime = `${entryDate}T${pad(slotHour)}:00`;
+    const finishTime = `${entryDate}T${pad(slotHour + 1)}:00`;
 
     const payload = {
-      prod_date: startTime.split('T')[0],
+      prod_date: entryDate,
       work_centre_id: Number(workCentreId),
       machine_id: machineId,
       emp_id: empId,
       start_time: startTime,
       finish_time: finishTime,
       target_mins: Number(targetMins || 0),
-      output_pairs: Number(outputPairs || 0),
+      output_pairs: outputValue,
       stoppage_reason: stoppageReason.trim() || null,
     };
 
@@ -504,13 +514,14 @@ export const ManualProductionEntryForm: React.FC = () => {
   };
 
   const handleEdit = (row: ManualEntryRow) => {
+    const start = new Date(row.start_time);
+    const derivedHour = Number.isNaN(start.getTime()) ? 0 : start.getHours();
     setShowForm(true);
     setEditingId(row.id);
     setWorkCentreId(String(row.work_centre_id));
     setMachineId(row.machine_id);
     setEmpId(row.emp_id);
-    setStartTime(toInputDateTime(row.start_time));
-    setFinishTime(toInputDateTime(row.finish_time));
+    setHourlySlot(String(Math.max(0, Math.min(23, derivedHour))));
     setTargetMins(String(Number(row.target_mins || 0)));
     setOutputPairs(String(Number(row.output_pairs || 0)));
     setStoppageReason((row.stoppage_reason || '').replace(/^MANUAL:/, ''));
@@ -527,6 +538,10 @@ export const ManualProductionEntryForm: React.FC = () => {
         method: 'DELETE',
       });
       const json = await res.json();
+      if (res.status === 401) {
+        handleUnauthorized(json.message);
+        return;
+      }
       if (!json.success) {
         toast.error(json.message || 'Failed to delete manual entry');
         return;
@@ -543,13 +558,14 @@ export const ManualProductionEntryForm: React.FC = () => {
     }
   };
 
-  const handleOpenAudit = async (entryId?: number) => {
+  const loadAuditLogs = React.useCallback(async (entryId?: number) => {
     setAuditLoading(true);
-    setActiveTab('audit');
-    setAuditEntryId(entryId || null);
     try {
       const params = new URLSearchParams();
       if (entryId) params.set('entry_id', String(entryId));
+      if (auditSearch.trim()) params.set('search', auditSearch.trim());
+      params.set('page', String(auditPage));
+      params.set('limit', auditLimit);
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/audit-logs?${params.toString()}`);
       const json = await res.json();
       if (res.status === 401) {
@@ -559,16 +575,30 @@ export const ManualProductionEntryForm: React.FC = () => {
       if (!json.success) {
         toast.error(json.message || 'Failed to load audit logs');
         setAuditLogs([]);
+        setAuditTotal(0);
+        setAuditTotalPages(1);
         return;
       }
       setAuditLogs(json.data || []);
+      setAuditTotal(Number(json.meta?.total || 0));
+      setAuditTotalPages(Number(json.meta?.total_pages || 1));
     } catch (error) {
       console.error('Failed to load audit logs:', error);
       toast.error('Failed to load audit logs');
       setAuditLogs([]);
+      setAuditTotal(0);
+      setAuditTotalPages(1);
     } finally {
       setAuditLoading(false);
     }
+  }, [auditSearch, auditPage, auditLimit, handleUnauthorized]);
+
+  const handleOpenAudit = async (entryId?: number) => {
+    setActiveTab('audit');
+    setAuditEntryId(entryId || null);
+    setAuditPage(1);
+    setAuditPageInput('1');
+    await loadAuditLogs(entryId);
   };
 
   const handleRestoreFromAudit = async (log: ManualEntryAuditRow) => {
@@ -602,7 +632,12 @@ export const ManualProductionEntryForm: React.FC = () => {
     const run = async () => {
       try {
         const params = new URLSearchParams();
-        params.set('date', tableDateFilter);
+        if (tableDateFilter && tableToDateFilter && tableDateFilter === tableToDateFilter) {
+          params.set('date', tableDateFilter);
+        } else {
+          if (tableDateFilter) params.set('from_date', tableDateFilter);
+          if (tableToDateFilter) params.set('to_date', tableToDateFilter);
+        }
         if (tableWorkCentreFilter) params.set('work_centre_id', tableWorkCentreFilter);
         if (tableSearch.trim()) params.set('search', tableSearch.trim());
         params.set('page', '1');
@@ -726,6 +761,10 @@ export const ManualProductionEntryForm: React.FC = () => {
                   Use this when supervisor/admin needs to enter a completed cycle manually.
                 </p>
               </div>
+              <div className="text-right mr-2">
+                <div className="text-xs uppercase tracking-wide text-gray-500">Date</div>
+                <div className="text-sm font-semibold text-gray-800">{entryDate}</div>
+              </div>
               <button
                 type="button"
                 onClick={clearForm}
@@ -804,43 +843,33 @@ export const ManualProductionEntryForm: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
-              <input
-                type="datetime-local"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Slot *</label>
+              <select
+                value={hourlySlot}
+                onChange={(e) => setHourlySlot(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg p-2.5"
                 required
                 disabled={loading}
-              />
+              >
+                <option value="">Select hourly slot</option>
+                {HOURLY_SLOTS.map((slot) => (
+                  <option key={slot.value} value={slot.value}>
+                    {slot.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Time *</label>
-              <input
-                type="datetime-local"
-                value={finishTime}
-                onChange={(e) => setFinishTime(e.target.value)}
-                className={`w-full border rounded-lg p-2.5 ${
-                  finishTime && !timeIsValid ? 'border-red-400 focus:border-red-500' : 'border-gray-300'
-                }`}
-                required
-                disabled={loading}
-              />
-              {finishTime && !timeIsValid ? (
-                <p className="text-xs text-red-600 mt-1">End Time must be greater than Start Time.</p>
-              ) : null}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Pairs</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Output Pairs *</label>
               <input
                 type="number"
                 min="0"
                 value={outputPairs}
                 onChange={(e) => setOutputPairs(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg p-2.5"
-                disabled
+                required
+                disabled={loading}
               />
             </div>
 
@@ -1092,8 +1121,6 @@ export const ManualProductionEntryForm: React.FC = () => {
               type="button"
               onClick={() => {
                 const payload = {
-                  tableDateFilter,
-                  tableToDateFilter,
                   tableWorkCentreFilter,
                   tableSearchInput,
                   tableLimit,
@@ -1121,11 +1148,34 @@ export const ManualProductionEntryForm: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleOpenAudit(auditEntryId || undefined)}
+                    onClick={() => loadAuditLogs(auditEntryId || undefined)}
                     className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs font-semibold"
                   >
                     Refresh
                   </button>
+                  <input
+                    type="text"
+                    value={auditSearchInput}
+                    onChange={(e) => setAuditSearchInput(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm w-40"
+                    placeholder="Search audit logs"
+                    title="Search by entry/user/role/reason/action"
+                  />
+                  <select
+                    value={auditLimit}
+                    onChange={(e) => {
+                      setAuditLimit(e.target.value);
+                      setAuditPage(1);
+                    }}
+                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white"
+                    title="Rows per page"
+                  >
+                    <option value="10">10 / page</option>
+                    <option value="20">20 / page</option>
+                    <option value="50">50 / page</option>
+                    <option value="100">100 / page</option>
+                    <option value="all">All</option>
+                  </select>
                   <button
                     type="button"
                     onClick={handleExportAuditCsv}
@@ -1229,6 +1279,50 @@ export const ManualProductionEntryForm: React.FC = () => {
                   ))}
                 </div>
               )}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-3 text-sm text-gray-600">
+                <div className="text-xs sm:text-sm">
+                  Showing page {auditPage} of {auditTotalPages} ({auditLogs.length} rows on this page, {auditTotal} total)
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                    disabled={auditLimit === 'all' || auditPage <= 1 || auditLoading}
+                    className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
+                  >
+                    Previous
+                  </button>
+                  <span className="min-w-[70px] sm:min-w-[90px] text-center text-xs sm:text-sm">Page {auditPage}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={auditTotalPages}
+                    value={auditPageInput}
+                    onChange={(e) => setAuditPageInput(e.target.value)}
+                    onBlur={() => {
+                      const next = Math.max(1, Math.min(auditTotalPages, parseInt(auditPageInput, 10) || auditPage));
+                      setAuditPage(next);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const next = Math.max(1, Math.min(auditTotalPages, parseInt(auditPageInput, 10) || auditPage));
+                        setAuditPage(next);
+                      }
+                    }}
+                    disabled={auditLimit === 'all' || auditLoading}
+                    className="w-14 sm:w-16 px-2 py-1.5 rounded border border-gray-300 text-center disabled:opacity-50 text-xs sm:text-sm"
+                    title="Go to page"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
+                    disabled={auditLimit === 'all' || auditPage >= auditTotalPages || auditLoading}
+                    className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

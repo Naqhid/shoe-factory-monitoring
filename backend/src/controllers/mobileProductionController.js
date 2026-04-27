@@ -317,6 +317,7 @@ exports.createManualEntry = async (req, res, next) => {
       emp_id,
       start_time,
       finish_time,
+      output_pairs,
       stoppage_reason
     } = req.body;
 
@@ -326,6 +327,13 @@ exports.createManualEntry = async (req, res, next) => {
         message: 'work_centre_id, machine_id, emp_id, start_time and finish_time are required'
       });
     }
+    if (output_pairs === undefined || output_pairs === null || Number.isNaN(Number(output_pairs))) {
+      return res.status(400).json({
+        success: false,
+        message: 'output_pairs is required and must be a number'
+      });
+    }
+    const manualOutputPairs = Math.max(0, Math.round(Number(output_pairs)));
 
     const start = new Date(start_time);
     const finish = new Date(finish_time);
@@ -420,7 +428,7 @@ exports.createManualEntry = async (req, res, next) => {
         start_time,
         finish_time,
         target_mins: enforcedTargets.targetMins,
-        output_pairs: enforcedTargets.targetPairs,
+        output_pairs: manualOutputPairs,
         stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
       };
 
@@ -434,7 +442,7 @@ exports.createManualEntry = async (req, res, next) => {
           work_centre_id,
           machine_id,
           emp_id,
-          enforcedTargets.targetPairs,
+          manualOutputPairs,
           enforcedTargets.targetMins,
           start_time,
           finish_time,
@@ -462,7 +470,7 @@ exports.createManualEntry = async (req, res, next) => {
     return res.status(201).json({
       success: true,
       message: 'Manual production entry saved successfully',
-      data: { id: insertedId, target_mins: enforcedTargets.targetMins, output_pairs: enforcedTargets.targetPairs, ...summaryData }
+      data: { id: insertedId, target_mins: enforcedTargets.targetMins, output_pairs: manualOutputPairs, ...summaryData }
     });
   } catch (error) {
     if (error?.statusCode) {
@@ -611,6 +619,7 @@ exports.updateManualEntry = async (req, res, next) => {
       emp_id,
       start_time,
       finish_time,
+      output_pairs,
       stoppage_reason
     } = req.body;
 
@@ -625,6 +634,10 @@ exports.updateManualEntry = async (req, res, next) => {
     if (!prod_date || !work_centre_id || !machine_id || !emp_id || !start_time || !finish_time) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
+    if (output_pairs === undefined || output_pairs === null || Number.isNaN(Number(output_pairs))) {
+      return res.status(400).json({ success: false, message: 'output_pairs is required and must be a number' });
+    }
+    const manualOutputPairs = Math.max(0, Math.round(Number(output_pairs)));
 
     const start = new Date(start_time);
     const finish = new Date(finish_time);
@@ -688,7 +701,7 @@ exports.updateManualEntry = async (req, res, next) => {
         start_time,
         finish_time,
         target_mins: enforcedTargets.targetMins,
-        output_pairs: enforcedTargets.targetPairs,
+        output_pairs: manualOutputPairs,
         stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
       };
 
@@ -703,7 +716,7 @@ exports.updateManualEntry = async (req, res, next) => {
           machine_id,
           emp_id,
           enforcedTargets.targetMins,
-          enforcedTargets.targetPairs,
+          manualOutputPairs,
           start_time,
           finish_time,
           afterData.stoppage_reason,
@@ -731,7 +744,7 @@ exports.updateManualEntry = async (req, res, next) => {
     return res.json({
       success: true,
       message: 'Manual entry updated successfully',
-      data: { target_mins: enforcedTargets.targetMins, output_pairs: enforcedTargets.targetPairs, ...summaryData }
+      data: { target_mins: enforcedTargets.targetMins, output_pairs: manualOutputPairs, ...summaryData }
     });
   } catch (error) {
     if (error?.statusCode) {
@@ -783,37 +796,73 @@ exports.deleteManualEntry = async (req, res, next) => {
 
 exports.getManualEntryAuditLogs = async (req, res, next) => {
   try {
-    const { entry_id, limit } = req.query;
-    const safeLimit = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
-    let where = '';
+    const { entry_id, search, action } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const rawLimit = String(req.query.limit || '50').trim().toLowerCase();
+    const useAll = rawLimit === 'all';
+    const safeLimit = useAll ? null : Math.min(500, Math.max(1, parseInt(rawLimit, 10) || 50));
+    const offset = useAll ? 0 : (page - 1) * safeLimit;
+
+    let where = 'WHERE 1=1';
     const params = [];
 
     if (entry_id) {
-      where = 'WHERE al.entry_id = ?';
+      where += ' AND al.entry_id = ?';
       params.push(Number(entry_id));
     }
+    if (action && ['CREATE', 'UPDATE', 'DELETE'].includes(String(action).toUpperCase())) {
+      where += ' AND al.action = ?';
+      params.push(String(action).toUpperCase());
+    }
+    if (search && String(search).trim()) {
+      const q = `%${String(search).trim()}%`;
+      where += ` AND (
+        CAST(al.entry_id AS CHAR) LIKE ?
+        OR COALESCE(al.actor_username, '') LIKE ?
+        OR COALESCE(al.actor_role, '') LIKE ?
+        OR COALESCE(al.reason, '') LIKE ?
+        OR COALESCE(al.action, '') LIKE ?
+      )`;
+      params.push(q, q, q, q, q);
+    }
 
-    params.push(safeLimit);
-    const [rows] = await db.query(
-      `SELECT
-         al.id,
-         al.entry_id,
-         al.action,
-         al.actor_user_id,
-         al.actor_username,
-         al.actor_role,
-         al.reason,
-         al.before_data,
-         al.after_data,
-         al.created_at
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) AS total
        FROM manual_entry_audit_logs al
-       ${where}
-       ORDER BY al.created_at DESC, al.id DESC
-       LIMIT ?`,
+       ${where}`,
       params
     );
+    const total = Number(countRows[0]?.total || 0);
 
-    res.json({ success: true, data: rows });
+    const baseSql = `SELECT
+        al.id,
+        al.entry_id,
+        al.action,
+        al.actor_user_id,
+        al.actor_username,
+        al.actor_role,
+        al.reason,
+        al.before_data,
+        al.after_data,
+        al.created_at
+      FROM manual_entry_audit_logs al
+      ${where}
+      ORDER BY al.created_at DESC, al.id DESC`;
+
+    const [rows] = useAll
+      ? await db.query(baseSql, params)
+      : await db.query(`${baseSql} LIMIT ? OFFSET ?`, [...params, safeLimit, offset]);
+
+    res.json({
+      success: true,
+      data: rows,
+      meta: {
+        page,
+        limit: useAll ? 'all' : safeLimit,
+        total,
+        total_pages: useAll ? 1 : Math.max(1, Math.ceil(total / safeLimit)),
+      },
+    });
   } catch (error) {
     logger.error('Error fetching manual entry audit logs:', error);
     next(error);
