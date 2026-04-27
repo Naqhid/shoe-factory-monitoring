@@ -1466,8 +1466,8 @@ export const MobileProduction: React.FC = () => {
     const calculateStatus = () => {
         if (!productionData) return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
 
-        // Paused/Idle state
-        if (productionData.is_paused || productionData.button_status === 3) {
+        // Paused/Idle state (including finished cycles waiting for reset/start).
+        if (productionData.is_paused || productionData.button_status === 3 || productionData.button_status === 2) {
             return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
         }
 
@@ -1551,13 +1551,11 @@ export const MobileProduction: React.FC = () => {
         !productionData.is_paused &&
         Number(productionData.target_mins || 0) > 0 &&
         actualTimeCounter / 60 > Number(productionData.target_mins || 0);
+    const normalizedButtonStatus = Number(productionData?.button_status ?? 0);
     const showStartPressHint =
         !!productionData &&
-        (productionData.button_status === 3 || productionData.button_status === 2);
+        (normalizedButtonStatus === 3 || normalizedButtonStatus === 2 || productionData.is_paused || normalizedButtonStatus === 0);
     const showFinishPressHint =
-        !!productionData &&
-        productionData.button_status === 1 &&
-        !productionData.is_paused &&
         isTargetTimeExceeded;
     const idleMinutes = (() => {
         if (!productionData) return 0;
@@ -1568,12 +1566,13 @@ export const MobileProduction: React.FC = () => {
     })();
     const showStartButtonPressHint =
         !!productionData &&
-        productionData.button_status === 3 &&
-        !productionData.is_paused;
+        (normalizedButtonStatus === 3 || productionData.is_paused || normalizedButtonStatus === 0);
     const showResetButtonPressHint =
         !!productionData &&
-        productionData.button_status === 2 &&
-        !productionData.is_paused;
+        normalizedButtonStatus === 2;
+    // Deterministic cue selection while START/RESET controls are visible.
+    const showStartPrimaryCue = normalizedButtonStatus !== 2;
+    const showResetPrimaryCue = normalizedButtonStatus === 2;
     const currentLoggedInUser = (() => {
         try {
             if (typeof localStorage === 'undefined') return null;
@@ -1903,7 +1902,7 @@ export const MobileProduction: React.FC = () => {
                                 <div className="flex items-center justify-center min-h-[44px] text-amber-800">
                                     <p className="text-sm font-semibold text-center">
                                         {productionData.button_status === 2
-                                            ? 'Cycle finished. Tap RESET, then tap START.'
+                                            ? `Production is idle for ${idleMinutes} min. Tap RESET, then tap START.`
                                             : `Production is idle for ${idleMinutes} min. Tap START to begin cycle.`}
                                     </p>
                                 </div>
@@ -1919,12 +1918,12 @@ export const MobileProduction: React.FC = () => {
                             </div>
                         )}
                         <div className="flex gap-3 md:gap-4">
-                            {productionData.button_status === 3 || productionData.button_status === 2 ? (
+                            {normalizedButtonStatus === 3 || normalizedButtonStatus === 2 ? (
                                 <>
                                     <button
                                         onClick={handleStart}
-                                        disabled={loading || productionData.button_status === 2}
-                                        title={productionData.button_status === 2 ? "Cycle finished. Click RESET to start a new cycle." : ""}
+                                        disabled={loading || normalizedButtonStatus === 2}
+                                        title={normalizedButtonStatus === 2 ? "Cycle finished. Click RESET to start a new cycle." : ""}
                                         className={`relative flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                                             showStartButtonPressHint
                                                 ? 'ring-4 ring-amber-300/80 ring-offset-2 ring-offset-white animate-pulse'
@@ -1940,12 +1939,10 @@ export const MobileProduction: React.FC = () => {
                                             <>
                                                 <Play className="h-5 w-5" />
                                                 <span>START</span>
-                                                {showStartButtonPressHint && (
-                                                    <Hand
-                                                        className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
-                                                        strokeWidth={2.8}
-                                                    />
-                                                )}
+                                                <Hand
+                                                    className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
+                                                    strokeWidth={2.8}
+                                                />
                                             </>
                                         )}
                                     </button>
@@ -1963,7 +1960,7 @@ export const MobileProduction: React.FC = () => {
                                         )}
                                         <RotateCcw className="h-5 w-5" />
                                         <span>RESET</span>
-                                        {showResetButtonPressHint && (
+                                        {showResetPrimaryCue && (
                                             <Hand
                                                 className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
                                                 strokeWidth={2.8}
@@ -1971,7 +1968,7 @@ export const MobileProduction: React.FC = () => {
                                         )}
                                     </button>
                                 </>
-                            ) : productionData.button_status === 1 && !productionData.is_paused ? (
+                            ) : normalizedButtonStatus === 1 && !productionData.is_paused ? (
                                 <>
                                     <button
                                         onClick={handleFinish}
