@@ -232,6 +232,33 @@ export const TVDashboard: React.FC = () => {
     const secondsSinceUpdate = lastUpdatedAt ? Math.floor((currentTime.getTime() - lastUpdatedAt.getTime()) / 1000) : null;
     const isStale = secondsSinceUpdate !== null && secondsSinceUpdate > 30;
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
+    const linePerformanceRows = Array.isArray(lowerSection?.linePerformance) ? lowerSection.linePerformance : [];
+    const topPerformer = linePerformanceRows.reduce<any | null>((best, line) => {
+        if (!best) return line;
+        return Number(line.efficiency || 0) > Number(best.efficiency || 0) ? line : best;
+    }, null);
+    const needActionCount = linePerformanceRows.filter((line) => {
+        const efficiency = Number(line.efficiency || 0);
+        const outputPct = Number(line.output_percentage || 0);
+        return efficiency < 90 || outputPct < 90;
+    }).length;
+    const shiftWindow = (() => {
+        const now = currentTime;
+        const start = new Date(now);
+        start.setHours(9, 0, 0, 0);
+        const end = new Date(now);
+        end.setHours(17, 30, 0, 0);
+        const totalMin = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 60000));
+        const elapsedMin = Math.min(totalMin, Math.max(0, Math.floor((now.getTime() - start.getTime()) / 60000)));
+        const remainingMin = Math.max(0, totalMin - elapsedMin);
+        const elapsedPct = Math.round((elapsedMin / totalMin) * 100);
+        return { elapsedPct, remainingMin };
+    })();
+    const targetGap = Math.max(0, Number(topSection.target || 0) - Number(topSection.output || 0));
+    const recoveryLabel =
+        targetGap > 0
+            ? `Gap: ${targetGap}`
+            : `Ahead: ${Math.max(0, Number(topSection.output || 0) - Number(topSection.target || 0))}`;
 
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
@@ -289,6 +316,25 @@ export const TVDashboard: React.FC = () => {
                         <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isRefreshing ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
                             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                             {isRefreshing ? 'Refreshing...' : 'Auto-refresh 10s'}
+                        </div>
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${needActionCount > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Lines Below Target: {needActionCount}
+                        </div>
+                        {topPerformer && (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-cyan-100 text-cyan-700">
+                                <TrendingUp className="h-3.5 w-3.5" />
+                                Best: {topPerformer.line_name || '-'} ({Number(topPerformer.efficiency || 0)}%)
+                            </div>
+                        )}
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-sky-100 text-sky-700">
+                            Shift Used: {shiftWindow.elapsedPct}%
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-violet-100 text-violet-700">
+                            Remaining: {shiftWindow.remainingMin}m
+                        </div>
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${targetGap > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            {recoveryLabel}
                         </div>
                         {retryAttempts > 0 && (
                             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-orange-100 text-orange-700">

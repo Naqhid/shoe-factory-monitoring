@@ -1939,10 +1939,12 @@ export const MobileProduction: React.FC = () => {
                                             <>
                                                 <Play className="h-5 w-5" />
                                                 <span>START</span>
-                                                <Hand
-                                                    className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
-                                                    strokeWidth={2.8}
-                                                />
+                                                {showStartPrimaryCue && (
+                                                    <Hand
+                                                        className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
+                                                        strokeWidth={2.8}
+                                                    />
+                                                )}
                                             </>
                                         )}
                                     </button>

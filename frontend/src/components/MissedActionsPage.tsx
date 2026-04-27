@@ -22,6 +22,15 @@ type MissedAction = {
   };
 };
 
+type LocalActionMeta = {
+  rootCause?: string;
+  lastAction?: string;
+  lastActionAt?: string;
+  trail?: Array<{ action: string; at: string }>;
+};
+
+const LOCAL_META_KEY = 'missed_actions_meta_v1';
+
 export const MissedActionsPage: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
@@ -32,6 +41,23 @@ export const MissedActionsPage: React.FC = () => {
   const [issueFilter, setIssueFilter] = React.useState<'all' | 'START_PENDING' | 'FINISH_PENDING'>('all');
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [showMuted, setShowMuted] = React.useState(false);
+  const [localMeta, setLocalMeta] = React.useState<Record<string, LocalActionMeta>>(() => {
+    try {
+      const raw = localStorage.getItem(LOCAL_META_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const persistMeta = React.useCallback((next: Record<string, LocalActionMeta>) => {
+    setLocalMeta(next);
+    try {
+      localStorage.setItem(LOCAL_META_KEY, JSON.stringify(next));
+    } catch {
+      // non-blocking
+    }
+  }, []);
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
@@ -69,6 +95,20 @@ export const MissedActionsPage: React.FC = () => {
     return { label: 'Low', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
   };
 
+  const getSlaStatus = (overdueMins: number) => {
+    if (overdueMins >= 30) return { label: `Breached by ${overdueMins - 30}m`, cls: 'text-red-700 bg-red-100' };
+    if (overdueMins >= 15) return { label: `Warning (${overdueMins}m)`, cls: 'text-amber-700 bg-amber-100' };
+    const dueIn = Math.max(0, 15 - overdueMins);
+    return { label: `Due in ${dueIn}m`, cls: 'text-blue-700 bg-blue-100' };
+  };
+
+  const getPriorityScore = (item: MissedAction, recurrenceCount: number) => {
+    const base = item.overdue_mins >= 60 ? 5 : item.overdue_mins >= 30 ? 4 : item.overdue_mins >= 15 ? 3 : 2;
+    const finishWeight = item.action_type === 'FINISH_PENDING' ? 1 : 0;
+    const repeatWeight = recurrenceCount >= 3 ? 1 : 0;
+    return Math.min(7, base + finishWeight + repeatWeight);
+  };
+
   const visibleItems = React.useMemo(() => {
     if (showMuted) return items;
     return items.filter((item) => {
@@ -86,22 +126,42 @@ export const MissedActionsPage: React.FC = () => {
     });
   }, [visibleItems, selectedLine, issueFilter]);
 
+  const recurrenceMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    items.forEach((i) => {
+      const key = `${i.machine_id || i.machine_name}|${i.action_type}`;
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return map;
+  }, [items]);
+
+  const sortedFilteredItems = React.useMemo(() => {
+    return [...filteredItems].sort((a, b) => {
+      const recA = recurrenceMap.get(`${a.machine_id || a.machine_name}|${a.action_type}`) || 0;
+      const recB = recurrenceMap.get(`${b.machine_id || b.machine_name}|${b.action_type}`) || 0;
+      const priA = getPriorityScore(a, recA);
+      const priB = getPriorityScore(b, recB);
+      if (priA !== priB) return priB - priA;
+      return b.overdue_mins - a.overdue_mins;
+    });
+  }, [filteredItems, recurrenceMap]);
+
   const filteredSummary = React.useMemo(() => {
     return {
-      total: filteredItems.length,
-      start_pending: filteredItems.filter((i) => i.action_type === 'START_PENDING').length,
-      finish_pending: filteredItems.filter((i) => i.action_type === 'FINISH_PENDING').length,
+      total: sortedFilteredItems.length,
+      start_pending: sortedFilteredItems.filter((i) => i.action_type === 'START_PENDING').length,
+      finish_pending: sortedFilteredItems.filter((i) => i.action_type === 'FINISH_PENDING').length,
     };
-  }, [filteredItems]);
+  }, [sortedFilteredItems]);
 
   const groupedItems = React.useMemo(() => {
-    return filteredItems.reduce<Record<string, MissedAction[]>>((acc, item) => {
+    return sortedFilteredItems.reduce<Record<string, MissedAction[]>>((acc, item) => {
       const key = item.work_centre_name || 'Unknown Line';
       if (!acc[key]) acc[key] = [];
       acc[key].push(item);
       return acc;
     }, {});
-  }, [filteredItems]);
+  }, [sortedFilteredItems]);
 
   const acknowledgeItem = async (item: MissedAction) => {
     if (!item.issue_key) return;
@@ -141,13 +201,72 @@ export const MissedActionsPage: React.FC = () => {
     }
   };
 
+  const logLocalAction = (item: MissedAction, action: string) => {
+    const key = item.issue_key;
+    if (!key) return;
+    const now = new Date().toISOString();
+    const current = localMeta[key] || {};
+    const nextTrail = [{ action, at: now }, ...(current.trail || [])].slice(0, 10);
+    persistMeta({
+      ...localMeta,
+      [key]: {
+        ...current,
+        lastAction: action,
+        lastActionAt: now,
+        trail: nextTrail,
+      },
+    });
+  };
+
+  const setRootCause = (item: MissedAction, rootCause: string) => {
+    const key = item.issue_key;
+    if (!key) return;
+    const current = localMeta[key] || {};
+    persistMeta({
+      ...localMeta,
+      [key]: {
+        ...current,
+        rootCause,
+      },
+    });
+  };
+
+  const acknowledgeFiltered = async () => {
+    const targets = sortedFilteredItems.filter((i) => i.issue_key);
+    if (targets.length === 0) return;
+    setIsActionLoading('__bulk__');
+    try {
+      await Promise.all(
+        targets.map((item) =>
+          apiFetch(`${API_BASE}/api/missed-actions/ack`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ issue_key: item.issue_key }),
+          })
+        )
+      );
+      await fetchData();
+    } catch (e: any) {
+      setError(e.message || 'Failed to acknowledge filtered items');
+    } finally {
+      setIsActionLoading(null);
+    }
+  };
+
   const exportFilteredCsv = () => {
-    if (filteredItems.length === 0) return;
-    const headers = ['line', 'machine', 'operator', 'issue', 'overdue_mins', 'severity', 'details'];
+    if (sortedFilteredItems.length === 0) return;
+    const headers = ['line', 'machine', 'operator', 'issue', 'overdue_mins', 'severity', 'priority_score', 'sla_status', 'root_cause', 'last_action', 'details'];
     const rows = [
+      `"snapshot_at","${new Date().toISOString()}"`,
+      `"filtered_total","${sortedFilteredItems.length}"`,
+      '',
       headers.join(','),
-      ...filteredItems.map((i) => {
+      ...sortedFilteredItems.map((i) => {
         const severity = getSeverity(i.overdue_mins).label;
+        const recurrence = recurrenceMap.get(`${i.machine_id || i.machine_name}|${i.action_type}`) || 0;
+        const priority = getPriorityScore(i, recurrence);
+        const sla = getSlaStatus(i.overdue_mins).label;
+        const meta = localMeta[i.issue_key] || {};
         const vals = [
           i.work_centre_name,
           i.machine_name,
@@ -155,6 +274,10 @@ export const MissedActionsPage: React.FC = () => {
           i.action_label,
           String(i.overdue_mins),
           severity,
+          String(priority),
+          sla,
+          meta.rootCause || '',
+          meta.lastAction ? `${meta.lastAction}${meta.lastActionAt ? ` @ ${new Date(meta.lastActionAt).toLocaleString()}` : ''}` : '',
           i.details,
         ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
         return vals.join(',');
@@ -169,6 +292,25 @@ export const MissedActionsPage: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const setPreset = (preset: 'all' | 'breached' | 'start' | 'finish') => {
+    if (preset === 'all') {
+      setIssueFilter('all');
+      setShowMuted(false);
+      return;
+    }
+    if (preset === 'start') {
+      setIssueFilter('START_PENDING');
+      return;
+    }
+    if (preset === 'finish') {
+      setIssueFilter('FINISH_PENDING');
+      return;
+    }
+    // breached preset = show all issue types, rely on sort + quick scan
+    setIssueFilter('all');
+    setShowMuted(false);
   };
 
   return (
@@ -196,8 +338,16 @@ export const MissedActionsPage: React.FC = () => {
               {showMuted ? 'Showing Muted' : 'Hide Muted'}
             </button>
             <button
+              onClick={acknowledgeFiltered}
+              disabled={sortedFilteredItems.length === 0 || isActionLoading === '__bulk__'}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-60"
+            >
+              {isActionLoading === '__bulk__' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              Ack Filtered
+            </button>
+            <button
               onClick={exportFilteredCsv}
-              disabled={filteredItems.length === 0}
+              disabled={sortedFilteredItems.length === 0}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold disabled:opacity-60"
             >
               <Download className="h-3.5 w-3.5" />
@@ -270,6 +420,15 @@ export const MissedActionsPage: React.FC = () => {
                 </button>
               </div>
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Presets</label>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setPreset('all')} className="px-2.5 py-2 text-xs font-semibold rounded-lg border bg-white text-gray-600 border-gray-300">All</button>
+                <button type="button" onClick={() => setPreset('breached')} className="px-2.5 py-2 text-xs font-semibold rounded-lg border bg-red-50 text-red-700 border-red-200">Breached</button>
+                <button type="button" onClick={() => setPreset('start')} className="px-2.5 py-2 text-xs font-semibold rounded-lg border bg-amber-50 text-amber-700 border-amber-200">Start</button>
+                <button type="button" onClick={() => setPreset('finish')} className="px-2.5 py-2 text-xs font-semibold rounded-lg border bg-rose-50 text-rose-700 border-rose-200">Finish</button>
+              </div>
+            </div>
             <div className="ml-auto text-xs text-gray-500">
               Showing {filteredItems.length} of {items.length} total
             </div>
@@ -304,14 +463,22 @@ export const MissedActionsPage: React.FC = () => {
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Operator</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Issue</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Severity</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Priority</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">SLA</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Overdue</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Details</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Root Cause</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Trail</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {lineItems.map((item) => {
                           const severity = getSeverity(item.overdue_mins);
+                          const sla = getSlaStatus(item.overdue_mins);
+                          const recurrence = recurrenceMap.get(`${item.machine_id || item.machine_name}|${item.action_type}`) || 0;
+                          const priority = getPriorityScore(item, recurrence);
+                          const meta = localMeta[item.issue_key] || {};
                           return (
                             <tr key={`${item.session_id}-${item.machine_id}-${item.action_type}`}>
                               <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{item.machine_name}</td>
@@ -329,9 +496,48 @@ export const MissedActionsPage: React.FC = () => {
                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${severity.cls}`}>
                                   {severity.label}
                                 </span>
+                                {recurrence > 1 && (
+                                  <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-700">
+                                    Repeat x{recurrence}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-sm font-bold text-gray-800">{priority}</td>
+                              <td className="px-3 py-2.5 text-sm">
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${sla.cls}`}>{sla.label}</span>
                               </td>
                               <td className="px-3 py-2.5 text-sm font-bold text-gray-800">{item.overdue_mins} mins</td>
-                              <td className="px-3 py-2.5 text-sm text-gray-600">{item.details}</td>
+                              <td className="px-3 py-2.5 text-sm text-gray-600">
+                                <div>{item.details}</div>
+                                <div className="mt-1 flex gap-2">
+                                  <a className="text-[11px] font-semibold text-blue-600 hover:text-blue-700" href="/production_tracker">Open Tracker</a>
+                                  <a className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700" href={`/mobile/${encodeURIComponent(item.machine_id || item.machine_name || '')}`}>Open Machine</a>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-sm">
+                                <select
+                                  value={meta.rootCause || ''}
+                                  onChange={(e) => setRootCause(item, e.target.value)}
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+                                >
+                                  <option value="">Select cause</option>
+                                  <option value="No operator">No operator</option>
+                                  <option value="Machine issue">Machine issue</option>
+                                  <option value="Material shortage">Material shortage</option>
+                                  <option value="Waiting approval">Waiting approval</option>
+                                  <option value="Other">Other</option>
+                                </select>
+                              </td>
+                              <td className="px-3 py-2.5 text-sm text-gray-600">
+                                {meta.lastAction ? (
+                                  <div>
+                                    <div className="font-semibold text-gray-700">{meta.lastAction}</div>
+                                    <div className="text-[11px] text-gray-500">{meta.lastActionAt ? new Date(meta.lastActionAt).toLocaleString() : ''}</div>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">No action yet</span>
+                                )}
+                              </td>
                               <td className="px-3 py-2.5 text-sm">
                                 <div className="flex items-center gap-2">
                                   <button
@@ -341,6 +547,20 @@ export const MissedActionsPage: React.FC = () => {
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100"
                                   >
                                     <CheckCircle2 className="h-3.5 w-3.5" /> Ack
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => logLocalAction(item, 'Called operator')}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100"
+                                  >
+                                    Called
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => logLocalAction(item, 'Resolved')}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100"
+                                  >
+                                    Resolved
                                   </button>
                                   <button
                                     type="button"

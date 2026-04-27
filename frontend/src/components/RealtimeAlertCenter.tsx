@@ -103,6 +103,11 @@ export const RealtimeAlertCenter: React.FC = () => {
   const [type, setType] = React.useState('all');
   const [includeAcknowledged, setIncludeAcknowledged] = React.useState(false);
   const [autoRefresh, setAutoRefresh] = React.useState(true);
+  const [enableGrouping, setEnableGrouping] = React.useState(true);
+  const [sortMode, setSortMode] = React.useState<'sla' | 'newest'>('sla');
+  const [ackNote, setAckNote] = React.useState('');
+  const [showAckDialog, setShowAckDialog] = React.useState(false);
+  const [pendingAckIds, setPendingAckIds] = React.useState<number[] | 'all'>([]);
 
   const mapLegacyAlertShape = (rows: any[]): AlertRow[] =>
     rows.map((row) => ({
@@ -155,7 +160,17 @@ export const RealtimeAlertCenter: React.FC = () => {
       const ackA = Number(a.is_acknowledged || 0);
       const ackB = Number(b.is_acknowledged || 0);
       if (ackA !== ackB) return ackA - ackB; // unack first
+      if (sortMode === 'sla') {
+        const ageA = getAlertAgeMinutes(a.created_at) ?? 0;
+        const ageB = getAlertAgeMinutes(b.created_at) ?? 0;
+        const breachA = ageA >= 30 ? 2 : ageA >= 15 ? 1 : 0;
+        const breachB = ageB >= 30 ? 2 : ageB >= 15 ? 1 : 0;
+        if (breachA !== breachB) return breachB - breachA;
+      }
       if (rank(a.severity) !== rank(b.severity)) return rank(a.severity) - rank(b.severity);
+      if (sortMode === 'newest') {
+        return (new Date(b.created_at).getTime() || 0) - (new Date(a.created_at).getTime() || 0);
+      }
       return (new Date(b.created_at).getTime() || 0) - (new Date(a.created_at).getTime() || 0);
     });
   };
@@ -199,13 +214,14 @@ export const RealtimeAlertCenter: React.FC = () => {
       if (!res.ok || !json.success) {
         throw new Error(json.message || json.error || 'Failed to load realtime alerts');
       }
-      setAlerts(normalizeAndGroupAlerts(Array.isArray(json.data) ? json.data : []));
+      const baseRows = Array.isArray(json.data) ? json.data : [];
+      setAlerts(enableGrouping ? normalizeAndGroupAlerts(baseRows) : baseRows);
     } catch (error: any) {
       if (!silent) toast.error(error?.message || 'Failed to load alert center');
     } finally {
       setLoading(false);
     }
-  }, [includeAcknowledged, severity, type]);
+  }, [enableGrouping, includeAcknowledged, severity, sortMode, type]);
 
   React.useEffect(() => {
     loadAlerts();
@@ -217,17 +233,47 @@ export const RealtimeAlertCenter: React.FC = () => {
     return () => window.clearInterval(id);
   }, [autoRefresh, loadAlerts]);
 
-  const acknowledgeAlerts = async (ids: number[] | 'all') => {
+  React.useEffect(() => {
+    if (!autoRefresh) return;
+    let closed = false;
+    let source: EventSource | null = null;
     try {
+      source = new EventSource(`${API_BASE_URL}/api/alerts/stream`);
+      source.onmessage = () => {
+        if (!closed) loadAlerts({ silent: true });
+      };
+      source.onerror = () => {
+        // Silent fallback: polling effect already active.
+      };
+    } catch {
+      // Silent fallback: polling effect already active.
+    }
+    return () => {
+      closed = true;
+      if (source) source.close();
+    };
+  }, [autoRefresh, loadAlerts]);
+
+  const submitAcknowledge = async (ids: number[] | 'all') => {
+    try {
+      const userInfo = (() => {
+        try {
+          const raw = localStorage.getItem('user_info');
+          return raw ? JSON.parse(raw) : null;
+        } catch {
+          return null;
+        }
+      })();
+      const owner = userInfo?.name || userInfo?.code || userInfo?.emp_code || undefined;
       let res = await apiFetch(`${API_BASE_URL}/api/alerts/acknowledge`, {
         method: 'POST',
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, note: ackNote || undefined, owner }),
       });
       if (res.status === 404) {
         // Backward compatibility with legacy endpoint.
         res = await apiFetch(`${API_BASE_URL}/api/alerts/mark-read`, {
           method: 'POST',
-          body: JSON.stringify({ ids }),
+          body: JSON.stringify({ ids, note: ackNote || undefined, owner }),
         });
       }
       const contentType = res.headers.get('content-type') || '';
@@ -239,13 +285,24 @@ export const RealtimeAlertCenter: React.FC = () => {
         throw new Error(json.error || json.message || 'Failed to acknowledge alerts');
       }
       toast.success(ids === 'all' ? 'All alerts acknowledged' : 'Alert acknowledged');
+      setAckNote('');
+      setShowAckDialog(false);
+      setPendingAckIds([]);
       loadAlerts({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'Acknowledge failed');
     }
   };
 
+  const openAcknowledgeDialog = (ids: number[] | 'all') => {
+    setPendingAckIds(ids);
+    setShowAckDialog(true);
+  };
+
   const unacknowledgedCount = alerts.filter((a) => Number(a.is_acknowledged || 0) === 0).length;
+  const visibleAlertIds = Array.from(
+    new Set(alerts.flatMap((a) => (a.alert_ids && a.alert_ids.length ? a.alert_ids : [a.id])))
+  );
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
@@ -266,14 +323,10 @@ export const RealtimeAlertCenter: React.FC = () => {
           {unacknowledgedCount > 0 && (
             <button
               type="button"
-              onClick={() =>
-                acknowledgeAlerts(
-                  Array.from(new Set(alerts.flatMap((a) => (a.alert_ids && a.alert_ids.length ? a.alert_ids : [a.id]))))
-                )
-              }
+              onClick={() => openAcknowledgeDialog(visibleAlertIds)}
               className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
             >
-              Acknowledge All ({unacknowledgedCount})
+              Acknowledge Filtered ({unacknowledgedCount})
             </button>
           )}
         </div>
@@ -313,7 +366,56 @@ export const RealtimeAlertCenter: React.FC = () => {
           <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
           Auto-refresh (30s)
         </label>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={enableGrouping} onChange={(e) => setEnableGrouping(e.target.checked)} />
+          Group duplicates
+        </label>
+        <select
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as 'sla' | 'newest')}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+        >
+          <option value="sla">Sort by SLA severity</option>
+          <option value="newest">Sort by newest</option>
+        </select>
       </div>
+
+      {showAckDialog && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 space-y-3">
+            <h3 className="text-base font-bold text-gray-900">Acknowledge Alerts</h3>
+            <p className="text-sm text-gray-600">
+              Add an optional note (action taken / root cause) for audit trail.
+            </p>
+            <textarea
+              value={ackNote}
+              onChange={(e) => setAckNote(e.target.value)}
+              placeholder="Optional note..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[90px]"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAckDialog(false);
+                  setAckNote('');
+                  setPendingAckIds([]);
+                }}
+                className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => submitAcknowledge(pendingAckIds)}
+                className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+              >
+                Confirm Acknowledge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="h-48 flex items-center justify-center text-gray-500">
@@ -367,12 +469,21 @@ export const RealtimeAlertCenter: React.FC = () => {
                         </span>
                       )}
                     </div>
+                    <div className="mt-2">
+                      <a
+                        href="/production_tracker"
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                        title="Open production tracker context"
+                      >
+                        Open in Production Tracker
+                      </a>
+                    </div>
                   </div>
                 </div>
                 {Number(alert.is_acknowledged || 0) === 0 && (
                   <button
                     type="button"
-                    onClick={() => acknowledgeAlerts(alert.alert_ids && alert.alert_ids.length ? alert.alert_ids : [alert.id])}
+                    onClick={() => openAcknowledgeDialog(alert.alert_ids && alert.alert_ids.length ? alert.alert_ids : [alert.id])}
                     className="px-3 py-2 rounded-lg border border-blue-300 text-blue-700 text-sm hover:bg-blue-50"
                   >
                     Acknowledge
