@@ -10,6 +10,7 @@ interface NavigationProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   hideLogout?: boolean;
+  hideAlertBell?: boolean;
 }
 
 const processMenus = [
@@ -46,7 +47,13 @@ const setupMenus = [
   { key: 'monitoring', label: 'Monitoring', icon: MonitorDot },
 ];
 
-export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen, onToggleSidebar, hideLogout = false }) => {
+export const Navigation: React.FC<NavigationProps> = ({
+  activeMenu,
+  sidebarOpen,
+  onToggleSidebar,
+  hideLogout = false,
+  hideAlertBell = false
+}) => {
   const navigate = useNavigate();
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
   const [processExpanded, setProcessExpanded] = React.useState(true);
@@ -110,7 +117,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, sidebarOpen,
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <AlertBell />
+            {!hideAlertBell && <AlertBell />}
             <button onClick={onToggleSidebar} className="p-1"><X className="h-5 w-5" /></button>
           </div>
         </div>

@@ -10,9 +10,16 @@ interface LayoutProps {
   activeMenu?: string;
   hideTopHeader?: boolean;
   hideLogout?: boolean;
+  hideAlertBell?: boolean;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '', hideTopHeader = false, hideLogout = false }) => {
+export const Layout: React.FC<LayoutProps> = ({
+  children,
+  activeMenu = '',
+  hideTopHeader = false,
+  hideLogout = false,
+  hideAlertBell = false
+}) => {
   const [sidebarOpen, setSidebarOpen] = React.useState(() => window.innerWidth >= 1024);
   const navigate = useNavigate();
 
@@ -54,7 +61,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '', hideT
           {user && (
             <div className="flex items-center gap-2">
               <LanguageSwitcher />
-              <AlertBell />
+              {!hideAlertBell && <AlertBell />}
               <div className="hidden sm:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
                 <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full">
                   <User className="h-3 w-3 text-blue-600" />
@@ -83,6 +90,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeMenu = '', hideT
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           hideLogout={hideLogout}
+          hideAlertBell={hideAlertBell}
         />
 
         {/* Main content area */}
