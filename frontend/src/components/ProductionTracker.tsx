@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   BarChart3,
+  Bell,
   Briefcase,
   ChevronRight,
+  Menu,
   RefreshCw,
+  SlidersHorizontal,
   Wifi,
   WifiOff,
   X,
@@ -51,6 +54,8 @@ export const ProductionTracker: React.FC = () => {
   const [lineSearch, setLineSearch] = useState('');
   const [lineSort, setLineSort] = useState<'risk' | 'efficiency' | 'output_gap'>('risk');
   const [refreshMode, setRefreshMode] = useState<'10s' | '30s' | 'manual'>('10s');
+  const [showTrackerNotifications, setShowTrackerNotifications] = useState(false);
+  const [showFilterDrawer, setShowFilterDrawer] = useState(false);
 
   const logAuditEvent = (event: string, payload: Record<string, any> = {}) => {
     try {
@@ -308,6 +313,7 @@ export const ProductionTracker: React.FC = () => {
   const efficiencyPercent = Number(topSection?.efficiencyPercent) || 0;
   const efficiencyGaugePercent = Math.min(Math.max(efficiencyPercent, 0), 100);
   const alertCount = alertCardCount;
+  const trackerSignalCount = shiftProjection.shortfall > 0 ? 1 : 0;
   const currentWorkCentreId = parseInt(selectedLine, 10) || workCentres[0]?.id || 1;
   const currentWorkCentreName = workCentres.find((wc) => String(wc.id) === String(currentWorkCentreId))?.name || 'Unknown Line';
   const statusDotClass = (efficiency: number) => {
@@ -347,8 +353,8 @@ export const ProductionTracker: React.FC = () => {
   if (!dashboardData) return null;
 
   return (
-    <div className="min-h-screen bg-slate-100 p-2 sm:p-4 lg:p-6">
-      <div className="max-w-5xl w-full mx-auto space-y-2.5 sm:space-y-3.5">
+    <div className="h-full bg-slate-100 p-1 sm:p-2 lg:p-2">
+      <div className="w-full h-full flex flex-col gap-2 sm:gap-3.5">
         {!online && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-red-700">
             <div className="flex items-center gap-2">
@@ -376,195 +382,145 @@ export const ProductionTracker: React.FC = () => {
         )}
 
         {/* Dashboard section below header uses the new mobile card UI */}
-        <section className="bg-gradient-to-r from-slate-800 via-blue-800 to-indigo-800 rounded-3xl p-2.5 sm:p-3.5 text-white border border-blue-900/40 shadow-md">
-          <div className="mb-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div className="text-xs text-slate-200 flex flex-wrap items-center gap-2">
+        <section className="bg-gradient-to-r from-slate-800 via-blue-800 to-indigo-800 rounded-3xl p-2 sm:p-3.5 text-white border border-blue-900/40 shadow-md flex-1 min-h-0 flex flex-col">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-xs text-slate-200 flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new Event('layout:toggle-sidebar'));
+                  logAuditEvent('sidebar_toggle_clicked', { selectedLine: currentWorkCentreId, selectedDate });
+                }}
+                className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 shrink-0"
+                title="Toggle sidebar"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
               {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-              <span>
-                Dashboard: {dashboardLastUpdated ? dashboardLastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+              <span className="truncate">
+                Prodpulse Live Dashboard {dashboardLastUpdated ? dashboardLastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
               </span>
               {dashboardLastUpdated && (Date.now() - dashboardLastUpdated.getTime() > 30000) && (
                 <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-300/40">Stale</span>
               )}
-              <span className={`px-2 py-0.5 rounded-full border ${isDashboardStale ? 'bg-amber-500/20 text-amber-200 border-amber-300/40' : 'bg-emerald-500/15 text-emerald-200 border-emerald-300/30'}`}>
-                Updated {dashboardAgeLabel}
-              </span>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <select
-                value={refreshMode}
-                onChange={(e) => setRefreshMode(e.target.value as '10s' | '30s' | 'manual')}
-                className="bg-white border border-white/20 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-800"
-                title="Auto refresh interval"
-              >
-                <option value="10s" className="text-slate-800">Auto 10s</option>
-                <option value="30s" className="text-slate-800">Auto 30s</option>
-                <option value="manual" className="text-slate-800">Manual</option>
-              </select>
+            <div className="flex items-center justify-end gap-1.5 shrink-0">
               <button
                 type="button"
-                onClick={handleManualRefresh}
-                disabled={manualRefreshing}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          <div className="sticky top-2 z-20 mb-3">
-            <div className="w-full bg-white rounded-2xl px-2 sm:px-3 py-2 text-slate-600 shadow-sm border border-slate-100">
-              <div className="flex items-center justify-between gap-1 sm:gap-1.5 overflow-x-auto">
-              <button
-                className={`flex flex-col items-center gap-1 rounded-xl py-1.5 px-2 min-w-[64px] transition-colors ${activeMobileTab === 'dashboard' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600'}`}
                 onClick={() => {
-                  setActiveMobileTab('dashboard');
-                  logAuditEvent('tab_changed', { tab: 'dashboard' });
+                  setShowFilterDrawer(true);
+                  logAuditEvent('tracker_filters_opened', { lineSort, lineSearch, selectedLine: currentWorkCentreId, selectedDate });
                 }}
-                type="button"
+                className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20"
+                title="Open line filters"
               >
-                <Home className="h-5 w-5" />
-                <span className="text-[11px] sm:text-xs">Dashboard</span>
+                <SlidersHorizontal className="h-4 w-4" />
               </button>
-              <button
-                className={`flex flex-col items-center gap-1 rounded-xl py-1.5 px-2 min-w-[64px] transition-colors ${activeMobileTab === 'trends' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600'}`}
-                onClick={() => {
-                  setActiveMobileTab('trends');
-                  logAuditEvent('tab_changed', { tab: 'trends' });
-                }}
-                type="button"
-              >
-                <TrendingUp className="h-5 w-5" />
-                <span className="text-[11px] sm:text-xs">Trends</span>
-              </button>
-              <button
-                className={`flex flex-col items-center gap-1 rounded-xl py-1.5 px-2 min-w-[64px] transition-colors ${activeMobileTab === 'reports' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600'}`}
-                onClick={() => {
-                  setActiveMobileTab('reports');
-                  logAuditEvent('tab_changed', { tab: 'reports' });
-                }}
-                type="button"
-              >
-                <BarChart3 className="h-5 w-5" />
-                <span className="text-[11px] sm:text-xs">Reports</span>
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTrackerNotifications((prev) => !prev);
+                    logAuditEvent('tracker_notifications_opened', { selectedLine: currentWorkCentreId, selectedDate, trackerSignalCount });
+                  }}
+                  className="relative inline-flex items-center justify-center h-8 w-8 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20"
+                  title="Production tracker notifications"
+                >
+                  <Bell className="h-4 w-4" />
+                  {trackerSignalCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] text-center font-bold">
+                      {trackerSignalCount}
+                    </span>
+                  )}
+                </button>
+                {showTrackerNotifications && (
+                  <div className="absolute right-0 top-full mt-2 w-[290px] sm:w-[320px] bg-white rounded-xl shadow-xl border border-slate-200 p-2.5 z-40">
+                    <div className="space-y-2">
+                      <div className="bg-slate-50 rounded-lg p-2.5 text-slate-900 border border-slate-100">
+                        <p className="text-xs font-semibold text-slate-500">Target Risk Projection</p>
+                        <p className="text-sm font-bold mt-1">
+                          {shiftProjection.shortfall > 0
+                            ? `At current pace: miss by ${shiftProjection.shortfall} pairs`
+                            : `At current pace: on track (+${Math.max(0, shiftProjection.projected - Number(topSection?.target || 0))} pairs)`}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
+                      </div>
+                      {shiftProjection.inLast60 && attentionQueue.length > 0 && (
+                        <div className="bg-red-50 rounded-lg p-2.5 text-slate-900 border border-red-100">
+                          <p className="text-xs font-semibold text-red-700 mb-1.5">Attention Queue</p>
+                          <div className="space-y-1.5">
+                            {attentionQueue.map(({ line, riskScore, riskLabel }) => (
+                              <button
+                                key={`attention-bell-${line.line_name}-${line.work_centre_id || 'x'}`}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedLineDetail(line);
+                                  const wcId = Number(line.work_centre_id || currentWorkCentreId);
+                                  loadLineMachines(wcId);
+                                  setShowTrackerNotifications(false);
+                                  logAuditEvent('attention_queue_opened_from_bell', { line: line.line_name, riskScore, riskLabel });
+                                }}
+                                className="w-full text-left rounded-lg border border-red-100 bg-white px-2 py-1.5 hover:bg-red-50"
+                              >
+                                <span className="font-semibold text-slate-800 text-xs">{line.line_name || 'Line'}</span>
+                                <span className="ml-2 text-[11px] text-red-600 font-semibold">{riskLabel}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-
-          <div className="mb-3 grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="bg-white/95 rounded-xl p-2.5 text-slate-900">
-              <p className="text-xs font-semibold text-slate-500">Target Risk Projection</p>
-              <p className="text-sm font-bold mt-1">
-                {shiftProjection.shortfall > 0
-                  ? `At current pace: miss by ${shiftProjection.shortfall} pairs`
-                  : `At current pace: on track (+${Math.max(0, shiftProjection.projected - Number(topSection?.target || 0))} pairs)`}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
-            </div>
-            <div className={`rounded-xl p-2.5 ${attendanceGap > 0 ? 'bg-amber-100/95 text-amber-900' : 'bg-emerald-100/95 text-emerald-900'}`}>
-              <p className="text-xs font-semibold">Attendance Signal</p>
-              <p className="text-sm font-bold mt-1">
-                {attendanceGap > 0
-                  ? `${attendanceGap} below target (${attendanceData.present}/${attendanceData.target_employees})`
-                  : `On staffing target (${attendanceData.present}/${attendanceData.target_employees})`}
-              </p>
-            </div>
-          </div>
-
-          <div className="mb-3 grid grid-cols-1 md:grid-cols-3 gap-2.5">
-            <input
-              value={lineSearch}
-              onChange={(e) => setLineSearch(e.target.value)}
-              placeholder="Search line..."
-              className="rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
-            />
-            <select
-              value={lineSort}
-              onChange={(e) => setLineSort(e.target.value as 'risk' | 'efficiency' | 'output_gap')}
-              className="rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
-            >
-              <option value="risk">Sort: Risk first</option>
-              <option value="efficiency">Sort: Efficiency high to low</option>
-              <option value="output_gap">Sort: Output gap high to low</option>
-            </select>
-            <div className="rounded-lg px-3 py-2 text-sm bg-white/90 text-slate-800 border border-slate-200">
-              Showing {enrichedLines.length} lines
-            </div>
-          </div>
-
-          {shiftProjection.inLast60 && attentionQueue.length > 0 && (
-            <div className="mb-3 bg-red-50 border border-red-200 rounded-2xl p-3 text-slate-900">
-              <h4 className="text-sm font-bold text-red-700 mb-2">Attention Queue</h4>
-              <div className="space-y-1.5">
-                {attentionQueue.map(({ line, riskScore, riskLabel }) => (
-                  <button
-                    key={`attention-${line.line_name}-${line.work_centre_id || 'x'}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedLineDetail(line);
-                      const wcId = Number(line.work_centre_id || currentWorkCentreId);
-                      loadLineMachines(wcId);
-                      logAuditEvent('attention_queue_opened', { line: line.line_name, riskScore, riskLabel });
-                    }}
-                    className="w-full text-left rounded-lg border border-red-100 bg-white px-2.5 py-2 hover:bg-red-50"
-                  >
-                    <span className="font-semibold text-slate-800">{line.line_name || 'Line'}</span>
-                    <span className="ml-2 text-xs text-red-600 font-semibold">{riskLabel}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {activeMobileTab === 'dashboard' && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
-              <div className="bg-white text-slate-900 rounded-2xl p-2.5 shadow-sm flex flex-col items-center justify-center text-center min-h-[118px]">
-                <div className="text-[11px] font-semibold text-slate-500 mb-1">Today Target</div>
-                <div className="text-2xl sm:text-3xl font-bold">{Number(topSection?.target || 0).toLocaleString()}</div>
-                <div className="text-xs sm:text-sm font-semibold text-slate-500">Pairs</div>
-              </div>
-
-              <div className="bg-white text-slate-900 rounded-2xl p-2.5 shadow-sm flex flex-col items-center justify-center text-center min-h-[118px]">
-                <div className="text-[11px] font-semibold text-slate-500 mb-1">Produced</div>
-                <div className="text-2xl sm:text-3xl font-bold">{Number(topSection?.output || 0).toLocaleString()}</div>
-                <div className="text-xs sm:text-sm font-semibold text-green-600 flex items-center justify-center gap-1">
-                  <TrendingUp className="h-3.5 w-3.5" /> {outputPercent}%
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
+              <div className="grid grid-cols-4 gap-1 sm:gap-2">
+                <div className="bg-white text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 shadow-sm flex flex-col items-center justify-center text-center h-[11vh] min-h-[84px] sm:h-[clamp(118px,16vh,180px)]">
+                  <div className="text-[11px] font-semibold text-slate-500 mb-1">Today Target</div>
+                  <div className="text-lg sm:text-3xl font-bold leading-none">{Number(topSection?.target || 0).toLocaleString()}</div>
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500">Pairs</div>
                 </div>
-              </div>
 
-              <div className="bg-white text-slate-900 rounded-2xl p-2.5 shadow-sm flex flex-col items-center justify-center text-center min-h-[118px]">
-                <div className="text-[11px] font-semibold text-slate-500 mb-2">Efficiency</div>
-                <div
-                  className="h-20 w-20 rounded-full grid place-items-center"
-                  style={{
-                    background: `conic-gradient(#22c55e ${efficiencyGaugePercent * 3.6}deg, #e2e8f0 0deg)`,
-                  }}
-                >
-                  <div className="h-14 w-14 rounded-full bg-white grid place-items-center px-1">
-                    <span className={`${efficiencyPercent >= 100 ? 'text-xs' : 'text-sm'} font-bold leading-none`}>
-                      {efficiencyPercent}%
-                    </span>
+                <div className="bg-white text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 shadow-sm flex flex-col items-center justify-center text-center h-[11vh] min-h-[84px] sm:h-[clamp(118px,16vh,180px)]">
+                  <div className="text-[11px] font-semibold text-slate-500 mb-1">Produced</div>
+                  <div className="text-lg sm:text-3xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
+                  <div className="text-xs sm:text-sm font-semibold text-green-600 flex items-center justify-center gap-1">
+                    <TrendingUp className="h-3.5 w-3.5" /> {outputPercent}%
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white text-slate-900 rounded-2xl p-2.5 shadow-sm flex flex-col items-center justify-center text-center min-h-[118px]">
-                <div className="text-[11px] font-semibold text-slate-500 mb-1">WIP</div>
-                <div className="flex items-center justify-center gap-2 text-2xl sm:text-3xl font-bold text-orange-600">
-                  <Briefcase className="h-5 w-5 sm:h-6 sm:w-6" />
-                  <span>{totalWip.toLocaleString()}</span>
+                <div className="bg-white text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 shadow-sm flex flex-col items-center justify-center text-center h-[11vh] min-h-[84px] sm:h-[clamp(118px,16vh,180px)]">
+                  <div className="text-[11px] font-semibold text-slate-500 mb-2">Efficiency</div>
+                  <div
+                    className="h-14 w-14 sm:h-20 sm:w-20 rounded-full grid place-items-center"
+                    style={{
+                      background: `conic-gradient(#22c55e ${efficiencyGaugePercent * 3.6}deg, #e2e8f0 0deg)`,
+                    }}
+                  >
+                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-white grid place-items-center px-1">
+                      <span className={`${efficiencyPercent >= 100 ? 'text-[10px] sm:text-xs' : 'text-xs sm:text-sm'} font-bold leading-none`}>
+                        {efficiencyPercent}%
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs sm:text-sm font-semibold text-slate-500">Pairs</div>
-              </div>
-            </div>
-          )}
 
-          {activeMobileTab === 'dashboard' && (
-            <>
-              <div className="bg-white/95 rounded-2xl p-3 text-slate-900">
-                <div className="flex items-center justify-between mb-3">
+                <div className="bg-white text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 shadow-sm flex flex-col items-center justify-center text-center h-[11vh] min-h-[84px] sm:h-[clamp(118px,16vh,180px)]">
+                  <div className="text-[11px] font-semibold text-slate-500 mb-1">WIP</div>
+                  <div className="flex items-center justify-center gap-1 text-lg sm:text-3xl font-bold text-orange-600 leading-none">
+                    <Briefcase className="h-4 w-4 sm:h-6 sm:w-6" />
+                    <span>{totalWip.toLocaleString()}</span>
+                  </div>
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500">Pairs</div>
+                </div>
+              </div>
+
+              <div className="bg-white/95 rounded-2xl p-2.5 sm:p-3 text-slate-900 flex-1 min-h-0 flex flex-col">
+                <div className="flex items-center justify-between mb-2">
                   <h3 className="text-lg sm:text-xl font-bold">Production Lines</h3>
                   <div className="px-2.5 py-1 rounded-full bg-slate-100 text-xs sm:text-sm font-semibold flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full bg-green-500 inline-block" />
@@ -574,58 +530,60 @@ export const ProductionTracker: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
-                  {enrichedLines.map(({ line, index, efficiency, target, output, outputPct, gap, riskScore, riskLabel }) => {
-                    return (
-                      <button
-                        key={`${line.line_name}-${index}`}
-                        type="button"
-                        onClick={() => {
-                          setSelectedLineDetail(line);
-                          const wcId = Number(line.work_centre_id || currentWorkCentreId);
-                          loadLineMachines(wcId);
-                          logAuditEvent('line_detail_opened', { line: line.line_name, workCentreId: wcId });
-                        }}
-                        className="relative bg-slate-50 rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-slate-200 w-full hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center min-h-[132px] sm:min-h-[168px]"
-                      >
-                        <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(efficiency)}`} />
-                        <div className="text-xs sm:text-xl font-bold text-slate-800 mb-1 sm:mb-2 leading-tight">
-                          {line.line_name || `Line ${index + 1}`}
-                        </div>
-                        <div className={`text-[10px] sm:text-xs font-semibold mb-1 ${riskScore >= 1 ? 'text-red-600' : 'text-slate-500'}`}>
-                          {riskLabel} • Gap {gap}
-                        </div>
+                <div className="pr-1 flex-1 min-h-0">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5 sm:gap-3 auto-rows-fr h-full">
+                    {enrichedLines.map(({ line, index, efficiency, target, output, outputPct, gap, riskScore, riskLabel }) => {
+                      return (
+                        <button
+                          key={`${line.line_name}-${index}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedLineDetail(line);
+                            const wcId = Number(line.work_centre_id || currentWorkCentreId);
+                            loadLineMachines(wcId);
+                            logAuditEvent('line_detail_opened', { line: line.line_name, workCentreId: wcId });
+                          }}
+                        className="relative bg-slate-50 rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-slate-200 w-full h-full min-h-[112px] sm:min-h-[168px] hover:shadow-md flex flex-col items-center justify-center text-center"
+                        >
+                          <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(efficiency)}`} />
+                          <div className="text-xs sm:text-xl font-bold text-slate-800 mb-1 sm:mb-2 leading-tight">
+                            {line.line_name || `Line ${index + 1}`}
+                          </div>
+                          <div className={`text-[10px] sm:text-xs font-semibold mb-1 ${riskScore >= 1 ? 'text-red-600' : 'text-slate-500'}`}>
+                            {riskLabel} • Gap {gap}
+                          </div>
 
-                        <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${efficiency >= 90 ? 'text-green-600' : efficiency >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
-                          {efficiency}%
-                        </div>
+                          <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${efficiency >= 90 ? 'text-green-600' : efficiency >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
+                            {efficiency}%
+                          </div>
 
-                        <div className="text-xs sm:text-2xl font-bold text-slate-800 mt-1 sm:mt-2">
-                          {output} / {target}
-                        </div>
+                          <div className="text-xs sm:text-2xl font-bold text-slate-800 mt-1 sm:mt-2">
+                            {output} / {target}
+                          </div>
 
-                        <div className="mt-1.5 sm:mt-2 h-1.5 sm:h-2.5 bg-slate-200 rounded-full overflow-hidden w-full">
-                          <div
-                            className={`h-full rounded-full ${outputPct >= 90 ? 'bg-green-500' : outputPct >= 80 ? 'bg-amber-400' : 'bg-orange-500'}`}
-                            style={{ width: `${Math.min(Math.max(outputPct, 0), 100)}%` }}
-                          />
-                        </div>
+                          <div className="mt-1.5 sm:mt-2 h-1.5 sm:h-2.5 bg-slate-200 rounded-full overflow-hidden w-full">
+                            <div
+                              className={`h-full rounded-full ${outputPct >= 90 ? 'bg-green-500' : outputPct >= 80 ? 'bg-amber-400' : 'bg-orange-500'}`}
+                              style={{ width: `${Math.min(Math.max(outputPct, 0), 100)}%` }}
+                            />
+                          </div>
 
-                        <div className="mt-1.5 sm:mt-2 inline-flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold text-[10px] sm:text-sm">
-                          <Briefcase className="h-3 w-3 sm:h-4 sm:w-4" />
-                          <span>WIP {Number(line.wip || 0)}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
+                          <div className="mt-1.5 sm:mt-2 inline-flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold text-[10px] sm:text-sm">
+                            <Briefcase className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span>WIP {Number(line.wip || 0)}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2.5 mt-3">
-                <div className="bg-white rounded-2xl p-3.5 text-slate-900 shadow-sm min-h-[118px] flex flex-col justify-center">
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
+                <div className="bg-white rounded-2xl p-2.5 sm:p-3.5 text-slate-900 shadow-sm h-[10.5vh] min-h-[88px] sm:h-[clamp(118px,18vh,200px)] flex flex-col justify-center">
                   <div className="text-xs sm:text-sm text-slate-500 font-semibold mb-1">Projected Output</div>
-                  <div className="text-4xl sm:text-5xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
-                  <div className="mt-1 text-xl sm:text-2xl font-semibold text-slate-600">Pairs</div>
+                  <div className="text-3xl sm:text-5xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
+                  <div className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-semibold text-slate-600">Pairs</div>
                 </div>
                 <button
                   type="button"
@@ -633,23 +591,23 @@ export const ProductionTracker: React.FC = () => {
                     navigate('/alert_center');
                     logAuditEvent('alerts_card_opened', { count: alertCount, selectedLine: currentWorkCentreId, selectedDate });
                   }}
-                  className={`bg-white rounded-2xl p-3.5 text-slate-900 shadow-sm flex items-center justify-between min-h-[118px] w-full text-left hover:bg-red-50/40 hover:ring-2 hover:ring-red-200 transition-all ${
-                    alertCount > 0 ? 'ring-2 ring-red-200/70 animate-pulse' : ''
+                  className={`bg-white rounded-2xl p-2.5 sm:p-3.5 text-slate-900 shadow-sm flex items-center justify-between h-[10.5vh] min-h-[88px] sm:h-[clamp(118px,18vh,200px)] w-full text-left hover:bg-red-50/40 hover:ring-2 hover:ring-red-200 transition-colors ${
+                    alertCount > 0 ? 'ring-2 ring-red-200/70' : ''
                   }`}
                   title="Open Alert Center"
                 >
                   <div>
-                    <div className="text-4xl sm:text-5xl font-bold text-red-500">{alertCount}</div>
-                    <div className="text-lg sm:text-xl font-semibold text-slate-700">Alerts</div>
-                    <div className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">Tap to open details</div>
+                    <div className="text-3xl sm:text-5xl font-bold text-red-500">{alertCount}</div>
+                    <div className="text-base sm:text-xl font-semibold text-slate-700">Alerts</div>
+                    <div className="text-[11px] sm:text-sm font-medium text-slate-500 mt-0.5">Tap to open details</div>
                   </div>
                   <div className="flex items-center gap-1.5 text-red-500">
-                    <AlertTriangle className="h-10 w-10" />
+                    <AlertTriangle className="h-8 w-8 sm:h-10 sm:w-10" />
                     <ChevronRight className="h-5 w-5" />
                   </div>
                 </button>
               </div>
-            </>
+            </div>
           )}
 
           {activeMobileTab === 'trends' && (
@@ -676,6 +634,46 @@ export const ProductionTracker: React.FC = () => {
               </div>
             </div>
           )}
+
+          <div className="mt-auto pt-2">
+            <div className="w-full bg-white rounded-2xl px-2 sm:px-3 py-2 text-slate-600 shadow-sm border border-slate-100">
+              <div className="flex items-center justify-between gap-1 sm:gap-1.5 overflow-x-auto">
+                <button
+                  className={`flex flex-col items-center gap-1 rounded-xl py-1.5 px-2 min-w-[64px] transition-colors ${activeMobileTab === 'dashboard' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600'}`}
+                  onClick={() => {
+                    setActiveMobileTab('dashboard');
+                    logAuditEvent('tab_changed', { tab: 'dashboard' });
+                  }}
+                  type="button"
+                >
+                  <Home className="h-5 w-5" />
+                  <span className="text-[11px] sm:text-xs">Dashboard</span>
+                </button>
+                <button
+                  className={`flex flex-col items-center gap-1 rounded-xl py-1.5 px-2 min-w-[64px] transition-colors ${activeMobileTab === 'trends' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600'}`}
+                  onClick={() => {
+                    setActiveMobileTab('trends');
+                    logAuditEvent('tab_changed', { tab: 'trends' });
+                  }}
+                  type="button"
+                >
+                  <TrendingUp className="h-5 w-5" />
+                  <span className="text-[11px] sm:text-xs">Trends</span>
+                </button>
+                <button
+                  className={`flex flex-col items-center gap-1 rounded-xl py-1.5 px-2 min-w-[64px] transition-colors ${activeMobileTab === 'reports' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600'}`}
+                  onClick={() => {
+                    setActiveMobileTab('reports');
+                    logAuditEvent('tab_changed', { tab: 'reports' });
+                  }}
+                  type="button"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                  <span className="text-[11px] sm:text-xs">Reports</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
       </div>
 
@@ -772,6 +770,90 @@ export const ProductionTracker: React.FC = () => {
               >
                 View Hourly Trend
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFilterDrawer && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            onClick={() => setShowFilterDrawer(false)}
+            className="absolute inset-0 bg-black/35"
+            aria-label="Close filters"
+          />
+          <div className="absolute right-0 top-0 h-full w-[300px] sm:w-[340px] bg-white shadow-2xl border-l border-slate-200 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-slate-900">Line Filters</h3>
+              <button
+                type="button"
+                onClick={() => setShowFilterDrawer(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-600"
+                aria-label="Close filter panel"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-800 border border-slate-200 flex items-center justify-between">
+                <span className="font-medium">Updated</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs border ${isDashboardStale ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
+                  {dashboardAgeLabel}
+                </span>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1.5">Refresh mode</p>
+                <select
+                  value={refreshMode}
+                  onChange={(e) => setRefreshMode(e.target.value as '10s' | '30s' | 'manual')}
+                  className="w-full rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
+                  title="Auto refresh interval"
+                >
+                  <option value="10s" className="text-slate-800">Auto 10s</option>
+                  <option value="30s" className="text-slate-800">Auto 30s</option>
+                  <option value="manual" className="text-slate-800">Manual</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleManualRefresh}
+                disabled={manualRefreshing}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${manualRefreshing ? 'animate-spin' : ''}`} />
+                Refresh now
+              </button>
+
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1.5">Search line</p>
+                <input
+                  value={lineSearch}
+                  onChange={(e) => setLineSearch(e.target.value)}
+                  placeholder="Search line..."
+                  className="w-full rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
+                />
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1.5">Sort order</p>
+                <select
+                  value={lineSort}
+                  onChange={(e) => setLineSort(e.target.value as 'risk' | 'efficiency' | 'output_gap')}
+                  className="w-full rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
+                >
+                  <option value="risk">Sort: Risk first</option>
+                  <option value="efficiency">Sort: Efficiency high to low</option>
+                  <option value="output_gap">Sort: Output gap high to low</option>
+                </select>
+              </div>
+
+              <div className="rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-800 border border-slate-200">
+                Showing {enrichedLines.length} lines
+              </div>
             </div>
           </div>
         </div>

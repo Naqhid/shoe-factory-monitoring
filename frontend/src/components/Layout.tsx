@@ -44,6 +44,14 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const user = getUserInfo();
 
+  React.useEffect(() => {
+    const toggleSidebar = () => setSidebarOpen((prev) => !prev);
+    window.addEventListener('layout:toggle-sidebar', toggleSidebar as EventListener);
+    return () => {
+      window.removeEventListener('layout:toggle-sidebar', toggleSidebar as EventListener);
+    };
+  }, []);
+
   return (
     <>
       {/* Fixed header when sidebar is closed */}
