@@ -8,6 +8,9 @@ const toNumber = (value, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
+const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '0', 10);
+
 const parseActionRows = (rows, startReminderMins, finishGraceMins) => {
   const data = [];
 
@@ -216,6 +219,117 @@ exports.snoozeMissedAction = async (req, res, next) => {
     return res.json({ success: true });
   } catch (error) {
     logger.error('Error snoozing missed action:', error);
+    return next(error);
+  }
+};
+
+exports.getMissedActionsDailyReport = async (req, res, next) => {
+  try {
+    const date = String(req.query?.date || new Date().toISOString().slice(0, 10));
+    const startReminderMins = Math.max(1, Number(req.query.startReminderMins) || 10);
+    const lineFilter = String(req.query?.line || 'all');
+
+    const [rows] = await db.query(
+      `
+      SELECT
+        mcp.id,
+        mcp.work_centre_id,
+        wc.name AS work_centre_name,
+        mcp.machine_id,
+        mc.machine_name,
+        mcp.emp_id,
+        e.code AS employee_code,
+        e.name AS employee_name,
+        mcp.start_time,
+        mcp.finish_time,
+        mcp.target_mins,
+        TIMESTAMPDIFF(MINUTE, mcp.start_time, mcp.finish_time) AS actual_mins,
+        LAG(mcp.finish_time) OVER (
+          PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
+          ORDER BY mcp.start_time
+        ) AS prev_finish_time
+      FROM machine_centre_production mcp
+      LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+      LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+      LEFT JOIN employees e ON e.code = mcp.emp_id
+      WHERE DATE(mcp.prod_date) = ?
+        AND mcp.button_status = 2
+        AND mcp.start_time IS NOT NULL
+        AND mcp.finish_time IS NOT NULL
+      ORDER BY wc.name, mcp.machine_id, mcp.start_time
+      `,
+      [date]
+    );
+
+    const mapped = rows.map((row) => {
+      const actualMins = toNumber(row.actual_mins, 0);
+      const targetMins = toNumber(row.target_mins, 0);
+      const extraMins = Math.max(0, actualMins - targetMins);
+      const startTs = new Date(row.start_time);
+      const shiftStart = new Date(startTs);
+      shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+      const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
+      const gapMins = Math.max(0, toNumber((startTs.getTime() - baselineTs.getTime()) / 60000, 0));
+      const inactiveMins = Math.max(0, gapMins - startReminderMins);
+
+      return {
+        id: row.id,
+        work_centre_id: row.work_centre_id,
+        work_centre_name: row.work_centre_name || 'N/A',
+        machine_id: row.machine_id,
+        machine_name: row.machine_name || row.machine_id || 'N/A',
+        employee_code: row.employee_code || 'N/A',
+        employee_name: row.employee_name || row.employee_code || 'N/A',
+        start_time: row.start_time,
+        finish_time: row.finish_time,
+        target_mins: targetMins,
+        actual_mins: actualMins,
+        extra_mins: extraMins,
+        start_gap_mins: gapMins,
+        inactive_mins: inactiveMins,
+      };
+    });
+
+    const filtered = lineFilter === 'all'
+      ? mapped
+      : mapped.filter((row) => String(row.work_centre_name) === lineFilter);
+
+    const byLineMap = new Map();
+    filtered.forEach((row) => {
+      const key = row.work_centre_name || 'N/A';
+      if (!byLineMap.has(key)) {
+        byLineMap.set(key, {
+          work_centre_name: key,
+          cycles: 0,
+          inactive_mins: 0,
+          extra_mins: 0,
+        });
+      }
+      const agg = byLineMap.get(key);
+      agg.cycles += 1;
+      agg.inactive_mins += row.inactive_mins;
+      agg.extra_mins += row.extra_mins;
+    });
+
+    const byLine = Array.from(byLineMap.values()).sort((a, b) => (b.inactive_mins + b.extra_mins) - (a.inactive_mins + a.extra_mins));
+    const totalInactive = filtered.reduce((sum, r) => sum + r.inactive_mins, 0);
+    const totalExtra = filtered.reduce((sum, r) => sum + r.extra_mins, 0);
+
+    return res.json({
+      success: true,
+      date,
+      thresholds: { startReminderMins },
+      summary: {
+        total_cycles: filtered.length,
+        total_inactive_mins: totalInactive,
+        total_extra_mins: totalExtra,
+        total_lost_mins: totalInactive + totalExtra,
+      },
+      by_line: byLine,
+      events: filtered,
+    });
+  } catch (error) {
+    logger.error('Error getting missed actions daily report:', error);
     return next(error);
   }
 };

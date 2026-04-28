@@ -66,6 +66,34 @@ const findOverlappingManualEntry = async (conn, { prodDate, workCentreId, machin
   return rows[0] || null;
 };
 
+const hasTimezoneInDateTime = (value) => {
+  if (value === null || value === undefined) return false;
+  const s = String(value).trim();
+  if (!s) return false;
+  return /Z$/i.test(s) || /[+-]\d{2}:\d{2}$/.test(s);
+};
+
+const formatLocalDateTime = (date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+};
+
+const toMySqlDateTimeOrNull = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return formatLocalDateTime(value);
+  }
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  return formatLocalDateTime(dt);
+};
+
 const writeManualAuditLog = async (conn, { req, action, entryId, beforeData = null, afterData = null, reason = null }) => {
   const actor = req.user || {};
   await conn.execute(
@@ -240,6 +268,16 @@ exports.create = async (req, res, next) => {
       button_status
     } = req.body;
 
+    const timezoneFields = { finish_time, idle_start_time, idle_stop_time };
+    for (const [field, value] of Object.entries(timezoneFields)) {
+      if (hasTimezoneInDateTime(value)) {
+        return res.status(400).json({
+          success: false,
+          message: `${field} must be local datetime without timezone (send YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss).`,
+        });
+      }
+    }
+
     // SECURITY: Prevent creating records that are already finished
     // Records must be created in status 1 (running) or 3 (idle), NOT 2 (finished)
     const requestedStatus = button_status || 1;
@@ -282,6 +320,10 @@ exports.create = async (req, res, next) => {
     // Extract YYYY-MM-DD from ISO timestamp for MySQL DATE column
     const formattedDate = prod_date ? prod_date.split('T')[0] : null;
 
+    const normalizedFinishTime = toMySqlDateTimeOrNull(finish_time);
+    const normalizedIdleStartTime = toMySqlDateTimeOrNull(idle_start_time);
+    const normalizedIdleStopTime = toMySqlDateTimeOrNull(idle_stop_time);
+
     const [result] = await db.query(
       `INSERT INTO machine_centre_production
        (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
@@ -290,9 +332,9 @@ exports.create = async (req, res, next) => {
       [formattedDate, work_centre_id, machine_id, emp_id,
        output_pairs !== undefined ? output_pairs : 0,
        target_mins || 0,
-       finish_time || null,
-       idle_start_time || null,
-       idle_stop_time || null,
+       normalizedFinishTime,
+       normalizedIdleStartTime,
+       normalizedIdleStopTime,
        requestedStatus]
     );
 
@@ -1082,6 +1124,16 @@ exports.update = async (req, res, next) => {
       button_status
     } = req.body;
 
+    const timezoneFields = { start_time, finish_time, idle_start_time, idle_stop_time };
+    for (const [field, value] of Object.entries(timezoneFields)) {
+      if (hasTimezoneInDateTime(value)) {
+        return res.status(400).json({
+          success: false,
+          message: `${field} must be local datetime without timezone (send YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss).`,
+        });
+      }
+    }
+
     // SECURITY: Block status changes through PUT - use PATCH /status instead
     if (button_status !== undefined) {
       logger.warn(`BLOCKED: Attempt to change button_status via PUT for record ${id}. Use PATCH /status endpoint instead.`);
@@ -1091,6 +1143,11 @@ exports.update = async (req, res, next) => {
       });
     }
 
+    const normalizedStartTime = toMySqlDateTimeOrNull(start_time);
+    const normalizedFinishTime = toMySqlDateTimeOrNull(finish_time);
+    const normalizedIdleStartTime = toMySqlDateTimeOrNull(idle_start_time);
+    const normalizedIdleStopTime = toMySqlDateTimeOrNull(idle_stop_time);
+
     const [result] = await db.query(
       `UPDATE machine_centre_production 
        SET prod_date = ?, work_centre_id = ?, machine_id = ?, emp_id = ?,
@@ -1098,7 +1155,7 @@ exports.update = async (req, res, next) => {
            idle_start_time = ?, idle_stop_time = ?
        WHERE id = ?`,
       [prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
-        start_time, finish_time, idle_start_time, idle_stop_time, id]
+        normalizedStartTime, normalizedFinishTime, normalizedIdleStartTime, normalizedIdleStopTime, id]
     );
 
     if (result.affectedRows === 0) {

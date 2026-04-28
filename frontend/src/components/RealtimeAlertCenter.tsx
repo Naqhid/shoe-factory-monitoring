@@ -20,6 +20,8 @@ interface AlertRow {
   acknowledged_by?: string | null;
   alert_ids?: number[];
   occurrence_count?: number;
+  first_seen_at?: string;
+  last_seen_at?: string;
 }
 
 const alertTypeLabel: Record<string, string> = {
@@ -72,6 +74,16 @@ const getSlaBadge = (alert: AlertRow) => {
   if (Number(alert.is_acknowledged || 0) === 1) return null;
   const age = getAlertAgeMinutes(alert.created_at);
   if (age === null) return null;
+  if (alert.alert_type === 'no_scan_heartbeat') {
+    const delayFromActual = Number(alert.actual_value);
+    const delayMins = Number.isFinite(delayFromActual) ? Math.max(0, Math.round(delayFromActual)) : null;
+    if (delayMins !== null) {
+      return {
+        text: `Open ${age}m • Delay ${delayMins}m`,
+        cls: delayMins >= 30 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700',
+      };
+    }
+  }
   if (age >= 30) return { text: `SLA Breach (${age}m)`, cls: 'bg-red-100 text-red-700' };
   if (age >= 15) return { text: `SLA Warning (${age}m)`, cls: 'bg-yellow-100 text-yellow-700' };
   return { text: `Open ${age}m`, cls: 'bg-gray-100 text-gray-700' };
@@ -108,6 +120,11 @@ export const RealtimeAlertCenter: React.FC = () => {
   const [ackNote, setAckNote] = React.useState('');
   const [showAckDialog, setShowAckDialog] = React.useState(false);
   const [pendingAckIds, setPendingAckIds] = React.useState<number[] | 'all'>([]);
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
+  const [totalAlerts, setTotalAlerts] = React.useState(0);
+  const [totalPages, setTotalPages] = React.useState(1);
+  const [unacknowledgedCount, setUnacknowledgedCount] = React.useState(0);
 
   const mapLegacyAlertShape = (rows: any[]): AlertRow[] =>
     rows.map((row) => ({
@@ -140,16 +157,30 @@ export const RealtimeAlertCenter: React.FC = () => {
           ...row,
           alert_ids: [row.id],
           occurrence_count: 1,
+          first_seen_at: row.created_at,
+          last_seen_at: row.created_at,
         });
         return;
       }
       const existingMs = new Date(existing.created_at).getTime() || 0;
       const latest = createdAtMs >= existingMs ? row : existing;
+      const firstSeenMs = Math.min(
+        new Date(existing.first_seen_at || existing.created_at).getTime() || createdAtMs,
+        createdAtMs
+      );
+      const lastSeenMs = Math.max(
+        new Date(existing.last_seen_at || existing.created_at).getTime() || createdAtMs,
+        createdAtMs
+      );
       const mergedIds = Array.from(new Set([...(existing.alert_ids || [existing.id]), row.id]));
       grouped.set(key, {
         ...latest,
+        // Keep created_at anchored to first seen so SLA/Open age does not reset on repeats.
+        created_at: new Date(firstSeenMs).toISOString(),
         alert_ids: mergedIds,
         occurrence_count: mergedIds.length,
+        first_seen_at: new Date(firstSeenMs).toISOString(),
+        last_seen_at: new Date(lastSeenMs).toISOString(),
         is_acknowledged:
           Number(existing.is_acknowledged || 0) === 1 && Number(row.is_acknowledged || 0) === 1 ? 1 : 0,
       });
@@ -182,12 +213,13 @@ export const RealtimeAlertCenter: React.FC = () => {
       if (severity !== 'all') params.set('severity', severity);
       if (type !== 'all') params.set('alert_type', type);
       params.set('include_acknowledged', includeAcknowledged ? 'true' : 'false');
-      params.set('limit', '250');
+      params.set('page', String(page));
+      params.set('limit', String(pageSize));
       const centerUrl = `${API_BASE_URL}/api/alerts/center?${params.toString()}`;
       const res = await apiFetch(centerUrl);
       if (res.status === 404) {
         // Backward compatibility: older backend without /alerts/center route.
-        const legacy = await apiFetch(`${API_BASE_URL}/api/alerts?unread_only=false&limit=250`);
+        const legacy = await apiFetch(`${API_BASE_URL}/api/alerts?unread_only=false&limit=500`);
         const legacyType = legacy.headers.get('content-type') || '';
         if (!legacyType.includes('application/json')) {
           throw new Error('Alert API returned non-JSON response. Please restart backend and try again.');
@@ -203,7 +235,13 @@ export const RealtimeAlertCenter: React.FC = () => {
           const ackOk = includeAcknowledged ? true : Number(row.is_acknowledged || 0) === 0;
           return severityOk && typeOk && ackOk;
         });
-        setAlerts(normalizeAndGroupAlerts(filtered));
+        const normalized = normalizeAndGroupAlerts(filtered);
+        const start = (page - 1) * pageSize;
+        const sliced = normalized.slice(start, start + pageSize);
+        setAlerts(sliced);
+        setTotalAlerts(normalized.length);
+        setTotalPages(Math.max(1, Math.ceil(normalized.length / pageSize)));
+        setUnacknowledgedCount(normalized.filter((r) => Number(r.is_acknowledged || 0) === 0).length);
         return;
       }
       const contentType = res.headers.get('content-type') || '';
@@ -216,16 +254,29 @@ export const RealtimeAlertCenter: React.FC = () => {
       }
       const baseRows = Array.isArray(json.data) ? json.data : [];
       setAlerts(enableGrouping ? normalizeAndGroupAlerts(baseRows) : baseRows);
+      const pagination = json.pagination || {};
+      const safeTotal = Number(pagination.total || baseRows.length || 0);
+      const safeTotalPages = Number(pagination.totalPages || Math.max(1, Math.ceil(safeTotal / pageSize)));
+      setTotalAlerts(safeTotal);
+      setTotalPages(safeTotalPages);
+      setUnacknowledgedCount(Number(json.unacknowledged_count || 0));
+      if (page > safeTotalPages && safeTotalPages > 0) {
+        setPage(1);
+      }
     } catch (error: any) {
       if (!silent) toast.error(error?.message || 'Failed to load alert center');
     } finally {
       setLoading(false);
     }
-  }, [enableGrouping, includeAcknowledged, severity, sortMode, type]);
+  }, [enableGrouping, includeAcknowledged, page, pageSize, severity, sortMode, type]);
 
   React.useEffect(() => {
     loadAlerts();
   }, [loadAlerts]);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [severity, type, includeAcknowledged, enableGrouping, sortMode, pageSize]);
 
   React.useEffect(() => {
     if (!autoRefresh) return;
@@ -299,10 +350,10 @@ export const RealtimeAlertCenter: React.FC = () => {
     setShowAckDialog(true);
   };
 
-  const unacknowledgedCount = alerts.filter((a) => Number(a.is_acknowledged || 0) === 0).length;
   const visibleAlertIds = Array.from(
     new Set(alerts.flatMap((a) => (a.alert_ids && a.alert_ids.length ? a.alert_ids : [a.id])))
   );
+  const unacknowledgedVisibleCount = alerts.filter((a) => Number(a.is_acknowledged || 0) === 0).length;
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
@@ -320,13 +371,13 @@ export const RealtimeAlertCenter: React.FC = () => {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
-          {unacknowledgedCount > 0 && (
+          {unacknowledgedVisibleCount > 0 && (
             <button
               type="button"
               onClick={() => openAcknowledgeDialog(visibleAlertIds)}
               className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
             >
-              Acknowledge Filtered ({unacknowledgedCount})
+              Acknowledge Visible ({unacknowledgedVisibleCount})
             </button>
           )}
         </div>
@@ -378,6 +429,40 @@ export const RealtimeAlertCenter: React.FC = () => {
           <option value="sla">Sort by SLA severity</option>
           <option value="newest">Sort by newest</option>
         </select>
+        <select
+          value={String(pageSize)}
+          onChange={(e) => setPageSize(Number(e.target.value))}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+        >
+          <option value="10">10 per page</option>
+          <option value="25">25 per page</option>
+          <option value="50">50 per page</option>
+          <option value="100">100 per page</option>
+        </select>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+        <span>
+          Showing page {page} of {totalPages} ({alerts.length} on this page, {totalAlerts} total)
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {showAckDialog && (
@@ -460,7 +545,8 @@ export const RealtimeAlertCenter: React.FC = () => {
                     <div className="text-xs text-gray-500 mt-2 flex flex-wrap gap-3">
                       <span>Line: {alert.work_centre_name || '-'}</span>
                       <span>Machine: {alert.machine_id || '-'}</span>
-                      <span>Time: {new Date(alert.created_at).toLocaleString()}</span>
+                      <span>First seen: {new Date(alert.first_seen_at || alert.created_at).toLocaleString()}</span>
+                      <span>Last seen: {new Date(alert.last_seen_at || alert.created_at).toLocaleString()}</span>
                       {getAlertContextHint(alert) && <span>{getAlertContextHint(alert)}</span>}
                       {Number(alert.is_acknowledged || 0) === 1 && alert.acknowledged_at && (
                         <span>

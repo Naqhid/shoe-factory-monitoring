@@ -19,6 +19,7 @@ interface SessionLogEntry {
   total_target_mins: number;
   avg_efficiency: number;
   total_idle_mins: number;
+  has_active_cycle?: number;
   last_finish_time: string | null;
 }
 
@@ -122,8 +123,11 @@ const LogPage: React.FC = () => {
     return decimals > 0 ? num.toFixed(decimals) : num.toString();
   };
 
-  const getCycleStatus = (totalCycles: number, status: string) => {
+  const getCycleStatus = (totalCycles: number, status: string, hasActiveCycle?: number) => {
     if (status !== 'active') return `${totalCycles} cycles done`;
+    if (!hasActiveCycle) {
+      return totalCycles > 0 ? `${totalCycles} cycles done` : 'Session active (no cycle started)';
+    }
     const currentCycle = totalCycles + 1;
     const suffix = currentCycle === 1 ? 'st' : currentCycle === 2 ? 'nd' : currentCycle === 3 ? 'rd' : 'th';
     return `${currentCycle}${suffix} cycle in progress`;
@@ -293,7 +297,7 @@ const LogPage: React.FC = () => {
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-700 text-center">{formatDuration(log.total_actual_mins)}</td>
                     <td className="px-3 py-3 text-sm text-blue-600 font-medium text-center">
-                      {getCycleStatus(log.total_cycles, log.status)}
+                      {getCycleStatus(log.total_cycles, log.status, log.has_active_cycle)}
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-700 capitalize">{log.status}</td>
                   </tr>

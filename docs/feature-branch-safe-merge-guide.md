@@ -55,7 +55,7 @@ PORT=3101 npm start
 
 # Terminal 2 (frontend)
 cd frontend
-npm run dev -- --port 3004 --host 0.0.0.0
+npm run dev -- --port 3002 --host 0.0.0.0
 ```
 
 Optional quick checks:

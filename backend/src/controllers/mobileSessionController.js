@@ -341,6 +341,7 @@ const mobileSessionController = {
                     COALESCE(prod_stats.total_target_mins, 0) AS total_target_mins,
                     COALESCE(prod_stats.avg_efficiency, 0) AS avg_efficiency,
                     COALESCE(prod_stats.total_idle_mins, 0) AS total_idle_mins,
+                    COALESCE(run_stats.has_active_cycle, 0) AS has_active_cycle,
                     -- Last logout/completed time
                     prod_stats.last_finish_time AS last_finish_time
                 FROM mobile_sessions ms
@@ -370,6 +371,23 @@ const mobileSessionController = {
                     ON prod_stats.machine_id = ms.machine_id 
                     AND prod_stats.emp_id = ms.emp_code
                     AND prod_stats.prod_date = DATE(ms.activated_at)
+                LEFT JOIN (
+                    -- Running cycle signal for this session day
+                    SELECT
+                        machine_id,
+                        emp_id,
+                        prod_date,
+                        CASE
+                            WHEN SUM(CASE WHEN button_status = 1 THEN 1 ELSE 0 END) > 0 THEN 1
+                            ELSE 0
+                        END AS has_active_cycle
+                    FROM machine_centre_production
+                    WHERE button_status != 2
+                    GROUP BY machine_id, emp_id, prod_date
+                ) run_stats
+                    ON run_stats.machine_id = ms.machine_id
+                    AND run_stats.emp_id = ms.emp_code
+                    AND run_stats.prod_date = DATE(ms.activated_at)
                 WHERE ms.activated_at IS NOT NULL
             `;
 
