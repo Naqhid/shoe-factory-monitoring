@@ -296,6 +296,69 @@ export const MissedActionsPage: React.FC = () => {
     })).sort((a, b) => (b.inactive + b.extra) - (a.inactive + a.extra));
   }, [dailyEvents]);
 
+  const lineLossRows = React.useMemo(() => {
+    return [...dailyByLine]
+      .map((line) => {
+        const inactive = Number(line.inactive_mins || 0);
+        const extra = Number(line.extra_mins || 0);
+        const lost = inactive + extra;
+        const perCycle = line.cycles > 0 ? lost / line.cycles : 0;
+        return {
+          ...line,
+          inactive,
+          extra,
+          lost,
+          perCycle,
+        };
+      })
+      .sort((a, b) => b.lost - a.lost);
+  }, [dailyByLine]);
+
+  const totalLineLoss = React.useMemo(
+    () => lineLossRows.reduce((sum, row) => sum + row.lost, 0),
+    [lineLossRows]
+  );
+
+  const liveLossRows = React.useMemo(() => {
+    const map = new Map<string, { line: string; activeLoss: number; issues: number }>();
+    sortedFilteredItems.forEach((item) => {
+      const line = item.work_centre_name || 'Unknown Line';
+      if (!map.has(line)) map.set(line, { line, activeLoss: 0, issues: 0 });
+      const current = map.get(line)!;
+      current.activeLoss += Number(item.overdue_mins || 0);
+      current.issues += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => b.activeLoss - a.activeLoss);
+  }, [sortedFilteredItems]);
+
+  const lineLossTrend = React.useMemo(() => {
+    const now = new Date();
+    const bucketStarts: Date[] = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      bucketStarts.push(new Date(now.getTime() - i * 60 * 60 * 1000));
+    }
+    const rows = bucketStarts.map((start, idx) => {
+      const end = idx === bucketStarts.length - 1 ? now : bucketStarts[idx + 1];
+      let inactive = 0;
+      let extra = 0;
+      dailyEvents.forEach((event) => {
+        const eventStart = event.start_time ? new Date(event.start_time) : null;
+        if (!eventStart || Number.isNaN(eventStart.getTime())) return;
+        if (eventStart >= start && eventStart < end) {
+          inactive += Number(event.inactive_mins || 0);
+          extra += Number(event.extra_mins || 0);
+        }
+      });
+      return {
+        label: `${start.getHours().toString().padStart(2, '0')}:00`,
+        inactive,
+        extra,
+        total: inactive + extra,
+      };
+    });
+    return rows;
+  }, [dailyEvents]);
+
   const acknowledgeItem = async (item: MissedAction) => {
     if (!item.issue_key) return;
     setIsActionLoading(item.issue_key);
@@ -911,51 +974,106 @@ export const MissedActionsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-xs text-gray-500 font-semibold uppercase">Total Cycles</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{dailySummary.total_cycles}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="bg-white rounded-xl border border-red-200 p-4 shadow-sm">
+                <p className="text-[11px] text-red-700 font-semibold uppercase tracking-wide">Total Lost Minutes</p>
+                <p className="text-3xl font-bold text-red-700 mt-1">{formatMinutes(dailySummary.total_lost_mins)}</p>
+                <p className="text-xs text-gray-500 mt-1">Inactive + extra minutes</p>
               </div>
               <div className="bg-white rounded-xl border border-blue-200 p-4 shadow-sm">
-                <p className="text-xs text-blue-700 font-semibold uppercase">Inactive Minutes</p>
+                <p className="text-[11px] text-blue-700 font-semibold uppercase tracking-wide">Inactive Minutes</p>
                 <p className="text-3xl font-bold text-blue-700 mt-1">{formatMinutes(dailySummary.total_inactive_mins)}</p>
+                <p className="text-xs text-gray-500 mt-1">Waiting / no-start loss</p>
               </div>
               <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
-                <p className="text-xs text-amber-700 font-semibold uppercase">Extra Minutes</p>
+                <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Extra Minutes</p>
                 <p className="text-3xl font-bold text-amber-700 mt-1">{formatMinutes(dailySummary.total_extra_mins)}</p>
+                <p className="text-xs text-gray-500 mt-1">Cycle over target duration</p>
               </div>
-              <div className="bg-white rounded-xl border border-red-200 p-4 shadow-sm">
-                <p className="text-xs text-red-700 font-semibold uppercase">Total Lost Minutes</p>
-                <p className="text-3xl font-bold text-red-700 mt-1">{formatMinutes(dailySummary.total_lost_mins)}</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Total Cycles</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{dailySummary.total_cycles}</p>
+                <p className="text-xs text-gray-500 mt-1">Completed cycles for selected date</p>
               </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Live Active Loss</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">
+                  {formatMinutes(liveLossRows.reduce((sum, row) => sum + row.activeLoss, 0))}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">From current live missed issues</p>
+              </div>
+              <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
+                <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Worst Line (Today)</p>
+                <p className="text-xl font-bold text-amber-700 mt-1">{lineLossRows[0]?.work_centre_name || '-'}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {lineLossRows[0] ? `${formatMinutes(lineLossRows[0].lost)} min loss` : 'No data'}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-red-200 p-4 shadow-sm">
+              <p className="text-[11px] text-red-700 font-semibold uppercase tracking-wide">Projected Shift Loss</p>
+              <p className="text-3xl font-bold text-red-700 mt-1">
+                {(() => {
+                  const elapsedHours = Math.max(1, new Date().getHours() + new Date().getMinutes() / 60 - 9);
+                  const projection = (totalLineLoss / elapsedHours) * 9;
+                  return formatMinutes(projection);
+                })()}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Simple 9-hour shift projection</p>
             </div>
 
             {dailyError ? (
               <div className="bg-white rounded-xl border border-red-200 p-6 text-center text-red-600 font-medium">{dailyError}</div>
             ) : (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-3 border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700">Line Summary</div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead className="bg-white border-b border-gray-100">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Line</th>
-                        <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Cycles</th>
-                        <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive Min</th>
-                        <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra Min</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {dailyByLine.map((line) => (
-                        <tr key={line.work_centre_name}>
-                          <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{line.work_centre_name}</td>
-                          <td className="px-3 py-2.5 text-sm text-gray-700">{line.cycles}</td>
-                          <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatMinutes(line.inactive_mins)}</td>
-                          <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatMinutes(line.extra_mins)}</td>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="xl:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="p-3 border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700">Line Loss Ranking</div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                      <thead className="bg-white border-b border-gray-100">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Line</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Cycles</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Total Loss</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Loss / Cycle</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {lineLossRows.map((row) => (
+                          <tr key={row.work_centre_name}>
+                            <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{row.work_centre_name}</td>
+                            <td className="px-3 py-2.5 text-sm text-gray-700">{row.cycles}</td>
+                            <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatMinutes(row.inactive)}</td>
+                            <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatMinutes(row.extra)}</td>
+                            <td className="px-3 py-2.5 text-sm text-red-700 font-bold">{formatMinutes(row.lost)}</td>
+                            <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.perCycle)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="p-3 border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700">Recent Loss Trend (Hourly)</div>
+                  <div className="p-3 space-y-2">
+                    {lineLossTrend.map((bucket) => {
+                      const max = Math.max(1, ...lineLossTrend.map((x) => x.total));
+                      const width = `${Math.max(4, Math.round((bucket.total / max) * 100))}%`;
+                      return (
+                        <div key={bucket.label}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-gray-600">{bucket.label}</span>
+                            <span className="font-semibold text-gray-800">{formatMinutes(bucket.total)}m</span>
+                          </div>
+                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
