@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTriangle, Bell, BellOff } from 'lucide-react';
+import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTriangle, Bell, BellOff, Hand } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -142,9 +142,11 @@ export const MobileProduction: React.FC = () => {
     const [showFinishConfirm, setShowFinishConfirm] = useState(false);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
+    const [startReminderDue, setStartReminderDue] = useState(false);
     const overTargetToastShownRef = React.useRef(false);
     const pendingOverTargetAlarmRef = React.useRef(false);
     const pendingStartReminderAlarmRef = React.useRef(false);
+    const lastStartReminderBucketRef = React.useRef(0);
     const hasUserInteractedRef = React.useRef(false);
     const alertAudioContextRef = React.useRef<AudioContext | null>(null);
     const alertSoundTimeoutsRef = React.useRef<number[]>([]);
@@ -481,7 +483,6 @@ export const MobileProduction: React.FC = () => {
                         id: 'mobile-start-reminder',
                     }
                 );
-                startReminderAnchorRef.current = Date.now();
             }
         };
 
@@ -533,7 +534,6 @@ export const MobileProduction: React.FC = () => {
                         id: 'mobile-start-reminder',
                     }
                 );
-                startReminderAnchorRef.current = Date.now();
             }
         };
         document.addEventListener('visibilitychange', onVisible);
@@ -654,6 +654,8 @@ export const MobileProduction: React.FC = () => {
         if (!productionData || initializing || loading || !idleReminderEnabled) {
             startReminderAnchorRef.current = null;
             pendingStartReminderAlarmRef.current = false;
+            lastStartReminderBucketRef.current = 0;
+            setStartReminderDue(false);
             return;
         }
 
@@ -663,6 +665,8 @@ export const MobileProduction: React.FC = () => {
         if (!needsStartReminder) {
             startReminderAnchorRef.current = null;
             pendingStartReminderAlarmRef.current = false;
+            lastStartReminderBucketRef.current = 0;
+            setStartReminderDue(false);
             return;
         }
 
@@ -677,6 +681,7 @@ export const MobileProduction: React.FC = () => {
                 const fallbackFinish = lastFinishedCycleMsRef.current;
                 startReminderAnchorRef.current = fallbackFinish && fallbackFinish > 0 ? fallbackFinish : Date.now();
             }
+            lastStartReminderBucketRef.current = 0;
         }
 
         const REMINDER_MS = 10 * 60 * 1000;
@@ -684,8 +689,15 @@ export const MobileProduction: React.FC = () => {
         const tick = () => {
             if (startReminderAnchorRef.current === null) return;
             const elapsed = Date.now() - startReminderAnchorRef.current;
-            if (elapsed < REMINDER_MS) return;
+            if (elapsed < REMINDER_MS) {
+                setStartReminderDue(false);
+                return;
+            }
 
+            const reminderBucket = Math.floor(elapsed / REMINDER_MS);
+            if (reminderBucket <= lastStartReminderBucketRef.current) return;
+            lastStartReminderBucketRef.current = reminderBucket;
+            setStartReminderDue(true);
             if (hasUserInteractedRef.current) {
                 pendingStartReminderAlarmRef.current = false;
                 playAlertSound('start');
@@ -701,7 +713,6 @@ export const MobileProduction: React.FC = () => {
                     id: 'mobile-start-reminder',
                 }
             );
-            startReminderAnchorRef.current = Date.now();
         };
 
         // Fire once exactly when 10-minute threshold is reached, then repeat every 10 minutes.
@@ -1455,8 +1466,8 @@ export const MobileProduction: React.FC = () => {
     const calculateStatus = () => {
         if (!productionData) return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
 
-        // Paused/Idle state
-        if (productionData.is_paused || productionData.button_status === 3) {
+        // Paused/Idle state (including finished cycles waiting for reset/start).
+        if (productionData.is_paused || productionData.button_status === 3 || productionData.button_status === 2) {
             return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
         }
 
@@ -1540,6 +1551,28 @@ export const MobileProduction: React.FC = () => {
         !productionData.is_paused &&
         Number(productionData.target_mins || 0) > 0 &&
         actualTimeCounter / 60 > Number(productionData.target_mins || 0);
+    const normalizedButtonStatus = Number(productionData?.button_status ?? 0);
+    const showStartPressHint =
+        !!productionData &&
+        (normalizedButtonStatus === 3 || normalizedButtonStatus === 2 || productionData.is_paused || normalizedButtonStatus === 0);
+    const showFinishPressHint =
+        isTargetTimeExceeded;
+    const idleMinutes = (() => {
+        if (!productionData) return 0;
+        const isRunning = productionData.button_status === 1 && !productionData.is_paused;
+        if (isRunning || startReminderAnchorRef.current === null) return 0;
+        const elapsedMs = currentTime.getTime() - startReminderAnchorRef.current;
+        return Math.max(0, Math.floor(elapsedMs / 60000));
+    })();
+    const showStartButtonPressHint =
+        !!productionData &&
+        (normalizedButtonStatus === 3 || productionData.is_paused || normalizedButtonStatus === 0);
+    const showResetButtonPressHint =
+        !!productionData &&
+        normalizedButtonStatus === 2;
+    // Deterministic cue selection while START/RESET controls are visible.
+    const showStartPrimaryCue = normalizedButtonStatus !== 2;
+    const showResetPrimaryCue = normalizedButtonStatus === 2;
     const currentLoggedInUser = (() => {
         try {
             if (typeof localStorage === 'undefined') return null;
@@ -1864,32 +1897,109 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Control Buttons */}
                     <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
+                        {showStartPressHint && (
+                            <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
+                                <div className="flex items-center justify-center min-h-[44px] text-amber-800">
+                                    <p className="text-sm font-semibold text-center">
+                                        {productionData.button_status === 2
+                                            ? `Production is idle for ${idleMinutes} min. Tap RESET, then tap START.`
+                                            : `Production is idle for ${idleMinutes} min. Tap START to begin cycle.`}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {showFinishPressHint && (
+                            <div className="mb-3 rounded-xl border border-red-300 bg-red-50 px-3 py-2.5">
+                                <div className="flex items-center justify-center min-h-[44px] text-red-800">
+                                    <p className="text-sm font-semibold text-center">
+                                        Target exceeded. Tap FINISH when cycle is complete.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                         <div className="flex gap-3 md:gap-4">
-                            {productionData.button_status === 3 || productionData.button_status === 2 ? (
+                            {normalizedButtonStatus === 3 || normalizedButtonStatus === 2 ? (
                                 <>
                                     <button
                                         onClick={handleStart}
-                                        disabled={loading || productionData.button_status === 2}
-                                        title={productionData.button_status === 2 ? "Cycle finished. Click RESET to start a new cycle." : ""}
-                                        className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        disabled={loading || normalizedButtonStatus === 2}
+                                        title={normalizedButtonStatus === 2 ? "Cycle finished. Click RESET to start a new cycle." : ""}
+                                        className={`relative flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                                            showStartButtonPressHint
+                                                ? 'ring-4 ring-amber-300/80 ring-offset-2 ring-offset-white animate-pulse'
+                                                : ''
+                                        }`}
                                     >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Play className="h-5 w-5" /><span>START</span></>}
+                                        {showStartButtonPressHint && (
+                                            <span className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/25 animate-ping" />
+                                        )}
+                                        {loading ? (
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <Play className="h-5 w-5" />
+                                                <span>START</span>
+                                                {showStartPrimaryCue && (
+                                                    <Hand
+                                                        className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
+                                                        strokeWidth={2.8}
+                                                    />
+                                                )}
+                                            </>
+                                        )}
                                     </button>
                                     <button
                                         onClick={handleReset}
                                         disabled={loading}
-                                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className={`relative flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2 ${
+                                            showResetButtonPressHint
+                                                ? 'ring-4 ring-amber-300/80 ring-offset-2 ring-offset-white animate-pulse'
+                                                : ''
+                                        }`}
                                     >
-                                        <RotateCcw className="h-5 w-5" /><span>RESET</span>
+                                        {showResetButtonPressHint && (
+                                            <span className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/25 animate-ping" />
+                                        )}
+                                        <RotateCcw className="h-5 w-5" />
+                                        <span>RESET</span>
+                                        {showResetPrimaryCue && (
+                                            <Hand
+                                                className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
+                                                strokeWidth={2.8}
+                                            />
+                                        )}
                                     </button>
                                 </>
-                            ) : productionData.button_status === 1 && !productionData.is_paused ? (
+                            ) : normalizedButtonStatus === 1 && !productionData.is_paused ? (
                                 <>
                                     <button
                                         onClick={handleFinish}
-                                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide flex items-center justify-center gap-2"
+                                        className={`relative flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide flex items-center justify-center gap-2 ${
+                                            showFinishPressHint
+                                                ? 'ring-4 ring-red-400/80 ring-offset-2 ring-offset-white animate-pulse'
+                                                : ''
+                                        }`}
                                     >
-                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" /><span>FINISH</span></>}
+                                        {showFinishPressHint && (
+                                            <span className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/25 animate-ping" />
+                                        )}
+                                        {loading ? (
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="h-5 w-5" />
+                                                <span>FINISH</span>
+                                                {showFinishPressHint && (
+                                                    <span className="relative inline-flex items-center justify-center ml-1">
+                                                        <span className="absolute h-8 w-8 rounded-full border-2 border-yellow-200/80 animate-ping" />
+                                                        <Hand
+                                                            className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
+                                                            strokeWidth={2.8}
+                                                        />
+                                                    </span>
+                                                )}
+                                            </>
+                                        )}
                                     </button>
                                 </>
                             ) : null}
