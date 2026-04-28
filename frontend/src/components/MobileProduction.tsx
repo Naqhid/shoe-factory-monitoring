@@ -1134,6 +1134,37 @@ export const MobileProduction: React.FC = () => {
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     };
 
+    const formatLocalDateTime = (date: Date) => {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mi = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+    };
+
+    const toLocalDateTimePayloadValue = (value: any) => {
+        if (value === null || value === undefined || value === '') return null;
+        if (value instanceof Date) return formatLocalDateTime(value);
+        const raw = String(value).trim();
+        if (!raw) return null;
+
+        // Keep local date-only values unchanged.
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+        // Local datetime without timezone: normalize separator/seconds only.
+        if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(raw) && !/(Z|[+-]\d{2}:\d{2})$/i.test(raw)) {
+            const normalized = raw.replace('T', ' ');
+            return normalized.length === 16 ? `${normalized}:00` : normalized;
+        }
+
+        // Timezone-bearing or other parseable datetime -> convert to local wall-clock string.
+        const parsed = new Date(raw);
+        if (!Number.isNaN(parsed.getTime())) return formatLocalDateTime(parsed);
+        return raw;
+    };
+
     const handleStart = async () => {
         // If no production data ID (first time) or after FINISH, create new record
         if (!productionData?.id || productionData.button_status === 2) {
@@ -1157,6 +1188,10 @@ export const MobileProduction: React.FC = () => {
                         // Always stamp new cycle with current local date from browser session.
                         // This avoids stale in-memory prod_date causing false duplicate conflicts.
                         prod_date: getLocalDateString(),
+                        start_time: toLocalDateTimePayloadValue(productionData?.start_time),
+                        finish_time: toLocalDateTimePayloadValue(productionData?.finish_time),
+                        idle_start_time: toLocalDateTimePayloadValue(productionData?.idle_start_time),
+                        idle_stop_time: toLocalDateTimePayloadValue(productionData?.idle_stop_time),
                         button_status: 1
                     };
                     const response = await apiFetch(`${API_BASE}/api/mobile-production`, {

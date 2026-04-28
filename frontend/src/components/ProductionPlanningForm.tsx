@@ -1,9 +1,10 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X, RotateCcw } from 'lucide-react';
+import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X, RotateCcw, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
+import * as XLSX from 'xlsx';
 
 interface MasterOption {
   id: number;
@@ -67,6 +68,9 @@ export const ProductionPlanningForm: React.FC = () => {
   const [filterWorkCentre, setFilterWorkCentre] = React.useState('');
   const [filterStyle, setFilterStyle] = React.useState('');
   const [showDeleted, setShowDeleted] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const [showTemplatePreview, setShowTemplatePreview] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
     fetchPlans();
@@ -352,6 +356,171 @@ export const ProductionPlanningForm: React.FC = () => {
     }
   };
 
+  const normalizeKey = (key: string) => String(key || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  const getField = (row: Record<string, any>, aliases: string[]) => {
+    for (const alias of aliases) {
+      if (Object.prototype.hasOwnProperty.call(row, alias)) {
+        const value = row[alias];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+      }
+    }
+    return '';
+  };
+
+  const resolveStyleId = (raw: any) => {
+    const needle = String(raw || '').trim();
+    if (!needle) return '';
+    const lower = needle.toLowerCase();
+    const exact = styles.find((s) =>
+      String(s.id) === needle ||
+      String(s.code || '').toLowerCase() === lower ||
+      String(s.name || '').toLowerCase() === lower
+    );
+    return exact ? String(exact.id) : '';
+  };
+
+  const resolveWorkCentreId = (raw: any) => {
+    const needle = String(raw || '').trim();
+    if (!needle) return '';
+    const lower = needle.toLowerCase();
+    const exact = workCentres.find((w) =>
+      String(w.id) === needle ||
+      String(w.code || '').toLowerCase() === lower ||
+      String(w.name || '').toLowerCase() === lower
+    );
+    return exact ? String(exact.id) : '';
+  };
+
+  const handleExcelImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (styles.length === 0 || workCentres.length === 0) {
+      toast.error('Master data not loaded. Please retry in a moment.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) throw new Error('Excel file has no sheets');
+      const sheet = workbook.Sheets[sheetName];
+      const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (!rawRows.length) throw new Error('Excel sheet is empty');
+
+      const rows = rawRows.map((r) => {
+        const normalized: Record<string, any> = {};
+        Object.keys(r).forEach((k) => { normalized[normalizeKey(k)] = r[k]; });
+        return normalized;
+      });
+
+      const routingCache = new Map<string, any>();
+      const defaultDate = new Date().toISOString().split('T')[0];
+      const payloadLines = [];
+
+      for (let idx = 0; idx < rows.length; idx += 1) {
+        const row = rows[idx];
+        const styleRaw = getField(row, ['style_id', 'style_code', 'style']);
+        const workCentreRaw = getField(row, ['work_centre_id', 'work_centre_code', 'work_centre']);
+        const planDateRaw = getField(row, ['plan_date', 'date']) || defaultDate;
+        const targetRaw = getField(row, ['total_target_per_day', 'target_per_day', 'target']);
+        const pairsRaw = getField(row, ['target_pairs_per_tray', 'pairs_per_tray']);
+        const trayRaw = getField(row, ['tray_count']);
+        const manHoursRaw = getField(row, ['man_hours_minutes', 'man_hours', 'manhours']);
+        const smvRaw = getField(row, ['smv_per_pair', 'smv']);
+
+        const styleId = resolveStyleId(styleRaw);
+        const workCentreId = resolveWorkCentreId(workCentreRaw);
+        if (!styleId) throw new Error(`Row ${idx + 2}: invalid style`);
+        if (!workCentreId) throw new Error(`Row ${idx + 2}: invalid work centre`);
+        if (!targetRaw || !pairsRaw) throw new Error(`Row ${idx + 2}: missing total_target_per_day or target_pairs_per_tray`);
+
+        if (!routingCache.has(styleId)) {
+          const res = await apiFetch(`${API_BASE}/api/production-routing/style/${styleId}`);
+          const routing = await res.json();
+          if (!routing.success || !routing.data) {
+            throw new Error(`Row ${idx + 2}: routing not found for selected style`);
+          }
+          let computedManHours = 0;
+          if (Array.isArray(routing.data.lines)) {
+            const secs = routing.data.lines.reduce((sum: number, l: any) => {
+              const obs = parseFloat(l.observed_time) || 0;
+              const rf = parseFloat(l.rating_factor) || 0;
+              const mp = parseFloat(l.manpower) || 0;
+              const std = (obs * rf / 100) * 1.15;
+              return sum + (std * mp);
+            }, 0);
+            computedManHours = Math.round(secs / 60);
+          }
+          routingCache.set(styleId, {
+            customer_id: routing.data.customer_id,
+            group_id: routing.data.group_id || null,
+            leather_id: routing.data.leather_id || null,
+            color_id: routing.data.color_id || null,
+            smv_per_pair: routing.data.tot_smv,
+            man_hours_minutes: computedManHours,
+          });
+        }
+
+        const routingData = routingCache.get(styleId);
+        const totalTarget = Math.round(Number(targetRaw));
+        const pairsPerTray = Math.round(Number(pairsRaw));
+        const trayCount = trayRaw ? Math.round(Number(trayRaw)) : (pairsPerTray > 0 ? Math.ceil(totalTarget / pairsPerTray) : 0);
+
+        payloadLines.push({
+          plan_date: String(planDateRaw).split('T')[0],
+          style_id: Number(styleId),
+          customer_id: Number(routingData.customer_id),
+          group_id: routingData.group_id ? Number(routingData.group_id) : null,
+          leather_id: routingData.leather_id ? Number(routingData.leather_id) : null,
+          color_id: routingData.color_id ? Number(routingData.color_id) : null,
+          work_centre_id: Number(workCentreId),
+          total_target_per_day: totalTarget,
+          target_pairs_per_tray: pairsPerTray,
+          tray_count: trayCount,
+          man_hours_minutes: Math.round(Number(manHoursRaw || routingData.man_hours_minutes || 0)),
+          smv_per_pair: Number(smvRaw || routingData.smv_per_pair || 0),
+        });
+      }
+
+      const res = await apiFetch(`${API_BASE}/api/production-planning/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: payloadLines }),
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Bulk import failed');
+
+      toast.success(`Imported ${result?.data?.count || payloadLines.length} planning line(s)`);
+      fetchPlans();
+    } catch (error: any) {
+      toast.error(error?.message || 'Excel import failed');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadPlanningTemplate = () => {
+    const rows = [
+      {
+        plan_date: new Date().toISOString().split('T')[0],
+        style: 'STYLE01',
+        work_centre: 'WC01',
+        total_target_per_day: 1200,
+        target_pairs_per_tray: 24,
+        tray_count: 50,
+        man_hours_minutes: 210,
+        smv_per_pair: 28.5,
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'planning_template');
+    XLSX.writeFile(wb, 'production_planning_template.xlsx');
+  };
+
   return (
     <div className="p-6">
       <ConfirmDialog
@@ -378,6 +547,31 @@ export const ProductionPlanningForm: React.FC = () => {
             <div className="flex gap-2">
               <button onClick={fetchPlans} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
                 <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleExcelImport}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"
+                title="Upload Excel with columns like: style, work_centre, plan_date, total_target_per_day, target_pairs_per_tray"
+              >
+                {importing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {importing ? 'Importing...' : 'Upload Excel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTemplatePreview(true)}
+                className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                View Template
               </button>
               <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
                 <Plus className="h-4 w-4" />Add New
@@ -661,6 +855,63 @@ export const ProductionPlanningForm: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showTemplatePreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Production Planning Template Preview</h3>
+              <button onClick={() => setShowTemplatePreview(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto">
+              <table className="min-w-full text-sm border border-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['plan_date', 'style', 'work_centre', 'total_target_per_day', 'target_pairs_per_tray', 'tray_count', 'man_hours_minutes', 'smv_per_pair'].map((h) => (
+                      <th key={h} className="px-2 py-2 border-b border-gray-200 text-left font-semibold text-gray-700 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {[
+                      new Date().toISOString().split('T')[0],
+                      'STYLE01',
+                      'WC01',
+                      '1200',
+                      '24',
+                      '50',
+                      '210',
+                      '28.5',
+                    ].map((v, idx) => (
+                      <td key={idx} className="px-2 py-2 border-b border-gray-100 whitespace-nowrap">{v}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-3 border-t flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowTemplatePreview(false)}
+                className="px-4 py-2 rounded-md border border-gray-300 text-gray-700"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={downloadPlanningTemplate}
+                className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Download Template
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,10 +1,21 @@
-# 🏭 Shoe Factory Monitoring System
+# Shoe Factory Monitoring System
 
-A complete real-time production monitoring system for shoe manufacturing with IoT integration, featuring a Node.js backend and React TypeScript dashboard.
+Short overview: this app helps supervisors and operators track shoe production in real time, monitor machine performance, and review daily productivity and cycle exceptions from one dashboard.
 
-## 🎯 **System Overview**
+## What this app includes
 
-Monitor machine status, track efficiency, and analyze production data in real-time through automated file processing and responsive web dashboard.
+- Real-time machine and line monitoring
+- Production cycle tracking (start, running, finish, idle)
+- Missed actions and inactive-time visibility
+- Login/session logs for operator activity
+- Production routing and planning management (with bulk Excel upload)
+- Reports for efficiency and daily operations
+
+## Tech stack
+
+- Backend: Node.js, Express, MySQL
+- Frontend: React, TypeScript, Tailwind CSS
+- Data flow: API-driven dashboard + automated production data ingestion
 
 ## 🏗️ **Architecture**
 
@@ -100,6 +111,9 @@ npm run build
 | `/api/reports/hourly?date=YYYY-MM-DD` | GET | Hourly event analysis |
 | `/api/reports/efficiency?date=YYYY-MM-DD` | GET | Machine efficiency ranking |
 | `/api/reports/overall-efficiency?date=YYYY-MM-DD` | GET | Factory-wide efficiency |
+| `/api/missed-actions/daily-report?date=YYYY-MM-DD&line=LINE` | GET | Daily inactive/lost-minutes report |
+| `/api/production-routing/bulk` | POST | Bulk create routing from parsed Excel rows |
+| `/api/production-planning/bulk` | POST | Bulk create planning records from parsed Excel rows |
 | `/health` | GET | System health check |
 
 ## 📁 **File Processing**
@@ -135,6 +149,8 @@ npm run build
 - 💡 Hover tooltips on status icons
 - 📊 Efficiency ranking charts
 - 📱 Responsive design (mobile/tablet/desktop)
+- 📁 Excel template preview/download and bulk import for routing/planning
+- 📉 Daily lost-minutes analysis by line and machine
 
 ### **Visual Indicators**
 - 🟢 **Running** (Status 1): Machine producing

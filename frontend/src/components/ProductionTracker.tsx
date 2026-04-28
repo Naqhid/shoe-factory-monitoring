@@ -350,7 +350,7 @@ export const ProductionTracker: React.FC = () => {
     <div className="min-h-screen bg-slate-100 p-2 sm:p-4 lg:p-6">
       <div className="max-w-5xl w-full mx-auto space-y-2.5 sm:space-y-3.5">
         {!online && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex items-center justify-between text-red-700">
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-red-700">
             <div className="flex items-center gap-2">
               <WifiOff className="h-4 w-4" />
               <span className="text-sm font-semibold">Offline mode: live sync paused</span>
@@ -360,14 +360,14 @@ export const ProductionTracker: React.FC = () => {
 
         {error && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-amber-800">Live refresh issue</p>
                 <p className="text-sm text-amber-700">{error}. Showing last available data.</p>
               </div>
               <button
                 onClick={loadDashboardData}
-                className="text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1 rounded"
+                className="text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1 rounded w-full sm:w-auto"
               >
                 Retry
               </button>
@@ -377,8 +377,8 @@ export const ProductionTracker: React.FC = () => {
 
         {/* Dashboard section below header uses the new mobile card UI */}
         <section className="bg-gradient-to-r from-slate-800 via-blue-800 to-indigo-800 rounded-3xl p-2.5 sm:p-3.5 text-white border border-blue-900/40 shadow-md">
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <div className="text-xs text-slate-200 flex items-center gap-2">
+          <div className="mb-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="text-xs text-slate-200 flex flex-wrap items-center gap-2">
               {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
               <span>
                 Dashboard: {dashboardLastUpdated ? dashboardLastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
@@ -390,7 +390,7 @@ export const ProductionTracker: React.FC = () => {
                 Updated {dashboardAgeLabel}
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <select
                 value={refreshMode}
                 onChange={(e) => setRefreshMode(e.target.value as '10s' | '30s' | 'manual')}
@@ -519,7 +519,7 @@ export const ProductionTracker: React.FC = () => {
           )}
 
           {activeMobileTab === 'dashboard' && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
               <div className="bg-white text-slate-900 rounded-2xl p-2.5 shadow-sm flex flex-col items-center justify-center text-center min-h-[118px]">
                 <div className="text-[11px] font-semibold text-slate-500 mb-1">Today Target</div>
                 <div className="text-2xl sm:text-3xl font-bold">{Number(topSection?.target || 0).toLocaleString()}</div>
@@ -574,7 +574,7 @@ export const ProductionTracker: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="grid grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
                   {enrichedLines.map(({ line, index, efficiency, target, output, outputPct, gap, riskScore, riskLabel }) => {
                     return (
                       <button
@@ -621,7 +621,7 @@ export const ProductionTracker: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5 mt-3">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2.5 mt-3">
                 <div className="bg-white rounded-2xl p-3.5 text-slate-900 shadow-sm min-h-[118px] flex flex-col justify-center">
                   <div className="text-xs sm:text-sm text-slate-500 font-semibold mb-1">Projected Output</div>
                   <div className="text-4xl sm:text-5xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
@@ -671,7 +671,7 @@ export const ProductionTracker: React.FC = () => {
                   Mobile mode: Reports optimized with horizontal scroll.
                 </div>
               )}
-              <div className={isSmallScreen ? 'min-w-[360px]' : 'min-w-[320px]'}>
+              <div className={isSmallScreen ? 'min-w-[300px]' : 'min-w-[320px]'}>
                 <Reports />
               </div>
             </div>
@@ -681,7 +681,7 @@ export const ProductionTracker: React.FC = () => {
 
       {selectedLineDetail && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
               <h3 className="text-lg font-bold text-slate-900">{selectedLineDetail.line_name || 'Line Details'}</h3>
               <button

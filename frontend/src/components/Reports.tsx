@@ -809,6 +809,25 @@ export const Reports: React.FC = () => {
           )}
         </div>
 
+        <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-blue-50 text-blue-700">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Daily Lost Minutes</p>
+              <p className="text-xs text-gray-500">Operational drill-down is available in Missed Actions under Daily Inactive Report.</p>
+            </div>
+          </div>
+          <a
+            href="/missed_actions?tab=daily"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+          >
+            Open Missed Actions Report
+            <ChevronRight className="h-3.5 w-3.5" />
+          </a>
+        </div>
+
         {/* Report Type Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           {REPORT_OPTIONS.map(opt => {

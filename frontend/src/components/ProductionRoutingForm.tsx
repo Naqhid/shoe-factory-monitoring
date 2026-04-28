@@ -1,9 +1,10 @@
 import React from 'react';
-import { Plus, Trash2, Save, RefreshCw, Edit, X, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Save, RefreshCw, Edit, X, RotateCcw, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Pagination } from './Pagination';
+import * as XLSX from 'xlsx';
 
 interface MasterOption {
   id: number;
@@ -131,6 +132,9 @@ export const ProductionRoutingForm: React.FC = () => {
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
   const [searchTerm, setSearchTerm] = React.useState('');
   const [showDeleted, setShowDeleted] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const [showTemplatePreview, setShowTemplatePreview] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const [headerData, setHeaderData] = React.useState<HeaderData>({
     customer_id: '',
@@ -381,6 +385,202 @@ export const ProductionRoutingForm: React.FC = () => {
     }
   };
 
+  const normalizeKey = (key: string) => String(key || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+
+  const getField = (row: Record<string, any>, aliases: string[]) => {
+    for (const alias of aliases) {
+      if (Object.prototype.hasOwnProperty.call(row, alias)) {
+        const value = row[alias];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+      }
+    }
+    return '';
+  };
+
+  const resolveMasterId = (options: MasterOption[], raw: any) => {
+    const needle = String(raw || '').trim();
+    if (!needle) return '';
+    const lower = needle.toLowerCase();
+    const exact = options.find((o) =>
+      String(o.id) === needle ||
+      String(o.code || '').toLowerCase() === lower ||
+      String(o.name || '').toLowerCase() === lower
+    );
+    return exact ? String(exact.id) : '';
+  };
+
+  const resolveMachineId = (raw: any) => {
+    const needle = String(raw || '').trim();
+    if (!needle) return '';
+    const lower = needle.toLowerCase();
+    const exact = machineCentres.find((m) =>
+      String(m.machine_id || '') === needle ||
+      String(m.machine_name || '').toLowerCase() === lower ||
+      String(m.name || '').toLowerCase() === lower
+    );
+    return exact ? String(exact.machine_id) : '';
+  };
+
+  const handleExcelImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (customers.length === 0 || styles.length === 0 || machineCentres.length === 0) {
+      toast.error('Master data is not loaded yet. Please retry in a moment.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) throw new Error('Excel file has no sheets');
+      const sheet = workbook.Sheets[sheetName];
+      const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (!rawRows.length) throw new Error('Excel sheet is empty');
+
+      const rows = rawRows.map((r) => {
+        const normalized: Record<string, any> = {};
+        Object.keys(r).forEach((k) => {
+          normalized[normalizeKey(k)] = r[k];
+        });
+        return normalized;
+      });
+
+      const routingGroups = new Map<string, { header: HeaderData; lines: RoutingLine[] }>();
+      const today = new Date().toISOString().split('T')[0];
+
+      rows.forEach((row, idx) => {
+        const customerRaw = getField(row, ['customer_id', 'customer_code', 'customer']);
+        const groupRaw = getField(row, ['group_id', 'group_code', 'group']);
+        const leatherRaw = getField(row, ['leather_id', 'leather_code', 'leather']);
+        const styleRaw = getField(row, ['style_id', 'style_code', 'style']);
+        const colorRaw = getField(row, ['color_id', 'color_code', 'color']);
+        const createdOnRaw = getField(row, ['created_on', 'created_date', 'date']) || today;
+        const targetRaw = getField(row, ['target_per_day', 'target_day', 'target']);
+        const smvRaw = getField(row, ['tot_smv', 'total_smv', 'smv']);
+        const machineRaw = getField(row, ['machine_centre_id', 'machine_id', 'machine']);
+        const processRaw = getField(row, ['process']);
+        const observedRaw = getField(row, ['observed_time', 'observed']);
+        const ratingRaw = getField(row, ['rating_factor', 'rating']);
+        const manpowerRaw = getField(row, ['manpower']);
+
+        const customerId = resolveMasterId(customers, customerRaw);
+        const groupId = resolveMasterId(groups, groupRaw);
+        const leatherId = resolveMasterId(leathers, leatherRaw);
+        const styleId = resolveMasterId(styles, styleRaw);
+        const colorId = resolveMasterId(colors, colorRaw);
+        const machineId = resolveMachineId(machineRaw);
+
+        if (!customerId || !groupId || !leatherId || !styleId || !colorId) {
+          throw new Error(`Row ${idx + 2}: invalid customer/group/leather/style/color mapping`);
+        }
+        if (!machineId) {
+          throw new Error(`Row ${idx + 2}: invalid machine mapping`);
+        }
+        if (!targetRaw || !smvRaw || !observedRaw || !ratingRaw || !manpowerRaw) {
+          throw new Error(`Row ${idx + 2}: missing target/smv/observed/rating/manpower`);
+        }
+
+        const header: HeaderData = {
+          customer_id: customerId,
+          group_id: groupId,
+          leather_id: leatherId,
+          style_id: styleId,
+          color_id: colorId,
+          created_on: String(createdOnRaw).split('T')[0],
+          machine_centre_id: '',
+          target_per_day: String(targetRaw),
+          tot_smv: String(smvRaw),
+        };
+
+        const line: RoutingLine = {
+          machine_centre_id: machineId,
+          machine_name: '',
+          process: String(processRaw || ''),
+          observed_time: String(observedRaw),
+          rating_factor: String(ratingRaw),
+          manpower: String(manpowerRaw),
+        };
+
+        const groupKey = [
+          header.customer_id,
+          header.group_id,
+          header.leather_id,
+          header.style_id,
+          header.color_id,
+          header.created_on,
+          header.target_per_day,
+          header.tot_smv,
+        ].join('|');
+
+        if (!routingGroups.has(groupKey)) {
+          routingGroups.set(groupKey, { header, lines: [] });
+        }
+        routingGroups.get(groupKey)!.lines.push(line);
+      });
+
+      const items = Array.from(routingGroups.values()).map((group) => {
+        const dedupedLines = group.lines.filter((line, index, arr) =>
+          arr.findIndex((x) => x.machine_centre_id === line.machine_centre_id) === index
+        );
+        return {
+          header: group.header,
+          lines: dedupedLines.map((line) => ({
+            machine_centre_id: line.machine_centre_id,
+            process: line.process || null,
+            observed_time: parseFloat(line.observed_time),
+            rating_factor: parseFloat(line.rating_factor),
+            manpower: parseFloat(line.manpower),
+          })),
+        };
+      });
+
+      const response = await apiFetch(`${API_BASE}/api/production-routing/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Import failed while saving routing');
+      }
+
+      const createdCount = Number(result?.data?.created_count || items.length);
+      toast.success(`Imported ${createdCount} routing record(s) from Excel`);
+      fetchRoutings();
+    } catch (error: any) {
+      toast.error(error?.message || 'Excel import failed');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadRoutingTemplate = () => {
+    const rows = [
+      {
+        customer: 'CUST01',
+        group: 'GRP01',
+        leather: 'LEA01',
+        style: 'STYLE01',
+        color: 'COL01',
+        created_on: new Date().toISOString().split('T')[0],
+        target_per_day: 1200,
+        tot_smv: 28.5,
+        machine_id: 'MC01',
+        process: 'Stitching',
+        observed_time: 145,
+        rating_factor: 100,
+        manpower: 1.2,
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'routing_template');
+    XLSX.writeFile(wb, 'production_routing_template.xlsx');
+  };
+
   return (
     <div className="p-6">
       <ConfirmDialog
@@ -427,6 +627,31 @@ export const ProductionRoutingForm: React.FC = () => {
             </label>
             <button onClick={fetchRoutings} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleExcelImport}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"
+              title="Upload first sheet with columns: customer/group/leather/style/color,target_per_day,tot_smv,machine_id,process,observed_time,rating_factor,manpower"
+            >
+              {importing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {importing ? 'Importing...' : 'Upload Excel'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowTemplatePreview(true)}
+              className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              View Template
             </button>
             <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
               <Plus className="h-4 w-4" />Add New
@@ -669,6 +894,54 @@ export const ProductionRoutingForm: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showTemplatePreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Production Routing Template Preview</h3>
+              <button onClick={() => setShowTemplatePreview(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto">
+              <table className="min-w-full text-sm border border-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['customer', 'group', 'leather', 'style', 'color', 'created_on', 'target_per_day', 'tot_smv', 'machine_id', 'process', 'observed_time', 'rating_factor', 'manpower'].map((h) => (
+                      <th key={h} className="px-2 py-2 border-b border-gray-200 text-left font-semibold text-gray-700 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {['CUST01', 'GRP01', 'LEA01', 'STYLE01', 'COL01', new Date().toISOString().split('T')[0], '1200', '28.5', 'MC01', 'Stitching', '145', '100', '1.2'].map((v, idx) => (
+                      <td key={idx} className="px-2 py-2 border-b border-gray-100 whitespace-nowrap">{v}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-3 border-t flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowTemplatePreview(false)}
+                className="px-4 py-2 rounded-md border border-gray-300 text-gray-700"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={downloadRoutingTemplate}
+                className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Download Template
+              </button>
+            </div>
           </div>
         </div>
       )}

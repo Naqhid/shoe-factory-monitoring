@@ -494,6 +494,7 @@ app.get('/api/production-routing/masters', authenticate, requireProductionRoutin
 app.get('/api/production-routing/style/:styleId', authenticate, requireProductionRoutingAccess, productionRoutingController.getByStyleId.bind(productionRoutingController));
 app.get('/api/production-routing/:id', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.getById.bind(productionRoutingController));
 app.post('/api/production-routing', authenticate, requireProductionRoutingAccess, productionRoutingController.create.bind(productionRoutingController));
+app.post('/api/production-routing/bulk', authenticate, requireProductionRoutingAccess, productionRoutingController.createBulk.bind(productionRoutingController));
 app.put('/api/production-routing/:id', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.update.bind(productionRoutingController));
 app.delete('/api/production-routing/:id', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.delete.bind(productionRoutingController));
 app.post('/api/production-routing/:id/restore', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.restore.bind(productionRoutingController));
@@ -572,6 +573,7 @@ app.post('/api/tracker/alert-actions/query', authenticate, requireTrackerAccess,
 app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, productionTrackerController.acknowledgeAlert.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
 app.get('/api/missed-actions', authenticate, requireLogsAccess, missedActionsController.getMissedActions);
+app.get('/api/missed-actions/daily-report', authenticate, requireLogsAccess, missedActionsController.getMissedActionsDailyReport);
 app.post('/api/missed-actions/ack', authenticate, requireLogsAccess, missedActionsController.acknowledgeMissedAction);
 app.post('/api/missed-actions/snooze', authenticate, requireLogsAccess, missedActionsController.snoozeMissedAction);
 

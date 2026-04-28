@@ -374,6 +374,104 @@ class ProductionRoutingController {
     }
   }
 
+  // Bulk create production routings in one transaction
+  async createBulk(req, res) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (items.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          error: 'items array is required'
+        });
+      }
+
+      const createdIds = [];
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index] || {};
+        const { header, lines } = item;
+
+        if (!header || !lines || lines.length === 0) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            error: `Item ${index + 1}: header and at least one line item are required`
+          });
+        }
+
+        const headerError = this.validateHeader(header);
+        if (headerError) {
+          await connection.rollback();
+          return res.status(400).json({ success: false, error: `Item ${index + 1}: ${headerError}` });
+        }
+        const lineError = this.validateLines(lines);
+        if (lineError) {
+          await connection.rollback();
+          return res.status(400).json({ success: false, error: `Item ${index + 1}: ${lineError}` });
+        }
+        const machineError = await this.validateMachineCentresExist(connection, lines);
+        if (machineError) {
+          await connection.rollback();
+          return res.status(400).json({ success: false, error: `Item ${index + 1}: ${machineError}` });
+        }
+        const uniquenessError = await this.ensureUniqueStyle(connection, { styleId: header.style_id });
+        if (uniquenessError) {
+          await connection.rollback();
+          return res.status(409).json({ success: false, error: `Item ${index + 1}: ${uniquenessError}` });
+        }
+
+        const [headerResult] = await connection.execute(
+          `INSERT INTO production_routing_header
+          (customer_id, group_id, leather_id, style_id, color_id, created_on, category, target_per_day, tot_smv)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            header.customer_id,
+            header.group_id,
+            header.leather_id,
+            header.style_id,
+            header.color_id,
+            header.created_on,
+            header.category,
+            header.target_per_day,
+            header.tot_smv
+          ]
+        );
+        const headerId = headerResult.insertId;
+        createdIds.push(headerId);
+
+        for (const line of lines) {
+          await connection.execute(
+            `INSERT INTO production_routing_lines
+            (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+            [headerId, line.machine_centre_id, line.process || null, line.observed_time, line.rating_factor, line.manpower]
+          );
+        }
+      }
+
+      await connection.commit();
+      return res.status(201).json({
+        success: true,
+        data: {
+          created_count: createdIds.length,
+          created_ids: createdIds
+        }
+      });
+    } catch (error) {
+      await connection.rollback();
+      logger.error('Error creating production routing in bulk:', error);
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ success: false, error: 'A routing already exists for one of the styles in this upload.' });
+      }
+      return res.status(500).json({ success: false, error: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+
   // Delete production routing
   async delete(req, res) {
     try {

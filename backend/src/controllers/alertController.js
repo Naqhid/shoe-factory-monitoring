@@ -233,7 +233,8 @@ class AlertController {
         alert_type,
         work_centre_id,
         include_acknowledged = 'false',
-        limit = 200,
+        limit = 25,
+        page = 1,
       } = req.query;
 
       const now = new Date();
@@ -242,7 +243,8 @@ class AlertController {
         await AlertController._runChecksThrottled(formatDateOnly(now));
       }
 
-      const limitInt = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500);
+      const limitInt = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 200);
+      const pageInt = Math.max(parseInt(page, 10) || 1, 1);
       let query = `
         SELECT
           pa.*,
@@ -276,8 +278,7 @@ class AlertController {
 
       query += ` ORDER BY
         CASE pa.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END ASC,
-        pa.created_at DESC
-        LIMIT ${limitInt}`;
+        pa.created_at DESC`;
 
       const [rows] = await db.execute(query, params);
 
@@ -362,8 +363,26 @@ class AlertController {
         }
       }
 
+      const totalCount = filteredRows.length;
+      const start = (pageInt - 1) * limitInt;
+      const end = start + limitInt;
+      const pagedRows = filteredRows.slice(start, end);
       const unacked = filteredRows.filter((r) => Number(r.is_acknowledged || 0) === 0).length;
-      return res.json({ success: true, data: filteredRows, unacknowledged_count: unacked });
+      const totalPages = Math.max(1, Math.ceil(totalCount / limitInt));
+
+      return res.json({
+        success: true,
+        data: pagedRows,
+        unacknowledged_count: unacked,
+        pagination: {
+          page: pageInt,
+          limit: limitInt,
+          total: totalCount,
+          totalPages,
+          hasNextPage: pageInt < totalPages,
+          hasPrevPage: pageInt > 1,
+        },
+      });
     } catch (error) {
       logger.error('getRealtimeCenterAlerts error:', error);
       return res.status(500).json({ success: false, message: error.message });
