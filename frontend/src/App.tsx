@@ -90,6 +90,7 @@ function App() {
   const isMobileProduction = pathParts[0] === 'mobile' && pathParts.length >= 2 && !isLineRoute;
   const isMobileQRScanner = pathParts[0] === 'mobile' && pathParts.length === 2 && !isLineRoute;
   const hideTopHeader = isMobileProduction || isMobileQRScanner || activeMenu === 'production_tracker';
+  const hideSidebarToggleButton = activeMenu === 'production_tracker';
   const hideAlertBell = isMobileProduction || isMobileQRScanner;
   const hideLogout = false; // Show logout for all users including Machine Centre Users
 
@@ -260,7 +261,7 @@ function App() {
   }
 
   return (
-    <Layout activeMenu={activeMenu} hideTopHeader={hideTopHeader} hideLogout={hideLogout} hideAlertBell={hideAlertBell}>
+    <Layout activeMenu={activeMenu} hideTopHeader={hideTopHeader} hideSidebarToggleButton={hideSidebarToggleButton} hideLogout={hideLogout} hideAlertBell={hideAlertBell}>
       <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>}>
       {isProductionDashboard ? (
         <TVDashboard />

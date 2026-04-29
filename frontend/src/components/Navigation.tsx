@@ -9,6 +9,7 @@ interface NavigationProps {
   activeMenu: string;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  hideSidebarToggleButton?: boolean;
   hideLogout?: boolean;
   hideAlertBell?: boolean;
 }
@@ -51,6 +52,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   activeMenu,
   sidebarOpen,
   onToggleSidebar,
+  hideSidebarToggleButton = false,
   hideLogout = false,
   hideAlertBell = false
 }) => {
@@ -99,9 +101,11 @@ export const Navigation: React.FC<NavigationProps> = ({
 
   return (
     <>
-      <button onClick={onToggleSidebar} className="fixed top-4 left-4 z-50 bg-white p-2 rounded-md shadow-md">
-        <Menu className="h-5 w-5" />
-      </button>
+      {!hideSidebarToggleButton && (
+        <button onClick={onToggleSidebar} className="fixed top-4 left-4 z-50 bg-white p-2 rounded-md shadow-md">
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40" onClick={onToggleSidebar} />

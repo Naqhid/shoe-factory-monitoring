@@ -9,6 +9,7 @@ interface LayoutProps {
   children: React.ReactNode;
   activeMenu?: string;
   hideTopHeader?: boolean;
+  hideSidebarToggleButton?: boolean;
   hideLogout?: boolean;
   hideAlertBell?: boolean;
 }
@@ -17,6 +18,7 @@ export const Layout: React.FC<LayoutProps> = ({
   children,
   activeMenu = '',
   hideTopHeader = false,
+  hideSidebarToggleButton = false,
   hideLogout = false,
   hideAlertBell = false
 }) => {
@@ -97,6 +99,7 @@ export const Layout: React.FC<LayoutProps> = ({
           activeMenu={activeMenu}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          hideSidebarToggleButton={hideSidebarToggleButton}
           hideLogout={hideLogout}
           hideAlertBell={hideAlertBell}
         />
@@ -107,7 +110,7 @@ export const Layout: React.FC<LayoutProps> = ({
           {!sidebarOpen && !hideTopHeader && <div className="h-20 flex-shrink-0"></div>}
           
           {/* Content wrapper */}
-          <div className="flex-1 overflow-auto min-h-0">
+          <div className="flex-1 overflow-auto min-h-0 h-full">
             {children}
           </div>
         </div>

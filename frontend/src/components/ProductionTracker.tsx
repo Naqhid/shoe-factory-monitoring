@@ -353,8 +353,8 @@ export const ProductionTracker: React.FC = () => {
   if (!dashboardData) return null;
 
   return (
-    <div className="min-h-full bg-slate-100 p-1 sm:p-2 lg:p-2">
-      <div className="w-full flex flex-col gap-2 sm:gap-3.5">
+    <div className="min-h-full h-full bg-slate-100 p-1 sm:p-2 lg:p-2 flex flex-col">
+      <div className="w-full flex-1 flex flex-col gap-2 sm:gap-3.5">
         {!online && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-red-700">
             <div className="flex items-center gap-2">
@@ -382,22 +382,22 @@ export const ProductionTracker: React.FC = () => {
         )}
 
         {/* Dashboard section below header uses the new mobile card UI */}
-        <section className="bg-gradient-to-r from-[#0f2f78] via-[#1847be] to-[#1c3cb5] rounded-[20px] p-1.5 pb-20 sm:pb-3.5 sm:p-3.5 text-white border border-blue-900/40 shadow-md flex flex-col sm:flex-1 sm:min-h-0">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="text-xs text-slate-200 flex items-center gap-2 min-w-0">
-              <button
-                type="button"
-                onClick={() => {
-                  window.dispatchEvent(new Event('layout:toggle-sidebar'));
-                  logAuditEvent('sidebar_toggle_clicked', { selectedLine: currentWorkCentreId, selectedDate });
-                }}
-                className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-white/12 hover:bg-white/20 shrink-0"
-                title="Toggle sidebar"
-              >
-                <Menu className="h-4 w-4" />
-              </button>
-              <div className="min-w-0">
-                <p className="text-sm font-bold leading-none truncate">Factory Production</p>
+        <section className="bg-gradient-to-r from-[#0f2f78] via-[#1847be] to-[#1c3cb5] rounded-[20px] p-1 pb-16 sm:p-3.5 sm:pb-3.5 text-white border border-blue-900/40 shadow-md flex flex-col flex-1 h-full min-h-0">
+          <div className="mb-3 sm:mb-2 flex items-center justify-between gap-2 flex-shrink-0 relative">
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new Event('layout:toggle-sidebar'));
+                logAuditEvent('sidebar_toggle_clicked', { selectedLine: currentWorkCentreId, selectedDate });
+              }}
+              className="absolute left-3 top-1 inline-flex items-center justify-center h-7 w-7 rounded-md bg-white/12 hover:bg-white/20"
+              title="Toggle sidebar"
+            >
+              <Menu className="h-8 w-8" />
+            </button>
+            <div className="text-xs text-slate-200 flex items-center gap-2 min-w-0 pl-10">
+              <div className="min-w-0 pl-4">
+                <p className="text-sm font-bold leading-none truncate">Prodpulse Factory Production</p>
                 <p className="text-[11px] text-emerald-200 flex items-center gap-1 mt-1">
                   <span className={`h-1.5 w-1.5 rounded-full ${online ? 'bg-emerald-400' : 'bg-red-400'}`} />
                   <span>Live Dashboard</span>
@@ -480,15 +480,15 @@ export const ProductionTracker: React.FC = () => {
           </div>
 
           {activeMobileTab === 'dashboard' && (
-            <div className="flex-1 min-h-0 flex flex-col justify-center gap-2">
-              <div className="grid grid-cols-4 gap-1 sm:gap-2">
-                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center h-[12vh] min-h-[92px] sm:h-[clamp(118px,16vh,180px)]">
+            <div className="flex-1 min-h-0 flex flex-col gap-2 h-full">
+              <div className="grid grid-cols-4 gap-1 sm:gap-2 auto-rows-[minmax(96px,auto)]">
+                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
                   <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Today Target</div>
                   <div className="text-lg sm:text-3xl font-bold leading-none">{Number(topSection?.target || 0).toLocaleString()}</div>
                   <div className="text-[11px] sm:text-sm font-semibold text-slate-500">Pairs</div>
                 </div>
 
-                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center h-[12vh] min-h-[92px] sm:h-[clamp(118px,16vh,180px)]">
+                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
                   <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Produced</div>
                   <div className="text-lg sm:text-3xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
                   <div className="text-[11px] sm:text-sm font-semibold text-green-600 flex items-center justify-center gap-0.5">
@@ -496,7 +496,7 @@ export const ProductionTracker: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center h-[12vh] min-h-[92px] sm:h-[clamp(118px,16vh,180px)]">
+                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
                   <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-1">Efficiency</div>
                   <div
                     className="h-12 w-12 sm:h-20 sm:w-20 rounded-full grid place-items-center"
@@ -512,7 +512,7 @@ export const ProductionTracker: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center h-[12vh] min-h-[92px] sm:h-[clamp(118px,16vh,180px)]">
+                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
                   <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">WIP</div>
                   <div className="flex items-center justify-center gap-1 text-lg sm:text-3xl font-bold text-orange-600 leading-none">
                     <Briefcase className="h-4 w-4 sm:h-6 sm:w-6" />
@@ -522,8 +522,8 @@ export const ProductionTracker: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-[#f7f9ff] rounded-2xl p-2 sm:p-3 text-slate-900 border border-[#dbe5ff]">
-                <div className="flex items-center justify-between mb-2">
+              <div className="bg-[#f7f9ff] rounded-2xl p-2 sm:p-3 text-slate-900 border border-[#dbe5ff] flex flex-col gap-2 min-h-[120px] sm:min-h-[150px] max-h-[40vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-1 sm:mb-2">
                   <h3 className="text-base sm:text-xl font-bold">Production Lines</h3>
                   <div className="px-2 py-1 rounded-full bg-slate-100 text-[11px] sm:text-sm font-semibold flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-green-500 inline-block" />
@@ -546,7 +546,7 @@ export const ProductionTracker: React.FC = () => {
                             loadLineMachines(wcId);
                             logAuditEvent('line_detail_opened', { line: line.line_name, workCentreId: wcId });
                           }}
-                        className="relative bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#d8e3ff] w-full min-h-[120px] sm:min-h-[168px] hover:shadow-md flex flex-col items-center justify-center text-center"
+                        className="relative bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#d8e3ff] w-full min-h-[100px] sm:min-h-[144px] hover:shadow-md flex flex-col items-center justify-center text-center"
                         >
                           <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(efficiency)}`} />
                           <div className="text-xs sm:text-xl font-bold text-slate-800 mb-1 sm:mb-2 leading-tight">
@@ -583,7 +583,7 @@ export const ProductionTracker: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
-                <div className="bg-[#f7f9ff] rounded-2xl p-2.5 sm:p-3.5 text-slate-900 border border-[#dbe5ff] h-[11.5vh] min-h-[94px] sm:h-[clamp(118px,18vh,200px)] flex flex-col justify-center">
+                <div className="bg-[#f7f9ff] rounded-2xl p-2.5 sm:p-3.5 text-slate-900 border border-[#dbe5ff] min-h-[104px] sm:min-h-[clamp(128px,18vh,220px)] flex flex-col justify-center">
                   <div className="text-xs sm:text-sm text-slate-500 font-semibold mb-1">Projected Output</div>
                   <div className="text-3xl sm:text-5xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
                   <div className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-semibold text-slate-600">Pairs</div>
@@ -594,7 +594,7 @@ export const ProductionTracker: React.FC = () => {
                     navigate('/alert_center');
                     logAuditEvent('alerts_card_opened', { count: alertCount, selectedLine: currentWorkCentreId, selectedDate });
                   }}
-                  className={`bg-[#f7f9ff] rounded-2xl p-2.5 sm:p-3.5 text-slate-900 border border-[#dbe5ff] flex items-center justify-between h-[11.5vh] min-h-[94px] sm:h-[clamp(118px,18vh,200px)] w-full text-left hover:bg-red-50/40 hover:ring-2 hover:ring-red-200 transition-colors ${
+                  className={`bg-[#f7f9ff] rounded-2xl p-2.5 sm:p-3.5 text-slate-900 border border-[#dbe5ff] flex items-center justify-between min-h-[92px] sm:min-h-[clamp(120px,16vh,180px)] w-full text-left hover:bg-red-50/40 hover:ring-2 hover:ring-red-200 transition-colors ${
                     alertCount > 0 ? 'ring-2 ring-red-200/70' : ''
                   }`}
                   title="Open Alert Center"
