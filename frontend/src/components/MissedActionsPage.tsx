@@ -68,7 +68,6 @@ const LOCAL_META_KEY = 'missed_actions_meta_v2';
 export const MissedActionsPage: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline'>('live');
   const [isLoading, setIsLoading] = React.useState(true);
-  const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [items, setItems] = React.useState<MissedAction[]>([]);
@@ -92,8 +91,11 @@ export const MissedActionsPage: React.FC = () => {
   const [dailyEvents, setDailyEvents] = React.useState<DailyReportEvent[]>([]);
   const [weeklyTrend, setWeeklyTrend] = React.useState<Array<{ day: string; cycles: number; inactive_mins: number; extra_mins: number; lost_mins: number }>>([]);
   const [dailyPage, setDailyPage] = React.useState(0);
-  const DAILY_PAGE_SIZE = 5;
+  const [dailyPageSize, setDailyPageSize] = React.useState(10);
   const [expandedMachineKeys, setExpandedMachineKeys] = React.useState<Record<string, boolean>>({});
+  const [discExpandedKeys, setDiscExpandedKeys] = React.useState<Record<string, boolean>>({});
+  const [discPage, setDiscPage] = React.useState(0);
+  const [discPageSize, setDiscPageSize] = React.useState(10);
   const [localMeta, setLocalMeta] = React.useState<Record<string, LocalActionMeta>>(() => {
     try {
       const raw = localStorage.getItem(LOCAL_META_KEY);
@@ -160,7 +162,17 @@ export const MissedActionsPage: React.FC = () => {
       if (hasNewCritical && !isFirstFetch.current) playAlert();
       isFirstFetch.current = false;
       prevCriticalKeys.current = newCriticalKeys;
-      setItems(incoming);
+      setItems((prev) => {
+        // Preserve root_cause edits made locally so auto-refresh doesn't wipe them
+        const prevMap = new Map(prev.map((p) => [p.issue_key, p]));
+        return incoming.map((item) => {
+          const existing = prevMap.get(item.issue_key);
+          if (existing && existing.state?.root_cause && !item.state?.root_cause) {
+            return { ...item, state: { ...item.state, root_cause: existing.state.root_cause } };
+          }
+          return item;
+        });
+      });
       setSummary(result.summary || { total: 0, start_pending: 0, finish_pending: 0 });
       setLastUpdated(new Date());
     } catch (e: any) {
@@ -206,9 +218,15 @@ export const MissedActionsPage: React.FC = () => {
   }, [dailyLine, dailyReportDate, dailyDateTo]);
 
   React.useEffect(() => {
-    if (activeTab !== 'daily' && activeTab !== 'discipline') return;
+    if (activeTab !== 'daily') return;
     fetchDailyReport();
   }, [activeTab, fetchDailyReport]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'discipline') return;
+    // Discipline tab reuses dailyEvents — trigger a fetch if data is empty
+    if (dailyEvents.length === 0 && !dailyLoading) fetchDailyReport();
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const prevDailyReportDate = React.useRef(dailyReportDate);
   const prevDailyDateTo = React.useRef(dailyDateTo);
@@ -506,11 +524,13 @@ export const MissedActionsPage: React.FC = () => {
         trail: nextTrail,
       },
     });
+    toast.success(`Logged: ${action}`);
   };
 
   const acknowledgeFiltered = async () => {
     const targets = sortedFilteredItems.filter((i) => i.issue_key);
     if (targets.length === 0) return;
+    if (!window.confirm(`Acknowledge all ${targets.length} filtered issue(s)?`)) return;
     setIsActionLoading('__bulk__');
     try {
       await Promise.all(
@@ -667,7 +687,7 @@ export const MissedActionsPage: React.FC = () => {
               }`}
             >
               <BellOff className="h-3.5 w-3.5" />
-              {showMuted ? 'Showing Muted' : 'Hide Muted'}
+              {showMuted ? 'Hide Muted' : 'Show Muted'}
             </button>
             <button
               onClick={acknowledgeFiltered}
@@ -708,6 +728,18 @@ export const MissedActionsPage: React.FC = () => {
           <div className="bg-white rounded-xl border border-red-200 p-4 shadow-sm">
             <p className="text-xs text-red-700 font-semibold uppercase">Finish Not Clicked</p>
             <p className="text-3xl font-bold text-red-700 mt-1">{filteredSummary.finish_pending}</p>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Priority Score Guide</p>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">2 — Low overdue</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">3 — 15m+</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold">4 — 30m+</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">5 — 60m+ Critical</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-200 text-red-800 text-xs font-semibold">+1 Finish Pending</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">+1 Repeated 3×</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">max 7</span>
           </div>
         </div>
 
@@ -1064,9 +1096,10 @@ export const MissedActionsPage: React.FC = () => {
                   <select
                     value={dailyLine}
                     onChange={(e) => setDailyLine(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                    disabled={dailyLoading}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white disabled:opacity-60"
                   >
-                    <option value="all">All Lines</option>
+                    <option value="all">{dailyLoading ? 'Loading…' : 'All Lines'}</option>
                     {dailyByLine.map((line) => (
                       <option key={line.work_centre_name} value={line.work_centre_name}>{line.work_centre_name}</option>
                     ))}
@@ -1122,7 +1155,9 @@ export const MissedActionsPage: React.FC = () => {
                 <p className="text-xs text-gray-500 mt-1">From current live missed issues</p>
               </div>
               <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
-                <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Worst Line (Today)</p>
+                <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">
+                  Worst Line {dailyReportDate === dailyDateTo ? '(Today)' : `(${dailyReportDate} – ${dailyDateTo})`}
+                </p>
                 <p className="text-xl font-bold text-amber-700 mt-1">{lineLossRows[0]?.work_centre_name || '-'}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {lineLossRows[0] ? `${formatMinutes(lineLossRows[0].lost)} min loss` : 'No data'}
@@ -1154,55 +1189,61 @@ export const MissedActionsPage: React.FC = () => {
                 <div className="xl:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="p-3 border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700">Line Loss Ranking</div>
                   <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                      <thead className="bg-white border-b border-gray-100">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Line</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Cycles</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Total Loss</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Loss / Cycle</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {lineLossRows.map((row) => (
-                          <tr key={row.work_centre_name}>
-                            <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{row.work_centre_name}</td>
-                            <td className="px-3 py-2.5 text-sm text-gray-700">{row.cycles}</td>
-                            <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatMinutes(row.inactive)}</td>
-                            <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatMinutes(row.extra)}</td>
-                            <td className="px-3 py-2.5 text-sm text-red-700 font-bold">{formatMinutes(row.lost)}</td>
-                            <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.perCycle)}</td>
+                    {lineLossRows.length === 0 ? (
+                      <p className="px-4 py-6 text-sm text-gray-400 text-center">No loss data for the selected period.</p>
+                    ) : (
+                      <table className="min-w-full">
+                        <thead className="bg-white border-b border-gray-100">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Line</th>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Cycles</th>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive</th>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra</th>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Total Loss</th>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Loss / Cycle</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {lineLossRows.map((row) => (
+                            <tr key={row.work_centre_name}>
+                              <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{row.work_centre_name}</td>
+                              <td className="px-3 py-2.5 text-sm text-gray-700">{row.cycles}</td>
+                              <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatMinutes(row.inactive)}</td>
+                              <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatMinutes(row.extra)}</td>
+                              <td className="px-3 py-2.5 text-sm text-red-700 font-bold">{formatMinutes(row.lost)}</td>
+                              <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.perCycle)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="p-3 border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700">Loss Trend</div>
                   <div className="p-3 space-y-3">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Today (Hourly)</p>
-                      <div className="space-y-2">
-                        {lineLossTrend.map((bucket) => {
-                          const max = Math.max(1, ...lineLossTrend.map((x) => x.total));
-                          const width = `${Math.max(4, Math.round((bucket.total / max) * 100))}%`;
-                          return (
-                            <div key={bucket.label}>
-                              <div className="flex items-center justify-between text-xs mb-1">
-                                <span className="text-gray-600">{bucket.label}</span>
-                                <span className="font-semibold text-gray-800">{formatMinutes(bucket.total)}m</span>
+                    {dailyReportDate === dailyDateTo && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Today (Hourly)</p>
+                        <div className="space-y-2">
+                          {lineLossTrend.map((bucket) => {
+                            const max = Math.max(1, ...lineLossTrend.map((x) => x.total));
+                            const width = `${Math.max(4, Math.round((bucket.total / max) * 100))}%`;
+                            return (
+                              <div key={bucket.label}>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-gray-600">{bucket.label}</span>
+                                  <span className="font-semibold text-gray-800">{formatMinutes(bucket.total)}m</span>
+                                </div>
+                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-blue-500 rounded-full" style={{ width }} />
+                                </div>
                               </div>
-                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-500 rounded-full" style={{ width }} />
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {weeklyTrend.length > 0 && (
                       <div>
                         <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Last 7 Days</p>
@@ -1261,7 +1302,7 @@ export const MissedActionsPage: React.FC = () => {
               </div>
 
               <div className="p-3 space-y-3">
-                {dailyLineMachineGroups.slice(dailyPage * DAILY_PAGE_SIZE, (dailyPage + 1) * DAILY_PAGE_SIZE).map((line) => (
+                {dailyLineMachineGroups.slice(dailyPage * dailyPageSize, (dailyPage + 1) * dailyPageSize).map((line) => (
                   <div key={line.lineName} className="border border-gray-200 rounded-xl overflow-hidden">
                     <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                       <p className="text-sm font-bold text-gray-700">{line.lineName}</p>
@@ -1353,15 +1394,28 @@ export const MissedActionsPage: React.FC = () => {
                   </div>
                 ))}
               </div>
-              {dailyLineMachineGroups.length > DAILY_PAGE_SIZE && (
-                <div className="px-3 pb-3 flex items-center justify-between text-xs text-gray-600 border-t border-gray-100 pt-3">
-                  <span>Page {dailyPage + 1} of {Math.ceil(dailyLineMachineGroups.length / DAILY_PAGE_SIZE)} ({dailyLineMachineGroups.length} lines total)</span>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setDailyPage((p) => Math.max(0, p - 1))} disabled={dailyPage === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Prev</button>
-                    <button type="button" onClick={() => setDailyPage((p) => Math.min(Math.ceil(dailyLineMachineGroups.length / DAILY_PAGE_SIZE) - 1, p + 1))} disabled={dailyPage >= Math.ceil(dailyLineMachineGroups.length / DAILY_PAGE_SIZE) - 1} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Next</button>
+              {dailyLineMachineGroups.length > 0 && (() => {
+                const totalDailyPages = dailyPageSize === 0 ? 1 : Math.ceil(dailyLineMachineGroups.length / dailyPageSize);
+                return (
+                  <div className="px-3 pb-3 pt-3 flex items-center justify-between text-xs text-gray-600 border-t border-gray-100">
+                    <span>Page {dailyPageSize === 0 ? 1 : dailyPage + 1} of {totalDailyPages} &mdash; {dailyLineMachineGroups.length} line(s) total</span>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={dailyPageSize}
+                        onChange={(e) => { setDailyPageSize(Number(e.target.value)); setDailyPage(0); }}
+                        className="px-2 py-1 text-xs border border-gray-300 rounded bg-white font-semibold"
+                      >
+                        <option value={10}>10 / page</option>
+                        <option value={20}>20 / page</option>
+                        <option value={30}>30 / page</option>
+                        <option value={0}>All</option>
+                      </select>
+                      <button type="button" onClick={() => setDailyPage((p) => Math.max(0, p - 1))} disabled={dailyPage === 0 || dailyPageSize === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Prev</button>
+                      <button type="button" onClick={() => setDailyPage((p) => Math.min(totalDailyPages - 1, p + 1))} disabled={dailyPage >= totalDailyPages - 1 || dailyPageSize === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Next</button>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         ) : null}
@@ -1372,16 +1426,16 @@ export const MissedActionsPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
-                  <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => setDailyReportDate(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                  <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => { setDailyReportDate(e.target.value); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">To</label>
-                  <input type="date" value={dailyDateTo} min={dailyReportDate} onChange={(e) => setDailyDateTo(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                  <input type="date" value={dailyDateTo} min={dailyReportDate} onChange={(e) => { setDailyDateTo(e.target.value); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
-                  <select value={dailyLine} onChange={(e) => setDailyLine(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white">
-                    <option value="all">All Lines</option>
+                  <select value={dailyLine} onChange={(e) => { setDailyLine(e.target.value); setDiscPage(0); }} disabled={dailyLoading} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white disabled:opacity-60">
+                    <option value="all">{dailyLoading ? 'Loading…' : 'All Lines'}</option>
                     {dailyByLine.map((l) => <option key={l.work_centre_name} value={l.work_centre_name}>{l.work_centre_name}</option>)}
                   </select>
                 </div>
@@ -1392,14 +1446,18 @@ export const MissedActionsPage: React.FC = () => {
               </div>
             </div>
 
+            {dailyError && (
+              <div className="bg-white rounded-xl border border-red-200 p-6 text-center text-red-600 font-medium">{dailyError}</div>
+            )}
+
             {(() => {
               const disciplineRows = dailyEvents
-                .filter((e) => e.inactive_mins > 0 || e.extra_mins > 0)
+                .filter((e) => Math.round(e.inactive_mins || 0) > 0 || Math.round(e.extra_mins || 0) > 0)
                 .sort((a, b) => (b.inactive_mins + b.extra_mins) - (a.inactive_mins + a.extra_mins));
+
               if (dailyLoading) return <div className="py-16 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
               if (disciplineRows.length === 0) return <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-500">No late starts or slow finishes for this period.</div>;
 
-              // Group by machine
               const machineMap = new Map<string, { machineName: string; rows: typeof disciplineRows }>();
               disciplineRows.forEach((e) => {
                 const key = e.machine_id || e.machine_name || 'UNKNOWN';
@@ -1414,6 +1472,9 @@ export const MissedActionsPage: React.FC = () => {
                 b.rows.reduce((s, r) => s + r.inactive_mins + r.extra_mins, 0) -
                 a.rows.reduce((s, r) => s + r.inactive_mins + r.extra_mins, 0)
               );
+
+              const totalPages = discPageSize === 0 ? 1 : Math.ceil(machineGroups.length / discPageSize);
+              const pagedGroups = discPageSize === 0 ? machineGroups : machineGroups.slice(discPage * discPageSize, (discPage + 1) * discPageSize);
 
               return (
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1432,7 +1493,7 @@ export const MissedActionsPage: React.FC = () => {
                           `"${e.finish_time ? new Date(e.finish_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}"`,
                           Math.round(e.inactive_mins || 0),
                           Math.round(e.extra_mins || 0),
-                          `"${e.inactive_mins > 0 && e.extra_mins > 0 ? 'Late start + slow finish' : e.inactive_mins > 0 ? 'Late start' : 'Slow finish'}"`,
+                          `"${Math.round(e.inactive_mins || 0) > 0 && Math.round(e.extra_mins || 0) > 0 ? 'Late start + slow finish' : Math.round(e.inactive_mins || 0) > 0 ? 'Late start' : 'Slow finish'}"`,
                         ].join(','))].join('\n');
                         const a = document.createElement('a');
                         a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -1445,16 +1506,16 @@ export const MissedActionsPage: React.FC = () => {
                     </button>
                   </div>
                   <div className="divide-y divide-gray-100">
-                    {machineGroups.map((mg) => {
+                    {pagedGroups.map((mg) => {
                       const totalLate = mg.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
                       const totalExtra = mg.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
                       const machineKey = `disc__${mg.machineName}`;
-                      const isOpen = !!expandedMachineKeys[machineKey];
+                      const isOpen = !!discExpandedKeys[machineKey];
                       return (
                         <div key={mg.machineName}>
                           <button
                             type="button"
-                            onClick={() => setExpandedMachineKeys((prev) => ({ ...prev, [machineKey]: !prev[machineKey] }))}
+                            onClick={() => setDiscExpandedKeys((prev) => ({ ...prev, [machineKey]: !prev[machineKey] }))}
                             className="w-full px-3 py-2.5 bg-white hover:bg-gray-50 flex items-center justify-between text-left"
                           >
                             <div className="flex items-center gap-2">
@@ -1519,6 +1580,23 @@ export const MissedActionsPage: React.FC = () => {
                         </div>
                       );
                     })}
+                  </div>
+                  <div className="px-3 pb-3 pt-3 flex items-center justify-between text-xs text-gray-600 border-t border-gray-100">
+                    <span>Page {discPageSize === 0 ? 1 : discPage + 1} of {totalPages} &mdash; {machineGroups.length} machine(s) total</span>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={discPageSize}
+                        onChange={(e) => { setDiscPageSize(Number(e.target.value)); setDiscPage(0); }}
+                        className="px-2 py-1 text-xs border border-gray-300 rounded bg-white font-semibold"
+                      >
+                        <option value={10}>10 / page</option>
+                        <option value={20}>20 / page</option>
+                        <option value={30}>30 / page</option>
+                        <option value={0}>All</option>
+                      </select>
+                      <button type="button" onClick={() => setDiscPage((p) => Math.max(0, p - 1))} disabled={discPage === 0 || discPageSize === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Prev</button>
+                      <button type="button" onClick={() => setDiscPage((p) => Math.min(totalPages - 1, p + 1))} disabled={discPage >= totalPages - 1 || discPageSize === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Next</button>
+                    </div>
                   </div>
                 </div>
               );
