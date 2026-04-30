@@ -491,6 +491,26 @@ export const MissedActionsPage: React.FC = () => {
     }
   };
 
+  const unmuteItem = async (item: MissedAction) => {
+    if (!item.issue_key) return;
+    setIsActionLoading(item.issue_key);
+    try {
+      const response = await apiFetch(`${API_BASE}/api/missed-actions/unmute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_key: item.issue_key }),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to unmute');
+      await fetchData();
+      toast.success('Issue unmuted');
+    } catch (e: any) {
+      setError(e.message || 'Failed to unmute');
+    } finally {
+      setIsActionLoading(null);
+    }
+  };
+
   const snoozeItem = async (item: MissedAction, mins: number) => {
     if (!item.issue_key) return;
     setIsActionLoading(item.issue_key);
@@ -926,6 +946,16 @@ export const MissedActionsPage: React.FC = () => {
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" /> Ack
                             </button>
+                            {(item.state?.is_snoozed || item.state?.acknowledged) && (
+                              <button
+                                type="button"
+                                onClick={() => unmuteItem(item)}
+                                disabled={isActionLoading === item.issue_key}
+                                className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 border border-orange-200"
+                              >
+                                <BellOff className="h-3.5 w-3.5" /> Unmute
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => logLocalAction(item, 'Called operator')}
@@ -1053,6 +1083,16 @@ export const MissedActionsPage: React.FC = () => {
                                     >
                                       <CheckCircle2 className="h-3.5 w-3.5" /> Ack
                                     </button>
+                                    {(item.state?.is_snoozed || item.state?.acknowledged) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => unmuteItem(item)}
+                                        disabled={isActionLoading === item.issue_key}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 border border-orange-200"
+                                      >
+                                        <BellOff className="h-3.5 w-3.5" /> Unmute
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => logLocalAction(item, 'Called operator')}

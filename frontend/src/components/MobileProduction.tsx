@@ -156,6 +156,10 @@ export const MobileProduction: React.FC = () => {
     const [machineBusyRecord, setMachineBusyRecord] = useState<{ emp_id: string | number; employee_name?: string; machine_id: string } | null>(null);
     const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
     const [hasTabSessionBinding, setHasTabSessionBinding] = useState(false);
+    const [showTimingPopup, setShowTimingPopup] = useState(false);
+    const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number }>>([]);
+    const [timingLoading, setTimingLoading] = useState(false);
+    const [timingTotalCycles, setTimingTotalCycles] = useState(0);
     
     // Pull-to-refresh state
     const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -1516,6 +1520,38 @@ export const MobileProduction: React.FC = () => {
         return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
     };
 
+    const fetchTimingCycles = React.useCallback(async () => {
+        if (!effectiveMachineId) return;
+        setTimingLoading(true);
+        try {
+            const today = new Date();
+            const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const res = await apiFetch(`${API_BASE}/api/missed-actions/daily-report?date_from=${localDate}&date_to=${localDate}&startReminderMins=10`);
+            const json = await res.json();
+            if (!json.success || !Array.isArray(json.events)) return;
+            const allMachineCycles = json.events
+                .filter((e: any) => e.machine_id === effectiveMachineId)
+                .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+            const late = allMachineCycles
+                .map((e: any, idx: number) => ({ ...e, cycleNumber: idx + 1 }))
+                .filter((e: any) => Math.round(e.inactive_mins || 0) > 0 || Math.round(e.extra_mins || 0) > 0)
+                .map((e: any) => ({
+                    id: e.id,
+                    cycle: e.cycleNumber,
+                    start_time: e.start_time,
+                    finish_time: e.finish_time,
+                    target_mins: Number(e.target_mins || 0),
+                    actual_mins: Number(e.actual_mins || 0),
+                    start_gap_mins: Math.round(e.inactive_mins || 0),
+                    extra_mins: Math.round(e.extra_mins || 0),
+                }));
+            setTimingTotalCycles(allMachineCycles.length);
+            setTimingCycles(late);
+        } catch { /* non-fatal */ } finally {
+            setTimingLoading(false);
+        }
+    }, [API_BASE, effectiveMachineId]);
+
     const getStatusText = () => {
         return calculateStatus().label;
     };
@@ -1689,6 +1725,73 @@ export const MobileProduction: React.FC = () => {
                         </div>
                     )}
                         <>
+                    {/* Late Cycles Timing Popup */}
+                    {showTimingPopup && (
+                        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 px-4" onClick={() => setShowTimingPopup(false)}>
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[75vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                        <Bell className="h-4 w-4 text-blue-600" /> Late Cycles Today
+                                    </h3>
+                                    <button onClick={() => setShowTimingPopup(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-500">
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+                                <div className="overflow-y-auto flex-1 p-3 space-y-2">
+                                    {timingLoading ? (
+                                        <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+                                    ) : timingCycles.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <CheckCircle className="h-10 w-10 text-green-400 mx-auto mb-2" />
+                                            <p className="text-sm font-semibold text-gray-600">All cycles on time today!</p>
+                                            <p className="text-xs text-gray-400 mt-1">No late starts or slow finishes</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 flex items-center justify-between">
+                                                <span className="text-xs font-semibold text-red-700">
+                                                    {timingCycles.length} late out of {timingTotalCycles} cycle{timingTotalCycles !== 1 ? 's' : ''}
+                                                </span>
+                                                <span className="text-xs font-bold text-red-800">
+                                                    {timingCycles.reduce((s, c) => s + c.start_gap_mins + c.extra_mins, 0)}m lost
+                                                </span>
+                                            </div>
+                                            {timingCycles.map((c) => (
+                                                <div key={c.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-bold text-gray-500">Cycle #{c.cycle}</span>
+                                                        <span className="text-xs text-gray-400">
+                                                            {new Date(c.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                            {c.finish_time ? ` → ${new Date(c.finish_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {c.start_gap_mins > 0 && (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
+                                                                ⏱ Started {c.start_gap_mins}m late
+                                                            </span>
+                                                        )}
+                                                        {c.extra_mins > 0 && (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
+                                                                +{c.extra_mins}m over target
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">Target: {c.target_mins}m &nbsp;&middot;&nbsp; Actual: {c.actual_mins}m</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="px-4 py-2 border-t border-gray-100 flex justify-end">
+                                    <button onClick={fetchTimingCycles} disabled={timingLoading} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                                        <RefreshCw className={`h-3 w-3 ${timingLoading ? 'animate-spin' : ''}`} /> Refresh
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Full-screen flashing alert overlay when time exceeds target */}
                     {isTargetTimeExceeded && (
                         <div
@@ -1761,23 +1864,23 @@ export const MobileProduction: React.FC = () => {
                         </div>
                         <div className="hidden md:flex absolute top-3 right-14 items-center gap-1.5 z-10">
                             <button
-                                onClick={() => playAlertSound('start')}
-                                className="px-2.5 py-1.5 rounded-lg bg-slate-700/95 hover:bg-slate-800 text-white text-[11px] md:text-xs font-semibold"
-                                title="Validate alert sound"
+                                onClick={() => { setShowTimingPopup(v => !v); if (!showTimingPopup) fetchTimingCycles(); }}
+                                className="relative p-1.5 rounded-lg bg-white hover:bg-white/90 text-red-500"
+                                title="View late cycles"
                             >
-                                Test Sound
+                                <Bell className="h-4 w-4" />
+                                {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
                             </button>
                         </div>
                         <div className="md:hidden flex items-center justify-between px-3 pb-3">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">
-                                Production Status
-                            </span>
+                            <span className="text-[11px] font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">Production Status</span>
                             <button
-                                onClick={() => playAlertSound('start')}
-                                className="px-2.5 py-1.5 rounded-lg bg-slate-700/95 hover:bg-slate-800 text-white text-[11px] font-semibold"
-                                title="Validate alert sound"
+                                onClick={() => { setShowTimingPopup(v => !v); if (!showTimingPopup) fetchTimingCycles(); }}
+                                className="relative p-2 rounded-lg bg-white hover:bg-white/90 text-red-500"
+                                title="View late cycles"
                             >
-                                Test Sound
+                                <Bell className="h-4 w-4" />
+                                {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
                             </button>
                         </div>
                         {headerExpanded && (

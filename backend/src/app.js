@@ -607,6 +607,7 @@ app.get('/api/missed-actions/daily-report', authenticate, requireLogsAccess, mis
 app.get('/api/missed-actions/weekly-trend', authenticate, requireLogsAccess, missedActionsController.getWeeklyTrend);
 app.post('/api/missed-actions/ack', authenticate, requireLogsAccess, missedActionsController.acknowledgeMissedAction);
 app.post('/api/missed-actions/snooze', authenticate, requireLogsAccess, missedActionsController.snoozeMissedAction);
+app.post('/api/missed-actions/unmute', authenticate, requireLogsAccess, missedActionsController.unmuteAction);
 app.post('/api/missed-actions/root-cause', authenticate, requireLogsAccess, missedActionsController.saveRootCause);
 app.delete('/api/missed-actions/cleanup', authenticate, requireAdminAccess, missedActionsController.cleanupStaleStates);
 

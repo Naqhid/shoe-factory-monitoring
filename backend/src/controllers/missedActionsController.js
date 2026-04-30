@@ -190,6 +190,23 @@ exports.getMissedActions = async (req, res, next) => {
   }
 };
 
+exports.unmuteAction = async (req, res, next) => {
+  try {
+    const issueKey = String(req.body?.issue_key || '').trim();
+    if (!issueKey) return res.status(400).json({ success: false, error: 'issue_key is required' });
+    await db.query(
+      `INSERT INTO missed_action_states (issue_key, acknowledged_at, snoozed_until, updated_at)
+       VALUES (?, NULL, NULL, NOW())
+       ON DUPLICATE KEY UPDATE acknowledged_at = NULL, snoozed_until = NULL, updated_at = NOW()`,
+      [issueKey]
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Error unmuting missed action:', error);
+    return next(error);
+  }
+};
+
 exports.acknowledgeMissedAction = async (req, res, next) => {
   try {
     const issueKey = String(req.body?.issue_key || '').trim();
