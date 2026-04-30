@@ -23,6 +23,7 @@ export const TVDashboard: React.FC = () => {
     const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<Date | null>(null);
     const [reworkUpdatedAt, setReworkUpdatedAt] = useState<Date | null>(null);
     const staleReloadTimerRef = React.useRef<number | null>(null);
+    const [showStatusBar, setShowStatusBar] = useState(false);
 
     useEffect(() => {
         const now = new Date();
@@ -233,11 +234,11 @@ export const TVDashboard: React.FC = () => {
     const isStale = secondsSinceUpdate !== null && secondsSinceUpdate > 30;
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
     const linePerformanceRows = Array.isArray(lowerSection?.linePerformance) ? lowerSection.linePerformance : [];
-    const topPerformer = linePerformanceRows.reduce<any | null>((best, line) => {
+    const topPerformer = linePerformanceRows.reduce((best: any, line: any) => {
         if (!best) return line;
         return Number(line.efficiency || 0) > Number(best.efficiency || 0) ? line : best;
-    }, null);
-    const needActionCount = linePerformanceRows.filter((line) => {
+    }, null as any);
+    const needActionCount = linePerformanceRows.filter((line:any) => {
         const efficiency = Number(line.efficiency || 0);
         const outputPct = Number(line.output_percentage || 0);
         return efficiency < 90 || outputPct < 90;
@@ -274,7 +275,20 @@ export const TVDashboard: React.FC = () => {
                 </div>
                 <div className="relative z-10">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
-                        <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white drop-shadow-lg">{topSection.workCentreName}</h1>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white drop-shadow-lg">{topSection.workCentreName}</h1>
+                            <button
+                                type="button"
+                                onClick={() => setShowStatusBar(v => !v)}
+                                className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors shrink-0"
+                                title={showStatusBar ? 'Hide status' : 'Show status'}
+                            >
+                                <span className="text-sm">{showStatusBar ? '▲' : '▼'}</span>
+                                {(isCriticalStale || isOffline || needActionCount > 0) && (
+                                    <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                                )}
+                            </button>
+                        </div>
                         <div className="text-left sm:text-right bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
                             <div className="text-white text-lg sm:text-2xl font-semibold">
                                 {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -287,61 +301,63 @@ export const TVDashboard: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const currentId = workCentres[currentIndex]?.id;
-                                const next = pinnedWorkCentreId ? null : Number(currentId || 0);
-                                setPinnedWorkCentreId(next && next > 0 ? next : null);
-                                try {
-                                    if (next && next > 0) localStorage.setItem(PINNED_LINE_STORAGE_KEY, String(next));
-                                    else localStorage.removeItem(PINNED_LINE_STORAGE_KEY);
-                                } catch (error) {
-                                    console.warn('Failed to persist pinned work centre preference:', error);
-                                }
-                            }}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${pinnedWorkCentreId ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-slate-100 text-slate-700'}`}
-                        >
-                            {pinnedWorkCentreId ? 'Pinned Line' : 'Auto Rotate'}
-                        </button>
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isOffline ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                            {isOffline ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
-                            {isOffline ? 'Offline' : 'Online'}
-                        </div>
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isCriticalStale ? 'bg-red-100 text-red-700' : isStale ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                            {secondsSinceUpdate === null ? 'No live data yet' : isCriticalStale ? `Data stale (${secondsSinceUpdate}s)` : isStale ? `Data aging (${secondsSinceUpdate}s)` : `Live (${secondsSinceUpdate}s ago)`}
-                        </div>
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isRefreshing ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
-                            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                            {isRefreshing ? 'Refreshing...' : 'Auto-refresh 10s'}
-                        </div>
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${needActionCount > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                            Lines Below Target: {needActionCount}
-                        </div>
-                        {topPerformer && (
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-cyan-100 text-cyan-700">
-                                <TrendingUp className="h-3.5 w-3.5" />
-                                Best: {topPerformer.line_name || '-'} ({Number(topPerformer.efficiency || 0)}%)
+                    {showStatusBar && (
+                        <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const currentId = workCentres[currentIndex]?.id;
+                                    const next = pinnedWorkCentreId ? null : Number(currentId || 0);
+                                    setPinnedWorkCentreId(next && next > 0 ? next : null);
+                                    try {
+                                        if (next && next > 0) localStorage.setItem(PINNED_LINE_STORAGE_KEY, String(next));
+                                        else localStorage.removeItem(PINNED_LINE_STORAGE_KEY);
+                                    } catch (error) {
+                                        console.warn('Failed to persist pinned work centre preference:', error);
+                                    }
+                                }}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${pinnedWorkCentreId ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-slate-100 text-slate-700'}`}
+                            >
+                                {pinnedWorkCentreId ? 'Pinned Line' : 'Auto Rotate'}
+                            </button>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isOffline ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {isOffline ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
+                                {isOffline ? 'Offline' : 'Online'}
                             </div>
-                        )}
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-sky-100 text-sky-700">
-                            Shift Used: {shiftWindow.elapsedPct}%
-                        </div>
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-violet-100 text-violet-700">
-                            Remaining: {shiftWindow.remainingMin}m
-                        </div>
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${targetGap > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                            {recoveryLabel}
-                        </div>
-                        {retryAttempts > 0 && (
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-orange-100 text-orange-700">
-                                Retry attempt {retryAttempts}
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isCriticalStale ? 'bg-red-100 text-red-700' : isStale ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                {secondsSinceUpdate === null ? 'No live data yet' : isCriticalStale ? `Data stale (${secondsSinceUpdate}s)` : isStale ? `Data aging (${secondsSinceUpdate}s)` : `Live (${secondsSinceUpdate}s ago)`}
                             </div>
-                        )}
-                    </div>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isRefreshing ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
+                                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                {isRefreshing ? 'Refreshing...' : 'Auto-refresh 10s'}
+                            </div>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${needActionCount > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                Lines Below Target: {needActionCount}
+                            </div>
+                            {topPerformer && (
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-cyan-100 text-cyan-700">
+                                    <TrendingUp className="h-3.5 w-3.5" />
+                                    Best: {topPerformer.line_name || '-'} ({Number(topPerformer.efficiency || 0)}%)
+                                </div>
+                            )}
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-sky-100 text-sky-700">
+                                Shift Used: {shiftWindow.elapsedPct}%
+                            </div>
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-violet-100 text-violet-700">
+                                Remaining: {shiftWindow.remainingMin}m
+                            </div>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${targetGap > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {recoveryLabel}
+                            </div>
+                            {retryAttempts > 0 && (
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-orange-100 text-orange-700">
+                                    Retry attempt {retryAttempts}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {(partialWarning || errorMessage || isOffline || isCriticalStale) && (
                         <div className={`rounded-xl px-4 py-3 text-sm font-semibold mb-4 ${isOffline || isCriticalStale ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
                             {isOffline
@@ -409,33 +425,29 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">WIP</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-yellow-600">REWORK</th>
                                 <th className="px-4 py-3 text-center text-sm font-bold text-red-600">REJECTION</th>
-                                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">STATUS</th>
                             </tr>
                         </thead>
                         <tbody>
                             {lowerSection.linePerformance?.map((line: any, index: number) => {
-                                const getStatusColor = (eff: number) => {
-                                    if (eff >= 95) return 'bg-green-500';
-                                    if (eff >= 85) return 'bg-yellow-500';
-                                    return 'bg-red-500';
-                                };
                                 const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
                                 return (
                                     <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                                         <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>
-                                        <td className="px-4 py-4 text-center text-lg font-bold text-purple-600">{line.output_percentage}%</td>
-                                        <td className="px-4 py-4 text-center text-lg font-bold text-orange-600">{line.efficiency}%</td>
+                                        <td className="px-4 py-4 text-center">
+                                            <span className={`inline-block px-3 py-1 rounded-full text-lg font-bold text-white ${
+                                                Number(line.output_percentage) >= 90 ? 'bg-green-500' : Number(line.output_percentage) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                                            }`}>{line.output_percentage}%</span>
+                                        </td>
+                                        <td className="px-4 py-4 text-center">
+                                            <span className={`inline-block px-3 py-1 rounded-full text-lg font-bold text-white ${
+                                                Number(line.efficiency) >= 90 ? 'bg-green-500' : Number(line.efficiency) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                                            }`}>{line.efficiency}%</span>
+                                        </td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{line.wip || 0}</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-yellow-600">{rw.total_rework}</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-red-600">{rw.total_rejection}</td>
-                                        <td className="px-4 py-4">
-                                            <div className="flex justify-center gap-2">
-                                                <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
-                                                <div className={`w-4 h-4 rounded-full ${getStatusColor(line.efficiency)}`}></div>
-                                            </div>
-                                        </td>
                                     </tr>
                                 );
                             })}

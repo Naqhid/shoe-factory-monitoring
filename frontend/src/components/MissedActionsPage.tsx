@@ -259,10 +259,35 @@ export const MissedActionsPage: React.FC = () => {
 
   const getSlaStatus = (overdueMins: number) => {
     const rounded = Math.max(0, Math.round(Number(overdueMins || 0)));
-    if (rounded >= 30) return { label: `Breached by ${Math.max(0, rounded - 30)}m`, cls: 'text-red-700 bg-red-100' };
-    if (rounded >= 15) return { label: `Warning (${rounded}m)`, cls: 'text-amber-700 bg-amber-100' };
+    if (rounded >= 30) return { label: `Breached by ${Math.max(0, rounded - 30)}m`, cls: 'text-red-700 bg-red-100', pct: 100, color: '#ef4444' };
+    if (rounded >= 15) return { label: `Warning (${rounded}m)`, cls: 'text-amber-700 bg-amber-100', pct: Math.round((rounded / 30) * 100), color: '#f59e0b' };
     const dueIn = Math.max(0, 15 - rounded);
-    return { label: `Due in ${dueIn}m`, cls: 'text-blue-700 bg-blue-100' };
+    return { label: `Due in ${dueIn}m`, cls: 'text-blue-700 bg-blue-100', pct: Math.round((rounded / 30) * 100), color: '#3b82f6' };
+  };
+
+  const SlaCircle: React.FC<{ overdueMins: number }> = ({ overdueMins }) => {
+    const sla = getSlaStatus(overdueMins);
+    const size = 44;
+    const stroke = 4;
+    const r = (size - stroke) / 2;
+    const circ = 2 * Math.PI * r;
+    const filled = circ - (circ * Math.min(sla.pct, 100)) / 100;
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={stroke} />
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none"
+            stroke={sla.color} strokeWidth={stroke}
+            strokeDasharray={circ}
+            strokeDashoffset={filled}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+          />
+        </svg>
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${sla.cls}`}>{sla.label}</span>
+      </div>
+    );
   };
 
   const getPriorityScore = (item: MissedAction, recurrenceCount: number) => {
@@ -841,7 +866,7 @@ export const MissedActionsPage: React.FC = () => {
                                 Repeat x{recurrence}
                               </span>
                             )}
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${sla.cls}`}>{sla.label}</span>
+                            <SlaCircle overdueMins={item.overdue_mins} />
                             <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">{overdueMinsRounded}m overdue</span>
                           </div>
 
@@ -981,7 +1006,7 @@ export const MissedActionsPage: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5 text-sm font-bold text-gray-800">{priority}</td>
                               <td className="px-3 py-2.5 text-sm">
-                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${sla.cls}`}>{sla.label}</span>
+                                <SlaCircle overdueMins={item.overdue_mins} />
                               </td>
                               <td className="px-3 py-2.5 text-sm text-gray-600">
                                 <div>{item.details}</div>
