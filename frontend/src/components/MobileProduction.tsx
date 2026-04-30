@@ -1201,7 +1201,7 @@ export const MobileProduction: React.FC = () => {
                     });
                     const data = await response.json();
                     if (!data.success) {
-                        const err = new Error(data.message || 'Failed to start') as Error & {
+                        const err = new Error(data.message || data.error || 'Failed to start') as Error & {
                             status?: number;
                             responseData?: any;
                         };

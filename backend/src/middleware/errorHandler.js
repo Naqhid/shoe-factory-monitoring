@@ -8,6 +8,13 @@ const classifyError = (err) => {
   if (err.code === 'ECONNREFUSED') return { type: 'DB_CONNECTION', status: 503, message: 'Database connection refused' };
   if (err.code === 'ETIMEDOUT') return { type: 'DB_TIMEOUT', status: 503, message: 'Database connection timeout' };
   if (err.code === 'ER_ACCESS_DENIED_ERROR') return { type: 'DB_AUTH', status: 503, message: 'Database authentication failed' };
+  if (typeof err.message === 'string' && err.message.includes('The user specified as a definer')) {
+    return {
+      type: 'DB_DEFINER',
+      status: 500,
+      message: 'Database object definer is invalid. Repair the database trigger/function DEFINER and retry.',
+    };
+  }
   if (err.name === 'JsonWebTokenError') return { type: 'AUTH_JWT', status: 401, message: 'Invalid token' };
   if (err.name === 'TokenExpiredError') return { type: 'AUTH_EXPIRED', status: 401, message: 'Token expired' };
   if (err.name === 'ValidationError') return { type: 'VALIDATION', status: 400, message: err.message };
@@ -34,12 +41,18 @@ const errorHandler = (err, req, res, next) => {
     logger.warn(`[${type}] ${err.message || message}`, logContext);
   }
 
-  res.status(status).json({
+  const responseBody = {
     success: false,
+    message,
     error: message,
     requestId: req.requestId,
-    ...(process.env.NODE_ENV !== 'production' && { detail: err.message }),
-  });
+  };
+
+  if (process.env.NODE_ENV !== 'production') {
+    responseBody.detail = err.message;
+  }
+
+  res.status(status).json(responseBody);
 };
 
 module.exports = errorHandler;

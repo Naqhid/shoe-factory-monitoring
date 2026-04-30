@@ -138,13 +138,16 @@ exports.getMissedActions = async (req, res, next) => {
     if (issueKeys.length > 0) {
       const placeholders = issueKeys.map(() => '?').join(',');
       const [states] = await db.query(
-        `SELECT issue_key, acknowledged_at, snoozed_until FROM missed_action_states WHERE issue_key IN (${placeholders})`,
+        `SELECT issue_key, acknowledged_at, acknowledged_by, snoozed_until, snooze_duration_mins, root_cause FROM missed_action_states WHERE issue_key IN (${placeholders})`,
         issueKeys
       );
       states.forEach((state) => {
         stateByKey[state.issue_key] = {
           acknowledged_at: state.acknowledged_at,
+          acknowledged_by: state.acknowledged_by,
           snoozed_until: state.snoozed_until,
+          snooze_duration_mins: state.snooze_duration_mins,
+          root_cause: state.root_cause,
         };
       });
     }
@@ -158,8 +161,11 @@ exports.getMissedActions = async (req, res, next) => {
         state: {
           acknowledged: !!state?.acknowledged_at,
           acknowledged_at: state?.acknowledged_at || null,
+          acknowledged_by: state?.acknowledged_by || null,
           snoozed_until: state?.snoozed_until || null,
+          snooze_duration_mins: state?.snooze_duration_mins || null,
           is_snoozed: !!(snoozedUntilTs && snoozedUntilTs > now),
+          root_cause: state?.root_cause || null,
         },
       };
     });
@@ -190,11 +196,12 @@ exports.acknowledgeMissedAction = async (req, res, next) => {
     if (!issueKey) {
       return res.status(400).json({ success: false, error: 'issue_key is required' });
     }
+    const acknowledgedBy = req.user?.username || req.user?.name || req.user?.id || null;
     await db.query(
-      `INSERT INTO missed_action_states (issue_key, acknowledged_at, snoozed_until, updated_at)
-       VALUES (?, NOW(), NULL, NOW())
-       ON DUPLICATE KEY UPDATE acknowledged_at = NOW(), snoozed_until = NULL, updated_at = NOW()`,
-      [issueKey]
+      `INSERT INTO missed_action_states (issue_key, acknowledged_at, acknowledged_by, snoozed_until, updated_at)
+       VALUES (?, NOW(), ?, NULL, NOW())
+       ON DUPLICATE KEY UPDATE acknowledged_at = NOW(), acknowledged_by = ?, snoozed_until = NULL, updated_at = NOW()`,
+      [issueKey, acknowledgedBy, acknowledgedBy]
     );
     return res.json({ success: true });
   } catch (error) {
@@ -211,10 +218,10 @@ exports.snoozeMissedAction = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'issue_key is required' });
     }
     await db.query(
-      `INSERT INTO missed_action_states (issue_key, acknowledged_at, snoozed_until, updated_at)
-       VALUES (?, NULL, DATE_ADD(NOW(), INTERVAL ? MINUTE), NOW())
-       ON DUPLICATE KEY UPDATE acknowledged_at = NULL, snoozed_until = DATE_ADD(NOW(), INTERVAL ? MINUTE), updated_at = NOW()`,
-      [issueKey, mins, mins]
+      `INSERT INTO missed_action_states (issue_key, acknowledged_at, snoozed_until, snooze_duration_mins, updated_at)
+       VALUES (?, NULL, DATE_ADD(NOW(), INTERVAL ? MINUTE), ?, NOW())
+       ON DUPLICATE KEY UPDATE acknowledged_at = NULL, snoozed_until = DATE_ADD(NOW(), INTERVAL ? MINUTE), snooze_duration_mins = ?, updated_at = NOW()`,
+      [issueKey, mins, mins, mins, mins]
     );
     return res.json({ success: true });
   } catch (error) {
@@ -223,9 +230,105 @@ exports.snoozeMissedAction = async (req, res, next) => {
   }
 };
 
+exports.saveRootCause = async (req, res, next) => {
+  try {
+    const issueKey = String(req.body?.issue_key || '').trim();
+    const rootCause = String(req.body?.root_cause || '').trim();
+    if (!issueKey) {
+      return res.status(400).json({ success: false, error: 'issue_key is required' });
+    }
+    await db.query(
+      `INSERT INTO missed_action_states (issue_key, root_cause, updated_at)
+       VALUES (?, ?, NOW())
+       ON DUPLICATE KEY UPDATE root_cause = ?, updated_at = NOW()`,
+      [issueKey, rootCause || null, rootCause || null]
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Error saving root cause:', error);
+    return next(error);
+  }
+};
+
+exports.cleanupStaleStates = async (req, res, next) => {
+  try {
+    const retentionDays = Math.max(1, Number(req.query?.days) || 7);
+    const [result] = await db.query(
+      `DELETE FROM missed_action_states
+       WHERE updated_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND (acknowledged_at IS NOT NULL OR (snoozed_until IS NOT NULL AND snoozed_until < NOW()))`,
+      [retentionDays]
+    );
+    return res.json({ success: true, deleted: result.affectedRows });
+  } catch (error) {
+    logger.error('Error cleaning up stale missed action states:', error);
+    return next(error);
+  }
+};
+
+exports.getWeeklyTrend = async (req, res, next) => {
+  try {
+    const rawDate = String(req.query?.date || '');
+    const endDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+    const startReminderMins = Math.max(1, Number(req.query.startReminderMins) || 10);
+
+    const [rows] = await db.query(
+      `
+      SELECT
+        DATE(mcp.prod_date) AS day,
+        COUNT(*) AS cycles,
+        SUM(GREATEST(0, TIMESTAMPDIFF(MINUTE, mcp.start_time, mcp.finish_time) - mcp.target_mins)) AS extra_mins
+      FROM machine_centre_production mcp
+      WHERE DATE(mcp.prod_date) BETWEEN DATE_SUB(?, INTERVAL 6 DAY) AND ?
+        AND mcp.button_status = 2
+        AND mcp.start_time IS NOT NULL
+        AND mcp.finish_time IS NOT NULL
+      GROUP BY DATE(mcp.prod_date)
+      ORDER BY day ASC
+      `,
+      [endDate, endDate]
+    );
+
+    // Compute inactive per day safely in JS using the same logic as getMissedActionsDailyReport
+    const [cycleRows] = await db.query(
+      `SELECT machine_id, prod_date, start_time, finish_time, target_mins,
+        LAG(finish_time) OVER (PARTITION BY machine_id, DATE(prod_date) ORDER BY start_time) AS prev_finish
+       FROM machine_centre_production
+       WHERE DATE(prod_date) BETWEEN DATE_SUB(?, INTERVAL 6 DAY) AND ?
+         AND button_status = 2 AND start_time IS NOT NULL AND finish_time IS NOT NULL`,
+      [endDate, endDate]
+    );
+    const inactiveByDay = {};
+    cycleRows.forEach((r) => {
+      const day = r.prod_date instanceof Date ? r.prod_date.toISOString().slice(0, 10) : String(r.prod_date).slice(0, 10);
+      const startTs = new Date(r.start_time);
+      const shiftStart = new Date(startTs); shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+      const baseline = r.prev_finish ? new Date(r.prev_finish) : shiftStart;
+      const gap = Math.max(0, (startTs.getTime() - baseline.getTime()) / 60000);
+      const inactive = Math.max(0, gap - startReminderMins);
+      inactiveByDay[day] = (inactiveByDay[day] || 0) + inactive;
+    });
+
+    const trend = rows.map((r) => {
+      const day = r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day);
+      const inactive = Math.max(0, inactiveByDay[day] || 0);
+      const extra = Math.max(0, Number(r.extra_mins || 0));
+      return { day, cycles: Number(r.cycles || 0), inactive_mins: inactive, extra_mins: extra, lost_mins: inactive + extra };
+    });
+
+    return res.json({ success: true, trend });
+  } catch (error) {
+    logger.error('Error getting weekly trend:', error);
+    return next(error);
+  }
+};
+
 exports.getMissedActionsDailyReport = async (req, res, next) => {
   try {
-    const date = String(req.query?.date || new Date().toISOString().slice(0, 10));
+    const rawFrom = String(req.query?.date_from || req.query?.date || '');
+    const rawTo   = String(req.query?.date_to   || req.query?.date || '');
+    const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(rawFrom) ? rawFrom : new Date().toISOString().slice(0, 10);
+    const dateTo   = /^\d{4}-\d{2}-\d{2}$/.test(rawTo)   ? rawTo   : dateFrom;
     const startReminderMins = Math.max(1, Number(req.query.startReminderMins) || 10);
     const lineFilter = String(req.query?.line || 'all');
 
@@ -247,18 +350,20 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         LAG(mcp.finish_time) OVER (
           PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
           ORDER BY mcp.start_time
-        ) AS prev_finish_time
+        ) AS prev_finish_time,
+        mas.root_cause
       FROM machine_centre_production mcp
       LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
       LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
       LEFT JOIN employees e ON e.code = mcp.emp_id
-      WHERE DATE(mcp.prod_date) = ?
+      LEFT JOIN missed_action_states mas ON mas.issue_key = CONCAT('daily__', mcp.id)
+      WHERE DATE(mcp.prod_date) BETWEEN ? AND ?
         AND mcp.button_status = 2
         AND mcp.start_time IS NOT NULL
         AND mcp.finish_time IS NOT NULL
       ORDER BY wc.name, mcp.machine_id, mcp.start_time
       `,
-      [date]
+      [dateFrom, dateTo]
     );
 
     const mapped = rows.map((row) => {
@@ -287,6 +392,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         extra_mins: extraMins,
         start_gap_mins: gapMins,
         inactive_mins: inactiveMins,
+        root_cause: row.root_cause || null,
       };
     });
 
@@ -317,7 +423,9 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
 
     return res.json({
       success: true,
-      date,
+      date: dateFrom,
+      date_from: dateFrom,
+      date_to: dateTo,
       thresholds: { startReminderMins },
       summary: {
         total_cycles: filtered.length,

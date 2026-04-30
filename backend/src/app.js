@@ -89,11 +89,27 @@ const initDb = async () => {
       CREATE TABLE IF NOT EXISTS missed_action_states (
         issue_key VARCHAR(255) NOT NULL PRIMARY KEY,
         acknowledged_at DATETIME NULL,
+        acknowledged_by VARCHAR(255) NULL,
         snoozed_until DATETIME NULL,
+        snooze_duration_mins INT NULL,
+        root_cause VARCHAR(255) NULL,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
     logger.info('missed_action_states table ready');
+    // Migrate existing table — add new columns if missing
+    for (const [col, def] of [
+      ['acknowledged_by', 'VARCHAR(255) NULL'],
+      ['snooze_duration_mins', 'INT NULL'],
+      ['root_cause', 'VARCHAR(255) NULL'],
+    ]) {
+      try {
+        await db.execute(`ALTER TABLE missed_action_states ADD COLUMN ${col} ${def}`);
+        logger.info(`Added ${col} to missed_action_states`);
+      } catch (e) {
+        if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+      }
+    }
     try {
       await db.execute('ALTER TABLE production_routing_header ADD COLUMN deleted_at DATETIME NULL');
       logger.info('Added deleted_at to production_routing_header');
@@ -272,6 +288,20 @@ setInterval(() => {
   const today = new Date().toISOString().split('T')[0];
   runAlertChecks(today);
 }, 60 * 60 * 1000); // every hour
+
+// Auto-cleanup stale missed_action_states daily (rows older than 7 days that are acked/expired-snooze)
+setInterval(async () => {
+  try {
+    const [result] = await db.query(
+      `DELETE FROM missed_action_states
+       WHERE updated_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
+         AND (acknowledged_at IS NOT NULL OR (snoozed_until IS NOT NULL AND snoozed_until < NOW()))`
+    );
+    if (result.affectedRows > 0) logger.info(`Auto-cleanup: removed ${result.affectedRows} stale missed_action_states row(s)`);
+  } catch (err) {
+    logger.error('missed_action_states auto-cleanup error:', err.message);
+  }
+}, 24 * 60 * 60 * 1000); // every 24 hours
 
 // Auto-close all active mobile sessions daily (configurable)
 const AUTO_CLOSE_ENABLED = (process.env.MOBILE_SESSION_AUTO_CLOSE_ENABLED || 'true').toLowerCase() !== 'false';
@@ -574,8 +604,11 @@ app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, p
 app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
 app.get('/api/missed-actions', authenticate, requireLogsAccess, missedActionsController.getMissedActions);
 app.get('/api/missed-actions/daily-report', authenticate, requireLogsAccess, missedActionsController.getMissedActionsDailyReport);
+app.get('/api/missed-actions/weekly-trend', authenticate, requireLogsAccess, missedActionsController.getWeeklyTrend);
 app.post('/api/missed-actions/ack', authenticate, requireLogsAccess, missedActionsController.acknowledgeMissedAction);
 app.post('/api/missed-actions/snooze', authenticate, requireLogsAccess, missedActionsController.snoozeMissedAction);
+app.post('/api/missed-actions/root-cause', authenticate, requireLogsAccess, missedActionsController.saveRootCause);
+app.delete('/api/missed-actions/cleanup', authenticate, requireAdminAccess, missedActionsController.cleanupStaleStates);
 
 // Machine Centre routes (public - no JWT for factory floor use)
 app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);

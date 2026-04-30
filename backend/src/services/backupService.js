@@ -27,7 +27,7 @@ function runBackup() {
   const filename  = `backup-${DB_NAME}-${timestamp}.sql`;
   const filepath  = path.join(BACKUP_DIR, filename);
 
-  const cmd = `mysqldump -h ${DB_HOST} -P ${DB_PORT || 3306} -u ${DB_USER} -p${DB_PASSWORD} --single-transaction --routines --triggers ${DB_NAME} > "${filepath}"`;
+  const cmd = `mysqldump -h ${DB_HOST} -P ${DB_PORT || 3306} -u ${DB_USER} -p${DB_PASSWORD} --single-transaction --routines --triggers --skip-definer ${DB_NAME} > "${filepath}"`;
 
   exec(cmd, (err) => {
     if (err) {
