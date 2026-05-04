@@ -82,6 +82,14 @@ const HOURLY_SLOTS = Array.from({ length: 24 }, (_, hour) => ({
 
 export const ManualProductionEntryForm: React.FC = () => {
   const navigate = useNavigate();
+
+  // Role guard — read once on mount
+  const currentUser = React.useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('user_info') || 'null'); } catch { return null; }
+  }, []);
+  const currentRole: string = (currentUser?.role || '').toLowerCase();
+  const canEdit = currentRole === 'admin' || currentRole === 'supervisor' || currentRole === 'manager';
+
   const [workCentres, setWorkCentres] = React.useState<WorkCentre[]>([]);
   const [machines, setMachines] = React.useState<MachineCentre[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
@@ -645,6 +653,19 @@ export const ManualProductionEntryForm: React.FC = () => {
       toast.error('Please choose a valid hourly slot');
       return;
     }
+    // Block future slots
+    const now = new Date();
+    const slotStart = new Date();
+    slotStart.setHours(slotHour, 0, 0, 0);
+    if (slotStart > now) {
+      toast.error(`Cannot add manual entry for a future time slot (${slotHour}:00–${slotHour + 1}:00).`);
+      return;
+    }
+    // Reason required
+    if (!stoppageReason.trim()) {
+      toast.error('Reason is required for manual entries.');
+      return;
+    }
     const outputValue = Math.round(Number(outputPairs || 0));
     if (Number.isNaN(outputValue) || outputValue < 0) {
       toast.error('Output pairs must be 0 or greater');
@@ -937,6 +958,13 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   return (
     <div className="w-full px-2 sm:px-3 md:px-4">
+      {!canEdit && (
+        <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <div className="text-red-600 text-lg font-bold mb-1">Access Restricted</div>
+          <p className="text-red-500 text-sm">Manual entry management is only available to Supervisors and Admins.</p>
+        </div>
+      )}
+      {canEdit && (
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto p-6">
@@ -1066,13 +1094,13 @@ export const ManualProductionEntryForm: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reason <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={stoppageReason}
                 onChange={(e) => setStoppageReason(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
-                placeholder="Manual note/reason"
+                className={`w-full border rounded-lg p-2.5 ${!stoppageReason.trim() ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                placeholder="Required: explain why this cycle was entered manually"
                 disabled={loading}
               />
             </div>
@@ -1935,6 +1963,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                       <th className="text-left p-2 border-b">Real Output</th>
                       <th className="text-left p-2 border-b">Manual Output</th>
                       <th className="text-left p-2 border-b">Total Output</th>
+                      <th className="text-left p-2 border-b">Manual %</th>
                       <th className="text-left p-2 border-b">Avg Efficiency</th>
                     </tr>
                   </thead>
@@ -1953,6 +1982,13 @@ export const ManualProductionEntryForm: React.FC = () => {
                         <td className="p-2">{row.real_output}</td>
                         <td className="p-2">{row.manual_output > 0 ? <span className="text-orange-600 font-medium">{row.manual_output}</span> : <span className="text-gray-400">0</span>}</td>
                         <td className="p-2 font-semibold">{row.total_output}</td>
+                        <td className="p-2">
+                          {(() => {
+                            const pct = row.total_output > 0 ? Math.round((row.manual_output / row.total_output) * 100) : 0;
+                            const cls = pct > 50 ? 'bg-red-100 text-red-700' : pct > 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+                            return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{pct}%</span>;
+                          })()}
+                        </td>
                         <td className="p-2">{effBadge(row.avg_eff)}</td>
                       </tr>
                     ))}
@@ -1967,6 +2003,15 @@ export const ManualProductionEntryForm: React.FC = () => {
                       <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.manual_output, 0)}</td>
 
                       <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.total_output, 0)}</td>
+                      <td className="p-2 border-t">
+                        {(() => {
+                          const totalOut = summaryData.reduce((s: number, r: any) => s + r.total_output, 0);
+                          const manualOut = summaryData.reduce((s: number, r: any) => s + r.manual_output, 0);
+                          const pct = totalOut > 0 ? Math.round((manualOut / totalOut) * 100) : 0;
+                          const cls = pct > 50 ? 'bg-red-100 text-red-700' : pct > 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+                          return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{pct}%</span>;
+                        })()}
+                      </td>
                       <td className="p-2 border-t">{effBadge(summaryData.filter((r: any) => r.avg_eff !== null).length ? Math.round(summaryData.filter((r: any) => r.avg_eff !== null).reduce((s: number, r: any) => s + r.avg_eff, 0) / summaryData.filter((r: any) => r.avg_eff !== null).length) : null)}</td>
                     </tr>
                   </tfoot>
@@ -1976,6 +2021,7 @@ export const ManualProductionEntryForm: React.FC = () => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };
