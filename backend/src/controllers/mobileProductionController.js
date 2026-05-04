@@ -317,28 +317,31 @@ exports.create = async (req, res, next) => {
       });
     }
 
-    // Block start if a manual entry already covers today for this machine+employee.
+    // Block start if a manual entry covers the current time for this machine+employee.
     const startCheckDate = prod_date ? prod_date.split('T')[0] : null;
+    const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const [manualBlockRows] = startCheckDate
       ? await db.query(
           `SELECT id FROM machine_centre_production
            WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = ?
              AND button_status = 2 AND stoppage_reason LIKE 'MANUAL:%'
+             AND start_time <= ? AND finish_time >= ?
            LIMIT 1`,
-          [machine_id, emp_id, startCheckDate]
+          [machine_id, emp_id, startCheckDate, nowStr, nowStr]
         )
       : await db.query(
           `SELECT id FROM machine_centre_production
            WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = CURDATE()
              AND button_status = 2 AND stoppage_reason LIKE 'MANUAL:%'
+             AND start_time <= NOW() AND finish_time >= NOW()
            LIMIT 1`,
           [machine_id, emp_id]
         );
     if (manualBlockRows.length > 0) {
-      logger.warn(`BLOCKED: Manual entry #${manualBlockRows[0].id} exists for machine ${machine_id}, emp ${emp_id} today.`);
+      logger.warn(`BLOCKED: Manual entry #${manualBlockRows[0].id} covers NOW() for machine ${machine_id}, emp ${emp_id}.`);
       return res.status(409).json({
         success: false,
-        message: 'A manual production entry already exists for this machine and employee today. Remove it before starting a new cycle.',
+        message: 'A manual production entry already covers this time slot. Remove it before starting a new cycle.',
         data: { existing_id: manualBlockRows[0].id }
       });
     }
