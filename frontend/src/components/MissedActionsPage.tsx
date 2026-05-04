@@ -1229,24 +1229,6 @@ export const MissedActionsPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-red-200 p-4 shadow-sm">
-              <p className="text-[11px] text-red-700 font-semibold uppercase tracking-wide">Projected Shift Loss</p>
-              <p className="text-3xl font-bold text-red-700 mt-1">
-                {(() => {
-                  const shiftStartH = 9;
-                  const shiftDurationH = 9;
-                  const now = new Date();
-                  const shiftStartMs = new Date(now).setHours(shiftStartH, 0, 0, 0);
-                  const elapsedMs = Math.max(0, now.getTime() - shiftStartMs);
-                  const elapsedHours = elapsedMs / (1000 * 60 * 60);
-                  if (elapsedHours < 0.25) return '—';
-                  const projection = (totalLineLoss / elapsedHours) * shiftDurationH;
-                  return `${formatMinutes(projection)} min`;
-                })()}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">9-hour shift projection (from 09:00)</p>
-            </div>
-
             {dailyError ? (
               <div className="bg-white rounded-xl border border-red-200 p-6 text-center text-red-600 font-medium">{dailyError}</div>
             ) : (

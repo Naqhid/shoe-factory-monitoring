@@ -103,7 +103,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [tableTotal, setTableTotal] = React.useState(0);
   const [tableTotalPages, setTableTotalPages] = React.useState(1);
   const [tableFilteredOutputTotal, setTableFilteredOutputTotal] = React.useState(0);
-  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit'>('entries');
+  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit' | 'production'>('entries');
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
@@ -118,6 +118,18 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [restoreCandidate, setRestoreCandidate] = React.useState<ManualEntryAuditRow | null>(null);
   const [deleteCandidate, setDeleteCandidate] = React.useState<ManualEntryRow | null>(null);
   const [pageInput, setPageInput] = React.useState('1');
+  const [prodRecords, setProdRecords] = React.useState<any[]>([]);
+  const [prodLoading, setProdLoading] = React.useState(false);
+  const [prodDateFilter, setProdDateFilter] = React.useState(getTodayLocalDate());
+  const [prodMachineFilter, setProdMachineFilter] = React.useState('');
+  const [prodLineFilter, setProdLineFilter] = React.useState('');
+  const [prodSearch, setProdSearch] = React.useState('');
+  const [editingProdId, setEditingProdId] = React.useState<number | null>(null);
+  const [prodStartTime, setProdStartTime] = React.useState('');
+  const [prodFinishTime, setProdFinishTime] = React.useState('');
+  const [prodOutputPairs, setProdOutputPairs] = React.useState('0');
+  const [prodTargetMins, setProdTargetMins] = React.useState('0');
+  const [showProdEditForm, setShowProdEditForm] = React.useState(false);
   const FILTER_PRESET_KEY = 'manual_entry_filters_v1';
 
   const handleUnauthorized = React.useCallback((message?: string) => {
@@ -445,6 +457,96 @@ export const ManualProductionEntryForm: React.FC = () => {
       console.warn('Failed to load manual entry filter preset:', error);
     }
   }, []);
+
+  const getProdMachineName = React.useCallback((machineId: string) => {
+    const m = machines.find(x => x.machine_id === machineId);
+    return m?.machine_name || m?.name || '';
+  }, [machines]);
+
+  const calcDuration = (start: string, finish: string) => {
+    if (!start || !finish) return null;
+    const mins = Math.round((new Date(finish).getTime() - new Date(start).getTime()) / 60000);
+    return Number.isFinite(mins) && mins >= 0 ? mins : null;
+  };
+
+  const calcEfficiency = (targetMins: number, start: string, finish: string) => {
+    const actual = calcDuration(start, finish);
+    if (!actual || actual === 0 || !targetMins) return null;
+    return Math.round((targetMins / actual) * 100);
+  };
+
+  const effBadge = (pct: number | null) => {
+    if (pct === null) return <span className="text-gray-400 text-xs">-</span>;
+    const cls = pct >= 90 ? 'bg-green-100 text-green-700' : pct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
+    return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{pct}%</span>;
+  };
+
+  const loadProdRecords = React.useCallback(async () => {
+    setProdLoading(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/api/mobile-production`);
+      const json = await res.json();
+      if (!json.success) return;
+      let rows = (json.data || []).filter((r: any) =>
+        Number(r.button_status) === 2 &&
+        (!r.stoppage_reason || !String(r.stoppage_reason).startsWith('MANUAL:'))
+      );
+      if (prodDateFilter) rows = rows.filter((r: any) => {
+        const startDate = r.start_time ? new Date(r.start_time).toLocaleDateString('en-CA') : '';
+        return startDate === prodDateFilter;
+      });
+      if (prodLineFilter) rows = rows.filter((r: any) => String(r.work_centre_id) === prodLineFilter);
+      if (prodMachineFilter) rows = rows.filter((r: any) => String(r.machine_id) === prodMachineFilter);
+      setProdRecords(rows);
+    } catch { toast.error('Failed to load production records'); }
+    finally { setProdLoading(false); }
+  }, [prodDateFilter, prodLineFilter, prodMachineFilter]);
+
+  const handleProdEdit = (row: any) => {
+    setEditingProdId(row.id);
+    const fmt = (v: string) => {
+      if (!v) return '';
+      const d = new Date(v);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    setProdStartTime(fmt(row.start_time));
+    setProdFinishTime(fmt(row.finish_time));
+    setProdOutputPairs(String(Number(row.output_pairs || 0)));
+    setProdTargetMins(String(Number(row.target_mins || 0)));
+    setShowProdEditForm(true);
+  };
+
+  const handleProdSave = async () => {
+    if (!editingProdId) return;
+    setLoading(true);
+    try {
+      const row = prodRecords.find(r => r.id === editingProdId);
+      if (!row) return;
+      const toLocal = (v: string) => v ? v.replace('T', ' ') + ':00' : null;
+      const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/${editingProdId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prod_date: String(row.prod_date || '').slice(0, 10),
+          work_centre_id: row.work_centre_id,
+          machine_id: row.machine_id,
+          emp_id: row.emp_id,
+          output_pairs: Number(prodOutputPairs),
+          target_mins: Number(prodTargetMins),
+          start_time: toLocal(prodStartTime),
+          finish_time: toLocal(prodFinishTime),
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) { toast.error(json.message || 'Failed to update'); return; }
+      toast.success('Record updated');
+      setShowProdEditForm(false);
+      setEditingProdId(null);
+      await loadProdRecords();
+    } catch { toast.error('Failed to update record'); }
+    finally { setLoading(false); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -997,6 +1099,13 @@ export const ManualProductionEntryForm: React.FC = () => {
             >
               Audit Logs
             </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('production'); loadProdRecords(); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'production' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}
+            >
+              Production Records
+            </button>
           </div>
 
           {activeTab === 'entries' ? (
@@ -1136,7 +1245,7 @@ export const ManualProductionEntryForm: React.FC = () => {
             </button>
           </div>
           </>
-          ) : (
+          ) : activeTab === 'audit' ? (
             <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
                 <div>
@@ -1324,7 +1433,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {activeTab === 'entries' ? (
@@ -1470,6 +1579,197 @@ export const ManualProductionEntryForm: React.FC = () => {
         </div>
         </>
         ) : null}
+        {activeTab === 'production' && (
+          <div className="space-y-3">
+            {showProdEditForm && editingProdId && (() => {
+              const row = prodRecords.find(r => r.id === editingProdId);
+              return (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-bold text-gray-900">Edit Production Record #{editingProdId}</h2>
+                      <button type="button" onClick={() => setShowProdEditForm(false)} className="text-gray-400 hover:text-gray-700 text-xl px-2">×</button>
+                    </div>
+                    {row && (
+                      <div className="text-sm text-gray-600 mb-4 bg-gray-50 rounded-lg p-3 space-y-1">
+                        <p><span className="font-semibold">Machine:</span> {row.machine_id}{(() => { const m = machines.find(x => x.machine_id === row.machine_id); return (m?.machine_name || m?.name) ? ` - ${m?.machine_name || m?.name}` : ''; })()}</p>
+                        <p><span className="font-semibold">Employee:</span> {row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</p>
+                        <p><span className="font-semibold">Line:</span> {row.work_centre_name || row.work_centre_id}</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                        <input type="datetime-local" value={prodStartTime} onChange={e => setProdStartTime(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Finish Time</label>
+                        <input type="datetime-local" value={prodFinishTime} onChange={e => setProdFinishTime(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Output Pairs</label>
+                        <input type="number" min="0" value={prodOutputPairs} onChange={e => setProdOutputPairs(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Target Mins</label>
+                        <input type="number" min="0" step="0.1" value={prodTargetMins} onChange={e => setProdTargetMins(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 mt-5">
+                      <button type="button" onClick={handleProdSave} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold disabled:opacity-60">{loading ? 'Saving...' : 'Save Changes'}</button>
+                      <button type="button" onClick={() => setShowProdEditForm(false)} disabled={loading} className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-2.5 rounded-lg font-semibold">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date</label>
+                <input type="date" value={prodDateFilter} onChange={e => setProdDateFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
+                <select value={prodLineFilter} onChange={e => { setProdLineFilter(e.target.value); setProdMachineFilter(''); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                  <option value="">All Lines</option>
+                  {workCentres.map(wc => <option key={wc.id} value={wc.id}>{wc.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Machine</label>
+                <select value={prodMachineFilter} onChange={e => setProdMachineFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                  <option value="">All Machines</option>
+                  {(prodLineFilter ? machines.filter(m => String(m.work_centre_id) === prodLineFilter) : machines).map(m => (
+                    <option key={m.machine_id} value={m.machine_id}>{m.machine_id}{m.machine_name ? ` - ${m.machine_name}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Search</label>
+                <input type="text" value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="Machine / Employee" className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-44" />
+              </div>
+              <button type="button" onClick={loadProdRecords} disabled={prodLoading} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
+                {prodLoading ? 'Loading...' : 'Refresh'}
+              </button>
+              <button type="button" onClick={() => {
+                const headers = ['Date','Line','Machine','Employee','Start','Finish','Duration(mins)','Target(mins)','Output','Efficiency%'];
+                const visibleRows = prodSearch.trim()
+                  ? prodRecords.filter(r => {
+                      const q = prodSearch.trim().toLowerCase();
+                      const mName = getProdMachineName(r.machine_id);
+                      return `${r.machine_id} ${mName}`.toLowerCase().includes(q) ||
+                             `${r.emp_id} ${r.employee_name || ''}`.toLowerCase().includes(q);
+                    })
+                  : prodRecords;
+                const csvBody = [
+                  headers.join(','),
+                  ...visibleRows.map((r: any) => {
+                    const mName = getProdMachineName(r.machine_id);
+                    const dur = calcDuration(r.start_time, r.finish_time);
+                    const eff = calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time);
+                    return [
+                      formatDisplayDate(r.prod_date),
+                      r.work_centre_name || r.work_centre_id,
+                      `${r.machine_id}${mName ? ` - ${mName}` : ''}`,
+                      `${r.emp_id}${r.employee_name ? ` - ${r.employee_name}` : ''}`,
+                      formatDisplayDateTime(r.start_time),
+                      formatDisplayDateTime(r.finish_time),
+                      dur ?? '',
+                      Number(r.target_mins || 0).toFixed(1),
+                      Number(r.output_pairs || 0),
+                      eff !== null ? `${eff}%` : '',
+                    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+                  }),
+                ].join('\n');
+                const blob = new Blob([csvBody], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `production_records_${prodDateFilter || 'all'}.csv`;
+                document.body.appendChild(a); a.click();
+                document.body.removeChild(a); URL.revokeObjectURL(url);
+              }} disabled={prodRecords.length === 0} className="bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
+                Export CSV
+              </button>
+            </div>
+
+            {(() => {
+              const visibleRows = prodSearch.trim()
+                ? prodRecords.filter(r => {
+                    const q = prodSearch.trim().toLowerCase();
+                    const mName = getProdMachineName(r.machine_id);
+                    return `${r.machine_id} ${mName}`.toLowerCase().includes(q) ||
+                           `${r.emp_id} ${r.employee_name || ''}`.toLowerCase().includes(q);
+                  })
+                : prodRecords;
+              const totalOutput = visibleRows.reduce((s: number, r: any) => s + Number(r.output_pairs || 0), 0);
+              const effValues = visibleRows.map((r: any) => calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time)).filter((v): v is number => v !== null);
+              const avgEff = effValues.length ? Math.round(effValues.reduce((a, b) => a + b, 0) / effValues.length) : null;
+              return (
+                <>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm border border-gray-200 rounded-lg">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left p-2 border-b">Date</th>
+                        <th className="text-left p-2 border-b">Line</th>
+                        <th className="text-left p-2 border-b">Machine</th>
+                        <th className="text-left p-2 border-b">Employee</th>
+                        <th className="text-left p-2 border-b">Start</th>
+                        <th className="text-left p-2 border-b">Finish</th>
+                        <th className="text-left p-2 border-b">Duration</th>
+                        <th className="text-left p-2 border-b">Target</th>
+                        <th className="text-left p-2 border-b">Output</th>
+                        <th className="text-left p-2 border-b">Efficiency</th>
+                        <th className="text-left p-2 border-b">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prodLoading ? (
+                        <tr><td colSpan={11} className="p-4 text-center text-gray-500">Loading...</td></tr>
+                      ) : visibleRows.length === 0 ? (
+                        <tr><td colSpan={11} className="p-4 text-center text-gray-500">No production records found for selected filters.</td></tr>
+                      ) : visibleRows.map((row: any) => {
+                        const mName = getProdMachineName(row.machine_id);
+                        const dur = calcDuration(row.start_time, row.finish_time);
+                        const eff = calcEfficiency(Number(row.target_mins || 0), row.start_time, row.finish_time);
+                        return (
+                          <tr key={row.id} className="border-b hover:bg-gray-50">
+                            <td className="p-2">{formatDisplayDate(row.prod_date)}</td>
+                            <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
+                            <td className="p-2">{row.machine_id}{mName ? ` - ${mName}` : ''}</td>
+                            <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
+                            <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
+                            <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
+                            <td className="p-2 text-gray-600">{dur !== null ? `${dur}m` : '-'}</td>
+                            <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
+                            <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>
+                            <td className="p-2">{effBadge(eff)}</td>
+                            <td className="p-2">
+                              <button type="button" onClick={() => handleProdEdit(row)} className="px-2 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-semibold">Edit</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {visibleRows.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-gray-50 font-semibold text-sm">
+                          <td className="p-2 border-t" colSpan={8}>Total ({visibleRows.length} records)</td>
+                          <td className="p-2 border-t">{totalOutput}</td>
+                          <td className="p-2 border-t">{effBadge(avgEff)}</td>
+                          <td className="p-2 border-t"></td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1226,8 +1226,9 @@ export const MobileProduction: React.FC = () => {
                 };
                 const existingId = err?.responseData?.data?.existing_id;
                 const isActiveConflict =
-                    err?.status === 409 ||
-                    (err?.message || '').toLowerCase().includes('active production record already exists');
+                    (err?.status === 409 ||
+                    (err?.message || '').toLowerCase().includes('active production record already exists')) &&
+                    !(err?.responseData?.message || err?.message || '').toLowerCase().includes('manual');
 
                 // Auto-recover from race/conflict: attach to already-created active record
                 // instead of requiring manual refresh.

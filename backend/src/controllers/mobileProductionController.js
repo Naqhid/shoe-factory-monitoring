@@ -317,6 +317,32 @@ exports.create = async (req, res, next) => {
       });
     }
 
+    // Block start if a manual entry already covers today for this machine+employee.
+    const startCheckDate = prod_date ? prod_date.split('T')[0] : null;
+    const [manualBlockRows] = startCheckDate
+      ? await db.query(
+          `SELECT id FROM machine_centre_production
+           WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = ?
+             AND button_status = 2 AND stoppage_reason LIKE 'MANUAL:%'
+           LIMIT 1`,
+          [machine_id, emp_id, startCheckDate]
+        )
+      : await db.query(
+          `SELECT id FROM machine_centre_production
+           WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = CURDATE()
+             AND button_status = 2 AND stoppage_reason LIKE 'MANUAL:%'
+           LIMIT 1`,
+          [machine_id, emp_id]
+        );
+    if (manualBlockRows.length > 0) {
+      logger.warn(`BLOCKED: Manual entry #${manualBlockRows[0].id} exists for machine ${machine_id}, emp ${emp_id} today.`);
+      return res.status(409).json({
+        success: false,
+        message: 'A manual production entry already exists for this machine and employee today. Remove it before starting a new cycle.',
+        data: { existing_id: manualBlockRows[0].id }
+      });
+    }
+
     // Extract YYYY-MM-DD from ISO timestamp for MySQL DATE column
     const formattedDate = prod_date ? prod_date.split('T')[0] : null;
 
@@ -1219,6 +1245,26 @@ exports.updateStatus = async (req, res, next) => {
         // If that old record is finished today, it previously kept old prod_date and
         // was excluded from today's output summary. Force prod_date to today on FINISH
         // so the completed cycle is counted in today's totals.
+        // Block finish if a manual entry already covers the start→now window for this machine+employee.
+        const finishNow = new Date();
+        const [manualOverlap] = await db.query(
+          `SELECT id FROM machine_centre_production
+           WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = CURDATE()
+             AND button_status = 2 AND stoppage_reason LIKE 'MANUAL:%'
+             AND start_time < ? AND finish_time > ?
+           LIMIT 1`,
+          [existingRecord.machine_id, existingRecord.emp_id,
+           finishNow.toISOString().slice(0, 19).replace('T', ' '),
+           existingRecord.start_time]
+        );
+        if (manualOverlap.length > 0) {
+          logger.warn(`[MANUAL-OVERLAP] Record ${id} finish blocked — manual entry #${manualOverlap[0].id} covers this time window.`);
+          return res.status(409).json({
+            success: false,
+            message: 'A manual production entry already covers this time period. Cannot finish this cycle.'
+          });
+        }
+
         updateQuery += ', finish_time = NOW(), prod_date = CURDATE()';
         if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
       } else if (normalizedButtonStatus === 1) {
