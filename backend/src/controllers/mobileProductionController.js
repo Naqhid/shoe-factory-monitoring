@@ -495,7 +495,7 @@ exports.createManualEntry = async (req, res, next) => {
         emp_id,
         start_time,
         finish_time,
-        target_mins: enforcedTargets.targetMins,
+        target_mins: enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
         stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
       };
@@ -511,7 +511,7 @@ exports.createManualEntry = async (req, res, next) => {
           machine_id,
           emp_id,
           manualOutputPairs,
-          enforcedTargets.targetMins,
+          enforcedTargets.targetMins * (manualOutputPairs / 12),
           start_time,
           finish_time,
           afterData.stoppage_reason
@@ -768,7 +768,7 @@ exports.updateManualEntry = async (req, res, next) => {
         emp_id,
         start_time,
         finish_time,
-        target_mins: enforcedTargets.targetMins,
+        target_mins: enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
         stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
       };

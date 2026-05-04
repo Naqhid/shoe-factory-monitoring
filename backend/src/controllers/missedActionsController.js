@@ -126,6 +126,15 @@ exports.getMissedActions = async (req, res, next) => {
       LEFT JOIN employees e ON e.code = ms.emp_code
       WHERE ms.status = 'active'
         AND ms.activated_at >= DATE_SUB(CURDATE(), INTERVAL ? HOUR)
+        AND NOT EXISTS (
+          SELECT 1 FROM machine_centre_production m
+          WHERE m.machine_id = ms.machine_id
+            AND m.emp_id = ms.emp_code
+            AND m.button_status = 2
+            AND m.stoppage_reason LIKE 'MANUAL:%'
+            AND m.start_time <= NOW()
+            AND m.finish_time >= NOW()
+        )
       ORDER BY ms.machine_id ASC
       `
       ,

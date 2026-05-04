@@ -932,15 +932,19 @@ export const ManualProductionEntryForm: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Target Time
                 {loadingTargetMins ? <span className="ml-2 text-xs text-gray-500">(loading...)</span> : null}
+                <span className="ml-2 text-xs text-gray-400">(scaled to output)</span>
               </label>
               <input
                 type="number"
                 step="0.1"
                 min="0"
-                value={targetMins}
-                onChange={(e) => setTargetMins(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
-                disabled
+                value={(() => {
+                  const base = Number(targetMins || 0);
+                  const pairs = Math.max(1, Number(outputPairs || 12));
+                  return (Math.round((base * (pairs / 12)) * 10) / 10).toFixed(1);
+                })()}
+                readOnly
+                className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-600"
               />
             </div>
 
