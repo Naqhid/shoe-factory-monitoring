@@ -319,15 +319,14 @@ exports.create = async (req, res, next) => {
 
     // Block start if a manual entry covers the current time for this machine+employee.
     const startCheckDate = prod_date ? prod_date.split('T')[0] : null;
-    const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const [manualBlockRows] = startCheckDate
       ? await db.query(
           `SELECT id FROM machine_centre_production
            WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = ?
              AND button_status = 2 AND stoppage_reason LIKE 'MANUAL:%'
-             AND start_time <= ? AND finish_time >= ?
+             AND start_time <= NOW() AND finish_time >= NOW()
            LIMIT 1`,
-          [machine_id, emp_id, startCheckDate, nowStr, nowStr]
+          [machine_id, emp_id, startCheckDate]
         )
       : await db.query(
           `SELECT id FROM machine_centre_production
