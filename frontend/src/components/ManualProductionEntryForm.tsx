@@ -103,7 +103,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [tableTotal, setTableTotal] = React.useState(0);
   const [tableTotalPages, setTableTotalPages] = React.useState(1);
   const [tableFilteredOutputTotal, setTableFilteredOutputTotal] = React.useState(0);
-  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit' | 'production'>('entries');
+  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit' | 'production' | 'summary'>('entries');
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
@@ -124,12 +124,20 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodMachineFilter, setProdMachineFilter] = React.useState('');
   const [prodLineFilter, setProdLineFilter] = React.useState('');
   const [prodSearch, setProdSearch] = React.useState('');
+  const [prodToDateFilter, setProdToDateFilter] = React.useState(getTodayLocalDate());
+  const [prodPage, setProdPage] = React.useState(0);
+  const [prodPageSize, setProdPageSize] = React.useState(20);
   const [editingProdId, setEditingProdId] = React.useState<number | null>(null);
   const [prodStartTime, setProdStartTime] = React.useState('');
   const [prodFinishTime, setProdFinishTime] = React.useState('');
   const [prodOutputPairs, setProdOutputPairs] = React.useState('0');
   const [prodTargetMins, setProdTargetMins] = React.useState('0');
   const [showProdEditForm, setShowProdEditForm] = React.useState(false);
+  const [summaryDate, setSummaryDate] = React.useState(getTodayLocalDate());
+  const [summaryData, setSummaryData] = React.useState<any[]>([]);
+  const [summaryLoading, setSummaryLoading] = React.useState(false);
+  // conflict map: manual entry id -> true if overlapping real cycle exists
+  const [conflictIds, setConflictIds] = React.useState<Set<number>>(new Set());
   const FILTER_PRESET_KEY = 'manual_entry_filters_v1';
 
   const handleUnauthorized = React.useCallback((message?: string) => {
@@ -493,14 +501,92 @@ export const ManualProductionEntryForm: React.FC = () => {
       );
       if (prodDateFilter) rows = rows.filter((r: any) => {
         const startDate = r.start_time ? new Date(r.start_time).toLocaleDateString('en-CA') : '';
-        return startDate === prodDateFilter;
+        return startDate >= prodDateFilter && startDate <= (prodToDateFilter || prodDateFilter);
       });
       if (prodLineFilter) rows = rows.filter((r: any) => String(r.work_centre_id) === prodLineFilter);
       if (prodMachineFilter) rows = rows.filter((r: any) => String(r.machine_id) === prodMachineFilter);
       setProdRecords(rows);
+      setProdPage(0);
     } catch { toast.error('Failed to load production records'); }
     finally { setProdLoading(false); }
-  }, [prodDateFilter, prodLineFilter, prodMachineFilter]);
+  }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter]);
+
+  // Detect conflicts: manual entries that overlap real cycles
+  const detectConflicts = React.useCallback(async () => {
+    if (!manualEntries.length) { setConflictIds(new Set()); return; }
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/api/mobile-production`);
+      const json = await res.json();
+      if (!json.success) return;
+      const realCycles = (json.data || []).filter((r: any) =>
+        Number(r.button_status) === 2 &&
+        (!r.stoppage_reason || !String(r.stoppage_reason).startsWith('MANUAL:'))
+      );
+      const conflicts = new Set<number>();
+      manualEntries.forEach((m) => {
+        const mStart = new Date(m.start_time).getTime();
+        const mEnd = new Date(m.finish_time).getTime();
+        const hasOverlap = realCycles.some((r: any) =>
+          r.machine_id === m.machine_id && r.emp_id === m.emp_id &&
+          new Date(r.start_time).getTime() < mEnd &&
+          new Date(r.finish_time).getTime() > mStart
+        );
+        if (hasOverlap) conflicts.add(m.id);
+      });
+      setConflictIds(conflicts);
+    } catch { /* silent */ }
+  }, [manualEntries]);
+
+  React.useEffect(() => { detectConflicts(); }, [detectConflicts]);
+
+  const loadSummary = React.useCallback(async () => {
+    setSummaryLoading(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/api/mobile-production`);
+      const json = await res.json();
+      if (!json.success) return;
+      const allRows = (json.data || []).filter((r: any) => {
+        const d = r.start_time ? new Date(r.start_time).toLocaleDateString('en-CA') : '';
+        return Number(r.button_status) === 2 && d === summaryDate;
+      });
+      // Group by machine_id
+      const map = new Map<string, any>();
+      allRows.forEach((r: any) => {
+        const key = r.machine_id;
+        if (!map.has(key)) {
+          const mName = machines.find(x => x.machine_id === key);
+          map.set(key, {
+            machine_id: key,
+            machine_name: mName?.machine_name || mName?.name || '',
+            work_centre_name: r.work_centre_name || r.work_centre_id,
+            real_cycles: 0, manual_cycles: 0,
+            real_output: 0, manual_output: 0,
+            eff_values: [] as number[],
+          });
+        }
+        const g = map.get(key);
+        const isManual = r.stoppage_reason && String(r.stoppage_reason).startsWith('MANUAL:');
+        const dur = r.start_time && r.finish_time
+          ? Math.round((new Date(r.finish_time).getTime() - new Date(r.start_time).getTime()) / 60000) : 0;
+        if (isManual) { g.manual_cycles++; g.manual_output += Number(r.output_pairs || 0); }
+        else { g.real_cycles++; g.real_output += Number(r.output_pairs || 0); }
+        if (dur > 0 && Number(r.target_mins || 0) > 0)
+          g.eff_values.push(Math.round((Number(r.target_mins) / dur) * 100));
+      });
+      const result = Array.from(map.values()).map(g => ({
+        ...g,
+        total_cycles: g.real_cycles + g.manual_cycles,
+        total_output: g.real_output + g.manual_output,
+        avg_eff: g.eff_values.length ? Math.round(g.eff_values.reduce((a: number, b: number) => a + b, 0) / g.eff_values.length) : null,
+      })).sort((a, b) => b.total_output - a.total_output);
+      setSummaryData(result);
+    } catch { toast.error('Failed to load summary'); }
+    finally { setSummaryLoading(false); }
+  }, [summaryDate, machines]);
+
+  React.useEffect(() => {
+    if (activeTab === 'summary') loadSummary();
+  }, [activeTab, loadSummary]);
 
   const handleProdEdit = (row: any) => {
     setEditingProdId(row.id);
@@ -1110,6 +1196,13 @@ export const ManualProductionEntryForm: React.FC = () => {
             >
               Production Records
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('summary')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'summary' ? 'bg-teal-600 text-white' : 'bg-teal-100 text-teal-800 hover:bg-teal-200'}`}
+            >
+              Daily Summary
+            </button>
           </div>
 
           {activeTab === 'entries' ? (
@@ -1468,8 +1561,11 @@ export const ManualProductionEntryForm: React.FC = () => {
                 </tr>
               ) : (
                 manualEntries.map((row) => (
-                  <tr key={row.id} className="border-b">
-                    <td className="p-2">{formatDisplayDate(row.prod_date)}</td>
+                  <tr key={row.id} className={`border-b ${conflictIds.has(row.id) ? 'bg-red-50' : ''}`}>
+                    <td className="p-2">
+                      {formatDisplayDate(row.prod_date)}
+                      {conflictIds.has(row.id) && <span className="ml-1 text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold" title="Overlaps a real production cycle">⚠ Conflict</span>}
+                    </td>
                     <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
                     <td className="p-2">{row.machine_id}{row.machine_name ? ` - ${row.machine_name}` : ''}</td>
                     <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
@@ -1630,8 +1726,12 @@ export const ManualProductionEntryForm: React.FC = () => {
 
             <div className="flex flex-wrap items-end gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date</label>
-                <input type="date" value={prodDateFilter} onChange={e => setProdDateFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
+                <input type="date" value={prodDateFilter} onChange={e => { setProdDateFilter(e.target.value); setProdPage(0); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">To</label>
+                <input type="date" value={prodToDateFilter} onChange={e => { setProdToDateFilter(e.target.value); setProdPage(0); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
@@ -1707,15 +1807,32 @@ export const ManualProductionEntryForm: React.FC = () => {
                            `${r.emp_id} ${r.employee_name || ''}`.toLowerCase().includes(q);
                   })
                 : prodRecords;
+              // Build cycle number map: per machine, sorted by start_time
+              const cycleNumMap = new Map<number, number>();
+              const byMachine = new Map<string, any[]>();
+              visibleRows.forEach((r: any) => {
+                const k = r.machine_id;
+                if (!byMachine.has(k)) byMachine.set(k, []);
+                byMachine.get(k)!.push(r);
+              });
+              byMachine.forEach((rows) => {
+                rows.sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+                rows.forEach((r: any, i: number) => cycleNumMap.set(r.id, i + 1));
+              });
               const totalOutput = visibleRows.reduce((s: number, r: any) => s + Number(r.output_pairs || 0), 0);
               const effValues = visibleRows.map((r: any) => calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time)).filter((v): v is number => v !== null);
               const avgEff = effValues.length ? Math.round(effValues.reduce((a, b) => a + b, 0) / effValues.length) : null;
+              const pageSize = prodPageSize === -1 ? visibleRows.length : prodPageSize;
+              const totalPages = Math.max(1, Math.ceil(visibleRows.length / (pageSize || 1)));
+              const safePage = Math.min(prodPage, totalPages - 1);
+              const pageRows = prodPageSize === -1 ? visibleRows : visibleRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
               return (
                 <>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm border border-gray-200 rounded-lg">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="text-left p-2 border-b">#</th>
                         <th className="text-left p-2 border-b">Date</th>
                         <th className="text-left p-2 border-b">Line</th>
                         <th className="text-left p-2 border-b">Machine</th>
@@ -1731,22 +1848,25 @@ export const ManualProductionEntryForm: React.FC = () => {
                     </thead>
                     <tbody>
                       {prodLoading ? (
-                        <tr><td colSpan={11} className="p-4 text-center text-gray-500">Loading...</td></tr>
-                      ) : visibleRows.length === 0 ? (
-                        <tr><td colSpan={11} className="p-4 text-center text-gray-500">No production records found for selected filters.</td></tr>
-                      ) : visibleRows.map((row: any) => {
+                        <tr><td colSpan={12} className="p-4 text-center text-gray-500">Loading...</td></tr>
+                      ) : pageRows.length === 0 ? (
+                        <tr><td colSpan={12} className="p-4 text-center text-gray-500">No production records found for selected filters.</td></tr>
+                      ) : pageRows.map((row: any) => {
                         const mName = getProdMachineName(row.machine_id);
                         const dur = calcDuration(row.start_time, row.finish_time);
                         const eff = calcEfficiency(Number(row.target_mins || 0), row.start_time, row.finish_time);
+                        const isAnomaly = (eff !== null && eff < 50) || (dur !== null && dur < 2);
+                        const cycleNum = cycleNumMap.get(row.id) ?? '-';
                         return (
-                          <tr key={row.id} className="border-b hover:bg-gray-50">
+                          <tr key={row.id} className={`border-b ${isAnomaly ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                            <td className="p-2 text-gray-400 text-xs font-mono">{cycleNum}</td>
                             <td className="p-2">{formatDisplayDate(row.prod_date)}</td>
                             <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
                             <td className="p-2">{row.machine_id}{mName ? ` - ${mName}` : ''}</td>
                             <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
                             <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
                             <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
-                            <td className="p-2 text-gray-600">{dur !== null ? `${dur}m` : '-'}</td>
+                            <td className={`p-2 ${dur !== null && dur < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{dur !== null ? `${dur}m` : '-'}</td>
                             <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
                             <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>
                             <td className="p-2">{effBadge(eff)}</td>
@@ -1760,7 +1880,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                     {visibleRows.length > 0 && (
                       <tfoot>
                         <tr className="bg-gray-50 font-semibold text-sm">
-                          <td className="p-2 border-t" colSpan={8}>Total ({visibleRows.length} records)</td>
+                          <td className="p-2 border-t" colSpan={9}>Total ({visibleRows.length} records)</td>
                           <td className="p-2 border-t">{totalOutput}</td>
                           <td className="p-2 border-t">{effBadge(avgEff)}</td>
                           <td className="p-2 border-t"></td>
@@ -1769,9 +1889,90 @@ export const ManualProductionEntryForm: React.FC = () => {
                     )}
                   </table>
                 </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-sm text-gray-600">
+                  <span className="text-xs">{visibleRows.length} record(s) · page {safePage + 1} of {totalPages}</span>
+                  <div className="flex items-center gap-2">
+                    <select value={prodPageSize} onChange={e => { setProdPageSize(Number(e.target.value)); setProdPage(0); }} className="border border-gray-300 rounded px-2 py-1 text-xs bg-white">
+                      <option value={10}>10/page</option>
+                      <option value={20}>20/page</option>
+                      <option value={50}>50/page</option>
+                      <option value={-1}>All</option>
+                    </select>
+                    <button onClick={() => setProdPage(p => Math.max(0, p - 1))} disabled={safePage === 0 || prodPageSize === -1} className="px-2 py-1 rounded border border-gray-300 disabled:opacity-50 text-xs">Prev</button>
+                    <button onClick={() => setProdPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1 || prodPageSize === -1} className="px-2 py-1 rounded border border-gray-300 disabled:opacity-50 text-xs">Next</button>
+                  </div>
+                </div>
                 </>
               );
             })()}
+          </div>
+        )}
+        {activeTab === 'summary' && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date</label>
+                <input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <button type="button" onClick={loadSummary} disabled={summaryLoading} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
+                {summaryLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+            {summaryLoading ? (
+              <p className="text-sm text-gray-500">Loading summary...</p>
+            ) : summaryData.length === 0 ? (
+              <p className="text-sm text-gray-500">No data for selected date.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-gray-200 rounded-lg">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left p-2 border-b">Machine</th>
+                      <th className="text-left p-2 border-b">Line</th>
+                      <th className="text-left p-2 border-b">Real Cycles</th>
+                      <th className="text-left p-2 border-b">Manual Cycles</th>
+                      <th className="text-left p-2 border-b">Total Cycles</th>
+                      <th className="text-left p-2 border-b">Real Output</th>
+                      <th className="text-left p-2 border-b">Manual Output</th>
+                      <th className="text-left p-2 border-b">Total Output</th>
+                      <th className="text-left p-2 border-b">Avg Efficiency</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryData.map((row: any) => (
+                      <tr key={row.machine_id} className="border-b hover:bg-gray-50">
+                        <td className="p-2 font-medium">{row.machine_id}{row.machine_name ? ` - ${row.machine_name}` : ''}</td>
+                        <td className="p-2">{row.work_centre_name}</td>
+                        <td className="p-2">{row.real_cycles}</td>
+                        <td className="p-2">
+                          {row.manual_cycles > 0
+                            ? <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">{row.manual_cycles}</span>
+                            : <span className="text-gray-400">0</span>}
+                        </td>
+                        <td className="p-2 font-semibold">{row.total_cycles}</td>
+                        <td className="p-2">{row.real_output}</td>
+                        <td className="p-2">{row.manual_output > 0 ? <span className="text-orange-600 font-medium">{row.manual_output}</span> : <span className="text-gray-400">0</span>}</td>
+                        <td className="p-2 font-semibold">{row.total_output}</td>
+                        <td className="p-2">{effBadge(row.avg_eff)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-50 font-semibold">
+                      <td className="p-2 border-t" colSpan={2}>Total</td>
+                      <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.real_cycles, 0)}</td>
+                      <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.manual_cycles, 0)}</td>
+                      <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.total_cycles, 0)}</td>
+                      <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.real_output, 0)}</td>
+                      <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.manual_output, 0)}</td>
+
+                      <td className="p-2 border-t">{summaryData.reduce((s: number, r: any) => s + r.total_output, 0)}</td>
+                      <td className="p-2 border-t">{effBadge(summaryData.filter((r: any) => r.avg_eff !== null).length ? Math.round(summaryData.filter((r: any) => r.avg_eff !== null).reduce((s: number, r: any) => s + r.avg_eff, 0) / summaryData.filter((r: any) => r.avg_eff !== null).length) : null)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
