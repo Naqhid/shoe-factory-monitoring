@@ -572,6 +572,7 @@ app.get('/api/mobile-session/:sessionId', mobileSessionController.checkSessionSt
 
 // Mobile production routes (public - no JWT for factory floor use)
 app.get('/api/mobile-production', mobileProductionController.getAll);
+app.get('/api/mobile-production/records', authenticate, mobileProductionController.getPaginatedRecords);
 app.get('/api/mobile-production/init/:machineId/:empCode', mobileProductionController.getInitData);
 app.get('/api/mobile-production/machine/:machineId/latest-unfinished', mobileProductionController.getLatestUnfinishedByMachine);
 app.get('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntries);

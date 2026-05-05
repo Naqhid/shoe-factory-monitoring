@@ -179,6 +179,41 @@ exports.getAll = async (req, res, next) => {
   }
 };
 
+// Paginated production records for supervisor view
+exports.getPaginatedRecords = async (req, res, next) => {
+  try {
+    const { date_from, date_to, work_centre_id, machine_id, type } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const rawLimit = String(req.query.limit || '20').toLowerCase();
+    const useAll = rawLimit === 'all';
+    const limit = useAll ? null : Math.min(200, Math.max(1, parseInt(rawLimit, 10) || 20));
+    const offset = useAll ? 0 : (page - 1) * limit;
+
+    let where = 'WHERE pd.button_status = 2';
+    const params = [];
+    if (date_from) { where += ' AND DATE(pd.start_time) >= ?'; params.push(date_from); }
+    if (date_to)   { where += ' AND DATE(pd.start_time) <= ?'; params.push(date_to); }
+    if (work_centre_id) { where += ' AND pd.work_centre_id = ?'; params.push(work_centre_id); }
+    if (machine_id) { where += ' AND pd.machine_id = ?'; params.push(machine_id); }
+    if (type === 'manual') where += " AND pd.stoppage_reason LIKE 'MANUAL:%'";
+    else if (type === 'real') where += " AND (pd.stoppage_reason IS NULL OR pd.stoppage_reason NOT LIKE 'MANUAL:%')";
+
+    const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM machine_centre_production pd ${where}`, params);
+    const sql = `SELECT pd.*, wc.name as work_centre_name, e.name as employee_name
+      FROM machine_centre_production pd
+      LEFT JOIN work_centres wc ON pd.work_centre_id = wc.id
+      LEFT JOIN employees e ON pd.emp_id = e.code
+      ${where} ORDER BY pd.start_time DESC, pd.id DESC`;
+    const [rows] = useAll
+      ? await db.query(sql, params)
+      : await db.query(`${sql} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+    res.json({ success: true, data: rows, meta: { page, limit: useAll ? 'all' : limit, total, total_pages: useAll ? 1 : Math.max(1, Math.ceil(total / limit)) } });
+  } catch (error) {
+    logger.error('Error fetching paginated production records:', error);
+    next(error);
+  }
+};
+
 // Get production data by ID
 exports.getById = async (req, res, next) => {
   try {

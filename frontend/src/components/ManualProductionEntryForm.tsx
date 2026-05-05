@@ -88,7 +88,9 @@ export const ManualProductionEntryForm: React.FC = () => {
     try { return JSON.parse(localStorage.getItem('user_info') || 'null'); } catch { return null; }
   }, []);
   const currentRole: string = (currentUser?.role || '').toLowerCase();
-  const canEdit = currentRole === 'admin' || currentRole === 'supervisor' || currentRole === 'manager';
+  const canEdit = currentRole === 'admin' || currentRole === 'supervisor' || currentRole === 'manager' || currentRole === 'line supervisor' || currentRole === 'unit head' || currentRole === 'ied';
+  // All authenticated users can VIEW — only canEdit users can add/edit/delete
+  const isAuthenticated = !!currentUser;
 
   const [workCentres, setWorkCentres] = React.useState<WorkCentre[]>([]);
   const [machines, setMachines] = React.useState<MachineCentre[]>([]);
@@ -144,8 +146,16 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [summaryDate, setSummaryDate] = React.useState(getTodayLocalDate());
   const [summaryData, setSummaryData] = React.useState<any[]>([]);
   const [summaryLoading, setSummaryLoading] = React.useState(false);
-  // conflict map: manual entry id -> true if overlapping real cycle exists
   const [conflictIds, setConflictIds] = React.useState<Set<number>>(new Set());
+  // Approved by
+  const [approvedBy, setApprovedBy] = React.useState('');
+  // Bulk delete
+  const [selectedEntryIds, setSelectedEntryIds] = React.useState<Set<number>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = React.useState(false);
+  // Duplicate slot warning
+  const [slotConflictWarning, setSlotConflictWarning] = React.useState('');
+  // Manipulation alert threshold
+  const MANUAL_PCT_ALERT = 30;
   const FILTER_PRESET_KEY = 'manual_entry_filters_v1';
 
   const handleUnauthorized = React.useCallback((message?: string) => {
@@ -341,6 +351,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     setTargetMins('0');
     setOutputPairs('0');
     setStoppageReason('');
+    setApprovedBy('');
     setEditingId(null);
     setShowForm(false);
   };
@@ -666,6 +677,15 @@ export const ManualProductionEntryForm: React.FC = () => {
       toast.error('Reason is required for manual entries.');
       return;
     }
+    // Duplicate slot warning check
+    const existingSlot = manualEntries.find(e =>
+      e.machine_id === machineId && e.emp_id === empId &&
+      new Date(e.start_time).getHours() === slotHour
+    );
+    if (existingSlot && !editingId) {
+      const confirmed = window.confirm(`A manual entry already exists for this machine/employee at ${slotHour}:00–${slotHour+1}:00. Add another one?`);
+      if (!confirmed) return;
+    }
     const outputValue = Math.round(Number(outputPairs || 0));
     if (Number.isNaN(outputValue) || outputValue < 0) {
       toast.error('Output pairs must be 0 or greater');
@@ -684,7 +704,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       finish_time: finishTime,
       target_mins: Number(targetMins || 0),
       output_pairs: outputValue,
-      stoppage_reason: stoppageReason.trim() || null,
+      stoppage_reason: `${stoppageReason.trim()}${approvedBy.trim() ? ` [Approved: ${approvedBy.trim()}]` : ''}` || null,
     };
 
     setLoading(true);
@@ -958,13 +978,14 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   return (
     <div className="w-full px-2 sm:px-3 md:px-4">
-      {!canEdit && (
+      {!isAuthenticated && (
         <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-6 text-center">
           <div className="text-red-600 text-lg font-bold mb-1">Access Restricted</div>
-          <p className="text-red-500 text-sm">Manual entry management is only available to Supervisors and Admins.</p>
+          <p className="text-red-500 text-sm">Please log in to access this page.</p>
         </div>
       )}
-      {canEdit && (
+      {isAuthenticated && (
+      <>
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto p-6">
@@ -1105,6 +1126,18 @@ export const ManualProductionEntryForm: React.FC = () => {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Approved By <span className="text-xs text-gray-400">(optional — 2nd person verification)</span></label>
+              <input
+                type="text"
+                value={approvedBy}
+                onChange={(e) => setApprovedBy(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg p-2.5"
+                placeholder="Name of approving supervisor"
+                disabled={loading}
+              />
+            </div>
+
               <div className="md:col-span-2 flex gap-3 mt-2">
                 <button
                   type="submit"
@@ -1154,6 +1187,36 @@ export const ManualProductionEntryForm: React.FC = () => {
               >
                 {loading ? 'Restoring...' : 'Restore'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {bulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-gray-900">Bulk Delete Manual Entries</h2>
+            <p className="text-sm text-gray-600 mt-2">Delete <span className="font-semibold">{selectedEntryIds.size}</span> selected manual entries? This cannot be undone.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setBulkDeleteConfirm(false)} disabled={loading} className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold disabled:opacity-60">Cancel</button>
+              <button type="button" disabled={loading} onClick={async () => {
+                setLoading(true);
+                let failed = 0;
+                for (const id of Array.from(selectedEntryIds)) {
+                  const row = manualEntries.find(r => r.id === id);
+                  if (!row) continue;
+                  try {
+                    const p = new URLSearchParams({ prod_date: String(row.prod_date || '').split('T')[0], work_centre_id: String(row.work_centre_id) });
+                    const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/${id}?${p.toString()}`, { method: 'DELETE' });
+                    const j = await res.json();
+                    if (!j.success) failed++;
+                  } catch { failed++; }
+                }
+                setLoading(false);
+                setBulkDeleteConfirm(false);
+                setSelectedEntryIds(new Set());
+                toast[failed ? 'error' : 'success'](failed ? `${failed} deletions failed` : `${selectedEntryIds.size} entries deleted`);
+                await loadManualEntries();
+              }} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-60">{loading ? 'Deleting...' : 'Delete All'}</button>
             </div>
           </div>
         </div>
@@ -1288,7 +1351,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 setShowForm(true);
                 setEditingId(null);
               }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full"
+              className={`bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full ${!canEdit ? 'hidden' : ''}`}
             >
               Add New Entry
             </button>
@@ -1308,6 +1371,15 @@ export const ManualProductionEntryForm: React.FC = () => {
             >
               Export CSV
             </button>
+            {canEdit && selectedEntryIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setBulkDeleteConfirm(true)}
+                className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-2 rounded-lg text-sm font-semibold w-full"
+              >
+                Delete ({selectedEntryIds.size})
+              </button>
+            )}
             <div className="relative col-span-2 sm:col-span-2 md:col-span-2 xl:col-span-3 min-w-0">
               <input
                 type="text"
@@ -1567,6 +1639,9 @@ export const ManualProductionEntryForm: React.FC = () => {
           <table className="min-w-[900px] w-full text-sm border border-gray-200 rounded-lg">
             <thead className="bg-gray-50">
               <tr>
+                <th className="p-2 border-b w-8">
+                  {canEdit && <input type="checkbox" checked={manualEntries.length > 0 && manualEntries.every(r => selectedEntryIds.has(r.id))} onChange={e => setSelectedEntryIds(e.target.checked ? new Set(manualEntries.map(r => r.id)) : new Set())} />}
+                </th>
                 <th className="text-left p-2 border-b">{sortLabel('created_at', 'Date')}</th>
                 <th className="text-left p-2 border-b">Line</th>
                 <th className="text-left p-2 border-b">{sortLabel('machine_id', 'Machine')}</th>
@@ -1581,7 +1656,7 @@ export const ManualProductionEntryForm: React.FC = () => {
             <tbody>
               {manualEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-3 text-center text-gray-500">
+                  <td colSpan={10} className="p-3 text-center text-gray-500">
                     {tableSearch.trim() || tableWorkCentreFilter || tableDateFilter
                       ? 'No manual entries found for selected filters.'
                       : 'No manual entries found.'}
@@ -1590,6 +1665,7 @@ export const ManualProductionEntryForm: React.FC = () => {
               ) : (
                 manualEntries.map((row) => (
                   <tr key={row.id} className={`border-b ${conflictIds.has(row.id) ? 'bg-red-50' : ''}`}>
+                    <td className="p-2">{canEdit && <input type="checkbox" checked={selectedEntryIds.has(row.id)} onChange={e => setSelectedEntryIds(prev => { const n = new Set(prev); e.target.checked ? n.add(row.id) : n.delete(row.id); return n; })} />}</td>
                     <td className="p-2">
                       {formatDisplayDate(row.prod_date)}
                       {conflictIds.has(row.id) && <span className="ml-1 text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold" title="Overlaps a real production cycle">⚠ Conflict</span>}
@@ -1603,27 +1679,9 @@ export const ManualProductionEntryForm: React.FC = () => {
                     <td className="p-2">{Number(row.output_pairs || 0)}</td>
                     <td className="p-2">
                       <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(row)}
-                          className="px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenAudit(row.id)}
-                          className="px-2 py-1 rounded bg-purple-100 text-purple-700 hover:bg-purple-200"
-                        >
-                          History
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteCandidate(row)}
-                          className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200"
-                        >
-                          Delete
-                        </button>
+                        {canEdit && <button type="button" onClick={() => handleEdit(row)} className="px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Edit</button>}
+                        <button type="button" onClick={() => handleOpenAudit(row.id)} className="px-2 py-1 rounded bg-purple-100 text-purple-700 hover:bg-purple-200">History</button>
+                        {canEdit && <button type="button" onClick={() => setDeleteCandidate(row)} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Delete</button>}
                       </div>
                     </td>
                   </tr>
@@ -1633,12 +1691,12 @@ export const ManualProductionEntryForm: React.FC = () => {
             {manualEntries.length > 0 ? (
               <tfoot>
                 <tr className="bg-gray-50 font-semibold">
-                  <td className="p-2 border-t" colSpan={7}>Page Total (manual outputs)</td>
+                  <td className="p-2 border-t" colSpan={8}>Page Total (manual outputs)</td>
                   <td className="p-2 border-t">{totalManualOutput}</td>
                   <td className="p-2 border-t"></td>
                 </tr>
                 <tr className="bg-gray-50 font-semibold">
-                  <td className="p-2 border-t" colSpan={7}>Filtered Total (all pages)</td>
+                  <td className="p-2 border-t" colSpan={8}>Filtered Total (all pages)</td>
                   <td className="p-2 border-t">{tableFilteredOutputTotal}</td>
                   <td className="p-2 border-t"></td>
                 </tr>
@@ -1951,6 +2009,22 @@ export const ManualProductionEntryForm: React.FC = () => {
             ) : summaryData.length === 0 ? (
               <p className="text-sm text-gray-500">No data for selected date.</p>
             ) : (
+              <>
+              {(() => {
+                const totalOut = summaryData.reduce((s: number, r: any) => s + r.total_output, 0);
+                const manualOut = summaryData.reduce((s: number, r: any) => s + r.manual_output, 0);
+                const pct = totalOut > 0 ? Math.round((manualOut / totalOut) * 100) : 0;
+                if (pct >= MANUAL_PCT_ALERT) return (
+                  <div className="bg-red-50 border border-red-300 rounded-lg p-3 flex items-start gap-2">
+                    <span className="text-red-500 text-lg">⚠️</span>
+                    <div>
+                      <p className="text-red-700 font-semibold text-sm">High Manual Entry Alert</p>
+                      <p className="text-red-600 text-xs mt-0.5">{pct}% of today's output ({manualOut} of {totalOut} pairs) was entered manually. This exceeds the {MANUAL_PCT_ALERT}% threshold — please verify data integrity.</p>
+                    </div>
+                  </div>
+                );
+                return null;
+              })()}
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm border border-gray-200 rounded-lg">
                   <thead className="bg-gray-50">
@@ -2017,10 +2091,12 @@ export const ManualProductionEntryForm: React.FC = () => {
                   </tfoot>
                 </table>
               </div>
+            </>
             )}
           </div>
         )}
       </div>
+      </>
       )}
     </div>
   );
