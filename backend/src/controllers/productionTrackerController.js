@@ -272,6 +272,83 @@ class ProductionTrackerController {
     }
   }
 
+  // Intraday Pacing
+  async getPacingData(req, res) {
+    try {
+      const { date, workCentreId } = req.query;
+      if (!date) return res.status(400).json({ success: false, error: 'Date is required' });
+
+      const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
+      const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '0', 10);
+      const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
+      const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
+
+      const now = new Date();
+      const shiftStart = new Date(now);
+      shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+      const shiftEnd = new Date(now);
+      shiftEnd.setHours(SHIFT_END_HOUR, SHIFT_END_MINUTE, 0, 0);
+
+      const totalShiftMins = Math.max(1, Math.floor((shiftEnd - shiftStart) / 60000));
+      const elapsedMins = Math.max(1, Math.min(
+        Math.floor((now - shiftStart) / 60000),
+        totalShiftMins
+      ));
+      const remainingMins = Math.max(0, totalShiftMins - elapsedMins);
+      const elapsedFraction = elapsedMins / totalShiftMins;
+
+      // Get target from production_plan (same as dashboard)
+      const [planRows] = await db.execute(`
+        SELECT COALESCE(SUM(total_target_per_day), 0) AS target_pairs
+        FROM production_plan
+        WHERE DATE(plan_date) = DATE(?)
+          AND deleted_at IS NULL
+          ${workCentreId && workCentreId !== 'all' ? 'AND work_centre_id = ?' : ''}
+      `, workCentreId && workCentreId !== 'all' ? [date, workCentreId] : [date]);
+
+      // Get actual output using Machine 07 (Final Inspection) — same as dashboard getDashboard
+      const [outputRows] = await db.execute(`
+        SELECT COALESCE(SUM(total_output_pairs), 0) AS actual_pairs
+        FROM machine_centre_summary
+        WHERE DATE(prod_date) = DATE(?)
+          AND machine_id = '07'
+          ${workCentreId && workCentreId !== 'all' ? 'AND work_centre_id = ?' : ''}
+      `, workCentreId && workCentreId !== 'all' ? [date, workCentreId] : [date]);
+
+      const actual = Number(outputRows[0]?.actual_pairs || 0);
+      const target = Number(planRows[0]?.target_pairs || 0);
+      const expectedByNow = Math.round(target * elapsedFraction);
+      const gap = actual - expectedByNow;
+      const projectedEod = elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalShiftMins) : 0;
+      const paceRate = expectedByNow > 0 ? Math.round((actual / expectedByNow) * 100) : 100;
+      const requiredRate = remainingMins > 0
+        ? Math.round(Math.max(0, target - actual) / remainingMins * 60)
+        : 0;
+      const currentRate = elapsedMins > 0 ? Math.round(actual / elapsedMins * 60) : 0;
+
+      res.json({
+        success: true,
+        data: {
+          actual,
+          target,
+          expected_by_now: expectedByNow,
+          gap,
+          pace_rate: paceRate,
+          projected_eod: projectedEod,
+          current_rate_per_hour: currentRate,
+          required_rate_per_hour: requiredRate,
+          elapsed_mins: elapsedMins,
+          remaining_mins: remainingMins,
+          total_shift_mins: totalShiftMins,
+          elapsed_fraction: Math.round(elapsedFraction * 100),
+        }
+      });
+    } catch (error) {
+      logger.error('Error getting pacing data:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   async getAlertActions(req, res) {
     try {
       const keys = Array.isArray(req.body?.keys)

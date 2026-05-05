@@ -56,6 +56,7 @@ export const ProductionTracker: React.FC = () => {
   const [refreshMode, setRefreshMode] = useState<'10s' | '30s' | 'manual'>('10s');
   const [showTrackerNotifications, setShowTrackerNotifications] = useState(false);
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
+  const [pacingData, setPacingData] = useState<any>(null);
 
   const logAuditEvent = (event: string, payload: Record<string, any> = {}) => {
     try {
@@ -81,6 +82,7 @@ export const ProductionTracker: React.FC = () => {
           setWorkCentres(result.data);
           setSelectedLine(result.data[0].id.toString());
           setError(null);
+          // pacing loads via the useEffect that watches selectedLine
         } else {
           setError('No work centres available for production tracker.');
           setLoading(false);
@@ -152,6 +154,18 @@ export const ProductionTracker: React.FC = () => {
     }
   };
 
+  const loadPacingData = async () => {
+    try {
+      const workCentreId = selectedLine || workCentres[0]?.id || 1;
+      const res = await apiFetch(`${API_BASE}/api/tracker/pacing?date=${selectedDate}&workCentreId=${workCentreId}`);
+      if (!res.ok) return;
+      const result = await res.json();
+      if (result.success) setPacingData(result.data);
+    } catch {
+      // non-blocking
+    }
+  };
+
   const loadAlertCardCount = async () => {
     try {
       const res = await apiFetch(`${API_BASE}/api/alerts?unread_only=false&limit=30`);
@@ -193,7 +207,7 @@ export const ProductionTracker: React.FC = () => {
     setManualRefreshing(true);
     logAuditEvent('manual_refresh_clicked', { selectedLine, selectedDate });
     try {
-      await Promise.all([loadDashboardData(), loadAttendanceData(), loadAlertCardCount()]);
+      await Promise.all([loadDashboardData(), loadAttendanceData(), loadAlertCardCount(), loadPacingData()]);
       toast.success('Dashboard refreshed');
     } finally {
       setManualRefreshing(false);
@@ -204,11 +218,13 @@ export const ProductionTracker: React.FC = () => {
     if (workCentres.length > 0 && selectedLine) {
       loadDashboardData();
       loadAttendanceData();
+      loadPacingData();
       if (refreshMode === 'manual') return;
       const pollMs = refreshMode === '30s' ? 30000 : 10000;
       const interval = setInterval(() => {
         loadDashboardData();
         loadAttendanceData();
+        loadPacingData();
       }, pollMs);
       return () => clearInterval(interval);
     }
@@ -448,6 +464,34 @@ export const ProductionTracker: React.FC = () => {
                         </p>
                         <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
                       </div>
+                      {pacingData && pacingData.target > 0 && (() => {
+                        const gap = pacingData.gap;
+                        const ahead = gap >= 0;
+                        const paceRate = pacingData.pace_rate;
+                        const borderColor = paceRate >= 100 ? 'border-green-100' : paceRate >= 85 ? 'border-amber-100' : 'border-red-100';
+                        const bgColor = paceRate >= 100 ? 'bg-green-50' : paceRate >= 85 ? 'bg-amber-50' : 'bg-red-50';
+                        const barColor = paceRate >= 100 ? 'bg-green-500' : paceRate >= 85 ? 'bg-amber-400' : 'bg-red-500';
+                        const labelColor = paceRate >= 100 ? 'text-green-700' : paceRate >= 85 ? 'text-amber-700' : 'text-red-700';
+                        return (
+                          <div className={`rounded-lg p-2.5 text-slate-900 border ${borderColor} ${bgColor}`}>
+                            <p className="text-xs font-semibold text-slate-500 mb-1">Intraday Pace</p>
+                            <p className={`text-sm font-bold ${labelColor}`}>
+                              {ahead ? `▲ +${gap} ahead` : `▼ ${Math.abs(gap)} behind`} · {paceRate}% of pace
+                            </p>
+                            <div className="mt-1.5 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(paceRate, 100)}%` }} />
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {pacingData.actual} / {pacingData.expected_by_now} exp · {pacingData.remaining_mins}m left
+                            </p>
+                            <div className="flex gap-3 text-xs text-slate-500 mt-0.5">
+                              <span>Now: <b className="text-slate-700">{pacingData.current_rate_per_hour}/hr</b></span>
+                              <span>Need: <b className="text-slate-700">{pacingData.required_rate_per_hour}/hr</b></span>
+                              <span>EOD: <b className="text-slate-700">{pacingData.projected_eod}</b></span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {shiftProjection.inLast60 && attentionQueue.length > 0 && (
                         <div className="bg-red-50 rounded-lg p-2.5 text-slate-900 border border-red-100">
                           <p className="text-xs font-semibold text-red-700 mb-1.5">Attention Queue</p>

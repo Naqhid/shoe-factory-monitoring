@@ -152,6 +152,16 @@ const initDb = async () => {
       )
     `);
     logger.info('manual_entry_audit_logs table ready');
+    // Add production_cycle_id to rework_rejection if missing
+    try {
+      await db.execute('ALTER TABLE rework_rejection ADD COLUMN production_cycle_id BIGINT NULL');
+      logger.info('Added production_cycle_id to rework_rejection');
+    } catch (e) { if (e.code !== 'ER_DUP_FIELDNAME') throw e; }
+    // Add stoppage_reason to machine_centre_production if missing
+    try {
+      await db.execute('ALTER TABLE machine_centre_production ADD COLUMN stoppage_reason VARCHAR(255) NULL');
+      logger.info('Added stoppage_reason to machine_centre_production');
+    } catch (e) { if (e.code !== 'ER_DUP_FIELDNAME') throw e; }
     
     // Archive old machine centre summary data on startup
     try {
@@ -505,6 +515,9 @@ app.get('/api/reports/rework-rejection', authenticate, requireLogsAccess, valida
 app.get('/api/reports/machine-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getMachineOutputReport.bind(apiController));
 app.get('/api/reports/employee-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeeOutputReport.bind(apiController));
 app.get('/api/reports/employee-performance', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
+app.get('/api/reports/downtime', authenticate, requireLogsAccess, apiController.getDowntimeReport.bind(apiController));
+app.get('/api/reports/attendance-production', authenticate, requireLogsAccess, apiController.getAttendanceProductionReport.bind(apiController));
+app.get('/api/reports/shift-summary', authenticate, requireLogsAccess, apiController.getShiftSummaryReport.bind(apiController));
 
 // Master routes — table whitelist on all master endpoints
 app.get('/api/masters/:table', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.pagination, masterController.getAll.bind(masterController));
@@ -582,12 +595,12 @@ app.get('/api/mobile-production/:id', mobileProductionController.getById);
 app.get('/api/mobile-production/machine/:machineId/date/:date', mobileProductionController.getByMachineAndDate);
 app.get('/api/mobile-production/summary/:machineId/date/:date', mobileProductionController.getSummaryByMachineAndDate);
 app.get('/api/mobile-production/live-status/:machineId', mobileProductionController.getLiveMachineStatus);
-app.post('/api/mobile-production', mobileProductionController.create);
+app.post('/api/mobile-production', checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.create);
 app.post('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.createManualEntry);
 app.put('/api/mobile-production/manual-entry/:id', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.updateManualEntry);
 app.delete('/api/mobile-production/manual-entry/:id', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.deleteManualEntry);
 app.put('/api/mobile-production/:id', mobileProductionController.update);
-app.patch('/api/mobile-production/:id/status', mobileProductionController.updateStatus);
+app.patch('/api/mobile-production/:id/status', checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.updateStatus);
 app.delete('/api/mobile-production/:id', mobileProductionController.delete);
 
 // Pivot data routes
@@ -596,6 +609,7 @@ app.post('/api/pivot-data/refresh', mobileProductionController.refreshPivotData)
 
 // Production Tracker routes
 app.get('/api/tracker/summary', authenticate, requireTrackerAccess, productionTrackerController.getSummary.bind(productionTrackerController));
+app.get('/api/tracker/pacing', authenticate, requireTrackerAccess, productionTrackerController.getPacingData.bind(productionTrackerController));
 app.get('/api/tracker/hourly', authenticate, requireTrackerAccess, productionTrackerController.getHourlyPerformance.bind(productionTrackerController));
 app.get('/api/tracker/workstations', authenticate, requireTrackerAccess, productionTrackerController.getWorkstationPerformance.bind(productionTrackerController));
 app.get('/api/tracker/stoppages', authenticate, requireTrackerAccess, productionTrackerController.getStoppageReasons.bind(productionTrackerController));
@@ -645,6 +659,7 @@ app.get('/api/rework-rejection', authenticate, requireReworkAccess, reworkReject
 app.post('/api/rework-rejection', authenticate, requireReworkAccess, validate(validate.schemas.reworkRejection), checkDayLock('production_date', 'work_centre_id'), reworkRejectionController.save.bind(reworkRejectionController));
 app.put('/api/rework-rejection/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.update.bind(reworkRejectionController));
 app.delete('/api/rework-rejection/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.delete.bind(reworkRejectionController));
+app.get('/api/rework-rejection/cycles', authenticate, requireReworkAccess, reworkRejectionController.getCyclesForDate.bind(reworkRejectionController));
 
 // Role routes
 app.get('/api/roles', authenticate, requireAdminAccess, roleController.getAll);
