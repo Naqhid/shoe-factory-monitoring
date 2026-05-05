@@ -654,7 +654,8 @@ app.get('/api/hourly-output/:workCentreId', hourlyOutputController.getHourlyOutp
 app.get('/api/hourly-output/:workCentreId/machines', hourlyOutputController.getMachineHourlyOutput);
 
 // Rework Rejection routes
-app.get('/api/rework-rejection/summary', authenticate, requireReworkAccess, reworkRejectionController.getSummaryByWorkCentre.bind(reworkRejectionController));
+// Keep summary public for TV dashboard screens (no operator login on display units).
+app.get('/api/rework-rejection/summary', reworkRejectionController.getSummaryByWorkCentre.bind(reworkRejectionController));
 app.get('/api/rework-rejection', authenticate, requireReworkAccess, reworkRejectionController.getAll.bind(reworkRejectionController));
 app.post('/api/rework-rejection', authenticate, requireReworkAccess, validate(validate.schemas.reworkRejection), checkDayLock('production_date', 'work_centre_id'), reworkRejectionController.save.bind(reworkRejectionController));
 app.put('/api/rework-rejection/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.update.bind(reworkRejectionController));
