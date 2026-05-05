@@ -6,7 +6,7 @@ import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import * as XLSX from 'xlsx';
 
-type ReportType = 'hourly-production' | 'line-efficiency' | 'attendance' | 'rework-rejection' | 'machine-output' | 'employee-output' | 'employee-performance';
+type ReportType = 'hourly-production' | 'line-efficiency' | 'attendance' | 'rework-rejection' | 'machine-output' | 'employee-output' | 'employee-performance' | 'downtime' | 'attendance-production' | 'shift-summary';
 
 const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode; color: string }[] = [
   { value: 'hourly-production',    label: 'Hourly Production',         icon: <Clock className="h-5 w-5" />,       color: 'blue' },
@@ -16,6 +16,9 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
   { value: 'machine-output',       label: 'Machine-wise Output',       icon: <Cpu className="h-5 w-5" />,         color: 'indigo' },
   { value: 'employee-output',      label: 'Employee-wise Output',      icon: <UserCheck className="h-5 w-5" />,   color: 'teal' },
   { value: 'employee-performance', label: 'Employee Performance',      icon: <TrendingUp className="h-5 w-5" />,  color: 'rose' },
+  { value: 'downtime',             label: 'Downtime Analysis',         icon: <AlertTriangle className="h-5 w-5" />, color: 'orange' },
+  { value: 'attendance-production',label: 'Attendance vs Output',      icon: <Users className="h-5 w-5" />,       color: 'cyan' },
+  { value: 'shift-summary',        label: 'Shift Summary',             icon: <BarChart2 className="h-5 w-5" />,   color: 'slate' },
 ];
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; activeBg: string; activeText: string }> = {
@@ -26,6 +29,9 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; acti
   indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200', activeBg: 'bg-indigo-600', activeText: 'text-white' },
   teal:   { bg: 'bg-teal-50',   text: 'text-teal-600',   border: 'border-teal-200',   activeBg: 'bg-teal-600',   activeText: 'text-white' },
   rose:   { bg: 'bg-rose-50',   text: 'text-rose-600',   border: 'border-rose-200',   activeBg: 'bg-rose-600',   activeText: 'text-white' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200', activeBg: 'bg-orange-600', activeText: 'text-white' },
+  cyan:   { bg: 'bg-cyan-50',   text: 'text-cyan-600',   border: 'border-cyan-200',   activeBg: 'bg-cyan-600',   activeText: 'text-white' },
+  slate:  { bg: 'bg-slate-50',  text: 'text-slate-600',  border: 'border-slate-200',  activeBg: 'bg-slate-600',  activeText: 'text-white' },
 };
 
 const fmtDate = (d: string) => {
@@ -559,6 +565,131 @@ export const Reports: React.FC = () => {
     );
   };
 
+  const renderDowntime = () => (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="bg-gray-50"><tr>
+          <th className="text-left p-2 border-b">Machine</th>
+          <th className="text-left p-2 border-b">Employee</th>
+          <th className="text-left p-2 border-b">Line</th>
+          <th className="text-left p-2 border-b">Idle Start</th>
+          <th className="text-left p-2 border-b">Idle End</th>
+          <th className="text-left p-2 border-b">Duration</th>
+          <th className="text-left p-2 border-b">Reason</th>
+        </tr></thead>
+        <tbody>
+          {data!.map((r: any, i: number) => (
+            <tr key={i} className="border-b hover:bg-gray-50">
+              <td className="p-2">{r.machine_id}{r.machine_name ? ` - ${r.machine_name}` : ''}</td>
+              <td className="p-2">{r.emp_id}{r.employee_name ? ` - ${r.employee_name}` : ''}</td>
+              <td className="p-2">{r.work_centre_name}</td>
+              <td className="p-2">{r.idle_start_time ? new Date(r.idle_start_time).toLocaleString('en-IN', {hour12:false,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+              <td className="p-2">{r.idle_stop_time ? new Date(r.idle_stop_time).toLocaleString('en-IN', {hour12:false,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : <span className="text-orange-500 text-xs">Still idle</span>}</td>
+              <td className="p-2 font-medium">{r.idle_mins != null ? `${r.idle_mins}m` : '-'}</td>
+              <td className="p-2">
+                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  r.reason === 'Machine Breakdown' ? 'bg-red-100 text-red-700' :
+                  r.reason === 'Material Shortage' ? 'bg-yellow-100 text-yellow-700' :
+                  r.reason === 'Power Cut' ? 'bg-orange-100 text-orange-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>{r.reason}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderAttendanceProduction = () => (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="bg-gray-50"><tr>
+          <th className="text-left p-2 border-b">Employee</th>
+          <th className="text-left p-2 border-b">Line</th>
+          <th className="text-left p-2 border-b">Session Start</th>
+          <th className="text-left p-2 border-b">Session End</th>
+          <th className="text-left p-2 border-b">Session Mins</th>
+          <th className="text-left p-2 border-b">Cycles</th>
+          <th className="text-left p-2 border-b">Active Mins</th>
+          <th className="text-left p-2 border-b">Output</th>
+          <th className="text-left p-2 border-b">Status</th>
+        </tr></thead>
+        <tbody>
+          {data!.map((r: any, i: number) => {
+            const isZero = Number(r.total_output) === 0;
+            return (
+              <tr key={i} className={`border-b ${isZero ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                <td className="p-2">{r.emp_code}{r.employee_name ? ` - ${r.employee_name}` : ''}</td>
+                <td className="p-2">{r.work_centre_name}</td>
+                <td className="p-2">{r.session_start ? new Date(r.session_start).toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+                <td className="p-2">{r.session_end ? new Date(r.session_end).toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'}) : <span className="text-green-600 text-xs">Active</span>}</td>
+                <td className="p-2">{r.session_mins}m</td>
+                <td className="p-2">{r.cycles_completed}</td>
+                <td className="p-2">{r.active_mins}m</td>
+                <td className="p-2 font-semibold">{r.total_output}</td>
+                <td className="p-2">{isZero ? <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">⚠ Zero Output</span> : <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">OK</span>}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderShiftSummary = () => (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="bg-gray-50"><tr>
+          <th className="text-left p-2 border-b">Machine</th>
+          <th className="text-left p-2 border-b">Employee</th>
+          <th className="text-left p-2 border-b">Line</th>
+          <th className="text-left p-2 border-b">Cycles</th>
+          <th className="text-left p-2 border-b">Output</th>
+          <th className="text-left p-2 border-b">Active Mins</th>
+          <th className="text-left p-2 border-b">Idle Mins</th>
+          <th className="text-left p-2 border-b">Utilisation</th>
+          <th className="text-left p-2 border-b">Shift Efficiency</th>
+        </tr></thead>
+        <tbody>
+          {data!.map((r: any, i: number) => (
+            <tr key={i} className="border-b hover:bg-gray-50">
+              <td className="p-2">{r.machine_id}{r.machine_name ? ` - ${r.machine_name}` : ''}</td>
+              <td className="p-2">{r.emp_id}{r.employee_name ? ` - ${r.employee_name}` : ''}</td>
+              <td className="p-2">{r.work_centre_name}</td>
+              <td className="p-2">{r.cycles}</td>
+              <td className="p-2 font-semibold">{r.total_output}</td>
+              <td className="p-2">{r.shift_actual_mins}m</td>
+              <td className="p-2 text-orange-600">{r.shift_idle_mins}m</td>
+              <td className="p-2">
+                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  r.shift_utilisation_pct >= 70 ? 'bg-green-100 text-green-700' :
+                  r.shift_utilisation_pct >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                }`}>{r.shift_utilisation_pct}%</span>
+              </td>
+              <td className="p-2">
+                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  r.shift_efficiency_pct >= 90 ? 'bg-green-100 text-green-700' :
+                  r.shift_efficiency_pct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                }`}>{r.shift_efficiency_pct}%</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-gray-50 font-semibold">
+            <td className="p-2 border-t" colSpan={3}>Total (Shift: 09:00–17:30 = 510 mins)</td>
+            <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.cycles||0),0)}</td>
+            <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.total_output||0),0)}</td>
+            <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.shift_actual_mins||0),0)}m</td>
+            <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.shift_idle_mins||0),0)}m</td>
+            <td className="p-2 border-t" colSpan={2}></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+
   const renderTable = () => {
     if (!data || data.length === 0) return (
       <div className="flex flex-col items-center justify-center py-20 text-gray-400">
@@ -575,6 +706,9 @@ export const Reports: React.FC = () => {
       case 'machine-output':       return renderMachineOutput();
       case 'employee-output':      return renderEmployeeOutput();
       case 'employee-performance': return renderEmployeePerformance();
+      case 'downtime':             return renderDowntime();
+      case 'attendance-production':return renderAttendanceProduction();
+      case 'shift-summary':        return renderShiftSummary();
     }
   };
 

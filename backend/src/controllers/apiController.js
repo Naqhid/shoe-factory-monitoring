@@ -280,6 +280,141 @@ class ApiController {
       res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
+
+  // Shift constants: 09:00 - 17:30
+  static get SHIFT_START_H() { return 9; }
+  static get SHIFT_START_M() { return 0; }
+  static get SHIFT_END_H() { return 17; }
+  static get SHIFT_END_M() { return 30; }
+  static get SHIFT_MINS() { return (17 * 60 + 30) - (9 * 60); } // 510 mins
+
+  // #3 Downtime report — idle events with reasons per machine per day
+  async getDowntimeReport(req, res, next) {
+    try {
+      const { fromDate, toDate, date, work_centre_id = null, workCentreId, page, limit } = req.query;
+      const { page: p, limit: l, offset } = paginate(page, limit);
+      const from = fromDate || date || new Date().toISOString().slice(0, 10);
+      const to = toDate || from;
+      let where = 'WHERE DATE(mcp.prod_date) BETWEEN ? AND ? AND mcp.idle_start_time IS NOT NULL';
+      const params = [from, to];
+      const wcId = work_centre_id || workCentreId || null;
+      if (wcId) { where += ' AND mcp.work_centre_id = ?'; params.push(wcId); }
+      const [rows] = await db.query(`
+        SELECT
+          mcp.id, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name AS employee_name,
+          wc.name AS work_centre_name,
+          mcp.idle_start_time, mcp.idle_stop_time,
+          TIMESTAMPDIFF(MINUTE, mcp.idle_start_time, COALESCE(mcp.idle_stop_time, NOW())) AS idle_mins,
+          COALESCE(mcp.stoppage_reason, 'Not specified') AS reason,
+          mcp.button_status
+        FROM machine_centre_production mcp
+        LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+        LEFT JOIN employees e ON e.code = mcp.emp_id
+        LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+        ${where}
+        ORDER BY mcp.idle_start_time DESC
+      `, params);
+      // Aggregate by reason
+      const byReason = {};
+      rows.forEach(r => {
+        const key = r.reason || 'Not specified';
+        if (!byReason[key]) byReason[key] = { reason: key, count: 0, total_mins: 0 };
+        byReason[key].count++;
+        byReason[key].total_mins += Number(r.idle_mins || 0);
+      });
+      res.json({ success: true, fromDate: from, toDate: to, data: rows, by_reason: Object.values(byReason).sort((a, b) => b.total_mins - a.total_mins) });
+    } catch (e) { next(e); }
+  }
+
+  // #4 Attendance vs production correlation
+  async getAttendanceProductionReport(req, res, next) {
+    try {
+      const { fromDate, toDate, date, work_centre_id = null, workCentreId, page, limit } = req.query;
+      const from = fromDate || date || new Date().toISOString().slice(0, 10);
+      const to = toDate || from;
+      const wcId = work_centre_id || workCentreId || null;
+      let wcWhere = wcId ? 'AND ms.work_centre_id = ?' : '';
+      const params = [from, to, from, to];
+      if (wcId) params.push(wcId);
+      const [rows] = await db.query(`
+        SELECT
+          ms.emp_code, e.name AS employee_name,
+          wc.name AS work_centre_name, ms.work_centre_id,
+          ms.activated_at AS session_start,
+          COALESCE(SUM(mcp.output_pairs), 0) AS total_output,
+          COUNT(CASE WHEN mcp.button_status = 2 THEN 1 END) AS cycles_completed,
+          COALESCE(SUM(mcp.actual_time), 0) AS active_mins
+        FROM mobile_sessions ms
+        LEFT JOIN employees e ON e.code = ms.emp_code
+        LEFT JOIN work_centres wc ON wc.id = ms.work_centre_id
+        LEFT JOIN machine_centre_production mcp
+          ON mcp.emp_id = ms.emp_code
+          AND DATE(mcp.prod_date) BETWEEN ? AND ?
+        WHERE DATE(ms.activated_at) BETWEEN ? AND ? ${wcWhere}
+        GROUP BY ms.session_id, ms.emp_code, e.name, wc.name, ms.work_centre_id, ms.activated_at
+        ORDER BY total_output ASC
+      `, params);
+      const zeroOutput = rows.filter(r => Number(r.total_output) === 0);
+      res.json({ success: true, fromDate: from, toDate: to, data: rows, zero_output_operators: zeroOutput });
+    } catch (e) { next(e); }
+  }
+
+  // #2 Shift summary — shift-aware efficiency (09:00-17:30 = 510 mins)
+  async getShiftSummaryReport(req, res, next) {
+    try {
+      const { fromDate, toDate, date, work_centre_id, workCentreId } = req.query;
+      const from = fromDate || date || new Date().toISOString().slice(0, 10);
+      const to = toDate || from;
+      const SHIFT_MINS = 510;
+      const wcId = work_centre_id || workCentreId || null;
+      let wcWhere = wcId ? 'AND mcp.work_centre_id = ?' : '';
+
+      // Build per-date shift boundaries inline so multi-day ranges work correctly
+      const params = [from, to];
+      if (wcId) params.push(wcId);
+
+      const [rows] = await db.query(`
+        SELECT
+          DATE(mcp.prod_date) AS date,
+          mcp.work_centre_id, wc.name AS work_centre_name,
+          mcp.machine_id, mc.machine_name,
+          mcp.emp_id, e.name AS employee_name,
+          COUNT(CASE WHEN mcp.button_status = 2 THEN 1 END) AS cycles,
+          COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.output_pairs END), 0) AS total_output,
+          COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.target_mins END), 0) AS total_target_mins,
+          COALESCE(SUM(
+            CASE WHEN mcp.button_status = 2 THEN
+              GREATEST(0, TIMESTAMPDIFF(MINUTE,
+                GREATEST(mcp.start_time, CONCAT(DATE(mcp.prod_date), ' 09:00:00')),
+                LEAST(mcp.finish_time, CONCAT(DATE(mcp.prod_date), ' 17:30:00'))))
+            END
+          ), 0) AS shift_actual_mins,
+          COALESCE(SUM(CASE WHEN mcp.idle_start_time IS NOT NULL THEN
+            GREATEST(0, TIMESTAMPDIFF(MINUTE,
+              GREATEST(mcp.idle_start_time, CONCAT(DATE(mcp.prod_date), ' 09:00:00')),
+              LEAST(COALESCE(mcp.idle_stop_time, CONCAT(DATE(mcp.prod_date), ' 17:30:00')),
+                    CONCAT(DATE(mcp.prod_date), ' 17:30:00'))))
+            END
+          ), 0) AS shift_idle_mins
+        FROM machine_centre_production mcp
+        LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+        LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+        LEFT JOIN employees e ON e.code = mcp.emp_id
+        WHERE DATE(mcp.prod_date) BETWEEN ? AND ? ${wcWhere}
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name
+        ORDER BY date, wc.name, mcp.machine_id
+      `, params);
+
+      const result = rows.map(r => {
+        const actualMins = Math.max(0, Number(r.shift_actual_mins));
+        const targetMins = Number(r.total_target_mins);
+        const shiftEff = actualMins > 0 ? Math.round((targetMins / actualMins) * 100) : 0;
+        const utilisation = Math.round((actualMins / SHIFT_MINS) * 100);
+        return { ...r, shift_efficiency_pct: shiftEff, shift_utilisation_pct: utilisation, shift_mins: SHIFT_MINS };
+      });
+      res.json({ success: true, fromDate: from, toDate: to, shift_start: '09:00', shift_end: '17:30', shift_mins: SHIFT_MINS, data: result });
+    } catch (e) { next(e); }
+  }
 }
 
 module.exports = new ApiController();

@@ -1238,6 +1238,7 @@ exports.updateStatus = async (req, res, next) => {
     const { id } = req.params;
     const { button_status, output_pairs, actual_time, stoppage_reason, emp_id, session_id } = req.body;
     const normalizedButtonStatus = button_status === 3 ? 1 : button_status;
+    const isGoingIdle = button_status === 3; // original 3 = stop/idle
 
     // DEBUG: Log all status change requests for troubleshooting ghost records
     logger.info(`[STATUS-CHANGE] Record ${id}: requested_status=${button_status}, normalized=${normalizedButtonStatus}, emp_id=${emp_id}, session_id=${session_id}, output_pairs=${output_pairs}, ip=${req.ip}, ua=${req.headers['user-agent']?.substring(0, 50)}`);
@@ -1305,7 +1306,14 @@ exports.updateStatus = async (req, res, next) => {
         updateQuery += ', finish_time = NOW(), prod_date = CURDATE()';
         if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
       } else if (normalizedButtonStatus === 1) {
-        updateQuery += ', idle_stop_time = NOW()';
+        if (isGoingIdle) {
+          // Machine stopping — record idle start time and reason
+          updateQuery += ', idle_start_time = NOW()';
+          if (stoppage_reason) { updateQuery += ', stoppage_reason = ?'; params.push(stoppage_reason); }
+        } else {
+          // Machine resuming from idle
+          updateQuery += ', idle_stop_time = NOW()';
+        }
       }
     }
 

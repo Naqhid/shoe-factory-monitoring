@@ -130,6 +130,31 @@ class ReworkRejectionController {
     }
   }
 
+  async getCyclesForDate(req, res) {
+    try {
+      const { date, work_centre_id } = req.query;
+      if (!date) return res.status(400).json({ success: false, error: 'date is required' });
+      const params = [date];
+      let wcFilter = '';
+      if (work_centre_id) { wcFilter = ' AND mcp.work_centre_id = ?'; params.push(work_centre_id); }
+      const [rows] = await db.execute(
+        `SELECT mcp.id, mcp.machine_centre_id, mcp.work_centre_id,
+                mc.name as machine_centre_name, mc.machine_id,
+                mcp.prod_date, mcp.start_time, mcp.finish_time,
+                mcp.total_output_pairs, mcp.bins_completed
+         FROM machine_centre_production mcp
+         LEFT JOIN machine_centres mc ON mcp.machine_centre_id = mc.id
+         WHERE DATE(mcp.prod_date) = ?${wcFilter}
+         ORDER BY mc.name ASC, mcp.start_time ASC`,
+        params
+      );
+      res.json({ success: true, data: rows });
+    } catch (error) {
+      logger.error('Error fetching cycles for date:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   async getSummaryByWorkCentre(req, res) {
     try {
       const { date } = req.query;
