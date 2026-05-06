@@ -1,6 +1,7 @@
 import React from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 
 interface WorkCentre {
@@ -137,6 +138,8 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodToDateFilter, setProdToDateFilter] = React.useState(getTodayLocalDate());
   const [prodPage, setProdPage] = React.useState(0);
   const [prodPageSize, setProdPageSize] = React.useState(20);
+  /** Which machine accordions are expanded (persisted across refresh after edit/save) */
+  const [prodMachineAccordionOpen, setProdMachineAccordionOpen] = React.useState<Record<string, boolean>>({});
   const [editingProdId, setEditingProdId] = React.useState<number | null>(null);
   const [prodStartTime, setProdStartTime] = React.useState('');
   const [prodFinishTime, setProdFinishTime] = React.useState('');
@@ -628,6 +631,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     try {
       const row = prodRecords.find(r => r.id === editingProdId);
       if (!row) return;
+      const machineKeyToReopen = String(row.machine_id);
       const toLocal = (v: string) => v ? v.replace('T', ' ') + ':00' : null;
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/${editingProdId}`, {
         method: 'PUT',
@@ -649,6 +653,8 @@ export const ManualProductionEntryForm: React.FC = () => {
       setShowProdEditForm(false);
       setEditingProdId(null);
       await loadProdRecords();
+      // Only keep the edited machine expanded (avoids fighting other open keys after refresh)
+      setProdMachineAccordionOpen({ [machineKeyToReopen]: true });
     } catch { toast.error('Failed to update record'); }
     finally { setLoading(false); }
   };
@@ -1893,96 +1899,144 @@ export const ManualProductionEntryForm: React.FC = () => {
                            `${r.emp_id} ${r.employee_name || ''}`.toLowerCase().includes(q);
                   })
                 : prodRecords;
-              // Build cycle number map: per machine, sorted by start_time
-              const cycleNumMap = new Map<number, number>();
-              const byMachine = new Map<string, any[]>();
-              visibleRows.forEach((r: any) => {
-                const k = r.machine_id;
-                if (!byMachine.has(k)) byMachine.set(k, []);
-                byMachine.get(k)!.push(r);
-              });
-              byMachine.forEach((rows) => {
-                rows.sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-                rows.forEach((r: any, i: number) => cycleNumMap.set(r.id, i + 1));
-              });
               const totalOutput = visibleRows.reduce((s: number, r: any) => s + Number(r.output_pairs || 0), 0);
               const effValues = visibleRows.map((r: any) => calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time)).filter((v): v is number => v !== null);
               const avgEff = effValues.length ? Math.round(effValues.reduce((a, b) => a + b, 0) / effValues.length) : null;
-              const pageSize = prodPageSize === -1 ? visibleRows.length : prodPageSize;
-              const totalPages = Math.max(1, Math.ceil(visibleRows.length / (pageSize || 1)));
+              // One accordion per machine; paginate machines (not raw rows)
+              const machineKeys = Array.from(new Set(visibleRows.map((r: any) => String(r.machine_id)))).sort((a, b) => a.localeCompare(b));
+              const allMachineGroups = machineKeys.map((mid) => ({
+                machine_id: mid,
+                rows: visibleRows
+                  .filter((r: any) => String(r.machine_id) === mid)
+                  .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+              }));
+              const machineCount = allMachineGroups.length;
+              const machinesPerPage = prodPageSize === -1 ? Math.max(1, machineCount) : prodPageSize;
+              const totalPages = Math.max(1, Math.ceil(machineCount / (machinesPerPage || 1)));
               const safePage = Math.min(prodPage, totalPages - 1);
-              const pageRows = prodPageSize === -1 ? visibleRows : visibleRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
+              const groupedByMachine =
+                prodPageSize === -1
+                  ? allMachineGroups
+                  : allMachineGroups.slice(safePage * machinesPerPage, safePage * machinesPerPage + machinesPerPage);
               return (
                 <>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm border border-gray-200 rounded-lg">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="text-left p-2 border-b">#</th>
-                        <th className="text-left p-2 border-b">Date</th>
-                        <th className="text-left p-2 border-b">Line</th>
-                        <th className="text-left p-2 border-b">Machine</th>
-                        <th className="text-left p-2 border-b">Employee</th>
-                        <th className="text-left p-2 border-b">Start</th>
-                        <th className="text-left p-2 border-b">Finish</th>
-                        <th className="text-left p-2 border-b">Duration</th>
-                        <th className="text-left p-2 border-b">Target</th>
-                        <th className="text-left p-2 border-b">Output</th>
-                        <th className="text-left p-2 border-b">Efficiency</th>
-                        <th className="text-left p-2 border-b">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {prodLoading ? (
-                        <tr><td colSpan={12} className="p-4 text-center text-gray-500">Loading...</td></tr>
-                      ) : pageRows.length === 0 ? (
-                        <tr><td colSpan={12} className="p-4 text-center text-gray-500">No production records found for selected filters.</td></tr>
-                      ) : pageRows.map((row: any) => {
-                        const mName = getProdMachineName(row.machine_id);
-                        const dur = calcDuration(row.start_time, row.finish_time);
-                        const eff = calcEfficiency(Number(row.target_mins || 0), row.start_time, row.finish_time);
-                        const isAnomaly = (eff !== null && eff < 50) || (dur !== null && dur < 2);
-                        const cycleNum = cycleNumMap.get(row.id) ?? '-';
-                        return (
-                          <tr key={row.id} className={`border-b ${isAnomaly ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
-                            <td className="p-2 text-gray-400 text-xs font-mono">{cycleNum}</td>
-                            <td className="p-2">{formatDisplayDate(row.prod_date)}</td>
-                            <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
-                            <td className="p-2">{row.machine_id}{mName ? ` - ${mName}` : ''}</td>
-                            <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
-                            <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
-                            <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
-                            <td className={`p-2 ${dur !== null && dur < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{dur !== null ? `${dur}m` : '-'}</td>
-                            <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
-                            <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>
-                            <td className="p-2">{effBadge(eff)}</td>
-                            <td className="p-2">
-                              <button type="button" onClick={() => handleProdEdit(row)} className="px-2 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-semibold">Edit</button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    {visibleRows.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-gray-50 font-semibold text-sm">
-                          <td className="p-2 border-t" colSpan={9}>Total ({visibleRows.length} records)</td>
-                          <td className="p-2 border-t">{totalOutput}</td>
-                          <td className="p-2 border-t">{effBadge(avgEff)}</td>
-                          <td className="p-2 border-t"></td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
+                {prodLoading ? (
+                  <div className="border border-gray-200 rounded-lg p-6 text-center text-gray-500 text-sm">Loading...</div>
+                ) : visibleRows.length === 0 ? (
+                  <div className="border border-gray-200 rounded-lg p-6 text-center text-gray-500 text-sm">No production records found for selected filters.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {groupedByMachine.map(({ machine_id: mid, rows: machineRows }) => {
+                      const mName = getProdMachineName(mid);
+                      const sectionOutput = machineRows.reduce((s: number, r: any) => s + Number(r.output_pairs || 0), 0);
+                      const sectionEff = machineRows
+                        .map((r: any) => calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time))
+                        .filter((v): v is number => v !== null);
+                      const sectionAvgEff = sectionEff.length ? Math.round(sectionEff.reduce((a, b) => a + b, 0) / sectionEff.length) : null;
+                      const accOpen = prodMachineAccordionOpen[mid] ?? false;
+                      return (
+                        <details
+                          key={mid}
+                          open={accOpen}
+                          className="border border-gray-200 rounded-lg bg-white overflow-hidden"
+                        >
+                          <summary
+                            className="cursor-pointer list-none px-4 py-3 bg-gray-50 hover:bg-gray-100 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-gray-900 [&::-webkit-details-marker]:hidden"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setProdMachineAccordionOpen((prev) => ({
+                                ...prev,
+                                [mid]: !(prev[mid] ?? false),
+                              }));
+                            }}
+                          >
+                            <span className="flex items-start gap-2 min-w-0">
+                              <ChevronRight
+                                className={`h-5 w-5 shrink-0 text-gray-500 mt-0.5 transition-transform duration-200 ${accOpen ? 'rotate-90' : ''}`}
+                                aria-hidden
+                              />
+                              <span>
+                                Machine {mid}{mName ? ` — ${mName}` : ''}
+                                <span className="font-normal text-gray-600 ml-2">
+                                  ({machineRows.length} cycle{machineRows.length !== 1 ? 's' : ''})
+                                </span>
+                              </span>
+                            </span>
+                            <span className="flex flex-wrap items-center gap-3 text-xs font-normal">
+                              <span>Output: <strong className="text-gray-900">{sectionOutput}</strong></span>
+                              <span>Avg eff: {effBadge(sectionAvgEff)}</span>
+                            </span>
+                          </summary>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="text-left p-2 border-b border-gray-200">Date</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Line</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Employee</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Start</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Finish</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Duration</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Target</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Output</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Efficiency</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {machineRows.map((row: any) => {
+                                  const dur = calcDuration(row.start_time, row.finish_time);
+                                  const eff = calcEfficiency(Number(row.target_mins || 0), row.start_time, row.finish_time);
+                                  const isAnomaly = (eff !== null && eff < 50) || (dur !== null && dur < 2);
+                                  return (
+                                    <tr key={row.id} className={`border-b border-gray-100 ${isAnomaly ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                                      <td className="p-2">{formatDisplayDate(row.prod_date)}</td>
+                                      <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
+                                      <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
+                                      <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
+                                      <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
+                                      <td className={`p-2 ${dur !== null && dur < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{dur !== null ? `${dur}m` : '-'}</td>
+                                      <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
+                                      <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>
+                                      <td className="p-2">{effBadge(eff)}</td>
+                                      <td className="p-2">
+                                        <button type="button" onClick={() => handleProdEdit(row)} className="px-2 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-semibold">Edit</button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                )}
+                {visibleRows.length > 0 && !prodLoading && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-900">
+                    <span>Total ({visibleRows.length} cycles)</span>
+                    <span className="flex flex-wrap items-center gap-4 font-normal text-gray-700">
+                      <span>Output: <strong className="text-gray-900">{totalOutput}</strong></span>
+                      <span className="flex items-center gap-1">Avg efficiency: {effBadge(avgEff)}</span>
+                    </span>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-sm text-gray-600">
-                  <span className="text-xs">{visibleRows.length} record(s) · page {safePage + 1} of {totalPages}</span>
+                  <span className="text-xs">
+                    {machineCount} machine{machineCount !== 1 ? 's' : ''} · {visibleRows.length} cycle{visibleRows.length !== 1 ? 's' : ''}
+                    {prodPageSize !== -1 ? (
+                      <> · showing {groupedByMachine.length} machine{groupedByMachine.length !== 1 ? 's' : ''} on this page · page {safePage + 1} of {totalPages}</>
+                    ) : (
+                      <> · page {safePage + 1} of {totalPages}</>
+                    )}
+                  </span>
                   <div className="flex items-center gap-2">
                     <select value={prodPageSize} onChange={e => { setProdPageSize(Number(e.target.value)); setProdPage(0); }} className="border border-gray-300 rounded px-2 py-1 text-xs bg-white">
-                      <option value={10}>10/page</option>
-                      <option value={20}>20/page</option>
-                      <option value={50}>50/page</option>
-                      <option value={-1}>All</option>
+                      <option value={10}>10 machines/page</option>
+                      <option value={20}>20 machines/page</option>
+                      <option value={50}>50 machines/page</option>
+                      <option value={-1}>All machines</option>
                     </select>
                     <button onClick={() => setProdPage(p => Math.max(0, p - 1))} disabled={safePage === 0 || prodPageSize === -1} className="px-2 py-1 rounded border border-gray-300 disabled:opacity-50 text-xs">Prev</button>
                     <button onClick={() => setProdPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1 || prodPageSize === -1} className="px-2 py-1 rounded border border-gray-300 disabled:opacity-50 text-xs">Next</button>

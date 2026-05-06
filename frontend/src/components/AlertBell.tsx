@@ -15,14 +15,22 @@ export const AlertBell: React.FC = () => {
 
   const fetchAlerts = React.useCallback(async () => {
     try {
-      const res = await apiFetch(`${API_BASE_URL}/api/alerts?unread_only=false&limit=30`);
+      // Use the same endpoint/filter logic as Realtime Alert Center
+      // so bell count matches currently visible unacknowledged alerts.
+      let res = await apiFetch(`${API_BASE_URL}/api/alerts/center?include_acknowledged=false&limit=1&page=1`);
+      if (!res.ok) {
+        // Backward compatibility fallback
+        res = await apiFetch(`${API_BASE_URL}/api/alerts?unread_only=false&limit=30`);
+      }
       if (!res.ok) return;
       const data = await res.json();
-      if (data.success) {
-        const nextCount = Number(data.unread_count || 0);
-        setUnreadCount(nextCount);
-        localStorage.setItem(ALERT_UNREAD_CACHE_KEY, String(nextCount));
-      }
+      if (!data?.success) return;
+
+      const nextCount = Number(
+        data.unacknowledged_count ?? data.unread_count ?? 0
+      );
+      setUnreadCount(nextCount);
+      localStorage.setItem(ALERT_UNREAD_CACHE_KEY, String(nextCount));
     } catch { /* silent */ }
   }, []);
 

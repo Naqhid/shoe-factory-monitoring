@@ -68,23 +68,19 @@ exports.getDashboard = async (req, res) => {
         // Get output from Machine 07 (Final Inspection) for Line 2A
         const [summaryData] = await pool.query(`
             SELECT COALESCE(total_output_pairs, 0) as total_output 
+                 , COALESCE(avg_efficiency_percent, 0) as eol_efficiency_percent
             FROM machine_centre_summary 
             WHERE prod_date = ? AND work_centre_id = ? AND machine_id = '07'
             LIMIT 1
         `, [today, workCentreId]);
         const finalOutput = summaryData[0]?.total_output || 0;
-        const [overallEfficiency] = await pool.query(`
-            SELECT CASE WHEN SUM(total_actual_mins) > 0 
-                THEN (SUM(total_target_mins) / SUM(total_actual_mins)) * 100 
-                ELSE 0 END AS overall_efficiency_percent
-            FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?
-        `, [today, workCentreId]);
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
         const target = planningData[0]?.total_target || 0;
         const output = finalOutput;
         const outputPercent = target > 0 ? (output / target) * 100 : 0;
-        const efficiencyPercent = overallEfficiency[0]?.overall_efficiency_percent || 0;
+        // Keep efficiency basis aligned with output basis (end-of-line machine 07)
+        const efficiencyPercent = summaryData[0]?.eol_efficiency_percent || 0;
 
         let emojiType = 'sad';
         if (outputPercent >= 90 && efficiencyPercent >= 90) emojiType = 'happy';
@@ -96,7 +92,11 @@ exports.getDashboard = async (req, res) => {
         );
         const [wcSummaryData] = await pool.query(
             `SELECT SUM(total_output_pairs) as output,
-             CASE WHEN SUM(total_actual_mins) > 0 THEN (SUM(total_target_mins) / SUM(total_actual_mins)) * 100 ELSE 0 END as avg_efficiency
+             CASE
+                WHEN SUM(total_output_pairs) <= 0 THEN 0
+                WHEN SUM(total_actual_mins) > 0 THEN (SUM(total_target_mins) / SUM(total_actual_mins)) * 100
+                ELSE 0
+             END as avg_efficiency
              FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?`,
             [today, workCentreId]
         );
@@ -180,9 +180,12 @@ exports.getDashboard = async (req, res) => {
                 -- For Line 2A (id=5), use Machine 07 output; for others, sum all machines
                 COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) as output,
                 CASE WHEN COALESCE(pp.target, 0) > 0 THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) / pp.target) * 100, 0) ELSE 0 END as output_percentage,
-                CASE WHEN COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0) > 0 
-                    THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.target_mins ELSE mcsall.target_mins END, 0) / COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0)) * 100, 0) 
-                    ELSE 0 END as efficiency,
+                CASE
+                    WHEN COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) <= 0 THEN 0
+                    WHEN COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0) > 0
+                        THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.target_mins ELSE mcsall.target_mins END, 0) / COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0)) * 100, 0)
+                    ELSE 0
+                END as efficiency,
                 GREATEST(0, COALESCE(pp.target, 0) - COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0)) as wip
             FROM work_centres wc
             LEFT JOIN (

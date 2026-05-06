@@ -64,7 +64,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = React.useState(10);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [filterDate, setFilterDate] = React.useState('');
+  const [filterDate, setFilterDate] = React.useState(() => new Date().toISOString().split('T')[0]);
   const [filterWorkCentre, setFilterWorkCentre] = React.useState('');
   const [filterStyle, setFilterStyle] = React.useState('');
   const [showDeleted, setShowDeleted] = React.useState(false);

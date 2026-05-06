@@ -5,6 +5,15 @@ const defaultApiBaseUrl = `${window.location.protocol}//${window.location.hostna
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl;
 const API_BASE = `${API_BASE_URL}/api`;
 
+type RefreshOutcome =
+  | { ok: true }
+  | { ok: false; redirectToLogin: boolean };
+
+const redirectToLogin = () => {
+  localStorage.clear();
+  window.location.href = `${window.location.origin}/`;
+};
+
 // Central fetch wrapper — attaches JWT and handles 401 with refresh
 export const apiFetch = async (input: string, init: RequestInit = {}): Promise<Response> => {
   const token = localStorage.getItem('jwt_token');
@@ -16,10 +25,8 @@ export const apiFetch = async (input: string, init: RequestInit = {}): Promise<R
   let response = await fetch(input, { ...init, headers });
 
   if (response.status === 401) {
-    // Try refresh
-    const refreshed = await tryRefresh();
-    if (refreshed) {
-      // Retry original request with new token
+    const outcome = await tryRefresh();
+    if (outcome.ok) {
       const newToken = localStorage.getItem('jwt_token');
       const retryHeaders = new Headers(init.headers || {});
       if (newToken) retryHeaders.set('Authorization', `Bearer ${newToken}`);
@@ -27,54 +34,47 @@ export const apiFetch = async (input: string, init: RequestInit = {}): Promise<R
         retryHeaders.set('Content-Type', 'application/json');
       }
       response = await fetch(input, { ...init, headers: retryHeaders });
-    } else {
-      // Only logout if refresh token is also gone/expired — not on network errors
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        localStorage.clear();
-        window.location.href = `${window.location.origin}/`;
-      }
-      // Otherwise silently fail — token may refresh on next request
+    } else if (outcome.redirectToLogin) {
+      redirectToLogin();
     }
   }
   return response;
 };
 
 let isRefreshing = false;
-let refreshRetryCount = 0;
-const MAX_REFRESH_RETRIES = 2;
 
-const tryRefresh = async (): Promise<boolean> => {
+const tryRefresh = async (): Promise<RefreshOutcome> => {
   if (isRefreshing) {
-    // Wait for the in-progress refresh
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return !!localStorage.getItem('jwt_token');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return localStorage.getItem('jwt_token') ? { ok: true } : { ok: false, redirectToLogin: false };
   }
   isRefreshing = true;
   try {
     const refreshToken = localStorage.getItem('refresh_token');
-    if (!refreshToken) return false;
+    if (!refreshToken) {
+      return { ok: false, redirectToLogin: true };
+    }
     const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
     if (!res.ok) {
-      refreshRetryCount++;
-      if (refreshRetryCount < MAX_REFRESH_RETRIES) return false; // don't logout yet
-      return false;
+      // Server rejects refresh token (expired / invalid) — force login
+      if (res.status === 401) {
+        return { ok: false, redirectToLogin: true };
+      }
+      return { ok: false, redirectToLogin: false };
     }
     const data = await res.json();
     if (data.success && data.token) {
       localStorage.setItem('jwt_token', data.token);
       localStorage.setItem('refresh_token', data.refreshToken);
-      refreshRetryCount = 0;
-      return true;
+      return { ok: true };
     }
-    return false;
+    return { ok: false, redirectToLogin: true };
   } catch {
-    // Network error — don't logout, just fail silently
-    return false;
+    return { ok: false, redirectToLogin: false };
   } finally {
     isRefreshing = false;
   }
@@ -94,24 +94,22 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401, try refresh then retry, only logout if refresh fails
+// On 401, try refresh then retry; send user to login if refresh token is dead
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     if (error.response?.status === 401) {
-      // Don't retry login requests - 401 means invalid credentials, not expired token
-      if (error.config?.url?.includes('/login')) {
+      const url = error.config?.url ?? '';
+      if (url.includes('/login')) {
         return Promise.reject(error);
       }
-      const refreshed = await tryRefresh();
-      if (refreshed) {
+      const outcome = await tryRefresh();
+      if (outcome.ok) {
         error.config.headers['Authorization'] = `Bearer ${localStorage.getItem('jwt_token')}`;
         return api.request(error.config);
       }
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        localStorage.clear();
-        window.location.href = `${window.location.origin}/`;
+      if (outcome.redirectToLogin) {
+        redirectToLogin();
       }
     }
     return Promise.reject(error);

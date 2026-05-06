@@ -45,24 +45,52 @@ const resolveTargetsFromPlan = async (conn, { machineId, workCentreId, prodDate 
   };
 };
 
-const findOverlappingManualEntry = async (conn, { prodDate, workCentreId, machineId, empId, startTime, finishTime, excludeId = null }) => {
+/** Finished cycles on the same machine cannot overlap; touching (end == next start) is allowed. */
+const MACHINE_CYCLE_OVERLAP_MSG =
+  'This time overlaps another finished cycle on the same machine. The next cycle can only start after the previous one ends.';
+
+/** Any finished row on this machine whose [start_time, finish_time] overlaps the given window. */
+const findOverlappingFinishedCycleOnMachine = async (connOrPool, { machineId, startTime, finishTime, excludeId = null }) => {
   let query = `
     SELECT id
     FROM machine_centre_production
-    WHERE DATE(prod_date) = ?
-      AND work_centre_id = ?
-      AND machine_id = ?
-      AND emp_id = ?
+    WHERE machine_id = ?
       AND button_status = 2
+      AND start_time IS NOT NULL
+      AND finish_time IS NOT NULL
       AND start_time < ?
       AND finish_time > ?`;
-  const params = [prodDate, workCentreId, machineId, empId, finishTime, startTime];
-  if (excludeId) {
+  const params = [machineId, finishTime, startTime];
+  if (excludeId != null && excludeId !== '') {
     query += ' AND id != ?';
     params.push(excludeId);
   }
   query += ' ORDER BY id DESC LIMIT 1';
-  const [rows] = await conn.execute(query, params);
+  const [rows] = await connOrPool.execute(query, params);
+  return rows[0] || null;
+};
+
+const findOverlappingActiveCycleForMachineEmployee = async (
+  connOrPool,
+  { prodDate, machineId, empId, startTime, finishTime, excludeId = null }
+) => {
+  let query = `
+    SELECT id
+    FROM machine_centre_production
+    WHERE machine_id = ?
+      AND emp_id = ?
+      AND DATE(prod_date) = ?
+      AND button_status != 2
+      AND start_time IS NOT NULL
+      AND start_time < ?
+      AND COALESCE(finish_time, '9999-12-31 23:59:59') > ?`;
+  const params = [machineId, empId, prodDate, finishTime, startTime];
+  if (excludeId != null && excludeId !== '') {
+    query += ' AND id != ?';
+    params.push(excludeId);
+  }
+  query += ' ORDER BY id DESC LIMIT 1';
+  const [rows] = await connOrPool.execute(query, params);
   return rows[0] || null;
 };
 
@@ -482,20 +510,21 @@ exports.createManualEntry = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `Employee ${emp_id} not found for selected line` });
     }
 
-    // Prevent duplicates when an unfinished cycle already exists.
-    const [unfinishedRows] = await db.query(
-      `SELECT id
-       FROM machine_centre_production
-       WHERE machine_id = ? AND emp_id = ? AND DATE(prod_date) = ? AND button_status != 2
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [machine_id, emp_id, prodDate]
-    );
-    if (unfinishedRows.length > 0) {
+    const normalizedStartTime = toMySqlDateTimeOrNull(start_time);
+    const normalizedFinishTime = toMySqlDateTimeOrNull(finish_time);
+
+    const activeOverlap = await findOverlappingActiveCycleForMachineEmployee(db, {
+      prodDate,
+      machineId: machine_id,
+      empId: emp_id,
+      startTime: normalizedStartTime,
+      finishTime: normalizedFinishTime,
+    });
+    if (activeOverlap) {
       return res.status(409).json({
         success: false,
-        message: 'Cannot add manual entry while an active production cycle exists for this machine and employee',
-        data: { existing_id: unfinishedRows[0].id }
+        message: 'Cannot add manual entry because an active cycle overlaps this time window for the same machine and employee',
+        data: { existing_id: activeOverlap.id }
       });
     }
 
@@ -510,18 +539,15 @@ exports.createManualEntry = async (req, res, next) => {
         prodDate,
       });
 
-      const overlapping = await findOverlappingManualEntry(conn, {
-        prodDate,
-        workCentreId: work_centre_id,
+      const overlapping = await findOverlappingFinishedCycleOnMachine(conn, {
         machineId: machine_id,
-        empId: emp_id,
         startTime: start_time,
         finishTime: finish_time,
       });
       if (overlapping) {
-        throw Object.assign(new Error('Manual entry overlaps an existing manual cycle for this machine and employee'), {
+        throw Object.assign(new Error(`${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`), {
           statusCode: 409,
-          exposeMessage: 'Manual entry overlaps an existing manual cycle for this machine and employee',
+          exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`,
         });
       }
 
@@ -549,8 +575,8 @@ exports.createManualEntry = async (req, res, next) => {
           emp_id,
           manualOutputPairs,
           enforcedTargets.targetMins * (manualOutputPairs / 12),
-          start_time,
-          finish_time,
+          normalizedStartTime,
+          normalizedFinishTime,
           afterData.stoppage_reason
         ]
       );
@@ -781,19 +807,16 @@ exports.updateManualEntry = async (req, res, next) => {
         prodDate,
       });
 
-      const overlapping = await findOverlappingManualEntry(conn, {
-        prodDate,
-        workCentreId: work_centre_id,
+      const overlapping = await findOverlappingFinishedCycleOnMachine(conn, {
         machineId: machine_id,
-        empId: emp_id,
         startTime: start_time,
         finishTime: finish_time,
         excludeId: id,
       });
       if (overlapping) {
-        throw Object.assign(new Error('Manual entry overlaps an existing manual cycle for this machine and employee'), {
+        throw Object.assign(new Error(`${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`), {
           statusCode: 409,
-          exposeMessage: 'Manual entry overlaps an existing manual cycle for this machine and employee',
+          exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`,
         });
       }
 
@@ -810,6 +833,8 @@ exports.updateManualEntry = async (req, res, next) => {
         stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
       };
 
+      const scaledTargetMins = enforcedTargets.targetMins * (manualOutputPairs / 12);
+
       await conn.execute(
         `UPDATE machine_centre_production
          SET prod_date = ?, work_centre_id = ?, machine_id = ?, emp_id = ?, target_mins = ?, output_pairs = ?,
@@ -820,7 +845,7 @@ exports.updateManualEntry = async (req, res, next) => {
           work_centre_id,
           machine_id,
           emp_id,
-          enforcedTargets.targetMins,
+          scaledTargetMins,
           manualOutputPairs,
           start_time,
           finish_time,
@@ -1105,18 +1130,15 @@ exports.restoreManualEntryFromAuditLog = async (req, res, next) => {
     let restoredId = null;
     let summaryData = null;
     await withTransaction(async (conn) => {
-      const overlapping = await findOverlappingManualEntry(conn, {
-        prodDate,
-        workCentreId,
+      const overlapping = await findOverlappingFinishedCycleOnMachine(conn, {
         machineId,
-        empId,
         startTime,
         finishTime,
       });
       if (overlapping) {
-        throw Object.assign(new Error('Cannot restore because it overlaps an existing cycle'), {
+        throw Object.assign(new Error(`${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`), {
           statusCode: 409,
-          exposeMessage: 'Cannot restore because it overlaps an existing cycle',
+          exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`,
         });
       }
 
@@ -1210,6 +1232,27 @@ exports.update = async (req, res, next) => {
     const normalizedFinishTime = toMySqlDateTimeOrNull(finish_time);
     const normalizedIdleStartTime = toMySqlDateTimeOrNull(idle_start_time);
     const normalizedIdleStopTime = toMySqlDateTimeOrNull(idle_stop_time);
+
+    if (normalizedStartTime && normalizedFinishTime) {
+      if (new Date(normalizedFinishTime) <= new Date(normalizedStartTime)) {
+        return res.status(400).json({
+          success: false,
+          message: 'finish_time must be after start_time',
+        });
+      }
+      const overlap = await findOverlappingFinishedCycleOnMachine(db, {
+        machineId: machine_id,
+        startTime: normalizedStartTime,
+        finishTime: normalizedFinishTime,
+        excludeId: id,
+      });
+      if (overlap) {
+        return res.status(409).json({
+          success: false,
+          message: `${MACHINE_CYCLE_OVERLAP_MSG} (conflicts with record #${overlap.id})`,
+        });
+      }
+    }
 
     const [result] = await db.query(
       `UPDATE machine_centre_production 
@@ -1329,6 +1372,24 @@ exports.updateStatus = async (req, res, next) => {
     
     try {
       await withTransaction(async (conn) => {
+        if (normalizedButtonStatus === 2 && existingRecord.start_time) {
+          const [overlapRows] = await conn.execute(
+            `SELECT id FROM machine_centre_production
+             WHERE machine_id = ? AND button_status = 2 AND id != ?
+               AND start_time IS NOT NULL AND finish_time IS NOT NULL
+               AND start_time < NOW() AND finish_time > ?`,
+            [existingRecord.machine_id, id, existingRecord.start_time]
+          );
+          if (overlapRows.length > 0) {
+            throw Object.assign(
+              new Error(`Finish blocked: overlapping cycle #${overlapRows[0].id}`),
+              {
+                statusCode: 409,
+                exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (conflicts with record #${overlapRows[0].id})`,
+              }
+            );
+          }
+        }
         // 1. Update production record
         [updateResult] = await conn.execute(updateQuery, params);
         
@@ -1417,6 +1478,12 @@ exports.updateStatus = async (req, res, next) => {
       }
       
     } catch (txError) {
+      if (txError?.statusCode === 409) {
+        return res.status(409).json({
+          success: false,
+          message: txError.exposeMessage || txError.message,
+        });
+      }
       logger.error(`[TRANSACTION-FAILED] Record ${id}:`, txError);
       return res.status(500).json({ 
         success: false, 

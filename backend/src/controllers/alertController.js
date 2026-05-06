@@ -249,11 +249,13 @@ class AlertController {
         SELECT
           pa.*,
           wc.name AS work_centre_name,
+          COALESCE(mc.machine_name, mc.name) AS machine_name,
           CASE WHEN ar.alert_id IS NULL THEN 0 ELSE 1 END AS is_acknowledged,
           ar.read_at AS acknowledged_at,
           u.name AS acknowledged_by
         FROM production_alerts pa
         LEFT JOIN work_centres wc ON wc.id = pa.work_centre_id
+        LEFT JOIN machine_centres mc ON mc.machine_id = pa.machine_id
         LEFT JOIN alert_reads ar ON ar.alert_id = pa.id AND ar.user_id = ?
         LEFT JOIN users u ON u.id = ar.user_id
         WHERE pa.alert_date = ?
@@ -292,6 +294,8 @@ class AlertController {
           const [freshHeartbeat] = await db.execute(
             `SELECT
                ms.machine_id,
+               latest.target_mins,
+               latest.start_time,
                TIMESTAMPDIFF(
                  MINUTE,
                  COALESCE(latest.updated_at, latest.start_time, ms.activated_at),
@@ -313,13 +317,37 @@ class AlertController {
             [alertDate, alertDate, ...uniqueMachines]
           );
           const gapByMachine = new Map(
-            freshHeartbeat.map((r) => [String(r.machine_id), Number(r.heartbeat_gap_mins || 0)])
+            freshHeartbeat.map((r) => [
+              String(r.machine_id),
+              {
+                gap: Number(r.heartbeat_gap_mins || 0),
+                targetMins: Number(r.target_mins || 0),
+                elapsedFromStart:
+                  r.start_time
+                    ? Math.max(
+                        0,
+                        Math.floor(
+                          (Date.now() - new Date(r.start_time).getTime()) / 60000
+                        )
+                      )
+                    : null,
+              },
+            ])
           );
           filteredRows = rows.filter((row) => {
             if (row.alert_type !== 'no_scan_heartbeat' || !row.machine_id) return true;
-            const currentGap = gapByMachine.get(String(row.machine_id));
-            // If machine is now active with healthy gap, hide this stale heartbeat alert.
-            if (typeof currentGap === 'number' && currentGap < HEARTBEAT_WARN_MINUTES) return false;
+            const state = gapByMachine.get(String(row.machine_id));
+            if (!state) return true;
+            // Hide when heartbeat is healthy again.
+            if (state.gap < HEARTBEAT_WARN_MINUTES) return false;
+            // Hide while cycle is still within expected target window (+ grace),
+            // even if there has been no DB write yet.
+            if (
+              typeof state.elapsedFromStart === 'number' &&
+              state.elapsedFromStart < (state.targetMins + OVER_TARGET_GRACE_MINUTES)
+            ) {
+              return false;
+            }
             return true;
           });
         }
@@ -359,6 +387,26 @@ class AlertController {
             const state = stateByMachine.get(String(row.machine_id));
             if (!state) return false; // no active cycle now => over-target alert is stale
             return state.target > 0 && state.actual >= (state.target + OVER_TARGET_GRACE_MINUTES);
+          });
+        }
+
+        // Hide stale machine-offline alerts when machine has an active session now.
+        const offlineRows = filteredRows.filter((r) => r.alert_type === 'machine_offline' && r.machine_id);
+        if (offlineRows.length > 0) {
+          const uniqueMachines = Array.from(new Set(offlineRows.map((r) => String(r.machine_id))));
+          const placeholders = uniqueMachines.map(() => '?').join(',');
+          const [activeSessions] = await db.execute(
+            `SELECT DISTINCT ms.machine_id
+             FROM mobile_sessions ms
+             WHERE ms.status = 'active'
+               AND DATE(ms.activated_at) = ?
+               AND ms.machine_id IN (${placeholders})`,
+            [alertDate, ...uniqueMachines]
+          );
+          const activeSet = new Set(activeSessions.map((r) => String(r.machine_id)));
+          filteredRows = filteredRows.filter((row) => {
+            if (row.alert_type !== 'machine_offline' || !row.machine_id) return true;
+            return !activeSet.has(String(row.machine_id));
           });
         }
       }
@@ -552,6 +600,8 @@ class AlertController {
             ms.work_centre_id,
             ms.machine_id,
             ms.emp_code,
+            latest.target_mins,
+            latest.start_time,
             TIMESTAMPDIFF(
               MINUTE,
               COALESCE(latest.updated_at, latest.start_time, ms.activated_at),
@@ -569,12 +619,23 @@ class AlertController {
           LEFT JOIN machine_centre_production latest ON latest.id = latest_idx.max_id
           WHERE ms.status = 'active'
             AND DATE(ms.activated_at) = ?
+            -- Avoid false positives while an active cycle is still within target time.
+            -- "Finish pending" should alert only when cycle is expected to be done.
+            AND (
+              latest.id IS NULL
+              OR latest.start_time IS NULL
+              OR TIMESTAMPDIFF(
+                MINUTE,
+                latest.start_time,
+                NOW()
+              ) >= (COALESCE(latest.target_mins, 0) + ?)
+            )
             AND TIMESTAMPDIFF(
               MINUTE,
               COALESCE(latest.updated_at, latest.start_time, ms.activated_at),
               NOW()
             ) >= ?
-        `, [date, date, HEARTBEAT_WARN_MINUTES]);
+        `, [date, date, OVER_TARGET_GRACE_MINUTES, HEARTBEAT_WARN_MINUTES]);
 
         for (const row of heartbeatRows) {
           await AlertController._upsertAlert({
@@ -592,7 +653,7 @@ class AlertController {
 
         // 1e. Machine offline alerts: planned work-centre machine has no active session.
         const [offlineRows] = await db.execute(`
-          SELECT mc.work_centre_id, mc.machine_id
+          SELECT mc.work_centre_id, mc.machine_id, COALESCE(mc.machine_name, mc.name) AS machine_name
           FROM machine_centres mc
           INNER JOIN production_plan pp
             ON pp.work_centre_id = mc.work_centre_id
@@ -613,12 +674,25 @@ class AlertController {
             work_centre_id: row.work_centre_id,
             machine_id: row.machine_id,
             alert_date: date,
-            message: `Machine ${row.machine_id} appears offline (no active session for planned line)`,
+            message: `Machine ${row.machine_id}${row.machine_name ? ` - ${row.machine_name}` : ''} appears offline (no active session for planned line)`,
             threshold_value: 1,
             actual_value: 0,
           });
           count++;
         }
+
+        // Resolve previously raised offline alerts as soon as an active session exists.
+        await db.execute(
+          `DELETE pa
+           FROM production_alerts pa
+           INNER JOIN mobile_sessions ms
+             ON ms.machine_id = pa.machine_id
+            AND ms.status = 'active'
+            AND DATE(ms.activated_at) = ?
+           WHERE pa.alert_type = 'machine_offline'
+             AND pa.alert_date = ?`,
+          [date, date]
+        );
       }
 
       // 2. Headcount alerts per work centre

@@ -3,6 +3,13 @@ const logger = require('../utils/logger');
 // Classify errors for better logging context
 const classifyError = (err) => {
   if (err.code === 'ER_DUP_ENTRY') return { type: 'DB_DUPLICATE', status: 409, message: 'Duplicate entry' };
+  if (err.code === 'ER_SIGNAL_EXCEPTION' || err.sqlState === '45000') {
+    return {
+      type: 'DB_TRIGGER_BLOCK',
+      status: 409,
+      message: err.sqlMessage || err.message || 'Operation blocked by database rule',
+    };
+  }
   if (err.code === 'ER_NO_REFERENCED_ROW_2') return { type: 'DB_FK_VIOLATION', status: 400, message: 'Referenced record not found' };
   if (err.code === 'ER_ROW_IS_REFERENCED_2') return { type: 'DB_FK_CONSTRAINT', status: 400, message: 'Record is referenced by other data' };
   if (err.code === 'ECONNREFUSED') return { type: 'DB_CONNECTION', status: 503, message: 'Database connection refused' };

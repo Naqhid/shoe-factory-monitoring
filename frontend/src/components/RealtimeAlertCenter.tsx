@@ -11,6 +11,7 @@ interface AlertRow {
   severity: Severity;
   work_centre_name?: string;
   machine_id?: string;
+  machine_name?: string;
   message: string;
   threshold_value?: number;
   actual_value?: number;
@@ -48,6 +49,9 @@ const severityIcon = (severity: Severity) => {
 };
 
 const formatAlertMessage = (alert: AlertRow): string => {
+  const machineLabel = alert.machine_id
+    ? `${alert.machine_id}${alert.machine_name ? ` - ${alert.machine_name}` : ''}`
+    : '-';
   if (alert.alert_type === 'no_scan_heartbeat') {
     const minutesFromValue = Number(alert.actual_value);
     const minutesFromTextMatch = String(alert.message || '').match(/for\s+(\d+(?:\.\d+)?)\s+minutes/i);
@@ -56,9 +60,9 @@ const formatAlertMessage = (alert: AlertRow): string => {
       ? Math.round(minutesFromValue)
       : (Number.isFinite(minutesFromText) ? Math.round(minutesFromText) : null);
     if (mins !== null) {
-      return `Machine ${alert.machine_id || '-'} has no cycle update for ${mins} minutes (Finish/next action may be pending)`;
+      return `Machine ${machineLabel} has no cycle update for ${mins} minutes (Finish/next action may be pending)`;
     }
-    return `Machine ${alert.machine_id || '-'} has no cycle update (Finish/next action may be pending)`;
+    return `Machine ${machineLabel} has no cycle update (Finish/next action may be pending)`;
   }
   return alert.message;
 };
@@ -133,6 +137,7 @@ export const RealtimeAlertCenter: React.FC = () => {
       severity: (row.severity || 'warning') as Severity,
       work_centre_name: row.work_centre_name || undefined,
       machine_id: row.machine_id || undefined,
+      machine_name: row.machine_name || undefined,
       message: String(row.message || ''),
       threshold_value: row.threshold_value ?? undefined,
       actual_value: row.actual_value ?? undefined,
@@ -544,7 +549,10 @@ export const RealtimeAlertCenter: React.FC = () => {
                     <p className="text-sm text-gray-900 mt-2">{formatAlertMessage(alert)}</p>
                     <div className="text-xs text-gray-500 mt-2 flex flex-wrap gap-3">
                       <span>Line: {alert.work_centre_name || '-'}</span>
-                      <span>Machine: {alert.machine_id || '-'}</span>
+                      <span>
+                        Machine: {alert.machine_id || '-'}
+                        {alert.machine_name ? ` - ${alert.machine_name}` : ''}
+                      </span>
                       <span>First seen: {new Date(alert.first_seen_at || alert.created_at).toLocaleString()}</span>
                       <span>Last seen: {new Date(alert.last_seen_at || alert.created_at).toLocaleString()}</span>
                       {getAlertContextHint(alert) && <span>{getAlertContextHint(alert)}</span>}

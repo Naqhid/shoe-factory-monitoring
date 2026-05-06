@@ -168,18 +168,29 @@ export const ProductionTracker: React.FC = () => {
 
   const loadAlertCardCount = async () => {
     try {
-      const res = await apiFetch(`${API_BASE}/api/alerts?unread_only=false&limit=30`);
+      // Keep tracker tile count aligned with Realtime Alert Center
+      // (same stale-alert filtering + unacknowledged logic).
+      let res = await apiFetch(
+        `${API_BASE}/api/alerts/center?include_acknowledged=false&limit=1&page=1&date=${selectedDate}`
+      );
+      if (res.status === 404) {
+        // Backward compatibility with older backend.
+        res = await apiFetch(`${API_BASE}/api/alerts?unread_only=false&limit=30`);
+      }
       if (!res.ok) return;
       const result = await res.json();
-      if (result?.success) {
-        const unread = Number(result.unread_count);
-        if (Number.isFinite(unread)) {
-          setAlertCardCount(unread);
-        } else if (Array.isArray(result.data)) {
-          // Fallback for older payloads without unread_count.
-          const openCount = result.data.filter((row: any) => Number(row.is_read ?? 0) === 0).length;
-          setAlertCardCount(openCount);
-        }
+      if (!result?.success) return;
+
+      const count = Number(
+        result.unacknowledged_count ?? result.unread_count
+      );
+      if (Number.isFinite(count)) {
+        setAlertCardCount(count);
+      } else if (Array.isArray(result.data)) {
+        const openCount = result.data.filter((row: any) =>
+          Number(row.is_acknowledged ?? row.is_read ?? 0) === 0
+        ).length;
+        setAlertCardCount(openCount);
       }
     } catch {
       // Non-blocking: keep previous card count when alerts API is unavailable.
@@ -455,16 +466,7 @@ export const ProductionTracker: React.FC = () => {
                 {showTrackerNotifications && (
                   <div className="absolute right-0 top-full mt-2 w-[290px] sm:w-[320px] bg-white rounded-xl shadow-xl border border-slate-200 p-2.5 z-40">
                     <div className="space-y-2">
-                      <div className="bg-slate-50 rounded-lg p-2.5 text-slate-900 border border-slate-100">
-                        <p className="text-xs font-semibold text-slate-500">Target Risk Projection</p>
-                        <p className="text-sm font-bold mt-1">
-                          {shiftProjection.shortfall > 0
-                            ? `At current pace: miss by ${shiftProjection.shortfall} pairs`
-                            : `At current pace: on track (+${Math.max(0, shiftProjection.projected - Number(topSection?.target || 0))} pairs)`}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
-                      </div>
-                      {pacingData && pacingData.target > 0 && (() => {
+                      {pacingData && pacingData.target > 0 ? (() => {
                         const gap = pacingData.gap;
                         const ahead = gap >= 0;
                         const paceRate = pacingData.pace_rate;
@@ -474,15 +476,21 @@ export const ProductionTracker: React.FC = () => {
                         const labelColor = paceRate >= 100 ? 'text-green-700' : paceRate >= 85 ? 'text-amber-700' : 'text-red-700';
                         return (
                           <div className={`rounded-lg p-2.5 text-slate-900 border ${borderColor} ${bgColor}`}>
-                            <p className="text-xs font-semibold text-slate-500 mb-1">Intraday Pace</p>
-                            <p className={`text-sm font-bold ${labelColor}`}>
+                            <p className="text-xs font-semibold text-slate-500">Target Risk Projection</p>
+                            <p className="text-sm font-bold mt-1">
+                              {shiftProjection.shortfall > 0
+                                ? `At current pace: miss by ${shiftProjection.shortfall} pairs`
+                                : `At current pace: on track (+${Math.max(0, shiftProjection.projected - Number(topSection?.target || 0))} pairs)`}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
+                            <p className={`text-sm font-bold mt-2 ${labelColor}`}>
                               {ahead ? `▲ +${gap} ahead` : `▼ ${Math.abs(gap)} behind`} · {paceRate}% of pace
                             </p>
                             <div className="mt-1.5 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                               <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(paceRate, 100)}%` }} />
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                              {pacingData.actual} / {pacingData.expected_by_now} exp · {pacingData.remaining_mins}m left
+                              {pacingData.actual} / {pacingData.expected_by_now} expected by now
                             </p>
                             <div className="flex gap-3 text-xs text-slate-500 mt-0.5">
                               <span>Now: <b className="text-slate-700">{pacingData.current_rate_per_hour}/hr</b></span>
@@ -491,7 +499,17 @@ export const ProductionTracker: React.FC = () => {
                             </div>
                           </div>
                         );
-                      })()}
+                      })() : (
+                        <div className="bg-slate-50 rounded-lg p-2.5 text-slate-900 border border-slate-100">
+                          <p className="text-xs font-semibold text-slate-500">Target Risk Projection</p>
+                          <p className="text-sm font-bold mt-1">
+                            {shiftProjection.shortfall > 0
+                              ? `At current pace: miss by ${shiftProjection.shortfall} pairs`
+                              : `At current pace: on track (+${Math.max(0, shiftProjection.projected - Number(topSection?.target || 0))} pairs)`}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
+                        </div>
+                      )}
                       {shiftProjection.inLast60 && attentionQueue.length > 0 && (
                         <div className="bg-red-50 rounded-lg p-2.5 text-slate-900 border border-red-100">
                           <p className="text-xs font-semibold text-red-700 mb-1.5">Attention Queue</p>

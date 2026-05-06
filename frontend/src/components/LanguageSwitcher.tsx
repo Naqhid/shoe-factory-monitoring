@@ -1,5 +1,5 @@
 import React from 'react';
-import { Languages, Keyboard } from 'lucide-react';
+import { Languages } from 'lucide-react';
 
 const LANGUAGES = [
   { code: 'en', label: 'English', flag: '🇬🇧' },
@@ -24,16 +24,9 @@ function getCurrentLang(): string {
   return match ? match[1] : 'en';
 }
 
-declare global {
-  interface Window {
-    toggleTransliteration?: () => boolean;
-  }
-}
-
 export const LanguageSwitcher: React.FC = () => {
   const [current, setCurrent] = React.useState(getCurrentLang);
   const [open, setOpen] = React.useState(false);
-  const [translitOn, setTranslitOn] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
   // Re-trigger Google Translate after React renders dynamic content
@@ -65,17 +58,6 @@ export const LanguageSwitcher: React.FC = () => {
     setCurrent(code);
     setOpen(false);
     setGoogleTranslateCookie(code);
-  };
-
-  const handleTranslit = () => {
-    console.log('Translit toggle clicked, fn exists:', !!window.toggleTransliteration);
-    if (window.toggleTransliteration) {
-      const newState = window.toggleTransliteration();
-      console.log('Translit state:', newState);
-      setTranslitOn(newState);
-    } else {
-      alert('Transliteration not loaded yet. Please refresh the page.');
-    }
   };
 
   return (
@@ -110,22 +92,6 @@ export const LanguageSwitcher: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Transliteration toggle — only shown when Tamil is active */}
-      {current === 'ta' && (
-        <button
-          onClick={handleTranslit}
-          title={translitOn ? 'Disable Tamil typing' : 'Enable Tamil typing (type in English)'}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-            translitOn
-              ? 'bg-green-100 border-green-400 text-green-700'
-              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <Keyboard className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{translitOn ? 'அ' : 'a→அ'}</span>
-        </button>
-      )}
     </div>
   );
 };
