@@ -150,8 +150,9 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [summaryData, setSummaryData] = React.useState<any[]>([]);
   const [summaryLoading, setSummaryLoading] = React.useState(false);
   const [conflictIds, setConflictIds] = React.useState<Set<number>>(new Set());
-  // Approved by
-  const [approvedBy, setApprovedBy] = React.useState('');
+  // Mandatory reasons for sensitive changes
+  const [editReason, setEditReason] = React.useState('');
+  const [deleteReason, setDeleteReason] = React.useState('');
   // Bulk delete
   const [selectedEntryIds, setSelectedEntryIds] = React.useState<Set<number>>(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = React.useState(false);
@@ -179,6 +180,18 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [outputPairs, setOutputPairs] = React.useState('0');
   const [stoppageReason, setStoppageReason] = React.useState('');
   const [loadingTargetMins, setLoadingTargetMins] = React.useState(false);
+  const isManualFormDirty = React.useMemo(() => {
+    if (!showForm) return false;
+    return Boolean(
+      workCentreId ||
+      machineId ||
+      empId ||
+      hourlySlot ||
+      Number(outputPairs || 0) > 0 ||
+      (stoppageReason || '').trim() ||
+      (editReason || '').trim()
+    );
+  }, [showForm, workCentreId, machineId, empId, hourlySlot, outputPairs, stoppageReason, editReason]);
 
   React.useEffect(() => {
     const loadMasters = async () => {
@@ -354,10 +367,30 @@ export const ManualProductionEntryForm: React.FC = () => {
     setTargetMins('0');
     setOutputPairs('0');
     setStoppageReason('');
-    setApprovedBy('');
+    setEditReason('');
     setEditingId(null);
     setShowForm(false);
+    setSlotConflictWarning('');
   };
+
+  const requestDiscardManualFormChanges = React.useCallback(() => {
+    if (!isManualFormDirty || loading) return true;
+    return window.confirm('You have unsaved manual entry changes. Discard them and continue?');
+  }, [isManualFormDirty, loading]);
+  const withDiscardCheck = React.useCallback((callback: () => void) => {
+    if (!requestDiscardManualFormChanges()) return;
+    callback();
+  }, [requestDiscardManualFormChanges]);
+
+  React.useEffect(() => {
+    if (!isManualFormDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isManualFormDirty]);
 
   const loadManualEntries = React.useCallback(async () => {
     setLoadingEntries(true);
@@ -689,8 +722,13 @@ export const ManualProductionEntryForm: React.FC = () => {
       new Date(e.start_time).getHours() === slotHour
     );
     if (existingSlot && !editingId) {
-      const confirmed = window.confirm(`A manual entry already exists for this machine/employee at ${slotHour}:00–${slotHour+1}:00. Add another one?`);
-      if (!confirmed) return;
+      setSlotConflictWarning(`A manual entry already exists for ${slotHour}:00-${slotHour + 1}:00 on this machine/employee. Duplicate saves are blocked.`);
+      toast.error('Duplicate hourly slot entry is not allowed.');
+      return;
+    }
+    if (editingId && !editReason.trim()) {
+      toast.error('Please provide an edit reason.');
+      return;
     }
     const outputValue = Math.round(Number(outputPairs || 0));
     if (Number.isNaN(outputValue) || outputValue < 0) {
@@ -710,7 +748,9 @@ export const ManualProductionEntryForm: React.FC = () => {
       finish_time: finishTime,
       target_mins: Number(targetMins || 0),
       output_pairs: outputValue,
-      stoppage_reason: `${stoppageReason.trim()}${approvedBy.trim() ? ` [Approved: ${approvedBy.trim()}]` : ''}` || null,
+      stoppage_reason: stoppageReason.trim() || null,
+      approved_by: currentUser?.username || currentUser?.name || currentUser?.email || currentUser?.id || null,
+      audit_reason: editingId ? editReason.trim() : undefined,
     };
 
     setLoading(true);
@@ -759,10 +799,16 @@ export const ManualProductionEntryForm: React.FC = () => {
     setHourlySlot(String(Math.max(0, Math.min(23, derivedHour))));
     setTargetMins(String(Number(row.target_mins || 0)));
     setOutputPairs(String(Number(row.output_pairs || 0)));
-    setStoppageReason((row.stoppage_reason || '').replace(/^MANUAL:/, ''));
+    setStoppageReason(
+      (row.stoppage_reason || '')
+        .replace(/^MANUAL:/, '')
+        .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
+        .trim()
+    );
+    setEditReason('');
   };
 
-  const handleDelete = async (row: ManualEntryRow) => {
+  const handleDelete = async (row: ManualEntryRow, reason: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -771,6 +817,8 @@ export const ManualProductionEntryForm: React.FC = () => {
       });
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/${row.id}?${params.toString()}`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audit_reason: reason }),
       });
       const json = await res.json();
       if (res.status === 401) {
@@ -785,6 +833,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       await loadManualEntries();
       if (editingId === row.id) clearForm();
       setDeleteCandidate(null);
+      setDeleteReason('');
     } catch (error) {
       console.error('Failed to delete manual entry:', error);
       toast.error('Failed to delete manual entry');
@@ -829,6 +878,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   }, [auditSearch, auditPage, auditLimit, handleUnauthorized]);
 
   const handleOpenAudit = async (entryId?: number) => {
+    if (!requestDiscardManualFormChanges()) return;
     setActiveTab('audit');
     setAuditEntryId(entryId || null);
     setAuditPage(1);
@@ -1133,16 +1183,30 @@ export const ManualProductionEntryForm: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Approved By <span className="text-xs text-gray-400">(optional — 2nd person verification)</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Approved By</label>
               <input
                 type="text"
-                value={approvedBy}
-                onChange={(e) => setApprovedBy(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
-                placeholder="Name of approving supervisor"
-                disabled={loading}
+                value={String(currentUser?.username || currentUser?.name || currentUser?.email || currentUser?.id || 'Current user')}
+                className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-600"
+                disabled
+                readOnly
               />
+              <p className="text-xs text-gray-500 mt-1">Auto-captured from the logged-in account.</p>
             </div>
+
+            {editingId ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Edit Reason <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  className={`w-full border rounded-lg p-2.5 ${!editReason.trim() ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                  placeholder="Required: why are you changing this entry?"
+                  disabled={loading}
+                />
+              </div>
+            ) : null}
 
               <div className="md:col-span-2 flex gap-3 mt-2">
                 <button
@@ -1154,7 +1218,10 @@ export const ManualProductionEntryForm: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={clearForm}
+                  onClick={() => {
+                    if (!requestDiscardManualFormChanges()) return;
+                    clearForm();
+                  }}
                   disabled={loading}
                   className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-2.5 rounded-lg font-semibold"
                 >
@@ -1167,8 +1234,8 @@ export const ManualProductionEntryForm: React.FC = () => {
       )}
       {restoreCandidate && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-            <h2 className="text-lg font-bold text-gray-900">Restore Manual Entry</h2>
+          <div role="dialog" aria-modal="true" aria-labelledby="restore-manual-entry-title" className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 id="restore-manual-entry-title" className="text-lg font-bold text-gray-900">Restore Manual Entry</h2>
             <p className="text-sm text-gray-600 mt-2">
               Restore deleted entry from audit log{' '}
               <span className="font-semibold">#{restoreCandidate.id}</span>?
@@ -1199,8 +1266,8 @@ export const ManualProductionEntryForm: React.FC = () => {
       )}
       {bulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-            <h2 className="text-lg font-bold text-gray-900">Bulk Delete Manual Entries</h2>
+          <div role="dialog" aria-modal="true" aria-labelledby="bulk-delete-manual-entry-title" className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 id="bulk-delete-manual-entry-title" className="text-lg font-bold text-gray-900">Bulk Delete Manual Entries</h2>
             <p className="text-sm text-gray-600 mt-2">Delete <span className="font-semibold">{selectedEntryIds.size}</span> selected manual entries? This cannot be undone.</p>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setBulkDeleteConfirm(false)} disabled={loading} className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold disabled:opacity-60">Cancel</button>
@@ -1229,8 +1296,8 @@ export const ManualProductionEntryForm: React.FC = () => {
       )}
       {deleteCandidate && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-            <h2 className="text-lg font-bold text-gray-900">Delete Manual Entry</h2>
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-manual-entry-title" className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 id="delete-manual-entry-title" className="text-lg font-bold text-gray-900">Delete Manual Entry</h2>
             <p className="text-sm text-gray-600 mt-2">
               Are you sure you want to delete manual entry for{' '}
               <span className="font-semibold">
@@ -1250,7 +1317,10 @@ export const ManualProductionEntryForm: React.FC = () => {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setDeleteCandidate(null)}
+                onClick={() => {
+                  setDeleteCandidate(null);
+                  setDeleteReason('');
+                }}
                 disabled={loading}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
               >
@@ -1258,12 +1328,29 @@ export const ManualProductionEntryForm: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => handleDelete(deleteCandidate)}
+                onClick={() => {
+                  if (!deleteReason.trim()) {
+                    toast.error('Delete reason is required.');
+                    return;
+                  }
+                  handleDelete(deleteCandidate, deleteReason.trim());
+                }}
                 disabled={loading}
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
               >
                 {loading ? 'Deleting...' : 'Delete'}
               </button>
+            </div>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Delete Reason <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                className={`w-full border rounded-lg p-2.5 ${!deleteReason.trim() ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                placeholder="Required: why are you deleting this entry?"
+                disabled={loading}
+              />
             </div>
           </div>
         </div>
@@ -1274,7 +1361,7 @@ export const ManualProductionEntryForm: React.FC = () => {
           <div className="flex items-center gap-2 mb-3">
             <button
               type="button"
-              onClick={() => setActiveTab('entries')}
+              onClick={() => withDiscardCheck(() => setActiveTab('entries'))}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'entries' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               Manual Entries
@@ -1288,14 +1375,14 @@ export const ManualProductionEntryForm: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => { setActiveTab('production'); loadProdRecords(); }}
+              onClick={() => withDiscardCheck(() => { setActiveTab('production'); loadProdRecords(); })}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'production' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}
             >
               Production Records
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('summary')}
+              onClick={() => withDiscardCheck(() => setActiveTab('summary'))}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'summary' ? 'bg-teal-600 text-white' : 'bg-teal-100 text-teal-800 hover:bg-teal-200'}`}
             >
               Daily Summary
@@ -1353,10 +1440,10 @@ export const ManualProductionEntryForm: React.FC = () => {
             </select>
             <button
               type="button"
-              onClick={() => {
+              onClick={() => withDiscardCheck(() => {
                 setShowForm(true);
                 setEditingId(null);
-              }}
+              })}
               className={`bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full ${!canEdit ? 'hidden' : ''}`}
             >
               Add New Entry
@@ -1687,7 +1774,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                       <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
                         {canEdit && <button type="button" onClick={() => handleEdit(row)} className="px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Edit</button>}
                         <button type="button" onClick={() => handleOpenAudit(row.id)} className="px-2 py-1 rounded bg-purple-100 text-purple-700 hover:bg-purple-200">History</button>
-                        {canEdit && <button type="button" onClick={() => setDeleteCandidate(row)} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Delete</button>}
+                        {canEdit && <button type="button" onClick={() => { setDeleteCandidate(row); setDeleteReason(''); }} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Delete</button>}
                       </div>
                     </td>
                   </tr>

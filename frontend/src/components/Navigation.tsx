@@ -102,7 +102,13 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <>
       {!hideSidebarToggleButton && (
-        <button onClick={onToggleSidebar} className="fixed top-4 left-4 z-50 bg-white p-2 rounded-md shadow-md">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          aria-label={sidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={sidebarOpen}
+          className="fixed top-4 left-4 z-50 bg-white p-2 rounded-md shadow-md"
+        >
           <Menu className="h-5 w-5" />
         </button>
       )}
@@ -122,7 +128,14 @@ export const Navigation: React.FC<NavigationProps> = ({
           </div>
           <div className="flex items-center gap-1">
             {!hideAlertBell && <AlertBell />}
-            <button onClick={onToggleSidebar} className="p-1"><X className="h-5 w-5" /></button>
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              aria-label="Close navigation menu"
+              className="p-1"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
         </div>
 
@@ -146,12 +159,18 @@ export const Navigation: React.FC<NavigationProps> = ({
           )}
           {filteredMasterMenus.length > 0 && (
             <div className="mb-4">
-              <button onClick={() => setMastersExpanded(!mastersExpanded)} className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md">
+              <button
+                type="button"
+                onClick={() => setMastersExpanded(!mastersExpanded)}
+                aria-expanded={mastersExpanded}
+                aria-controls="masters-menu-group"
+                className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+              >
                 <span className="font-medium">Masters</span>
                 {mastersExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </button>
               {mastersExpanded && (
-                <div className="ml-4 mt-2 space-y-1">
+                <div id="masters-menu-group" className="ml-4 mt-2 space-y-1">
                   {filteredMasterMenus.map((menu) => {
                     const Icon = menu.icon;
                     return (
@@ -167,12 +186,18 @@ export const Navigation: React.FC<NavigationProps> = ({
 
           {filteredProcessMenus.length > 0 && (
             <div className="mb-4">
-              <button onClick={() => setProcessExpanded(!processExpanded)} className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md">
+              <button
+                type="button"
+                onClick={() => setProcessExpanded(!processExpanded)}
+                aria-expanded={processExpanded}
+                aria-controls="process-menu-group"
+                className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+              >
                 <span className="font-medium">Process</span>
                 {processExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </button>
               {processExpanded && (
-                <div className="ml-4 mt-2 space-y-1">
+                <div id="process-menu-group" className="ml-4 mt-2 space-y-1">
                   {filteredProcessMenus.map((menu) => {
                     const Icon = menu.icon;
                     return (
@@ -188,12 +213,18 @@ export const Navigation: React.FC<NavigationProps> = ({
 
           {filteredSetupMenus.length > 0 && (
             <div className="mb-4">
-              <button onClick={() => setSetupExpanded(!setupExpanded)} className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md">
+              <button
+                type="button"
+                onClick={() => setSetupExpanded(!setupExpanded)}
+                aria-expanded={setupExpanded}
+                aria-controls="setup-menu-group"
+                className="flex items-center justify-between w-full text-left p-2 text-gray-700 hover:bg-gray-100 rounded-md"
+              >
                 <span className="font-medium">Setup</span>
                 {setupExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </button>
               {setupExpanded && (
-                <div className="ml-4 mt-2 space-y-1">
+                <div id="setup-menu-group" className="ml-4 mt-2 space-y-1">
                   {filteredSetupMenus.map((menu) => {
                     const Icon = menu.icon;
                     return (

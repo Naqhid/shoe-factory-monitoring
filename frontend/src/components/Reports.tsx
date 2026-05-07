@@ -118,6 +118,22 @@ export const Reports: React.FC = () => {
   const [lastReportGeneratedAt, setLastReportGeneratedAt] = React.useState<Date | null>(null);
   const [isShareLoading, setIsShareLoading] = React.useState(false);
   const reportTableRef = React.useRef<HTMLDivElement>(null);
+  const generatedFilterSnapshotRef = React.useRef<string | null>(null);
+  const currentFilterSnapshot = React.useMemo(() => JSON.stringify({
+    fromDate,
+    toDate,
+    reportType,
+    selectedLine,
+    selectedMachine,
+    search: search.trim(),
+    limit,
+    datePreset,
+  }), [fromDate, toDate, reportType, selectedLine, selectedMachine, search, limit, datePreset]);
+  const hasUnsavedReportFilterChanges = React.useMemo(() => {
+    if (!data || data.length === 0) return false;
+    if (!generatedFilterSnapshotRef.current) return false;
+    return generatedFilterSnapshotRef.current !== currentFilterSnapshot;
+  }, [data, currentFilterSnapshot]);
 
   React.useEffect(() => {
     try {
@@ -193,6 +209,16 @@ export const Reports: React.FC = () => {
     const nextUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState(null, '', nextUrl);
   }, [fromDate, toDate, reportType, selectedLine, selectedMachine, search, limit, datePreset]);
+
+  React.useEffect(() => {
+    if (!hasUnsavedReportFilterChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedReportFilterChanges]);
 
   React.useEffect(() => {
     apiFetch(`${API_BASE}/api/tv-dashboard/work-centres`)
@@ -286,6 +312,16 @@ export const Reports: React.FC = () => {
       if (!result.success) throw new Error(result.error);
       setData(result.data);
       setLastReportGeneratedAt(new Date());
+      generatedFilterSnapshotRef.current = JSON.stringify({
+        fromDate,
+        toDate,
+        reportType,
+        selectedLine,
+        selectedMachine,
+        search: currentSearch.trim(),
+        limit,
+        datePreset,
+      });
       if (result.pagination) setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
     } catch (e: any) {
       setError(e.message);
@@ -311,6 +347,16 @@ export const Reports: React.FC = () => {
         if (!result.success) throw new Error(result.error);
         setData(result.data);
         setLastReportGeneratedAt(new Date());
+        generatedFilterSnapshotRef.current = JSON.stringify({
+          fromDate,
+          toDate,
+          reportType,
+          selectedLine,
+          selectedMachine,
+          search: search.trim(),
+          limit: newLimit,
+          datePreset,
+        });
         if (result.pagination) setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
       })
       .catch((e: any) => setError(e.message))
@@ -533,7 +579,7 @@ export const Reports: React.FC = () => {
 
   const renderMobileCards = () => {
     if (!data || data.length === 0) return null;
-    const columnsByType: Record<ReportType, string[]> = {
+    const columnsByType: Partial<Record<ReportType, string[]>> = {
       'hourly-production': ['date', 'line', 'customer', 'article_no', 'total_planned_qty', 'total_output', 'avg_hourly_output'],
       'line-efficiency': ['date', 'line', 'process', 'total_output', 'output_percent', 'efficiency_percent'],
       'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'login_time'],
@@ -542,7 +588,7 @@ export const Reports: React.FC = () => {
       'employee-output': ['date', 'line', 'emp_code', 'emp_name', 'machine_id', 'total_output'],
       'employee-performance': ['date', 'line', 'emp_code', 'emp_name', 'machine_id', 'output', 'efficiency_percent', 'performance_grade'],
     };
-    const keys = columnsByType[reportType];
+    const keys = columnsByType[reportType] || [];
     return (
       <div className="space-y-3 p-3">
         {data.map((row, i) => (
@@ -1190,7 +1236,14 @@ export const Reports: React.FC = () => {
           </div>
           <div className="mt-2 flex items-center justify-between gap-2 text-xs text-gray-500">
             <span>Exports include all filtered rows (not just current page).</span>
-            <span>{lastReportGeneratedAt ? `Last generated: ${lastReportGeneratedAt.toLocaleTimeString()}` : 'Not generated yet'}</span>
+            <div className="flex items-center gap-2">
+              {hasUnsavedReportFilterChanges ? (
+                <span className="text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded-md">
+                  Filters changed. Regenerate report.
+                </span>
+              ) : null}
+              <span>{lastReportGeneratedAt ? `Last generated: ${lastReportGeneratedAt.toLocaleTimeString()}` : 'Not generated yet'}</span>
+            </div>
           </div>
 
           {dateError && (

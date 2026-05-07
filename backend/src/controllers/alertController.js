@@ -789,7 +789,18 @@ class AlertController {
 
       // Email digest intentionally disabled.
     } catch (err) {
-      logger.error('Alert _runChecks error:', err.message);
+      // Log full details to diagnose silent failures (some errors have empty message).
+      const e = err || {};
+      logger.error('Alert _runChecks error', {
+        date,
+        message: e.message || String(e),
+        name: e.name,
+        code: e.code,
+        errno: e.errno,
+        sqlState: e.sqlState,
+        sqlMessage: e.sqlMessage,
+        stack: e.stack,
+      });
     }
     return count;
   }

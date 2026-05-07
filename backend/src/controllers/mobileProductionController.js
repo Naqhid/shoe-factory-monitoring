@@ -451,7 +451,8 @@ exports.createManualEntry = async (req, res, next) => {
       start_time,
       finish_time,
       output_pairs,
-      stoppage_reason
+      stoppage_reason,
+      approved_by
     } = req.body;
 
     if (!work_centre_id || !machine_id || !emp_id || !start_time || !finish_time) {
@@ -528,6 +529,15 @@ exports.createManualEntry = async (req, res, next) => {
       });
     }
 
+    const approverIdentity = String(
+      approved_by ||
+      req?.user?.username ||
+      req?.user?.name ||
+      req?.user?.email ||
+      req?.user?.id ||
+      'Unknown'
+    ).trim();
+
     let insertedId = null;
     let summaryData = null;
     let enforcedTargets = { targetMins: 0, targetPairs: 0 };
@@ -551,6 +561,28 @@ exports.createManualEntry = async (req, res, next) => {
         });
       }
 
+      const [duplicateRows] = await conn.execute(
+        `SELECT id
+         FROM machine_centre_production
+         WHERE work_centre_id = ?
+           AND machine_id = ?
+           AND emp_id = ?
+           AND button_status = 2
+           AND stoppage_reason IS NOT NULL
+           AND stoppage_reason LIKE 'MANUAL:%'
+           AND start_time = ?
+           AND finish_time = ?
+         ORDER BY id DESC
+         LIMIT 1`,
+        [work_centre_id, machine_id, emp_id, normalizedStartTime, normalizedFinishTime]
+      );
+      if (duplicateRows.length > 0) {
+        throw Object.assign(new Error(`Duplicate manual entry for this machine/employee/time slot (record #${duplicateRows[0].id})`), {
+          statusCode: 409,
+          exposeMessage: `Duplicate manual entry for this machine/employee/time slot (record #${duplicateRows[0].id})`,
+        });
+      }
+
       const afterData = {
         prod_date: prodDate,
         work_centre_id,
@@ -560,7 +592,7 @@ exports.createManualEntry = async (req, res, next) => {
         finish_time,
         target_mins: enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
-        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
+        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
       };
 
       const [insertResult] = await conn.execute(
@@ -751,7 +783,9 @@ exports.updateManualEntry = async (req, res, next) => {
       start_time,
       finish_time,
       output_pairs,
-      stoppage_reason
+      stoppage_reason,
+      approved_by,
+      audit_reason
     } = req.body;
 
     const [existingRows] = await db.query(
@@ -768,7 +802,18 @@ exports.updateManualEntry = async (req, res, next) => {
     if (output_pairs === undefined || output_pairs === null || Number.isNaN(Number(output_pairs))) {
       return res.status(400).json({ success: false, message: 'output_pairs is required and must be a number' });
     }
+    if (!audit_reason || !String(audit_reason).trim()) {
+      return res.status(400).json({ success: false, message: 'audit_reason is required for manual entry updates' });
+    }
     const manualOutputPairs = Math.max(0, Math.round(Number(output_pairs)));
+    const approverIdentity = String(
+      approved_by ||
+      req?.user?.username ||
+      req?.user?.name ||
+      req?.user?.email ||
+      req?.user?.id ||
+      'Unknown'
+    ).trim();
 
     const start = new Date(start_time);
     const finish = new Date(finish_time);
@@ -830,7 +875,7 @@ exports.updateManualEntry = async (req, res, next) => {
         finish_time,
         target_mins: enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
-        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'}`,
+        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
       };
 
       const scaledTargetMins = enforcedTargets.targetMins * (manualOutputPairs / 12);
@@ -860,7 +905,7 @@ exports.updateManualEntry = async (req, res, next) => {
         entryId: Number(id),
         beforeData,
         afterData,
-        reason: 'Manual entry updated',
+        reason: String(audit_reason).trim(),
       });
 
       summaryData = await recalcSummaryForDayMachineEmployee(conn, {
@@ -888,6 +933,10 @@ exports.updateManualEntry = async (req, res, next) => {
 exports.deleteManualEntry = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const auditReason = String(req.body?.audit_reason || '').trim();
+    if (!auditReason) {
+      return res.status(400).json({ success: false, message: 'audit_reason is required for manual entry deletion' });
+    }
     const [existingRows] = await db.query(
       `SELECT id, prod_date, work_centre_id, machine_id, emp_id
        FROM machine_centre_production
@@ -907,7 +956,7 @@ exports.deleteManualEntry = async (req, res, next) => {
         action: 'DELETE',
         entryId: Number(id),
         beforeData: existing,
-        reason: 'Manual entry deleted',
+        reason: auditReason,
       });
       summaryData = await recalcSummaryForDayMachineEmployee(conn, {
         prodDate: existing.prod_date,

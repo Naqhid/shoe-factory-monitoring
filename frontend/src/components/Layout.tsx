@@ -82,9 +82,11 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={handleLogout}
                 className="flex items-center gap-1 px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm"
                 title="Logout"
+                aria-label="Logout"
               >
                 <LogOut className="h-4 w-4" />
                 <span className="hidden sm:inline">Logout</span>

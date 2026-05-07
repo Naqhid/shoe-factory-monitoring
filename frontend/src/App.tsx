@@ -9,6 +9,8 @@ import { isMenuAllowed, getDefaultRoute } from './utils/roleConfig';
 import { API_BASE_URL, apiFetch } from './services/api';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { NotFoundPage } from './components/NotFoundPage';
 
 const MasterForm = lazy(() => import('./components/MasterForm').then(m => ({ default: m.MasterForm })));
 const ProductionPlanningForm = lazy(() => import('./components/ProductionPlanningForm').then(m => ({ default: m.ProductionPlanningForm })));
@@ -204,6 +206,30 @@ function App() {
   const isLogs = activeMenu === 'logs';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
   const currentConfig = isMasterView ? masterConfigs[activeMenu as keyof typeof masterConfigs] : null;
+  const knownMenus = React.useMemo(() => new Set([
+    'overview',
+    'reports',
+    'missed_actions',
+    'production_routing',
+    'production_planning',
+    'line_setup_form',
+    'mobile_live_dashboard',
+    'mobile',
+    'mobile-remote-setup',
+    'tracker_app',
+    'production_tracker',
+    'manual_production_entry',
+    'rework_rejection_tracker',
+    'users',
+    'forms_master',
+    'user_rights',
+    'roles',
+    'monitoring',
+    'alert_center',
+    'logs',
+    ...Object.keys(masterConfigs),
+  ]), []);
+  const isUnknownRoute = pathParts.length > 0 && !knownMenus.has(pathParts[0]);
 
   // Role-based access control - must be before any early returns
   React.useEffect(() => {
@@ -321,6 +347,8 @@ function App() {
             table={currentConfig!.table}
           />
         )
+      ) : isUnknownRoute ? (
+        <NotFoundPage />
       ) : (
         <div className="flex items-center justify-center h-full">
           <p className="text-gray-500">Select a menu item</p>
@@ -345,8 +373,10 @@ function App() {
 function AppWithProvider() {
   return (
     <QueryClientProvider client={queryClient}>
-      <App />
-      <Toaster position="top-right" />
+      <ErrorBoundary>
+        <App />
+        <Toaster position="top-right" />
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }
