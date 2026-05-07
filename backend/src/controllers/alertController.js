@@ -664,7 +664,7 @@ class AlertController {
            AND ms.status = 'active'
            AND DATE(ms.activated_at) = ?
           WHERE ms.session_id IS NULL
-          GROUP BY mc.work_centre_id, mc.machine_id
+          GROUP BY mc.work_centre_id, mc.machine_id, COALESCE(mc.machine_name, mc.name)
         `, [date, date]);
 
         for (const row of offlineRows) {
