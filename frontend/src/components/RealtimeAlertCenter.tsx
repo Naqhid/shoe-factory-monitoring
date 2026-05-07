@@ -370,7 +370,7 @@ export const RealtimeAlertCenter: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={loadAlerts}
+            onClick={() => { void loadAlerts(); }}
             className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
           >
             <RefreshCw className="h-4 w-4" />

@@ -135,6 +135,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodMachineFilter, setProdMachineFilter] = React.useState('');
   const [prodLineFilter, setProdLineFilter] = React.useState('');
   const [prodSearch, setProdSearch] = React.useState('');
+  const [prodIncludeInProgress, setProdIncludeInProgress] = React.useState(true);
   const [prodToDateFilter, setProdToDateFilter] = React.useState(getTodayLocalDate());
   const [prodPage, setProdPage] = React.useState(0);
   const [prodPageSize, setProdPageSize] = React.useState(20);
@@ -146,6 +147,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodOutputPairs, setProdOutputPairs] = React.useState('0');
   const [prodTargetMins, setProdTargetMins] = React.useState('0');
   const [showProdEditForm, setShowProdEditForm] = React.useState(false);
+  const [prodDeleteCandidate, setProdDeleteCandidate] = React.useState<any | null>(null);
   const [summaryDate, setSummaryDate] = React.useState(getTodayLocalDate());
   const [summaryData, setSummaryData] = React.useState<any[]>([]);
   const [summaryLoading, setSummaryLoading] = React.useState(false);
@@ -544,16 +546,27 @@ export const ManualProductionEntryForm: React.FC = () => {
     return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{pct}%</span>;
   };
 
+  const prodStatusBadge = (status: number) => {
+    if (status === 2) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Finished</span>;
+    if (status === 1) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">In Progress</span>;
+    if (status === 0) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">Started</span>;
+    if (status === 3) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">Idle</span>;
+    return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">Status {status}</span>;
+  };
+
   const loadProdRecords = React.useCallback(async () => {
     setProdLoading(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production`);
       const json = await res.json();
       if (!json.success) return;
-      let rows = (json.data || []).filter((r: any) =>
-        Number(r.button_status) === 2 &&
-        (!r.stoppage_reason || !String(r.stoppage_reason).startsWith('MANUAL:'))
-      );
+      let rows = (json.data || []).filter((r: any) => {
+        const isManual = r.stoppage_reason && String(r.stoppage_reason).startsWith('MANUAL:');
+        if (isManual) return false;
+        const status = Number(r.button_status);
+        if (prodIncludeInProgress) return status !== 3;
+        return status === 2;
+      });
       if (prodDateFilter) rows = rows.filter((r: any) => {
         const startDate = r.start_time ? new Date(r.start_time).toLocaleDateString('en-CA') : '';
         return startDate >= prodDateFilter && startDate <= (prodToDateFilter || prodDateFilter);
@@ -564,7 +577,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       setProdPage(0);
     } catch { toast.error('Failed to load production records'); }
     finally { setProdLoading(false); }
-  }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter]);
+  }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter, prodIncludeInProgress]);
 
   // Detect conflicts: manual entries that overlap real cycles
   const detectConflicts = React.useCallback(async () => {
@@ -649,7 +662,8 @@ export const ManualProductionEntryForm: React.FC = () => {
       if (!v) return '';
       const d = new Date(v);
       const pad = (n: number) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      if (Number.isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
     setProdStartTime(fmt(row.start_time));
     setProdFinishTime(fmt(row.finish_time));
@@ -665,7 +679,12 @@ export const ManualProductionEntryForm: React.FC = () => {
       const row = prodRecords.find(r => r.id === editingProdId);
       if (!row) return;
       const machineKeyToReopen = String(row.machine_id);
-      const toLocal = (v: string) => v ? v.replace('T', ' ') + ':00' : null;
+      const toLocal = (v: string) => {
+        if (!v) return null;
+        // datetime-local may be yyyy-mm-ddThh:mm or yyyy-mm-ddThh:mm:ss
+        const normalized = v.length === 16 ? `${v}:00` : v;
+        return normalized.replace('T', ' ');
+      };
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/${editingProdId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -690,6 +709,32 @@ export const ManualProductionEntryForm: React.FC = () => {
       setProdMachineAccordionOpen({ [machineKeyToReopen]: true });
     } catch { toast.error('Failed to update record'); }
     finally { setLoading(false); }
+  };
+
+  const handleProdDelete = async (row: any) => {
+    if (!row?.id) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/${row.id}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.message || 'Failed to delete production record');
+        return;
+      }
+      toast.success('Production record deleted');
+      if (editingProdId === row.id) {
+        setShowProdEditForm(false);
+        setEditingProdId(null);
+      }
+      setProdDeleteCandidate(null);
+      await loadProdRecords();
+    } catch {
+      toast.error('Failed to delete production record');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1879,11 +1924,11 @@ export const ManualProductionEntryForm: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                        <input type="datetime-local" value={prodStartTime} onChange={e => setProdStartTime(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
+                        <input type="datetime-local" step={1} value={prodStartTime} onChange={e => setProdStartTime(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Finish Time</label>
-                        <input type="datetime-local" value={prodFinishTime} onChange={e => setProdFinishTime(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
+                        <input type="datetime-local" step={1} value={prodFinishTime} onChange={e => setProdFinishTime(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Output Pairs</label>
@@ -1902,6 +1947,40 @@ export const ManualProductionEntryForm: React.FC = () => {
                 </div>
               );
             })()}
+            {prodDeleteCandidate && (
+              <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                <div role="dialog" aria-modal="true" aria-labelledby="delete-production-record-title" className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                  <h2 id="delete-production-record-title" className="text-lg font-bold text-gray-900">Delete Production Record</h2>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Delete record{' '}
+                    <span className="font-semibold">#{prodDeleteCandidate.id}</span>{' '}
+                    for machine{' '}
+                    <span className="font-semibold">{prodDeleteCandidate.machine_id}</span>?
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    This action cannot be undone.
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProdDeleteCandidate(null)}
+                      disabled={loading}
+                      className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleProdDelete(prodDeleteCandidate)}
+                      disabled={loading}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
+                    >
+                      {loading ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-end gap-3">
               <div>
@@ -1935,6 +2014,14 @@ export const ManualProductionEntryForm: React.FC = () => {
               <button type="button" onClick={loadProdRecords} disabled={prodLoading} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
                 {prodLoading ? 'Loading...' : 'Refresh'}
               </button>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={prodIncludeInProgress}
+                  onChange={(e) => setProdIncludeInProgress(e.target.checked)}
+                />
+                Show in-progress cycles
+              </label>
               <button type="button" onClick={() => {
                 const headers = ['Date','Line','Machine','Employee','Start','Finish','Duration(mins)','Target(mins)','Output','Efficiency%'];
                 const visibleRows = prodSearch.trim()
@@ -1974,6 +2061,20 @@ export const ManualProductionEntryForm: React.FC = () => {
                 document.body.removeChild(a); URL.revokeObjectURL(url);
               }} disabled={prodRecords.length === 0} className="bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
                 Export CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setProdDateFilter(getTodayLocalDate());
+                  setProdToDateFilter(getTodayLocalDate());
+                  setProdLineFilter('');
+                  setProdMachineFilter('');
+                  setProdSearch('');
+                  setProdIncludeInProgress(true);
+                }}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                Reset
               </button>
             </div>
 
@@ -2064,6 +2165,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                                   <th className="text-left p-2 border-b border-gray-200">Start</th>
                                   <th className="text-left p-2 border-b border-gray-200">Finish</th>
                                   <th className="text-left p-2 border-b border-gray-200">Duration</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Status</th>
                                   <th className="text-left p-2 border-b border-gray-200">Target</th>
                                   <th className="text-left p-2 border-b border-gray-200">Output</th>
                                   <th className="text-left p-2 border-b border-gray-200">Efficiency</th>
@@ -2083,11 +2185,29 @@ export const ManualProductionEntryForm: React.FC = () => {
                                       <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
                                       <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
                                       <td className={`p-2 ${dur !== null && dur < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{dur !== null ? `${dur}m` : '-'}</td>
+                                      <td className="p-2">{prodStatusBadge(Number(row.button_status || 0))}</td>
                                       <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
                                       <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>
                                       <td className="p-2">{effBadge(eff)}</td>
                                       <td className="p-2">
-                                        <button type="button" onClick={() => handleProdEdit(row)} className="px-2 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-semibold">Edit</button>
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleProdEdit(row)}
+                                            className="px-2 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-semibold"
+                                          >
+                                            Edit
+                                          </button>
+                                          {canEdit && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setProdDeleteCandidate(row)}
+                                              className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 text-xs font-semibold"
+                                            >
+                                              Delete
+                                            </button>
+                                          )}
+                                        </div>
                                       </td>
                                     </tr>
                                   );

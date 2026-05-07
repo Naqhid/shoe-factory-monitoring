@@ -15,9 +15,23 @@ export const AlertBell: React.FC = () => {
 
   const fetchAlerts = React.useCallback(async () => {
     try {
+      const toGroupedVisibleCount = (rows: any[]): number => {
+        const grouped = new Set<string>();
+        rows.forEach((row) => {
+          const key = [
+            String(row?.alert_type || ''),
+            String(row?.severity || ''),
+            String(row?.work_centre_name || ''),
+            String(row?.machine_id || ''),
+          ].join('|');
+          grouped.add(key);
+        });
+        return grouped.size;
+      };
+
       // Use the same endpoint/filter logic as Realtime Alert Center
       // so bell count matches currently visible unacknowledged alerts.
-      let res = await apiFetch(`${API_BASE_URL}/api/alerts/center?include_acknowledged=false&limit=1&page=1`);
+      let res = await apiFetch(`${API_BASE_URL}/api/alerts/center?include_acknowledged=false&limit=10&page=1`);
       if (!res.ok) {
         // Backward compatibility fallback
         res = await apiFetch(`${API_BASE_URL}/api/alerts?unread_only=false&limit=30`);
@@ -26,21 +40,22 @@ export const AlertBell: React.FC = () => {
       const data = await res.json();
       if (!data?.success) return;
 
-      const nextCount = Number(
-        data.unacknowledged_count ?? data.unread_count ?? 0
-      );
+      const centerRows = Array.isArray(data.data) ? data.data : [];
+      const nextCount = centerRows.length > 0
+        ? toGroupedVisibleCount(centerRows)
+        : Number(data.unacknowledged_count ?? data.unread_count ?? 0);
       setUnreadCount(nextCount);
       localStorage.setItem(ALERT_UNREAD_CACHE_KEY, String(nextCount));
     } catch { /* silent */ }
   }, []);
 
-  const getCurrentLeader = React.useCallback(() => {
+  const getCurrentLeader = React.useCallback((): { tabId: string; expiresAt: number } | null => {
     try {
       const raw = localStorage.getItem(ALERT_POLL_LEADER_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { tabId?: string; expiresAt?: number };
-      if (!parsed?.tabId || !parsed?.expiresAt) return null;
-      return parsed;
+      const parsed = JSON.parse(raw) as { tabId?: unknown; expiresAt?: unknown };
+      if (typeof parsed?.tabId !== 'string' || typeof parsed?.expiresAt !== 'number') return null;
+      return { tabId: parsed.tabId, expiresAt: parsed.expiresAt };
     } catch {
       return null;
     }

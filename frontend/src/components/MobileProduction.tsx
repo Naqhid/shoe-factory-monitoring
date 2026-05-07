@@ -19,6 +19,7 @@ interface ProductionData {
     start_time: string | null;
     finish_time: string | null;
     idle_start_time: string | null;
+    idle_stop_time: string | null;
     actual_time: number;
     button_status: number; // 1=Running, 2=Finished, 3=Paused
     updated_at?: string;
@@ -1061,6 +1062,7 @@ export const MobileProduction: React.FC = () => {
                             start_time: null,
                             finish_time: null,
                             idle_start_time: null,
+                            idle_stop_time: null,
                             actual_time: 0,
                             button_status: 3,
                             is_paused: false

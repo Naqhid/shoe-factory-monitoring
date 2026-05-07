@@ -1281,6 +1281,28 @@ exports.update = async (req, res, next) => {
     const normalizedFinishTime = toMySqlDateTimeOrNull(finish_time);
     const normalizedIdleStartTime = toMySqlDateTimeOrNull(idle_start_time);
     const normalizedIdleStopTime = toMySqlDateTimeOrNull(idle_stop_time);
+    const [existingRows] = await db.query('SELECT * FROM machine_centre_production WHERE id = ? LIMIT 1', [id]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Production data not found' });
+    }
+    const existingRecord = existingRows[0];
+
+    const toDateOnly = (value) => {
+      if (!value) return null;
+      if (typeof value === 'string') return value.slice(0, 10);
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return null;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+
+    // Normalize prod_date to start_time date when available to avoid day drift.
+    const normalizedProdDate =
+      toDateOnly(normalizedStartTime) ||
+      toDateOnly(prod_date) ||
+      toDateOnly(existingRecord.prod_date);
+    // If finish_time is provided, this row is completed.
+    const normalizedButtonStatus = normalizedFinishTime ? 2 : Number(existingRecord.button_status || 1);
 
     if (normalizedStartTime && normalizedFinishTime) {
       if (new Date(normalizedFinishTime) <= new Date(normalizedStartTime)) {
@@ -1307,17 +1329,48 @@ exports.update = async (req, res, next) => {
       `UPDATE machine_centre_production 
        SET prod_date = ?, work_centre_id = ?, machine_id = ?, emp_id = ?,
            output_pairs = ?, target_mins = ?, start_time = ?, finish_time = ?,
-           idle_start_time = ?, idle_stop_time = ?
+           idle_start_time = ?, idle_stop_time = ?, button_status = ?
        WHERE id = ?`,
-      [prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
-        normalizedStartTime, normalizedFinishTime, normalizedIdleStartTime, normalizedIdleStopTime, id]
+      [
+        normalizedProdDate,
+        work_centre_id,
+        machine_id,
+        emp_id,
+        output_pairs,
+        target_mins,
+        normalizedStartTime,
+        normalizedFinishTime,
+        normalizedIdleStartTime,
+        normalizedIdleStopTime,
+        normalizedButtonStatus,
+        id
+      ]
     );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: 'Production data not found' });
     }
 
-    res.json({ success: true, message: 'Production data updated successfully' });
+    let summaryData = null;
+    if (normalizedButtonStatus === 2 && normalizedProdDate && work_centre_id && machine_id && emp_id) {
+      summaryData = await recalcSummaryForDayMachineEmployee(db, {
+        prodDate: normalizedProdDate,
+        workCentreId: work_centre_id,
+        machineId: machine_id,
+        empId: emp_id,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Production data updated successfully',
+      data: {
+        id: Number(id),
+        prod_date: normalizedProdDate,
+        button_status: normalizedButtonStatus,
+        ...(summaryData || {}),
+      },
+    });
   } catch (error) {
     logger.error('Error updating production data:', error);
     next(error);
