@@ -1,6 +1,24 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseRequestedDate(rawDate) {
+  const requestedDate = rawDate || new Date().toISOString().split('T')[0];
+  if (!DATE_ONLY_RE.test(requestedDate)) {
+    return { ok: false, error: 'Invalid date format. Expected YYYY-MM-DD.' };
+  }
+  const parsed = new Date(`${requestedDate}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return { ok: false, error: 'Invalid date value.' };
+  }
+  const normalized = parsed.toISOString().slice(0, 10);
+  if (normalized !== requestedDate) {
+    return { ok: false, error: 'Invalid date value.' };
+  }
+  return { ok: true, requestedDate };
+}
+
 function formatHour(hour) {
   if (hour === 0) return '12 AM';
   if (hour < 12) return `${hour} AM`;
@@ -12,7 +30,11 @@ class HourlyOutputController {
   async getHourlyOutput(req, res) {
     try {
       const { workCentreId } = req.params;
-      const requestedDate = req.query.date || new Date().toISOString().split('T')[0];
+      const parsedDate = parseRequestedDate(req.query.date);
+      if (!parsedDate.ok) {
+        return res.status(400).json({ success: false, error: parsedDate.error });
+      }
+      const { requestedDate } = parsedDate;
 
       logger.info(`Fetching hourly output for work centre: ${workCentreId}, date: ${requestedDate}`);
 
@@ -90,7 +112,11 @@ class HourlyOutputController {
   async getMachineHourlyOutput(req, res) {
     try {
       const { workCentreId } = req.params;
-      const requestedDate = req.query.date || new Date().toISOString().split('T')[0];
+      const parsedDate = parseRequestedDate(req.query.date);
+      if (!parsedDate.ok) {
+        return res.status(400).json({ success: false, error: parsedDate.error });
+      }
+      const { requestedDate } = parsedDate;
 
       const [machines] = await db.query(
         `SELECT mc.machine_id, mc.name AS machine_name

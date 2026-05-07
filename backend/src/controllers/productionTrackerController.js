@@ -126,7 +126,7 @@ class ProductionTrackerController {
 
       const [hourlyData] = await db.execute(`
         SELECT 
-          HOUR(pd.created_at) as hour,
+          HOUR(pd.updated_at) as hour,
           SUM(pd.output_pairs) as pairs
         FROM machine_centre_production pd
         WHERE DATE(pd.prod_date) = DATE(?) ${whereClause}

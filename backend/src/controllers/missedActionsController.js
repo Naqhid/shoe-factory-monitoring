@@ -10,6 +10,44 @@ const toNumber = (value, fallback = 0) => {
 
 const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
 const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '0', 10);
+const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
+const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
+const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
+const LUNCH_START_MINUTE = parseInt(process.env.LUNCH_START_MINUTE || '30', 10);
+const LUNCH_END_HOUR = parseInt(process.env.LUNCH_END_HOUR || '14', 10);
+const LUNCH_END_MINUTE = parseInt(process.env.LUNCH_END_MINUTE || '0', 10);
+
+const overlapMinutes = (aStart, aEnd, bStart, bEnd) => {
+  const start = Math.max(aStart.getTime(), bStart.getTime());
+  const end = Math.min(aEnd.getTime(), bEnd.getTime());
+  if (end <= start) return 0;
+  return (end - start) / 60000;
+};
+
+const computeShiftInactiveMinutes = ({ baselineTs, startTs, startReminderMins }) => {
+  if (!baselineTs || !startTs) return 0;
+  if (!Number.isFinite(startTs.getTime()) || !Number.isFinite(baselineTs.getTime())) return 0;
+
+  const shiftStart = new Date(startTs);
+  shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+  const shiftEnd = new Date(startTs);
+  shiftEnd.setHours(SHIFT_END_HOUR, SHIFT_END_MINUTE, 0, 0);
+
+  const lunchStart = new Date(startTs);
+  lunchStart.setHours(LUNCH_START_HOUR, LUNCH_START_MINUTE, 0, 0);
+  const lunchEnd = new Date(startTs);
+  lunchEnd.setHours(LUNCH_END_HOUR, LUNCH_END_MINUTE, 0, 0);
+
+  const effectiveStart = new Date(Math.max(baselineTs.getTime(), shiftStart.getTime()));
+  const effectiveEnd = new Date(Math.min(startTs.getTime(), shiftEnd.getTime()));
+  if (effectiveEnd <= effectiveStart) return 0;
+
+  const rawGapMins = (effectiveEnd.getTime() - effectiveStart.getTime()) / 60000;
+  const lunchOverlapMins = overlapMinutes(effectiveStart, effectiveEnd, lunchStart, lunchEnd);
+  const gapExcludingLunch = Math.max(0, rawGapMins - lunchOverlapMins);
+
+  return Math.max(0, gapExcludingLunch - startReminderMins);
+};
 
 const parseActionRows = (rows, startReminderMins, finishGraceMins) => {
   const data = [];
@@ -330,8 +368,7 @@ exports.getWeeklyTrend = async (req, res, next) => {
       const startTs = new Date(r.start_time);
       const shiftStart = new Date(startTs); shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
       const baseline = r.prev_finish ? new Date(r.prev_finish) : shiftStart;
-      const gap = Math.max(0, (startTs.getTime() - baseline.getTime()) / 60000);
-      const inactive = Math.max(0, gap - startReminderMins);
+      const inactive = computeShiftInactiveMinutes({ baselineTs: baseline, startTs, startReminderMins });
       inactiveByDay[day] = (inactiveByDay[day] || 0) + inactive;
     });
 
@@ -401,7 +438,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
       shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
       const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
       const gapMins = Math.max(0, toNumber((startTs.getTime() - baselineTs.getTime()) / 60000, 0));
-      const inactiveMins = Math.max(0, gapMins - startReminderMins);
+      const inactiveMins = computeShiftInactiveMinutes({ baselineTs, startTs, startReminderMins });
 
       return {
         id: row.id,

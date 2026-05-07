@@ -27,6 +27,7 @@ const productionLockController = require('./controllers/productionLockController
 const alertController = require('./controllers/alertController');
 const backupController = require('./controllers/backupController');
 const missedActionsController = require('./controllers/missedActionsController');
+const tabBroadcastController = require('./controllers/tabBroadcastController');
 const checkDayLock = require('./middleware/checkDayLock');
 const backupService = require('./services/backupService');
 const errorHandler = require('./middleware/errorHandler');
@@ -638,6 +639,12 @@ app.get('/api/machine-centre/plan/:workCentreId/:machineId', machineCentreContro
 // Alert routes (public - factory floor can see alerts)
 app.get('/api/alerts', optionalAuthenticate, alertController.getAlerts.bind(alertController));
 app.get('/api/alerts/center', authenticate, requireLogsAccess, alertController.getRealtimeCenterAlerts.bind(alertController));
+
+// Lightweight tab broadcast routes (public view, authless machine tabs)
+app.post('/api/tab-broadcast/:broadcastId/frame', tabBroadcastController.upsertFrame);
+app.post('/api/tab-broadcast/:broadcastId/stop', tabBroadcastController.stopBroadcast);
+app.get('/api/tab-broadcast/:broadcastId/frame', tabBroadcastController.getFrame);
+app.get('/api/tab-broadcast/:broadcastId/view', tabBroadcastController.viewerPage);
 
 // Logs routes (protected)
 app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSessionController.getSessionLogs);

@@ -1515,10 +1515,19 @@ export const MissedActionsPage: React.FC = () => {
               const machineGroups = Array.from(machineMap.values()).map((mg) => ({
                 ...mg,
                 rows: [...mg.rows].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
-              })).sort((a, b) =>
-                b.rows.reduce((s, r) => s + r.inactive_mins + r.extra_mins, 0) -
-                a.rows.reduce((s, r) => s + r.inactive_mins + r.extra_mins, 0)
-              );
+              })).sort((a, b) => {
+                const aExtra = a.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
+                const bExtra = b.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
+                if (bExtra !== aExtra) return bExtra - aExtra;
+                const aLate = a.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
+                const bLate = b.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
+                if (bLate !== aLate) return bLate - aLate;
+                const aCombined = a.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0) + Math.round(r.extra_mins || 0), 0);
+                const bCombined = b.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0) + Math.round(r.extra_mins || 0), 0);
+                return bCombined - aCombined;
+              });
+
+              const csvRowsInMachineOrder = machineGroups.flatMap((mg) => mg.rows);
 
               const totalPages = discPageSize === 0 ? 1 : Math.ceil(machineGroups.length / discPageSize);
               const pagedGroups = discPageSize === 0 ? machineGroups : machineGroups.slice(discPage * discPageSize, (discPage + 1) * discPageSize);
@@ -1531,7 +1540,7 @@ export const MissedActionsPage: React.FC = () => {
                       type="button"
                       onClick={() => {
                         const headers = ['operator', 'machine', 'line', 'date', 'start', 'finish', 'started_late_mins', 'finished_extra_mins', 'verdict'];
-                        const csv = [headers.join(','), ...disciplineRows.map((e) => [
+                        const csv = [headers.join(','), ...csvRowsInMachineOrder.map((e) => [
                           `"${e.employee_name} (${e.employee_code})"`,
                           `"${e.machine_name || e.machine_id}"`,
                           `"${e.work_centre_name}"`,

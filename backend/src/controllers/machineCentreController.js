@@ -143,11 +143,11 @@ exports.getMachineStatus = async (req, res) => {
     const [rows] = await db.execute(
       `SELECT 
          mca.*,
-         e.emp_name as operator_name,
-         wc.work_centre_name as line_name,
+         e.name as operator_name,
+         wc.name as line_name,
          mca.updated_at as last_activity
        FROM machine_centre_app mca
-       LEFT JOIN employees e ON mca.emp_id = e.emp_id
+       LEFT JOIN employees e ON mca.emp_id = e.code
        LEFT JOIN work_centres wc ON mca.work_centre_id = wc.id
        WHERE mca.machine_id = ? 
          AND mca.prod_date = CURDATE()

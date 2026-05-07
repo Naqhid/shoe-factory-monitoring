@@ -368,6 +368,9 @@ export const RealtimeAlertCenter: React.FC = () => {
           <p className="text-sm text-gray-500">Critical production alerts with acknowledge flow.</p>
         </div>
         <div className="flex items-center gap-2">
+          <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
+            Unacknowledged Total: {unacknowledgedCount}
+          </span>
           <button
             type="button"
             onClick={() => { void loadAlerts(); }}
@@ -449,6 +452,9 @@ export const RealtimeAlertCenter: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
         <span>
           Showing page {page} of {totalPages} ({alerts.length} on this page, {totalAlerts} total)
+        </span>
+        <span className="font-medium text-gray-700">
+          Bell-matched unacknowledged count: {unacknowledgedCount}
         </span>
         <div className="flex items-center gap-2">
           <button
