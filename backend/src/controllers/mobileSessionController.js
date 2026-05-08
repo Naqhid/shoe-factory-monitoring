@@ -534,6 +534,10 @@ const mobileSessionController = {
                    END
                  )
                ),
+               output_pairs = CASE
+                 WHEN COALESCE(output_pairs, 0) <= 0 THEN 12
+                 ELSE output_pairs
+               END,
                button_status = 2
              WHERE button_status IN (1, 3)`
         );

@@ -140,7 +140,6 @@ export const MobileProduction: React.FC = () => {
     const [totalOutputToday, setTotalOutputToday] = useState(0);
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
-    const [showFinishConfirm, setShowFinishConfirm] = useState(false);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
     const [startReminderDue, setStartReminderDue] = useState(false);
@@ -294,9 +293,6 @@ export const MobileProduction: React.FC = () => {
             alertAudioContextRef.current.close().catch(() => {});
             alertAudioContextRef.current = null;
         }
-        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-        }
     }, []);
 
     const playAlarmReminderBackground = React.useCallback((durationMs = 12000) => {
@@ -403,49 +399,15 @@ export const MobileProduction: React.FC = () => {
         }
     }, []);
 
-    const speakAlertVoice = React.useCallback((mode: 'start' | 'finish') => {
-        try {
-            if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-            window.speechSynthesis.cancel();
-            const operatorName = (employeeName || '').trim();
-            const operatorAddress = operatorName ? `Operator ${operatorName}` : 'Operator';
-            const parts =
-                mode === 'finish'
-                    ? [`Attention ${operatorAddress}.`, 'Time exceeded.', 'Please finish this cycle now.']
-                    : [`Attention ${operatorAddress}.`, 'Production is idle.', 'Please tap start for next cycle.'];
-            // Speech volume is capped at 1.0 by browser APIs, so repeat once for better audibility.
-            const queue = [...parts, ...parts];
-
-            const speakAt = (idx: number) => {
-                if (idx >= queue.length) return;
-                const utterance = new SpeechSynthesisUtterance(queue[idx]);
-                utterance.rate = 0.98;
-                utterance.pitch = 1.0;
-                utterance.volume = 1.0;
-                utterance.onend = () => speakAt(idx + 1);
-                utterance.onerror = () => speakAt(idx + 1);
-                window.speechSynthesis.speak(utterance);
-            };
-
-            speakAt(0);
-        } catch {
-            // Ignore speech synthesis failures
-        }
-    }, [employeeName]);
-
-    const playAlertSound = React.useCallback((mode: 'start' | 'finish') => {
+    const playAlertSound = React.useCallback((_mode: 'start' | 'finish') => {
         try {
             stopAlertSound();
             const ALARM_DURATION_MS = 12000;
             playAlarmReminderBackground(ALARM_DURATION_MS);
-            const speechStartId = window.setTimeout(() => {
-                speakAlertVoice(mode);
-            }, ALARM_DURATION_MS);
-            alertSoundTimeoutsRef.current.push(speechStartId);
         } catch (error) {
             console.warn('Alert sound playback blocked or unavailable:', error);
         }
-    }, [playAlarmReminderBackground, speakAlertVoice, stopAlertSound]);
+    }, [playAlarmReminderBackground, stopAlertSound]);
 
     useEffect(() => {
         return () => stopAlertSound();
@@ -1342,14 +1304,10 @@ export const MobileProduction: React.FC = () => {
 
     const handleFinish = async () => {
         if (!productionData?.id) return;
-        setShowFinishConfirm(true);
-    };
-
-    const confirmFinish = async () => {
-        if (!productionData?.id) return;
-        setShowFinishConfirm(false);
         setLoading(true);
-        const outputPairs = productionData.target_pairs || 0;
+        // Business rule: every completed cycle contributes 12 pairs.
+        // Do not rely on mutable target_pairs state here.
+        const outputPairs = 12;
         const maxFinishRetries = 5;
         let finishSuccess = false;
         let finishResult: any;
@@ -1802,35 +1760,6 @@ export const MobileProduction: React.FC = () => {
                             aria-hidden
                         />
                     )}
-                    {/* Finish Confirmation Dialog */}
-                    {showFinishConfirm && (
-                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
-                                <div className="mb-6">
-                                    <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <CheckCircle className="w-10 h-10 text-blue-600" />
-                                    </div>
-                                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Finish Production?</h2>
-                                    <p className="text-gray-600">Are you sure you want to complete this production cycle?</p>
-                                </div>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setShowFinishConfirm(false)}
-                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-6 rounded-xl font-semibold transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={confirmFinish}
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors"
-                                    >
-                                        Finish
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {/* Stoppage Reason Modal */}
                     {showStoppageModal && (
                         <StoppageReasonModal
@@ -1846,9 +1775,10 @@ export const MobileProduction: React.FC = () => {
                             className="relative w-full p-4 hover:bg-white/5 transition-colors"
                         >
                             <div className="flex flex-col items-center justify-center gap-2 w-full text-center pl-10 pr-8 md:pl-0 md:pr-0">
-                                <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
                                 {!headerExpanded && (
-                                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full animate-pulse">Tap to view details</span>
+                                    <span className="text-xs md:text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full animate-pulse">
+                                        Tap to view details
+                                    </span>
                                 )}
                             </div>
                             <svg
@@ -1860,34 +1790,24 @@ export const MobileProduction: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                         </button>
-                        <div className="hidden md:block absolute top-3 left-4 z-10">
-                            <span className="text-[11px] md:text-xs font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">
-                                Production Status
-                            </span>
-                        </div>
-                        <div className="hidden md:flex absolute top-3 right-14 items-center gap-1.5 z-10">
-                            <button
-                                onClick={() => { setShowTimingPopup(v => !v); if (!showTimingPopup) fetchTimingCycles(); }}
-                                className="relative p-1.5 rounded-lg bg-white hover:bg-white/90 text-red-500"
-                                title="View late cycles"
-                            >
-                                <Bell className="h-4 w-4" />
-                                {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
-                            </button>
-                        </div>
-                        <div className="md:hidden flex items-center justify-between px-3 pb-3">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">Production Status</span>
-                            <button
-                                onClick={() => { setShowTimingPopup(v => !v); if (!showTimingPopup) fetchTimingCycles(); }}
-                                className="relative p-2 rounded-lg bg-white hover:bg-white/90 text-red-500"
-                                title="View late cycles"
-                            >
-                                <Bell className="h-4 w-4" />
-                                {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
-                            </button>
-                        </div>
                         {headerExpanded && (
                             <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm px-4 pb-4">
+                                <div className="col-span-2 md:col-span-6 flex items-center justify-between">
+                                    <span className="text-[11px] md:text-xs font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">
+                                        Production Status
+                                    </span>
+                                    <button
+                                        onClick={() => { setShowTimingPopup(v => !v); if (!showTimingPopup) fetchTimingCycles(); }}
+                                        className="relative p-1.5 md:p-2 rounded-lg bg-white hover:bg-white/90 text-red-500"
+                                        title="View late cycles"
+                                    >
+                                        <Bell className="h-4 w-4" />
+                                        {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
+                                    </button>
+                                </div>
+                                <div className="col-span-2 md:col-span-6 text-center">
+                                    <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
+                                </div>
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Process Name</p>
@@ -1943,12 +1863,6 @@ export const MobileProduction: React.FC = () => {
                         {/* Progress Bar — red when actual time exceeds target */}
                         {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (
                             <div className="mb-4">
-                                {isTargetTimeExceeded && (
-                                    <div role="alert" className="mb-3 flex items-center justify-center gap-2 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2.5 text-center shadow-md">
-                                        <AlertTriangle className="h-6 w-6 shrink-0 text-red-600" aria-hidden />
-                                        <p className="text-sm font-bold text-red-800">Target time exceeded — tap <span className="whitespace-nowrap">FINISH</span> when done</p>
-                                    </div>
-                                )}
                                 <div
                                     className={`rounded-lg p-1 transition-shadow duration-300 ${
                                         isTargetTimeExceeded

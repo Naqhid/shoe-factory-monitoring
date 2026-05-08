@@ -1448,8 +1448,14 @@ exports.updateStatus = async (req, res, next) => {
           });
         }
 
-        updateQuery += ', finish_time = NOW(), prod_date = CURDATE()';
-        if (output_pairs !== undefined) { updateQuery += ', output_pairs = ?'; params.push(output_pairs); }
+        const normalizedOutputPairs = Number(output_pairs);
+        const finishOutputPairs = Number.isFinite(normalizedOutputPairs) && normalizedOutputPairs > 0 ? normalizedOutputPairs : 12;
+        if (finishOutputPairs !== normalizedOutputPairs) {
+          logger.warn(`[STATUS-CHANGE] Record ${id}: invalid finish output_pairs=${output_pairs}. Forcing to 12.`);
+        }
+
+        updateQuery += ', finish_time = NOW(), prod_date = CURDATE(), output_pairs = ?';
+        params.push(finishOutputPairs);
       } else if (normalizedButtonStatus === 1) {
         if (isGoingIdle) {
           // Machine stopping — record idle start time and reason
