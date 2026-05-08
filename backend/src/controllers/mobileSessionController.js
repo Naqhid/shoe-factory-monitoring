@@ -519,21 +519,6 @@ const mobileSessionController = {
                  WHEN button_status = 3 AND idle_start_time IS NOT NULL AND idle_stop_time IS NULL THEN NOW()
                  ELSE idle_stop_time
                END,
-               idle_mins = CASE
-                 WHEN button_status = 3 AND idle_start_time IS NOT NULL AND idle_stop_time IS NULL
-                 THEN COALESCE(idle_mins, 0) + GREATEST(TIMESTAMPDIFF(MINUTE, idle_start_time, NOW()), 0)
-                 ELSE COALESCE(idle_mins, 0)
-               END,
-               actual_time = GREATEST(
-                 0,
-                 TIMESTAMPDIFF(MINUTE, start_time, NOW()) - (
-                   CASE
-                     WHEN button_status = 3 AND idle_start_time IS NOT NULL AND idle_stop_time IS NULL
-                     THEN COALESCE(idle_mins, 0) + GREATEST(TIMESTAMPDIFF(MINUTE, idle_start_time, NOW()), 0)
-                     ELSE COALESCE(idle_mins, 0)
-                   END
-                 )
-               ),
                output_pairs = CASE
                  WHEN COALESCE(output_pairs, 0) <= 0 THEN 12
                  ELSE output_pairs

@@ -1449,13 +1449,24 @@ exports.updateStatus = async (req, res, next) => {
         }
 
         const normalizedOutputPairs = Number(output_pairs);
-        const finishOutputPairs = Number.isFinite(normalizedOutputPairs) && normalizedOutputPairs > 0 ? normalizedOutputPairs : 12;
+        const finishOutputPairsRaw = Number.isFinite(normalizedOutputPairs) && normalizedOutputPairs > 0 ? normalizedOutputPairs : 12;
+        const finishOutputPairs = Math.max(1, Math.min(12, Math.round(finishOutputPairsRaw)));
         if (finishOutputPairs !== normalizedOutputPairs) {
-          logger.warn(`[STATUS-CHANGE] Record ${id}: invalid finish output_pairs=${output_pairs}. Forcing to 12.`);
+          logger.warn(`[STATUS-CHANGE] Record ${id}: invalid finish output_pairs=${output_pairs}. Forcing to ${finishOutputPairs}.`);
         }
 
-        updateQuery += ', finish_time = NOW(), prod_date = CURDATE(), output_pairs = ?';
-        params.push(finishOutputPairs);
+        const [[todayRow]] = await db.execute('SELECT CURDATE() as today');
+        const today = todayRow?.today;
+        const resolvedTargets = await resolveTargetsFromPlan(db, {
+          machineId: existingRecord.machine_id,
+          workCentreId: existingRecord.work_centre_id,
+          prodDate: today,
+        });
+        const baseTargetMins = Number(resolvedTargets?.targetMins || existingRecord.target_mins || 0);
+        const scaledTargetMins = baseTargetMins > 0 ? (baseTargetMins * (finishOutputPairs / 12)) : 0;
+
+        updateQuery += ', finish_time = NOW(), prod_date = CURDATE(), output_pairs = ?, target_mins = ?';
+        params.push(finishOutputPairs, scaledTargetMins);
       } else if (normalizedButtonStatus === 1) {
         if (isGoingIdle) {
           // Machine stopping — record idle start time and reason

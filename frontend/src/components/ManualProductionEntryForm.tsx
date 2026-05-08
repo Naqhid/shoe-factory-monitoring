@@ -136,6 +136,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodLineFilter, setProdLineFilter] = React.useState('');
   const [prodSearch, setProdSearch] = React.useState('');
   const [prodIncludeInProgress, setProdIncludeInProgress] = React.useState(true);
+  const [prodFinishedView, setProdFinishedView] = React.useState<'all' | 'recent_finished' | 'last_finished'>('all');
   const [prodToDateFilter, setProdToDateFilter] = React.useState(getTodayLocalDate());
   const [prodPage, setProdPage] = React.useState(0);
   const [prodPageSize, setProdPageSize] = React.useState(20);
@@ -573,11 +574,35 @@ export const ManualProductionEntryForm: React.FC = () => {
       });
       if (prodLineFilter) rows = rows.filter((r: any) => String(r.work_centre_id) === prodLineFilter);
       if (prodMachineFilter) rows = rows.filter((r: any) => String(r.machine_id) === prodMachineFilter);
+      if (prodFinishedView !== 'all') {
+        const getFinishMs = (r: any) => {
+          const raw = r.finish_time || r.updated_at || r.start_time;
+          const ts = raw ? new Date(raw).getTime() : 0;
+          return Number.isNaN(ts) ? 0 : ts;
+        };
+        rows = rows
+          .filter((r: any) => Number(r.button_status) === 2)
+          .sort((a: any, b: any) => getFinishMs(b) - getFinishMs(a));
+
+        if (prodFinishedView === 'recent_finished') {
+          rows = rows.slice(0, 50);
+        } else if (prodFinishedView === 'last_finished') {
+          const lastByMachine = new Map<string, any>();
+          rows.forEach((row: any) => {
+            const key = String(row.machine_id);
+            if (!lastByMachine.has(key)) {
+              // rows are already sorted by latest finish first
+              lastByMachine.set(key, row);
+            }
+          });
+          rows = Array.from(lastByMachine.values());
+        }
+      }
       setProdRecords(rows);
       setProdPage(0);
     } catch { toast.error('Failed to load production records'); }
     finally { setProdLoading(false); }
-  }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter, prodIncludeInProgress]);
+  }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter, prodIncludeInProgress, prodFinishedView]);
 
   // Detect conflicts: manual entries that overlap real cycles
   const detectConflicts = React.useCallback(async () => {
@@ -1423,7 +1448,7 @@ export const ManualProductionEntryForm: React.FC = () => {
               onClick={() => withDiscardCheck(() => { setActiveTab('production'); loadProdRecords(); })}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'production' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}
             >
-              Production Records
+              Live Production Records
             </button>
             <button
               type="button"
@@ -2011,6 +2036,18 @@ export const ManualProductionEntryForm: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Search</label>
                 <input type="text" value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="Machine / Employee" className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-44" />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Finished Cycles</label>
+                <select
+                  value={prodFinishedView}
+                  onChange={e => { setProdFinishedView(e.target.value as 'all' | 'recent_finished' | 'last_finished'); setProdPage(0); }}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="all">All cycles</option>
+                  <option value="recent_finished">Recently finished (last 50)</option>
+                  <option value="last_finished">Last finished cycle</option>
+                </select>
+              </div>
               <button type="button" onClick={loadProdRecords} disabled={prodLoading} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
                 {prodLoading ? 'Loading...' : 'Refresh'}
               </button>
@@ -2071,6 +2108,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                   setProdMachineFilter('');
                   setProdSearch('');
                   setProdIncludeInProgress(true);
+                  setProdFinishedView('all');
                 }}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-semibold"
               >

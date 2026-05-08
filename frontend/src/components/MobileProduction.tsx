@@ -160,6 +160,9 @@ export const MobileProduction: React.FC = () => {
     const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number }>>([]);
     const [timingLoading, setTimingLoading] = useState(false);
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
+    const [selectedTargetPairs, setSelectedTargetPairs] = useState(12);
+    const baseTargetMinsRef = React.useRef(0);
+    const baseTargetPairsRef = React.useRef(12);
     
     // Pull-to-refresh state
     const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -176,6 +179,27 @@ export const MobileProduction: React.FC = () => {
         if (safeCode) return safeCode;
         return 'N/A';
     };
+
+    const clampTargetPairs = React.useCallback((value: number) => {
+        if (!Number.isFinite(value)) return 12;
+        return Math.max(1, Math.min(12, Math.round(value)));
+    }, []);
+
+    const getScaledTargetMins = React.useCallback((pairs: number) => {
+        const baseMins = Number(baseTargetMinsRef.current || 0);
+        const basePairs = Number(baseTargetPairsRef.current || 12);
+        if (baseMins <= 0 || basePairs <= 0) return 0;
+        return Number(((baseMins * pairs) / basePairs).toFixed(1));
+    }, []);
+
+    const initializeTargetPairBaseline = React.useCallback((targetMins: number, _targetPairs: number) => {
+        const safeBaseMins = Number(targetMins || 0);
+        baseTargetPairsRef.current = 12;
+        baseTargetMinsRef.current = safeBaseMins > 0 ? safeBaseMins : 0;
+        const nextSelected = 12;
+        setSelectedTargetPairs(nextSelected);
+        return getScaledTargetMins(nextSelected);
+    }, [getScaledTargetMins]);
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -202,6 +226,27 @@ export const MobileProduction: React.FC = () => {
         ? slugToMachineId[urlMachineId]
         : urlMachineId;
     const effectiveMachineId = resolvedMachineId || urlMachineId || '';
+    const targetPairsSessionKey = React.useMemo(() => {
+        if (!effectiveMachineId || !urlEmpId) return null;
+        return `mobile_target_pairs_${effectiveMachineId}_${urlEmpId}`;
+    }, [effectiveMachineId, urlEmpId]);
+
+    const readSessionTargetPairs = React.useCallback(() => {
+        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return 12;
+        const raw = sessionStorage.getItem(targetPairsSessionKey);
+        if (!raw) return 12;
+        return clampTargetPairs(Number(raw));
+    }, [clampTargetPairs, targetPairsSessionKey]);
+
+    const writeSessionTargetPairs = React.useCallback((pairs: number) => {
+        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return;
+        sessionStorage.setItem(targetPairsSessionKey, String(clampTargetPairs(pairs)));
+    }, [clampTargetPairs, targetPairsSessionKey]);
+
+    const clearSessionTargetPairs = React.useCallback(() => {
+        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return;
+        sessionStorage.removeItem(targetPairsSessionKey);
+    }, [targetPairsSessionKey]);
 
     // Update current time every second
     useEffect(() => {
@@ -941,6 +986,7 @@ export const MobileProduction: React.FC = () => {
                             initRes?.success && typeof initRes?.data?.targetMins !== 'undefined'
                                 ? Number(initRes.data.targetMins)
                                 : Number(activeRecord.target_mins || 0);
+                        const scaledTargetMins = initializeTargetPairBaseline(refreshedTargetMins, Number(targetPairs || 12));
 
                         setSessionStatus('active');
                         setQrData(effectiveMachineId);
@@ -964,10 +1010,20 @@ export const MobileProduction: React.FC = () => {
                         const normalizedRecord = normalizePauseState(activeRecord);
                         setProductionData({
                             ...normalizedRecord,
-                            target_mins: refreshedTargetMins,
-                            target_pairs: targetPairs,
+                            target_mins: scaledTargetMins,
+                            target_pairs: 12,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
+                        const rememberedPairs = readSessionTargetPairs();
+                        if (rememberedPairs !== 12) {
+                            const rememberedTargetMins = getScaledTargetMins(rememberedPairs);
+                            setSelectedTargetPairs(rememberedPairs);
+                            setProductionData((prev) => prev ? {
+                                ...prev,
+                                target_pairs: rememberedPairs,
+                                target_mins: rememberedTargetMins,
+                            } : prev);
+                        }
                         runningSinceMsRef.current = normalizedRecord.start_time
                             ? new Date(normalizedRecord.start_time).getTime()
                             : null;
@@ -992,6 +1048,7 @@ export const MobileProduction: React.FC = () => {
                         }
 
                         const { employee, machine, workCentre, targetMins, targetPairs, existingRecord } = result.data;
+                        const scaledTargetMins = initializeTargetPairBaseline(Number(targetMins || 0), Number(targetPairs || 12));
 
                         setSessionStatus('active');
                         setQrData(effectiveMachineId);
@@ -1019,8 +1076,8 @@ export const MobileProduction: React.FC = () => {
                             machine_id: effectiveMachineId,
                             emp_id: employee.id,
                             output_pairs: 0,
-                            target_mins: targetMins,
-                            target_pairs: targetPairs,
+                            target_mins: scaledTargetMins,
+                            target_pairs: 12,
                             start_time: null,
                             finish_time: null,
                             idle_start_time: null,
@@ -1030,6 +1087,16 @@ export const MobileProduction: React.FC = () => {
                             is_paused: false
                         };
                         setProductionData(defaultData);
+                        const rememberedPairs = readSessionTargetPairs();
+                        if (rememberedPairs !== 12) {
+                            const rememberedTargetMins = getScaledTargetMins(rememberedPairs);
+                            setSelectedTargetPairs(rememberedPairs);
+                            setProductionData((prev) => prev ? {
+                                ...prev,
+                                target_pairs: rememberedPairs,
+                                target_mins: rememberedTargetMins,
+                            } : prev);
+                        }
                         runningSinceMsRef.current = null;
                         // Fetch summary data immediately after setting production data
                         await fetchSummaryData(effectiveMachineId);
@@ -1305,9 +1372,7 @@ export const MobileProduction: React.FC = () => {
     const handleFinish = async () => {
         if (!productionData?.id) return;
         setLoading(true);
-        // Business rule: every completed cycle contributes 12 pairs.
-        // Do not rely on mutable target_pairs state here.
-        const outputPairs = 12;
+        const outputPairs = clampTargetPairs(selectedTargetPairs);
         const maxFinishRetries = 5;
         let finishSuccess = false;
         let finishResult: any;
@@ -1408,6 +1473,7 @@ export const MobileProduction: React.FC = () => {
         
         // SUCCESS: Update local state and show success
         setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
+        clearSessionTargetPairs();
         runningSinceMsRef.current = null;
         
         if (finishResult?.data?.summary_updated && finishResult?.data?.total_output_pairs !== undefined) {
@@ -1430,11 +1496,14 @@ export const MobileProduction: React.FC = () => {
         
         if (productionData.button_status === 2) {
             // After FINISH, reset to initial state without database record
+            const resetTargetMins = getScaledTargetMins(12);
             const resetData: ProductionData = {
                 ...productionData,
                 id: undefined, // Remove ID so next START creates new record
                 prod_date: getLocalDateString(),
                 output_pairs: 0,
+                target_pairs: 12,
+                target_mins: resetTargetMins,
                 actual_time: 0,
                 button_status: 3,
                 is_paused: false,
@@ -1442,6 +1511,8 @@ export const MobileProduction: React.FC = () => {
                 finish_time: null,
                 idle_start_time: null
             };
+            setSelectedTargetPairs(12);
+            clearSessionTargetPairs();
             setProductionData(resetData);
             setActualTimeCounter(0);
             runningSinceMsRef.current = null;
@@ -1461,6 +1532,18 @@ export const MobileProduction: React.FC = () => {
         const actualMins = actualTimeCounter / 60; // Use live counter in seconds, convert to minutes
         if (actualMins === 0) return 0;
         return parseFloat(((actualMins / productionData.target_mins) * 100).toFixed(1));
+    };
+
+    const handleTargetPairsChange = (nextValue: number) => {
+        const clamped = clampTargetPairs(nextValue);
+        setSelectedTargetPairs(clamped);
+        writeSessionTargetPairs(clamped);
+        if (!productionData) return;
+        setProductionData({
+            ...productionData,
+            target_pairs: clamped,
+            target_mins: getScaledTargetMins(clamped),
+        });
     };
 
     const calculateStatus = () => {
@@ -1840,6 +1923,19 @@ export const MobileProduction: React.FC = () => {
                                         <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
                                 </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Bins Completed (Today)</p>
+                                        <p className="font-semibold truncate">
+                                            {loadingSummary
+                                                ? '...'
+                                                : Number.isInteger(totalOutputToday / 12)
+                                                    ? totalOutputToday / 12
+                                                    : (totalOutputToday / 12).toFixed(2)}
+                                        </p>
+                                        <p className="text-[11px] opacity-80">1 bin = 12 pairs</p>
+                                    </div>
+                                </div>
                                 <button
                                     onClick={toggleIdleReminder}
                                     className={`flex items-center justify-center gap-2 rounded-lg p-2 transition-colors border ${
@@ -1908,7 +2004,16 @@ export const MobileProduction: React.FC = () => {
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
                                 <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs / BIN</p>
-                                <p className="text-3xl md:text-5xl font-bold text-green-900"><span>{productionData.target_pairs || 0}</span></p>
+                                <select
+                                    value={selectedTargetPairs}
+                                    onChange={(e) => handleTargetPairsChange(Number(e.target.value))}
+                                    disabled={loading || productionData.button_status === 1}
+                                    className="w-full text-2xl md:text-3xl font-bold text-green-900 bg-white border border-green-300 rounded-lg px-2 py-1"
+                                >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((pairCount) => (
+                                        <option key={pairCount} value={pairCount}>{pairCount}</option>
+                                    ))}
+                                </select>
                                 <p className="text-xs text-green-600 mt-1">pairs</p>
                             </div>
                             <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm relative">
