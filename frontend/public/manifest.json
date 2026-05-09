@@ -3,7 +3,7 @@
   "short_name": "ProdPulse",
   "description": "Smart production tracking system for real-time manufacturing monitoring",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "any",
   "theme_color": "#2563eb",
   "background_color": "#ffffff",

@@ -76,10 +76,36 @@ const getTodayLocalDate = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 };
 
-const HOURLY_SLOTS = Array.from({ length: 24 }, (_, hour) => ({
-  value: `${hour}`,
-  label: `${hour}-${hour + 1}`,
-}));
+const SLOT_TYPES = [
+  { value: 'hourly', label: 'Hourly', minutes: 60 },
+  { value: 'half_hourly', label: 'Half-hourly', minutes: 30 },
+  { value: 'quarterly', label: 'Quarterly', minutes: 15 },
+  { value: 'manual', label: 'Manual', minutes: 0 },
+] as const;
+
+type SlotType = typeof SLOT_TYPES[number]['value'];
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+const formatTimeFromMinutes = (totalMinutes: number) => {
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const mins = totalMinutes % 60;
+  return `${pad2(hours)}:${pad2(mins)}`;
+};
+
+const buildSlotOptions = (slotMinutes: number) => {
+  const options: Array<{ value: string; label: string; startMinutes: number; endMinutes: number }> = [];
+  for (let start = 0; start + slotMinutes <= 24 * 60; start += slotMinutes) {
+    const end = start + slotMinutes;
+    options.push({
+      value: formatTimeFromMinutes(start),
+      label: `${formatTimeFromMinutes(start)}-${formatTimeFromMinutes(end)}`,
+      startMinutes: start,
+      endMinutes: end,
+    });
+  }
+  return options;
+};
 
 export const ManualProductionEntryForm: React.FC = () => {
   const navigate = useNavigate();
@@ -179,6 +205,9 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [empId, setEmpId] = React.useState('');
   const [entryDate] = React.useState(getTodayLocalDate());
   const [hourlySlot, setHourlySlot] = React.useState('');
+  const [slotType, setSlotType] = React.useState<SlotType>('hourly');
+  const [manualStartTime, setManualStartTime] = React.useState('');
+  const [manualFinishTime, setManualFinishTime] = React.useState('');
   const [targetMins, setTargetMins] = React.useState('0');
   const [outputPairs, setOutputPairs] = React.useState('0');
   const [stoppageReason, setStoppageReason] = React.useState('');
@@ -190,11 +219,13 @@ export const ManualProductionEntryForm: React.FC = () => {
       machineId ||
       empId ||
       hourlySlot ||
+      manualStartTime ||
+      manualFinishTime ||
       Number(outputPairs || 0) > 0 ||
       (stoppageReason || '').trim() ||
       (editReason || '').trim()
     );
-  }, [showForm, workCentreId, machineId, empId, hourlySlot, outputPairs, stoppageReason, editReason]);
+  }, [showForm, workCentreId, machineId, empId, hourlySlot, manualStartTime, manualFinishTime, outputPairs, stoppageReason, editReason]);
 
   React.useEffect(() => {
     const loadMasters = async () => {
@@ -248,8 +279,21 @@ export const ManualProductionEntryForm: React.FC = () => {
     return byLine.filter((e) => !blockedEmpCodes.has(String(e.code)));
   }, [employees, workCentreId, activeSessions, machineId]);
 
+  const hasSlotSelection = slotType === 'manual'
+    ? !!manualStartTime && !!manualFinishTime
+    : !!hourlySlot;
   const canSubmit =
-    !!workCentreId && !!machineId && !!empId && !!hourlySlot && !loading;
+    !!workCentreId && !!machineId && !!empId && hasSlotSelection && !loading;
+
+  const selectedSlotMinutes = React.useMemo(() => {
+    const match = SLOT_TYPES.find((slot) => slot.value === slotType);
+    return match?.minutes || 60;
+  }, [slotType]);
+
+  const slotOptions = React.useMemo(
+    () => buildSlotOptions(selectedSlotMinutes),
+    [selectedSlotMinutes]
+  );
 
   const totalManualOutput = React.useMemo(
     () => manualEntries.reduce((sum, row) => sum + Number(row.output_pairs || 0), 0),
@@ -367,6 +411,8 @@ export const ManualProductionEntryForm: React.FC = () => {
     setMachineId('');
     setEmpId('');
     setHourlySlot('');
+    setManualStartTime('');
+    setManualFinishTime('');
     setTargetMins('0');
     setOutputPairs('0');
     setStoppageReason('');
@@ -531,7 +577,8 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   const calcDuration = (start: string, finish: string) => {
     if (!start || !finish) return null;
-    const mins = Math.round((new Date(finish).getTime() - new Date(start).getTime()) / 60000);
+    const minsRaw = (new Date(finish).getTime() - new Date(start).getTime()) / 60000;
+    const mins = Math.round(minsRaw * 10) / 10;
     return Number.isFinite(mins) && mins >= 0 ? mins : null;
   };
 
@@ -764,21 +811,54 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!workCentreId || !machineId || !empId || !hourlySlot) {
+    const usingManualSlot = slotType === 'manual';
+    if (!workCentreId || !machineId || !empId || (!usingManualSlot && !hourlySlot) || (usingManualSlot && (!manualStartTime || !manualFinishTime))) {
       toast.error('Please fill required fields');
       return;
     }
-    const slotHour = Number(hourlySlot);
-    if (!Number.isInteger(slotHour) || slotHour < 0 || slotHour > 23) {
-      toast.error('Please choose a valid hourly slot');
-      return;
+    let slotHour = 0;
+    let slotMinute = 0;
+    let slotStartMinutes = 0;
+    let slotEndMinutes = 0;
+    if (usingManualSlot) {
+      const startMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(manualStartTime);
+      const finishMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(manualFinishTime);
+      if (!startMatch || !finishMatch) {
+        toast.error('Please choose valid manual start and finish times');
+        return;
+      }
+      slotHour = Number(startMatch[1]);
+      slotMinute = Number(startMatch[2]);
+      const finishHourInput = Number(finishMatch[1]);
+      const finishMinuteInput = Number(finishMatch[2]);
+      slotStartMinutes = slotHour * 60 + slotMinute;
+      slotEndMinutes = finishHourInput * 60 + finishMinuteInput;
+      if (slotEndMinutes <= slotStartMinutes) {
+        toast.error('Manual finish time must be later than start time');
+        return;
+      }
+    } else {
+      const slotMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hourlySlot);
+      if (!slotMatch) {
+        toast.error('Please choose a valid time slot');
+        return;
+      }
+      slotHour = Number(slotMatch[1]);
+      slotMinute = Number(slotMatch[2]);
+      slotStartMinutes = slotHour * 60 + slotMinute;
+      slotEndMinutes = slotStartMinutes + selectedSlotMinutes;
+      if (slotEndMinutes > 24 * 60) {
+        toast.error('Selected slot crosses to next day. Please choose a valid slot.');
+        return;
+      }
     }
+    const slotStartLabel = formatTimeFromMinutes(slotStartMinutes);
+    const slotEndLabel = formatTimeFromMinutes(slotEndMinutes);
     // Block future slots
     const now = new Date();
-    const slotStart = new Date();
-    slotStart.setHours(slotHour, 0, 0, 0);
+    const slotStart = new Date(`${entryDate}T${pad2(slotHour)}:${pad2(slotMinute)}:00`);
     if (slotStart > now) {
-      toast.error(`Cannot add manual entry for a future time slot (${slotHour}:00–${slotHour + 1}:00).`);
+      toast.error(`Cannot add manual entry for a future time slot (${slotStartLabel}-${slotEndLabel}).`);
       return;
     }
     // Reason required
@@ -787,13 +867,15 @@ export const ManualProductionEntryForm: React.FC = () => {
       return;
     }
     // Duplicate slot warning check
-    const existingSlot = manualEntries.find(e =>
-      e.machine_id === machineId && e.emp_id === empId &&
-      new Date(e.start_time).getHours() === slotHour
-    );
+    const existingSlot = manualEntries.find(e => {
+      if (e.machine_id !== machineId || e.emp_id !== empId) return false;
+      const start = new Date(e.start_time);
+      if (Number.isNaN(start.getTime())) return false;
+      return start.getHours() === slotHour && start.getMinutes() === slotMinute;
+    });
     if (existingSlot && !editingId) {
-      setSlotConflictWarning(`A manual entry already exists for ${slotHour}:00-${slotHour + 1}:00 on this machine/employee. Duplicate saves are blocked.`);
-      toast.error('Duplicate hourly slot entry is not allowed.');
+      setSlotConflictWarning(`A manual entry already exists for ${slotStartLabel}-${slotEndLabel} on this machine/employee. Duplicate saves are blocked.`);
+      toast.error('Duplicate time slot entry is not allowed.');
       return;
     }
     if (editingId && !editReason.trim()) {
@@ -805,9 +887,10 @@ export const ManualProductionEntryForm: React.FC = () => {
       toast.error('Output pairs must be 0 or greater');
       return;
     }
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const startTime = `${entryDate}T${pad(slotHour)}:00`;
-    const finishTime = `${entryDate}T${pad(slotHour + 1)}:00`;
+    const finishHour = Math.floor(slotEndMinutes / 60);
+    const finishMinute = slotEndMinutes % 60;
+    const startTime = `${entryDate}T${pad2(slotHour)}:${pad2(slotMinute)}:00`;
+    const finishTime = `${entryDate}T${pad2(finishHour)}:${pad2(finishMinute)}:00`;
 
     const payload = {
       prod_date: entryDate,
@@ -1210,21 +1293,69 @@ export const ManualProductionEntryForm: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Slot *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Slot Type *</label>
               <select
-                value={hourlySlot}
-                onChange={(e) => setHourlySlot(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
+                value={slotType}
+                onChange={(e) => {
+                  setSlotType(e.target.value as SlotType);
+                  setHourlySlot('');
+                  setManualStartTime('');
+                  setManualFinishTime('');
+                }}
+                className="w-full border border-gray-300 rounded-lg p-2.5 mb-2"
                 required
                 disabled={loading}
               >
-                <option value="">Select hourly slot</option>
-                {HOURLY_SLOTS.map((slot) => (
+                {SLOT_TYPES.map((slot) => (
                   <option key={slot.value} value={slot.value}>
                     {slot.label}
                   </option>
                 ))}
               </select>
+              {slotType === 'manual' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start *</label>
+                    <input
+                      type="time"
+                      value={manualStartTime}
+                      onChange={(e) => setManualStartTime(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg p-2.5"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Finish *</label>
+                    <input
+                      type="time"
+                      value={manualFinishTime}
+                      onChange={(e) => setManualFinishTime(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg p-2.5"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot *</label>
+                  <select
+                    value={hourlySlot}
+                    onChange={(e) => setHourlySlot(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg p-2.5"
+                    required
+                    disabled={loading}
+                  >
+                    <option value="">Select time slot</option>
+                    {slotOptions.map((slot) => (
+                      <option key={slot.value} value={slot.value}>
+                        {slot.label}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
 
             <div>
@@ -2222,7 +2353,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                                       <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
                                       <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
                                       <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
-                                      <td className={`p-2 ${dur !== null && dur < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{dur !== null ? `${dur}m` : '-'}</td>
+                                      <td className={`p-2 ${dur !== null && dur < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{dur !== null ? `${dur.toFixed(1)} m` : '-'}</td>
                                       <td className="p-2">{prodStatusBadge(Number(row.button_status || 0))}</td>
                                       <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
                                       <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>

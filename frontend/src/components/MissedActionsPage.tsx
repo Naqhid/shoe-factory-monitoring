@@ -32,13 +32,6 @@ type LocalActionMeta = {
   trail?: Array<{ action: string; at: string }>;
 };
 
-const SNOOZE_OPTIONS = [
-  { label: '15m', mins: 15 },
-  { label: '30m', mins: 30 },
-  { label: '1h', mins: 60 },
-  { label: 'End of shift', mins: 120 },
-];
-
 type DailyReportEvent = {
   id: number;
   work_centre_name: string;
@@ -64,6 +57,7 @@ type DailyReportLine = {
 };
 
 const LOCAL_META_KEY = 'missed_actions_meta_v2';
+const DAILY_MY_LINE_KEY = 'missed_actions_daily_my_line_v1';
 
 export const MissedActionsPage: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline'>('live');
@@ -74,6 +68,8 @@ export const MissedActionsPage: React.FC = () => {
   const [summary, setSummary] = React.useState({ total: 0, start_pending: 0, finish_pending: 0 });
   const [selectedLine, setSelectedLine] = React.useState<string>('all');
   const [issueFilter, setIssueFilter] = React.useState<'all' | 'START_PENDING' | 'FINISH_PENDING'>('all');
+  const [liveSort, setLiveSort] = React.useState<'priority' | 'overdue' | 'machine'>('priority');
+  const [showPriorityGuide, setShowPriorityGuide] = React.useState(false);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [showMuted, setShowMuted] = React.useState(false);
   const [dailyReportDate, setDailyReportDate] = React.useState<string>(new Date().toISOString().slice(0, 10));
@@ -92,10 +88,23 @@ export const MissedActionsPage: React.FC = () => {
   const [weeklyTrend, setWeeklyTrend] = React.useState<Array<{ day: string; cycles: number; inactive_mins: number; extra_mins: number; lost_mins: number }>>([]);
   const [dailyPage, setDailyPage] = React.useState(0);
   const [dailyPageSize, setDailyPageSize] = React.useState(10);
+  const [dailyTopOffendersOnly, setDailyTopOffendersOnly] = React.useState(false);
+  const [dailyBreachedOnly, setDailyBreachedOnly] = React.useState(false);
+  const [dailyMyLineOnly, setDailyMyLineOnly] = React.useState(false);
+  const [showAllLineRows, setShowAllLineRows] = React.useState(false);
+  const [preferredDailyLine, setPreferredDailyLine] = React.useState<string>(() => {
+    try {
+      return localStorage.getItem(DAILY_MY_LINE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [expandedMachineKeys, setExpandedMachineKeys] = React.useState<Record<string, boolean>>({});
   const [discExpandedKeys, setDiscExpandedKeys] = React.useState<Record<string, boolean>>({});
   const [discPage, setDiscPage] = React.useState(0);
   const [discPageSize, setDiscPageSize] = React.useState(10);
+  const [discVerdictFilter, setDiscVerdictFilter] = React.useState<'all' | 'late' | 'slow' | 'both'>('all');
+  const [discSort, setDiscSort] = React.useState<'combined' | 'late' | 'extra' | 'operator'>('combined');
   const [localMeta, setLocalMeta] = React.useState<Record<string, LocalActionMeta>>(() => {
     try {
       const raw = localStorage.getItem(LOCAL_META_KEY);
@@ -115,6 +124,16 @@ export const MissedActionsPage: React.FC = () => {
     if (tab === 'daily') setActiveTab('daily');
     if (tab === 'live') setActiveTab('live');
   }, []);
+
+  React.useEffect(() => {
+    if (dailyLine === 'all') return;
+    setPreferredDailyLine(dailyLine);
+    try {
+      localStorage.setItem(DAILY_MY_LINE_KEY, dailyLine);
+    } catch {
+      // non-blocking
+    }
+  }, [dailyLine]);
 
   const persistMeta = React.useCallback((next: Record<string, LocalActionMeta>) => {
     setLocalMeta(next);
@@ -251,29 +270,30 @@ export const MissedActionsPage: React.FC = () => {
   }, [items]);
 
   const getSeverity = (overdueMins: number) => {
-    if (overdueMins >= 60) return { label: 'Critical', cls: 'bg-red-100 text-red-700 border-red-200' };
-    if (overdueMins >= 30) return { label: 'High', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
-    if (overdueMins >= 10) return { label: 'Medium', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
-    return { label: 'Low', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
+    if (overdueMins >= 60) return { label: 'Critical', cls: 'bg-red-200 text-red-900 border-red-400' };
+    if (overdueMins >= 30) return { label: 'High', cls: 'bg-red-100 text-red-800 border-red-300' };
+    if (overdueMins >= 10) return { label: 'Medium', cls: 'bg-amber-200 text-amber-900 border-amber-400' };
+    return { label: 'Low', cls: 'bg-green-100 text-green-800 border-green-300' };
   };
 
   const getSlaStatus = (overdueMins: number) => {
     const rounded = Math.max(0, Math.round(Number(overdueMins || 0)));
-    if (rounded >= 30) return { label: `Breached by ${Math.max(0, rounded - 30)}m`, cls: 'text-red-700 bg-red-100', pct: 100, color: '#ef4444' };
-    if (rounded >= 15) return { label: `Warning (${rounded}m)`, cls: 'text-amber-700 bg-amber-100', pct: Math.round((rounded / 30) * 100), color: '#f59e0b' };
+    if (rounded >= 45) return { label: `Critical breach +${Math.max(0, rounded - 30)}m`, cls: 'text-red-900 bg-red-200', pct: 100, color: '#b91c1c' };
+    if (rounded >= 30) return { label: `Breached by ${Math.max(0, rounded - 30)}m`, cls: 'text-red-800 bg-red-100', pct: 100, color: '#ef4444' };
+    if (rounded >= 15) return { label: `Warning (${rounded}m)`, cls: 'text-amber-900 bg-amber-200', pct: Math.round((rounded / 30) * 100), color: '#d97706' };
     const dueIn = Math.max(0, 15 - rounded);
-    return { label: `Due in ${dueIn}m`, cls: 'text-blue-700 bg-blue-100', pct: Math.round((rounded / 30) * 100), color: '#3b82f6' };
+    return { label: `Due in ${dueIn}m`, cls: 'text-green-800 bg-green-100', pct: Math.round((rounded / 30) * 100), color: '#16a34a' };
   };
 
   const SlaCircle: React.FC<{ overdueMins: number }> = ({ overdueMins }) => {
     const sla = getSlaStatus(overdueMins);
-    const size = 44;
-    const stroke = 4;
+    const size = 30;
+    const stroke = 3;
     const r = (size - stroke) / 2;
     const circ = 2 * Math.PI * r;
     const filled = circ - (circ * Math.min(sla.pct, 100)) / 100;
     return (
-      <div className="flex flex-col items-center gap-0.5">
+      <div className="flex items-center justify-center opacity-60">
         <svg width={size} height={size} className="-rotate-90">
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={stroke} />
           <circle
@@ -285,7 +305,6 @@ export const MissedActionsPage: React.FC = () => {
             style={{ transition: 'stroke-dashoffset 0.6s ease' }}
           />
         </svg>
-        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${sla.cls}`}>{sla.label}</span>
       </div>
     );
   };
@@ -324,7 +343,7 @@ export const MissedActionsPage: React.FC = () => {
   }, [items]);
 
   const sortedFilteredItems = React.useMemo(() => {
-    return [...filteredItems].sort((a, b) => {
+    const base = [...filteredItems].sort((a, b) => {
       const recA = recurrenceMap.get(`${a.machine_id || a.machine_name}|${a.action_type}`) || 0;
       const recB = recurrenceMap.get(`${b.machine_id || b.machine_name}|${b.action_type}`) || 0;
       const priA = getPriorityScore(a, recA);
@@ -332,7 +351,14 @@ export const MissedActionsPage: React.FC = () => {
       if (priA !== priB) return priB - priA;
       return b.overdue_mins - a.overdue_mins;
     });
-  }, [filteredItems, recurrenceMap]);
+    if (liveSort === 'overdue') {
+      return base.sort((a, b) => Number(b.overdue_mins || 0) - Number(a.overdue_mins || 0));
+    }
+    if (liveSort === 'machine') {
+      return base.sort((a, b) => String(a.machine_name || '').localeCompare(String(b.machine_name || '')));
+    }
+    return base;
+  }, [filteredItems, recurrenceMap, liveSort]);
 
   const filteredSummary = React.useMemo(() => {
     return {
@@ -472,6 +498,75 @@ export const MissedActionsPage: React.FC = () => {
     return rows;
   }, [dailyEvents]);
 
+  const dailyFilteredEvents = React.useMemo(() => {
+    let rows = [...dailyEvents];
+    if (dailyMyLineOnly && preferredDailyLine) {
+      rows = rows.filter((r) => String(r.work_centre_name) === preferredDailyLine);
+    }
+    if (dailyBreachedOnly) {
+      rows = rows.filter((r) => Number(r.inactive_mins || 0) >= 15 || Number(r.extra_mins || 0) > 0);
+    }
+    return rows;
+  }, [dailyEvents, dailyMyLineOnly, preferredDailyLine, dailyBreachedOnly]);
+
+  const dailyVisibleSummary = React.useMemo(() => {
+    const totalCycles = dailyFilteredEvents.length;
+    const inactive = dailyFilteredEvents.reduce((sum, e) => sum + Number(e.inactive_mins || 0), 0);
+    const extra = dailyFilteredEvents.reduce((sum, e) => sum + Number(e.extra_mins || 0), 0);
+    return {
+      total_cycles: totalCycles,
+      total_inactive_mins: inactive,
+      total_extra_mins: extra,
+      total_lost_mins: inactive + extra,
+    };
+  }, [dailyFilteredEvents]);
+
+  const dailyVisibleLineLossRows = React.useMemo(() => {
+    const byLine = new Map<string, { work_centre_name: string; cycles: number; inactive: number; extra: number; lost: number; perCycle: number }>();
+    dailyFilteredEvents.forEach((e) => {
+      const line = e.work_centre_name || 'N/A';
+      if (!byLine.has(line)) byLine.set(line, { work_centre_name: line, cycles: 0, inactive: 0, extra: 0, lost: 0, perCycle: 0 });
+      const row = byLine.get(line)!;
+      row.cycles += 1;
+      row.inactive += Number(e.inactive_mins || 0);
+      row.extra += Number(e.extra_mins || 0);
+      row.lost = row.inactive + row.extra;
+      row.perCycle = row.cycles > 0 ? row.lost / row.cycles : 0;
+    });
+    let rows = Array.from(byLine.values()).sort((a, b) => b.lost - a.lost);
+    if (dailyTopOffendersOnly) rows = rows.slice(0, 5);
+    if (!showAllLineRows) rows = rows.slice(0, 8);
+    return rows;
+  }, [dailyFilteredEvents, dailyTopOffendersOnly, showAllLineRows]);
+
+  const dailyVisibleLineMachineGroups = React.useMemo(() => {
+    let groups = [...dailyLineMachineGroups];
+    if (dailyMyLineOnly && preferredDailyLine) {
+      groups = groups.filter((g) => g.lineName === preferredDailyLine);
+    }
+    if (dailyBreachedOnly) {
+      groups = groups
+        .map((g) => ({
+          ...g,
+          machines: g.machines
+            .map((m) => ({
+              ...m,
+              events: m.events.filter((e) => Number(e.inactive_mins || 0) >= 15 || Number(e.extra_mins || 0) > 0),
+            }))
+            .filter((m) => m.events.length > 0),
+        }))
+        .filter((g) => g.machines.length > 0);
+    }
+    if (dailyTopOffendersOnly) groups = groups.slice(0, 5);
+    return groups;
+  }, [dailyLineMachineGroups, dailyMyLineOnly, preferredDailyLine, dailyBreachedOnly, dailyTopOffendersOnly]);
+
+  const previousDayTrend = React.useMemo(() => {
+    if (!weeklyTrend || weeklyTrend.length < 2) return null;
+    const sorted = [...weeklyTrend].sort((a, b) => String(a.day).localeCompare(String(b.day)));
+    return sorted[sorted.length - 2] || null;
+  }, [weeklyTrend]);
+
   const acknowledgeItem = async (item: MissedAction) => {
     if (!item.issue_key) return;
     setIsActionLoading(item.issue_key);
@@ -595,6 +690,20 @@ export const MissedActionsPage: React.FC = () => {
     }
   };
 
+  const handleSecondaryAction = async (item: MissedAction, action: string) => {
+    if (!action) return;
+    if (action === 'unmute') {
+      await unmuteItem(item);
+      return;
+    }
+    if (action.startsWith('snooze_')) {
+      const mins = Number(action.replace('snooze_', ''));
+      if (Number.isFinite(mins) && mins > 0) {
+        await snoozeItem(item, mins);
+      }
+    }
+  };
+
   const exportFilteredCsv = () => {
     if (sortedFilteredItems.length === 0) return;
     const headers = ['line', 'machine', 'operator', 'issue', 'overdue_mins', 'severity', 'priority_score', 'sla_status', 'root_cause', 'acknowledged_by', 'last_action', 'details'];
@@ -638,18 +747,18 @@ export const MissedActionsPage: React.FC = () => {
   };
 
   const exportDailyCsv = () => {
-    if (dailyEvents.length === 0) return;
+    if (dailyFilteredEvents.length === 0) return;
     const headers = ['line', 'machine', 'operator', 'start_time', 'finish_time', 'target_mins', 'actual_mins', 'inactive_mins', 'extra_mins'];
     const rows = [
       `"snapshot_at","${new Date().toISOString()}"`,
       `"report_date","${dailyReportDate} to ${dailyDateTo}"`,
-      `"total_cycles","${dailySummary.total_cycles}"`,
-      `"total_inactive_mins","${dailySummary.total_inactive_mins}"`,
-      `"total_extra_mins","${dailySummary.total_extra_mins}"`,
-      `"total_lost_mins","${dailySummary.total_lost_mins}"`,
+      `"total_cycles","${dailyVisibleSummary.total_cycles}"`,
+      `"total_inactive_mins","${dailyVisibleSummary.total_inactive_mins}"`,
+      `"total_extra_mins","${dailyVisibleSummary.total_extra_mins}"`,
+      `"total_lost_mins","${dailyVisibleSummary.total_lost_mins}"`,
       '',
       headers.join(','),
-      ...dailyEvents.map((i) => {
+      ...dailyFilteredEvents.map((i) => {
         const vals = [
           i.work_centre_name,
           i.machine_name || i.machine_id,
@@ -675,6 +784,38 @@ export const MissedActionsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const exportDailySummaryCsv = () => {
+    if (dailyVisibleLineLossRows.length === 0) return;
+    const headers = ['line', 'cycles', 'inactive_mins', 'extra_mins', 'lost_mins', 'loss_per_cycle'];
+    const rows = [
+      `"snapshot_at","${new Date().toISOString()}"`,
+      `"report_date","${dailyReportDate} to ${dailyDateTo}"`,
+      `"total_cycles","${dailyVisibleSummary.total_cycles}"`,
+      `"total_inactive_mins","${dailyVisibleSummary.total_inactive_mins}"`,
+      `"total_extra_mins","${dailyVisibleSummary.total_extra_mins}"`,
+      `"total_lost_mins","${dailyVisibleSummary.total_lost_mins}"`,
+      '',
+      headers.join(','),
+      ...dailyVisibleLineLossRows.map((row) => [
+        `"${row.work_centre_name}"`,
+        row.cycles,
+        `"${formatMinutes(row.inactive)}"`,
+        `"${formatMinutes(row.extra)}"`,
+        `"${formatMinutes(row.lost)}"`,
+        `"${formatMinutes(row.perCycle)}"`,
+      ].join(',')),
+    ];
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `missed_actions_daily_summary_${dailyReportDate}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const formatMinutes = (value: number) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n)) return '0';
@@ -683,6 +824,15 @@ export const MissedActionsPage: React.FC = () => {
       maximumFractionDigits: 2,
     });
   };
+
+  const criticalItemsCount = React.useMemo(
+    () => sortedFilteredItems.filter((item) => Number(item.overdue_mins || 0) >= 60).length,
+    [sortedFilteredItems]
+  );
+  const maxOverdueMins = React.useMemo(
+    () => sortedFilteredItems.reduce((max, item) => Math.max(max, Math.round(Number(item.overdue_mins || 0))), 0),
+    [sortedFilteredItems]
+  );
 
   return (
     <div className="min-h-screen bg-gray-100 px-2 py-4 sm:px-3 sm:py-6">
@@ -724,68 +874,54 @@ export const MissedActionsPage: React.FC = () => {
             </p>
             <p className="text-xs text-gray-400">Auto-refresh every 30s</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            <button
-              onClick={() => setShowMuted((v) => !v)}
-              className={`inline-flex w-full justify-center items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] sm:text-xs font-semibold border ${
-                showMuted ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-gray-50 text-gray-600 border-gray-200'
-              }`}
-            >
-              <BellOff className="h-3.5 w-3.5" />
-              {showMuted ? 'Hide Muted' : 'Show Muted'}
-            </button>
-            <button
-              onClick={acknowledgeFiltered}
-              disabled={sortedFilteredItems.length === 0 || isActionLoading === '__bulk__'}
-              className="inline-flex w-full justify-center items-center gap-2 px-2.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs font-semibold disabled:opacity-60"
-            >
-              {isActionLoading === '__bulk__' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              Ack Filtered
-            </button>
-            <button
-              onClick={exportFilteredCsv}
-              disabled={sortedFilteredItems.length === 0}
-              className="inline-flex w-full justify-center items-center gap-2 px-2.5 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-[11px] sm:text-xs font-semibold disabled:opacity-60"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export CSV
-            </button>
-            <button
-              onClick={fetchData}
-              disabled={isLoading}
-              className="inline-flex w-full justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold disabled:opacity-60"
-            >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Refresh
-            </button>
-          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="bg-indigo-100 rounded-xl border-2 border-indigo-300 p-4 shadow-sm">
             <p className="text-xs text-gray-500 font-semibold uppercase">Total Alerts</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{filteredSummary.total}</p>
+            <p className="text-5xl font-black text-indigo-900 mt-1">{filteredSummary.total}</p>
           </div>
-          <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
-            <p className="text-xs text-amber-700 font-semibold uppercase">Start Not Clicked</p>
-            <p className="text-3xl font-bold text-amber-700 mt-1">{filteredSummary.start_pending}</p>
+          <div className="bg-amber-100 rounded-xl border-2 border-amber-400 p-4 shadow-sm">
+            <p className="text-xs text-amber-800 font-semibold uppercase">Start Not Clicked</p>
+            <p className="text-5xl font-black text-amber-900 mt-1">{filteredSummary.start_pending}</p>
           </div>
-          <div className="bg-white rounded-xl border border-red-200 p-4 shadow-sm">
-            <p className="text-xs text-red-700 font-semibold uppercase">Finish Not Clicked</p>
-            <p className="text-3xl font-bold text-red-700 mt-1">{filteredSummary.finish_pending}</p>
+          <div className="bg-red-100 rounded-xl border-2 border-red-400 p-4 shadow-sm">
+            <p className="text-xs text-red-800 font-semibold uppercase">Finish Not Clicked</p>
+            <p className="text-5xl font-black text-red-900 mt-1">{filteredSummary.finish_pending}</p>
           </div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Priority Score Guide</p>
-          <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">2 — Low overdue</span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">3 — 15m+</span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold">4 — 30m+</span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">5 — 60m+ Critical</span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-200 text-red-800 text-xs font-semibold">+1 Finish Pending</span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">+1 Repeated 3×</span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">max 7</span>
+        {criticalItemsCount > 0 && (
+          <div className="bg-red-100 border-2 border-red-300 rounded-xl px-4 py-3 shadow-sm flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-red-900">
+              Critical attention: {criticalItemsCount} issue(s) are 60m+ overdue
+            </p>
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-red-200 text-red-900 text-xs font-bold animate-pulse">
+              Max overdue: {maxOverdueMins}m
+            </span>
           </div>
+        )}
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Priority Score Guide</p>
+            <button
+              type="button"
+              onClick={() => setShowPriorityGuide((v) => !v)}
+              className="text-xs font-semibold text-blue-700 hover:text-blue-800"
+            >
+              {showPriorityGuide ? 'Hide guide' : 'Show guide'}
+            </button>
+          </div>
+          {showPriorityGuide && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">2 — Low overdue</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">3 — 15m+</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold">4 — 30m+</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">5 — 60m+ Critical</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-200 text-red-800 text-xs font-semibold">+1 Finish Pending</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">+1 Repeated 3×</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">max 7</span>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -829,8 +965,60 @@ export const MissedActionsPage: React.FC = () => {
                 </button>
               </div>
             </div>
+            <div className="w-full sm:w-auto">
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sort By</label>
+              <select
+                value={liveSort}
+                onChange={(e) => setLiveSort(e.target.value as 'priority' | 'overdue' | 'machine')}
+                className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+              >
+                <option value="priority">Priority (default)</option>
+                <option value="overdue">Overdue (high to low)</option>
+                <option value="machine">Machine (A-Z)</option>
+              </select>
+            </div>
+            <div className="w-full lg:w-auto lg:ml-auto grid grid-cols-2 lg:flex gap-2">
+              <button
+                onClick={() => setShowMuted((v) => !v)}
+                className={`inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold border ${
+                  showMuted ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-gray-600 border-gray-300'
+                }`}
+              >
+                <BellOff className="h-3.5 w-3.5" />
+                {showMuted ? 'Hide Muted' : 'Show Muted'}
+              </button>
+              <button
+                onClick={acknowledgeFiltered}
+                disabled={sortedFilteredItems.length === 0 || isActionLoading === '__bulk__'}
+                className="inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-60"
+              >
+                {isActionLoading === '__bulk__' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                Ack Filtered
+              </button>
+              <button
+                onClick={exportFilteredCsv}
+                disabled={sortedFilteredItems.length === 0}
+                className="inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold disabled:opacity-60"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </button>
+              <button
+                onClick={fetchData}
+                disabled={isLoading}
+                className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-60"
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Refresh
+              </button>
+            </div>
             <div className="w-full md:ml-auto md:w-auto text-xs text-gray-500">
               Showing {filteredItems.length} of {items.length} total
+            </div>
+            <div className="w-full flex flex-wrap gap-1.5">
+              {selectedLine !== 'all' && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Line: {selectedLine}</span>}
+              {issueFilter !== 'all' && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">Issue: {issueFilter === 'START_PENDING' ? 'Start Pending' : 'Finish Pending'}</span>}
+              {liveSort !== 'priority' && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">Sort: {liveSort}</span>}
             </div>
           </div>
 
@@ -864,7 +1052,10 @@ export const MissedActionsPage: React.FC = () => {
                       const meta = localMeta[item.issue_key] || {};
                       const overdueMinsRounded = Math.round(Number(item.overdue_mins || 0));
                       return (
-                        <div key={`${item.session_id}-${item.machine_id}-${item.action_type}`} className="p-2.5 sm:p-3 space-y-2.5 sm:space-y-3">
+                        <div
+                          key={`${item.session_id}-${item.machine_id}-${item.action_type}`}
+                          className={`p-3 sm:p-3.5 space-y-3 sm:space-y-3.5 ${Number(item.overdue_mins || 0) >= 60 ? 'bg-red-50/70 ring-1 ring-red-200' : ''}`}
+                        >
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="text-sm font-semibold text-gray-800">{item.machine_name}</p>
@@ -877,17 +1068,19 @@ export const MissedActionsPage: React.FC = () => {
                             </span>
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${severity.cls}`}>
-                              {severity.label}
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] leading-none font-semibold border whitespace-nowrap ${severity.cls}`}>
+                              {overdueMinsRounded}m overdue • {severity.label}
                             </span>
                             {recurrence > 1 && (
-                              <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-700">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${recurrence >= 3 ? 'bg-red-200 text-red-900' : 'bg-purple-100 text-purple-700'}`}>
                                 Repeat x{recurrence}
                               </span>
                             )}
-                            <SlaCircle overdueMins={item.overdue_mins} />
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">{overdueMinsRounded}m overdue</span>
+                            <div className="inline-flex items-center gap-1">
+                              <SlaCircle overdueMins={item.overdue_mins} />
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${sla.cls}`}>{sla.label}</span>
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-1 gap-1.5 sm:gap-2 text-xs">
@@ -928,59 +1121,40 @@ export const MissedActionsPage: React.FC = () => {
 
                           <div className="text-xs text-gray-600">
                             {meta.lastAction ? (
-                              <div>
-                                <div className="font-semibold text-gray-700">{meta.lastAction}</div>
+                              <div className="space-y-1">
+                                <div className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.lastAction.toLowerCase().includes('resolve') ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{meta.lastAction}</div>
                                 <div className="text-[11px] text-gray-500">{meta.lastActionAt ? new Date(meta.lastActionAt).toLocaleString() : ''}</div>
                               </div>
                             ) : (
-                              <span className="text-xs text-gray-400">No action yet</span>
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">Pending</span>
                             )}
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2 items-center">
                             <button
                               type="button"
                               onClick={() => acknowledgeItem(item)}
                               disabled={isActionLoading === item.issue_key}
-                              className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-green-600 text-white text-xs font-semibold hover:bg-green-700"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" /> Ack
                             </button>
-                            {(item.state?.is_snoozed || item.state?.acknowledged) && (
-                              <button
-                                type="button"
-                                onClick={() => unmuteItem(item)}
-                                disabled={isActionLoading === item.issue_key}
-                                className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 border border-orange-200"
-                              >
-                                <BellOff className="h-3.5 w-3.5" /> Unmute
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => logLocalAction(item, 'Called operator')}
-                              className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100"
+                            <select
+                              defaultValue=""
+                              onChange={(e) => {
+                                handleSecondaryAction(item, e.target.value);
+                                e.target.value = '';
+                              }}
+                              disabled={isActionLoading === item.issue_key}
+                              className="px-2.5 py-1.5 rounded border border-gray-300 text-xs font-semibold text-gray-700 bg-white"
                             >
-                              Called
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => logLocalAction(item, 'Resolved')}
-                              className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100"
-                            >
-                              Resolved
-                            </button>
-                            {SNOOZE_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.mins}
-                                type="button"
-                                onClick={() => snoozeItem(item, opt.mins)}
-                                disabled={isActionLoading === item.issue_key}
-                                className="inline-flex items-center gap-1 px-2 py-1.5 rounded bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100"
-                              >
-                                <BellOff className="h-3.5 w-3.5" /> {opt.label}
-                              </button>
-                            ))}
+                              <option value="">Escalate</option>
+                              <option value="snooze_15">Snooze 15m</option>
+                              <option value="snooze_30">Snooze 30m</option>
+                              <option value="snooze_60">Snooze 1h</option>
+                              <option value="snooze_120">Snooze end of shift</option>
+                              {(item.state?.is_snoozed || item.state?.acknowledged) && <option value="unmute">Unmute</option>}
+                            </select>
                           </div>
                         </div>
                       );
@@ -1011,10 +1185,10 @@ export const MissedActionsPage: React.FC = () => {
                           const priority = getPriorityScore(item, recurrence);
                           const meta = localMeta[item.issue_key] || {};
                           return (
-                            <tr key={`${item.session_id}-${item.machine_id}-${item.action_type}`}>
-                              <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{item.machine_name}</td>
-                              <td className="px-3 py-2.5 text-sm text-gray-700">{item.employee_name} ({item.employee_code})</td>
-                              <td className="px-3 py-2.5 text-sm">
+                            <tr key={`${item.session_id}-${item.machine_id}-${item.action_type}`} className={Number(item.overdue_mins || 0) >= 60 ? 'bg-red-50' : ''}>
+                              <td className="px-3 py-3.5 text-sm font-semibold text-gray-800">{item.machine_name}</td>
+                              <td className="px-3 py-3.5 text-sm text-gray-700">{item.employee_name} ({item.employee_code})</td>
+                              <td className="px-3 py-3.5 text-sm">
                                 <span className={`inline-flex items-center justify-center min-w-[118px] px-2.5 py-1 rounded-full text-[11px] leading-none font-semibold whitespace-nowrap ${
                                   item.action_type === 'START_PENDING'
                                     ? 'bg-amber-100 text-amber-700'
@@ -1023,29 +1197,36 @@ export const MissedActionsPage: React.FC = () => {
                                   {item.action_label}
                                 </span>
                               </td>
-                              <td className="px-3 py-2.5 text-sm font-bold text-gray-800">{Math.round(Number(item.overdue_mins || 0))}m</td>
-                              <td className="px-3 py-2.5 text-sm">
+                              <td className="px-3 py-3.5 text-sm">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] leading-none font-semibold border whitespace-nowrap ${severity.cls}`}>
+                                  {Math.round(Number(item.overdue_mins || 0))}m overdue • {severity.label}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3.5 text-sm">
                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${severity.cls}`}>
                                   {severity.label}
                                 </span>
                                 {recurrence > 1 && (
-                                  <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-700">
+                                  <span className={`ml-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${recurrence >= 3 ? 'bg-red-200 text-red-900' : 'bg-purple-100 text-purple-700'}`}>
                                     Repeat x{recurrence}
                                   </span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-sm font-bold text-gray-800">{priority}</td>
-                              <td className="px-3 py-2.5 text-sm">
-                                <SlaCircle overdueMins={item.overdue_mins} />
+                              <td className="px-3 py-3.5 text-sm font-bold text-gray-800">{priority}</td>
+                              <td className="px-3 py-3.5 text-sm">
+                                <div className="inline-flex items-center gap-1">
+                                  <SlaCircle overdueMins={item.overdue_mins} />
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${sla.cls}`}>{sla.label}</span>
+                                </div>
                               </td>
-                              <td className="px-3 py-2.5 text-sm text-gray-600">
+                              <td className="px-3 py-3.5 text-sm text-gray-600">
                                 <div>{item.details}</div>
                                 <div className="mt-1 flex gap-2">
                                   <a className="text-[11px] font-semibold text-blue-600 hover:text-blue-700" href="/production_tracker">Open Tracker</a>
                                   <a className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700" href={`/mobile/${encodeURIComponent(item.machine_id || item.machine_name || '')}`}>Open Machine</a>
                                 </div>
                               </td>
-                              <td className="px-3 py-2.5 text-sm">
+                              <td className="px-3 py-3.5 text-sm">
                                 <select
                                   value={item.state?.root_cause || ''}
                                   onChange={(e) => saveRootCause(item, e.target.value)}
@@ -1060,64 +1241,45 @@ export const MissedActionsPage: React.FC = () => {
                                   <option value="Other">Other</option>
                                 </select>
                               </td>
-                              <td className="px-3 py-2.5 text-sm text-gray-600">
+                              <td className="px-3 py-3.5 text-sm text-gray-600">
                                 {item.state?.acknowledged && item.state.acknowledged_by && (
                                   <p className="text-[11px] text-gray-500 mb-1">Acked by: <span className="font-semibold">{item.state.acknowledged_by}</span></p>
                                 )}
                                 {meta.lastAction ? (
-                                  <div>
-                                    <div className="font-semibold text-gray-700">{meta.lastAction}</div>
+                                  <div className="space-y-1">
+                                    <div className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.lastAction.toLowerCase().includes('resolve') ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{meta.lastAction}</div>
                                     <div className="text-[11px] text-gray-500">{meta.lastActionAt ? new Date(meta.lastActionAt).toLocaleString() : ''}</div>
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-gray-400">No action yet</span>
+                                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">Pending</span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-sm">
+                              <td className="px-3 py-3.5 text-sm">
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <button
                                       type="button"
                                       onClick={() => acknowledgeItem(item)}
                                       disabled={isActionLoading === item.issue_key}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-green-600 text-white text-xs font-semibold hover:bg-green-700"
                                     >
                                       <CheckCircle2 className="h-3.5 w-3.5" /> Ack
                                     </button>
-                                    {(item.state?.is_snoozed || item.state?.acknowledged) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => unmuteItem(item)}
-                                        disabled={isActionLoading === item.issue_key}
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100 border border-orange-200"
-                                      >
-                                        <BellOff className="h-3.5 w-3.5" /> Unmute
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => logLocalAction(item, 'Called operator')}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100"
+                                    <select
+                                      defaultValue=""
+                                      onChange={(e) => {
+                                        handleSecondaryAction(item, e.target.value);
+                                        e.target.value = '';
+                                      }}
+                                      disabled={isActionLoading === item.issue_key}
+                                      className="px-2.5 py-1.5 rounded border border-gray-300 text-xs font-semibold text-gray-700 bg-white min-w-[140px]"
                                     >
-                                      Called
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => logLocalAction(item, 'Resolved')}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100"
-                                    >
-                                      Resolved
-                                    </button>
-                                    {SNOOZE_OPTIONS.map((opt) => (
-                                      <button
-                                        key={opt.mins}
-                                        type="button"
-                                        onClick={() => snoozeItem(item, opt.mins)}
-                                        disabled={isActionLoading === item.issue_key}
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100"
-                                      >
-                                        <BellOff className="h-3.5 w-3.5" /> {opt.label}
-                                      </button>
-                                    ))}
+                                      <option value="">Escalate</option>
+                                      <option value="snooze_15">Snooze 15m</option>
+                                      <option value="snooze_30">Snooze 30m</option>
+                                      <option value="snooze_60">Snooze 1h</option>
+                                      <option value="snooze_120">Snooze end of shift</option>
+                                      {(item.state?.is_snoozed || item.state?.acknowledged) && <option value="unmute">Unmute</option>}
+                                    </select>
                                   </div>
                               </td>
                             </tr>
@@ -1135,7 +1297,7 @@ export const MissedActionsPage: React.FC = () => {
         ) : activeTab === 'daily' ? (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
                   <input
@@ -1182,34 +1344,77 @@ export const MissedActionsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={exportDailyCsv}
-                  disabled={dailyEvents.length === 0}
+                  disabled={dailyFilteredEvents.length === 0}
                   className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-60"
                 >
                   <Download className="h-4 w-4" />
-                  Export CSV
+                  Export Detailed
                 </button>
+                <button
+                  type="button"
+                  onClick={exportDailySummaryCsv}
+                  disabled={dailyVisibleLineLossRows.length === 0}
+                  className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold disabled:opacity-60"
+                >
+                  <Download className="h-4 w-4" />
+                  Export Summary
+                </button>
+              </div>
+              <div className="mt-3 border-t border-gray-100 pt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDailyTopOffendersOnly((v) => !v)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${dailyTopOffendersOnly ? 'bg-red-100 text-red-800 border-red-300' : 'bg-white text-gray-700 border-gray-300'}`}
+                >
+                  Top offenders only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDailyBreachedOnly((v) => !v)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${dailyBreachedOnly ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-gray-700 border-gray-300'}`}
+                >
+                  Breached only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDailyMyLineOnly((v) => !v)}
+                  disabled={!preferredDailyLine}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${dailyMyLineOnly ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-white text-gray-700 border-gray-300'} disabled:opacity-50`}
+                >
+                  My line only {preferredDailyLine ? `(${preferredDailyLine})` : '(set line first)'}
+                </button>
+                <div className="ml-auto text-[11px] text-gray-500 flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">Inactive = blue</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Extra = amber</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Loss = red</span>
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              <div className="bg-white rounded-xl border border-red-200 p-4 shadow-sm">
+              <div className="bg-red-50 rounded-xl border-2 border-red-300 p-5 shadow-sm">
                 <p className="text-[11px] text-red-700 font-semibold uppercase tracking-wide">Total Lost Minutes</p>
-                <p className="text-3xl font-bold text-red-700 mt-1">{formatMinutes(dailySummary.total_lost_mins)}</p>
+                <p className="text-4xl font-black text-red-800 mt-1">{formatMinutes(dailyVisibleSummary.total_lost_mins)}</p>
+                {previousDayTrend && (
+                  <p className={`text-xs mt-1 font-semibold ${dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? '↓' : '↑'} vs previous day ({formatMinutes(previousDayTrend.lost_mins)}m)
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">Inactive + extra minutes</p>
               </div>
-              <div className="bg-white rounded-xl border border-blue-200 p-4 shadow-sm">
+              <div className="bg-blue-50 rounded-xl border-2 border-blue-300 p-5 shadow-sm">
                 <p className="text-[11px] text-blue-700 font-semibold uppercase tracking-wide">Inactive Minutes</p>
-                <p className="text-3xl font-bold text-blue-700 mt-1">{formatMinutes(dailySummary.total_inactive_mins)}</p>
+                <p className="text-4xl font-black text-blue-800 mt-1">{formatMinutes(dailyVisibleSummary.total_inactive_mins)}</p>
                 <p className="text-xs text-gray-500 mt-1">Waiting / no-start loss</p>
               </div>
-              <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
+              <div className="bg-amber-50 rounded-xl border-2 border-amber-300 p-5 shadow-sm">
                 <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Extra Minutes</p>
-                <p className="text-3xl font-bold text-amber-700 mt-1">{formatMinutes(dailySummary.total_extra_mins)}</p>
+                <p className="text-4xl font-black text-amber-800 mt-1">{formatMinutes(dailyVisibleSummary.total_extra_mins)}</p>
                 <p className="text-xs text-gray-500 mt-1">Cycle over target duration</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                 <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Total Cycles</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{dailySummary.total_cycles}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{dailyVisibleSummary.total_cycles}</p>
                 <p className="text-xs text-gray-500 mt-1">Completed cycles for selected date</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
@@ -1223,9 +1428,9 @@ export const MissedActionsPage: React.FC = () => {
                 <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">
                   Worst Line {dailyReportDate === dailyDateTo ? '(Today)' : `(${dailyReportDate} – ${dailyDateTo})`}
                 </p>
-                <p className="text-xl font-bold text-amber-700 mt-1">{lineLossRows[0]?.work_centre_name || '-'}</p>
+                <p className="text-xl font-bold text-amber-700 mt-1">{dailyVisibleLineLossRows[0]?.work_centre_name || '-'}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {lineLossRows[0] ? `${formatMinutes(lineLossRows[0].lost)} min loss` : 'No data'}
+                  {dailyVisibleLineLossRows[0] ? `${formatMinutes(dailyVisibleLineLossRows[0].lost)} min loss` : 'No data'}
                 </p>
               </div>
             </div>
@@ -1234,9 +1439,14 @@ export const MissedActionsPage: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div className="xl:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="p-3 border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700">Line Loss Ranking</div>
+                  <div className="p-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-gray-700">Line Loss Ranking</span>
+                    <button type="button" onClick={() => setShowAllLineRows((v) => !v)} className="text-xs font-semibold text-blue-700 hover:text-blue-800">
+                      {showAllLineRows ? 'Show fewer' : 'View all'}
+                    </button>
+                  </div>
                   <div className="overflow-x-auto">
-                    {lineLossRows.length === 0 ? (
+                    {dailyVisibleLineLossRows.length === 0 ? (
                       <p className="px-4 py-6 text-sm text-gray-400 text-center">No loss data for the selected period.</p>
                     ) : (
                       <table className="min-w-full">
@@ -1251,7 +1461,7 @@ export const MissedActionsPage: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {lineLossRows.map((row) => (
+                          {dailyVisibleLineLossRows.map((row) => (
                             <tr key={row.work_centre_name}>
                               <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{row.work_centre_name}</td>
                               <td className="px-3 py-2.5 text-sm text-gray-700">{row.cycles}</td>
@@ -1295,7 +1505,7 @@ export const MissedActionsPage: React.FC = () => {
                       <div>
                         <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Last 7 Days</p>
                         <div className="space-y-2">
-                          {weeklyTrend.map((d) => {
+                          {(showAllLineRows ? weeklyTrend : weeklyTrend.slice(-5)).map((d) => {
                             const max = Math.max(1, ...weeklyTrend.map((x) => x.lost_mins));
                             const width = `${Math.max(4, Math.round((d.lost_mins / max) * 100))}%`;
                             const label = new Date(d.day + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -1327,7 +1537,7 @@ export const MissedActionsPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       const next: Record<string, boolean> = {};
-                      dailyLineMachineGroups.forEach((line) => {
+                      dailyVisibleLineMachineGroups.forEach((line) => {
                         line.machines.forEach((machine) => {
                           next[`${line.lineName}__${machine.machineKey}`] = true;
                         });
@@ -1349,7 +1559,7 @@ export const MissedActionsPage: React.FC = () => {
               </div>
 
               <div className="p-3 space-y-3">
-                {dailyLineMachineGroups.slice(dailyPage * dailyPageSize, (dailyPage + 1) * dailyPageSize).map((line) => (
+                {dailyVisibleLineMachineGroups.slice(dailyPage * dailyPageSize, (dailyPage + 1) * dailyPageSize).map((line) => (
                   <div key={line.lineName} className="border border-gray-200 rounded-xl overflow-hidden">
                     <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                       <p className="text-sm font-bold text-gray-700">{line.lineName}</p>
@@ -1394,6 +1604,16 @@ export const MissedActionsPage: React.FC = () => {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
+                                    <tr className="bg-blue-50">
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">Summary</td>
+                                      <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>
+                                        Cycles: {machine.events.length}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">—</td>
+                                    </tr>
                                     {machine.events.map((row) => (
                                       <tr key={row.id}>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.employee_name} ({row.employee_code})</td>
@@ -1441,11 +1661,11 @@ export const MissedActionsPage: React.FC = () => {
                   </div>
                 ))}
               </div>
-              {dailyLineMachineGroups.length > 0 && (() => {
-                const totalDailyPages = dailyPageSize === 0 ? 1 : Math.ceil(dailyLineMachineGroups.length / dailyPageSize);
+              {dailyVisibleLineMachineGroups.length > 0 && (() => {
+                const totalDailyPages = dailyPageSize === 0 ? 1 : Math.ceil(dailyVisibleLineMachineGroups.length / dailyPageSize);
                 return (
                   <div className="px-3 pb-3 pt-3 flex items-center justify-between text-xs text-gray-600 border-t border-gray-100">
-                    <span>Page {dailyPageSize === 0 ? 1 : dailyPage + 1} of {totalDailyPages} &mdash; {dailyLineMachineGroups.length} line(s) total</span>
+                    <span>Page {dailyPageSize === 0 ? 1 : dailyPage + 1} of {totalDailyPages} &mdash; {dailyVisibleLineMachineGroups.length} line(s) total</span>
                     <div className="flex items-center gap-2">
                       <select
                         value={dailyPageSize}
@@ -1470,7 +1690,7 @@ export const MissedActionsPage: React.FC = () => {
         {activeTab === 'discipline' && (
           <div className="space-y-3">
             <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
                   <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => { setDailyReportDate(e.target.value); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
@@ -1486,10 +1706,33 @@ export const MissedActionsPage: React.FC = () => {
                     {dailyByLine.map((l) => <option key={l.work_centre_name} value={l.work_centre_name}>{l.work_centre_name}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Verdict</label>
+                  <select value={discVerdictFilter} onChange={(e) => { setDiscVerdictFilter(e.target.value as 'all' | 'late' | 'slow' | 'both'); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white">
+                    <option value="all">All</option>
+                    <option value="late">Late start</option>
+                    <option value="slow">Slow finish</option>
+                    <option value="both">Late + Slow</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sort By</label>
+                  <select value={discSort} onChange={(e) => { setDiscSort(e.target.value as 'combined' | 'late' | 'extra' | 'operator'); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white">
+                    <option value="combined">Combined loss</option>
+                    <option value="late">Started late</option>
+                    <option value="extra">Finished extra</option>
+                    <option value="operator">Operator name</option>
+                  </select>
+                </div>
                 <button type="button" onClick={fetchDailyReport} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Refresh
                 </button>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">Blue = started late</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Amber = finished over</span>
+                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Red = both</span>
               </div>
             </div>
 
@@ -1498,9 +1741,24 @@ export const MissedActionsPage: React.FC = () => {
             )}
 
             {(() => {
-              const disciplineRows = dailyEvents
-                .filter((e) => Math.round(e.inactive_mins || 0) > 0 || Math.round(e.extra_mins || 0) > 0)
-                .sort((a, b) => (b.inactive_mins + b.extra_mins) - (a.inactive_mins + a.extra_mins));
+              let disciplineRows = dailyEvents
+                .filter((e) => Math.round(e.inactive_mins || 0) > 0 || Math.round(e.extra_mins || 0) > 0);
+
+              disciplineRows = disciplineRows.filter((e) => {
+                const late = Math.round(e.inactive_mins || 0);
+                const extra = Math.round(e.extra_mins || 0);
+                if (discVerdictFilter === 'late') return late > 0 && extra === 0;
+                if (discVerdictFilter === 'slow') return late === 0 && extra > 0;
+                if (discVerdictFilter === 'both') return late > 0 && extra > 0;
+                return true;
+              });
+
+              disciplineRows = disciplineRows.sort((a, b) => {
+                if (discSort === 'late') return Math.round(b.inactive_mins || 0) - Math.round(a.inactive_mins || 0);
+                if (discSort === 'extra') return Math.round(b.extra_mins || 0) - Math.round(a.extra_mins || 0);
+                if (discSort === 'operator') return String(a.employee_name || '').localeCompare(String(b.employee_name || ''));
+                return (b.inactive_mins + b.extra_mins) - (a.inactive_mins + a.extra_mins);
+              });
 
               if (dailyLoading) return <div className="py-16 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
               if (disciplineRows.length === 0) return <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-500">No late starts or slow finishes for this period.</div>;
@@ -1518,13 +1776,31 @@ export const MissedActionsPage: React.FC = () => {
               })).sort((a, b) => {
                 const aExtra = a.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
                 const bExtra = b.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
-                if (bExtra !== aExtra) return bExtra - aExtra;
                 const aLate = a.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
                 const bLate = b.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
-                if (bLate !== aLate) return bLate - aLate;
                 const aCombined = a.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0) + Math.round(r.extra_mins || 0), 0);
                 const bCombined = b.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0) + Math.round(r.extra_mins || 0), 0);
+                if (discSort === 'late') {
+                  if (bLate !== aLate) return bLate - aLate;
+                  return bCombined - aCombined;
+                }
+                if (discSort === 'extra') {
+                  if (bExtra !== aExtra) return bExtra - aExtra;
+                  return bCombined - aCombined;
+                }
+                if (discSort === 'operator') {
+                  return String(a.machineName).localeCompare(String(b.machineName));
+                }
                 return bCombined - aCombined;
+              });
+
+              const totalLateAll = disciplineRows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
+              const totalExtraAll = disciplineRows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
+              const totalCombinedAll = totalLateAll + totalExtraAll;
+              const topOffenders = machineGroups.slice(0, 3).map((g) => {
+                const late = g.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
+                const extra = g.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
+                return { name: g.machineName, late, extra, combined: late + extra };
               });
 
               const csvRowsInMachineOrder = machineGroups.flatMap((mg) => mg.rows);
@@ -1533,6 +1809,41 @@ export const MissedActionsPage: React.FC = () => {
               const pagedGroups = discPageSize === 0 ? machineGroups : machineGroups.slice(discPage * discPageSize, (discPage + 1) * discPageSize);
 
               return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <div className="bg-red-50 rounded-xl border-2 border-red-300 p-4 shadow-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700">Cycles With Issues</p>
+                      <p className="text-4xl font-black text-red-800 mt-1">{disciplineRows.length}</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-xl border-2 border-blue-300 p-4 shadow-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">Started Late (mins)</p>
+                      <p className="text-4xl font-black text-blue-800 mt-1">{totalLateAll}</p>
+                    </div>
+                    <div className="bg-amber-50 rounded-xl border-2 border-amber-300 p-4 shadow-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Finished Over (mins)</p>
+                      <p className="text-4xl font-black text-amber-800 mt-1">{totalExtraAll}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border-2 border-gray-300 p-4 shadow-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Combined Loss (mins)</p>
+                      <p className="text-4xl font-black text-gray-900 mt-1">{totalCombinedAll}</p>
+                    </div>
+                  </div>
+
+                  {topOffenders.length > 0 && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                      <p className="text-xs font-bold text-gray-500 uppercase mb-2">Top Offenders</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        {topOffenders.map((o) => (
+                          <div key={o.name} className="rounded-lg border border-gray-200 p-2">
+                            <p className="text-sm font-semibold text-gray-800">{o.name}</p>
+                            <p className="text-xs text-gray-500">Late: <span className="font-semibold text-blue-700">{o.late}m</span> | Over: <span className="font-semibold text-amber-700">{o.extra}m</span></p>
+                            <p className="text-xs font-bold text-red-700 mt-0.5">Total: {o.combined}m</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="p-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
                     <span className="text-sm font-semibold text-gray-700">Cycle Discipline — {disciplineRows.length} cycle(s) with issues</span>
@@ -1582,6 +1893,14 @@ export const MissedActionsPage: React.FC = () => {
                             <div className="flex items-center gap-3 text-xs">
                               {totalLate > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">{totalLate}m late total</span>}
                               {totalExtra > 0 && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">+{totalExtra}m over total</span>}
+                              <div className="hidden md:block w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-red-400 rounded-full"
+                                  style={{
+                                    width: `${Math.max(8, Math.min(100, Math.round(((totalLate + totalExtra) / Math.max(1, totalCombinedAll)) * 100)))}%`,
+                                  }}
+                                />
+                              </div>
                             </div>
                           </button>
                           {isOpen && (
@@ -1591,7 +1910,7 @@ export const MissedActionsPage: React.FC = () => {
                                   <tr>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Cycle</th>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Operator</th>
-                                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Line</th>
+                                    {dailyLine === 'all' && <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Line</th>}
                                     <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Start</th>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finish</th>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Started Late</th>
@@ -1606,21 +1925,21 @@ export const MissedActionsPage: React.FC = () => {
                                     const verdict = late > 0 && extra > 0 ? 'Late start + slow finish' : late > 0 ? 'Late start' : 'Slow finish';
                                     return (
                                       <tr key={e.id} className="hover:bg-gray-50">
-                                        <td className="px-3 py-2.5 text-xs font-bold text-gray-400 w-12">#{idx + 1}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">
+                                        <td className="px-3 py-3 text-xs font-bold text-gray-400 w-12">#{idx + 1}</td>
+                                        <td className="px-3 py-3 text-sm font-semibold text-gray-800">
                                           {e.employee_name} <span className="text-xs font-normal text-gray-400">({e.employee_code})</span>
                                         </td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-600">{e.work_centre_name}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-600">{e.start_time ? new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-600">{e.finish_time ? new Date(e.finish_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                                        <td className="px-3 py-2.5 text-sm">
-                                          {late > 0 ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{late}m late</span> : <span className="text-gray-300">—</span>}
+                                        {dailyLine === 'all' && <td className="px-3 py-3 text-sm text-gray-600">{e.work_centre_name}</td>}
+                                        <td className="px-3 py-3 text-sm text-gray-600">{e.start_time ? new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                                        <td className="px-3 py-3 text-sm text-gray-600">{e.finish_time ? new Date(e.finish_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                                        <td className="px-3 py-3 text-sm">
+                                          {late > 0 ? <span className="px-2 py-0.5 rounded-full text-sm font-semibold bg-blue-100 text-blue-700">{late}m late</span> : <span className="text-gray-300">—</span>}
                                         </td>
-                                        <td className="px-3 py-2.5 text-sm">
-                                          {extra > 0 ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">+{extra}m over</span> : <span className="text-gray-300">—</span>}
+                                        <td className="px-3 py-3 text-sm">
+                                          {extra > 0 ? <span className="px-2 py-0.5 rounded-full text-sm font-semibold bg-amber-100 text-amber-700">+{extra}m over</span> : <span className="text-gray-300">—</span>}
                                         </td>
-                                        <td className="px-3 py-2.5 text-sm">
-                                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                        <td className="px-3 py-3 text-sm">
+                                          <span className={`px-2 py-0.5 rounded-full text-sm font-semibold ${
                                             verdict === 'Late start + slow finish' ? 'bg-red-100 text-red-700'
                                             : verdict === 'Late start' ? 'bg-blue-100 text-blue-700'
                                             : 'bg-amber-100 text-amber-700'
@@ -1654,6 +1973,7 @@ export const MissedActionsPage: React.FC = () => {
                       <button type="button" onClick={() => setDiscPage((p) => Math.min(totalPages - 1, p + 1))} disabled={discPage >= totalPages - 1 || discPageSize === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Next</button>
                     </div>
                   </div>
+                </div>
                 </div>
               );
             })()}

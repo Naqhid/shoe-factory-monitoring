@@ -38,6 +38,51 @@ const normalizePauseState = <T extends ProductionData>(record: T): T => {
     return record;
 };
 
+const FRIDAY_INDEX = 5; // Sunday=0 ... Friday=5
+const DEFAULT_LUNCH_START_MINUTES = 13 * 60 + 30; // 1:30 PM
+const DEFAULT_LUNCH_END_MINUTES = 14 * 60; // 2:00 PM
+const FRIDAY_LUNCH_START_MINUTES = 12 * 60 + 30; // 12:30 PM
+const FRIDAY_LUNCH_END_MINUTES = 13 * 60; // 1:00 PM
+
+const getMinutesOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
+
+const isLunchBreakTime = (d: Date) => {
+    const minutes = getMinutesOfDay(d);
+    if (d.getDay() === FRIDAY_INDEX) {
+        return minutes >= FRIDAY_LUNCH_START_MINUTES && minutes < FRIDAY_LUNCH_END_MINUTES;
+    }
+    return minutes >= DEFAULT_LUNCH_START_MINUTES && minutes < DEFAULT_LUNCH_END_MINUTES;
+};
+
+const getIdleMsExcludingLunch = (anchorMs: number, nowMs: number) => {
+    if (!Number.isFinite(anchorMs) || !Number.isFinite(nowMs) || nowMs <= anchorMs) return 0;
+    const anchor = new Date(anchorMs);
+    const now = new Date(nowMs);
+    const elapsed = nowMs - anchorMs;
+
+    if (
+        anchor.getFullYear() === now.getFullYear() &&
+        anchor.getMonth() === now.getMonth() &&
+        anchor.getDate() === now.getDate()
+    ) {
+        const lunchStartMinutes = anchor.getDay() === FRIDAY_INDEX
+            ? FRIDAY_LUNCH_START_MINUTES
+            : DEFAULT_LUNCH_START_MINUTES;
+        const lunchEndMinutes = anchor.getDay() === FRIDAY_INDEX
+            ? FRIDAY_LUNCH_END_MINUTES
+            : DEFAULT_LUNCH_END_MINUTES;
+        const lunchStart = new Date(anchor);
+        lunchStart.setHours(Math.floor(lunchStartMinutes / 60), lunchStartMinutes % 60, 0, 0);
+        const lunchEnd = new Date(anchor);
+        lunchEnd.setHours(Math.floor(lunchEndMinutes / 60), lunchEndMinutes % 60, 0, 0);
+        const overlapStart = Math.max(anchorMs, lunchStart.getTime());
+        const overlapEnd = Math.min(nowMs, lunchEnd.getTime());
+        const overlap = Math.max(0, overlapEnd - overlapStart);
+        return Math.max(0, elapsed - overlap);
+    }
+    return elapsed;
+};
+
 // Tries each candidate URL in order, shows first one that loads
 const QRImageWithFallback: React.FC<{ candidates: string[]; machineId: string }> = ({ candidates, machineId }) => {
     const [idx, setIdx] = React.useState(0);
@@ -486,15 +531,7 @@ export const MobileProduction: React.FC = () => {
                 }
                 pendingStartReminderAlarmRef.current = false;
                 playAlertSound('start');
-                toast.error(
-                    productionData.button_status === 2
-                        ? 'Cycle completed. Tap RESET, then START for next cycle.'
-                        : 'Production not started. Tap START to begin cycle.',
-                    {
-                        duration: 8000,
-                        id: 'mobile-start-reminder',
-                    }
-                );
+                toast.dismiss('mobile-start-reminder');
             }
         };
 
@@ -537,15 +574,7 @@ export const MobileProduction: React.FC = () => {
                 }
                 pendingStartReminderAlarmRef.current = false;
                 playAlertSound('start');
-                toast.error(
-                    productionData.button_status === 2
-                        ? 'Cycle completed. Tap RESET, then START for next cycle.'
-                        : 'Production not started. Tap START to begin cycle.',
-                    {
-                        duration: 8000,
-                        id: 'mobile-start-reminder',
-                    }
-                );
+                toast.dismiss('mobile-start-reminder');
             }
         };
         document.addEventListener('visibilitychange', onVisible);
@@ -581,10 +610,6 @@ export const MobileProduction: React.FC = () => {
         } else {
             pendingOverTargetAlarmRef.current = true;
         }
-        toast.error('Target time exceeded — tap FINISH when your cycle is complete.', {
-            duration: 8000,
-            id: 'mobile-over-target',
-        });
     }, [
         productionData?.id,
         productionData?.button_status,
@@ -700,7 +725,12 @@ export const MobileProduction: React.FC = () => {
 
         const tick = () => {
             if (startReminderAnchorRef.current === null) return;
-            const elapsed = Date.now() - startReminderAnchorRef.current;
+            if (isLunchBreakTime(new Date())) {
+                setStartReminderDue(false);
+                pendingStartReminderAlarmRef.current = false;
+                return;
+            }
+            const elapsed = getIdleMsExcludingLunch(startReminderAnchorRef.current, Date.now());
             if (elapsed < REMINDER_MS) {
                 setStartReminderDue(false);
                 return;
@@ -716,15 +746,7 @@ export const MobileProduction: React.FC = () => {
             } else {
                 pendingStartReminderAlarmRef.current = true;
             }
-            toast.error(
-                productionData.button_status === 2
-                    ? 'Cycle completed. Tap RESET, then START for next cycle.'
-                    : 'Production not started. Tap START to begin cycle.',
-                {
-                    duration: 8000,
-                    id: 'mobile-start-reminder',
-                }
-            );
+            toast.dismiss('mobile-start-reminder');
         };
 
         // Fire once exactly when 10-minute threshold is reached, then repeat every 10 minutes.
@@ -1201,6 +1223,7 @@ export const MobileProduction: React.FC = () => {
     };
 
     const handleStart = async () => {
+        toast.dismiss('mobile-action-hint');
         // If no production data ID (first time) or after FINISH, create new record
         if (!productionData?.id || productionData.button_status === 2) {
             if (!urlEmpId) {
@@ -1370,6 +1393,7 @@ export const MobileProduction: React.FC = () => {
     };
 
     const handleFinish = async () => {
+        toast.dismiss('mobile-action-hint');
         if (!productionData?.id) return;
         setLoading(true);
         const outputPairs = clampTargetPairs(selectedTargetPairs);
@@ -1473,7 +1497,6 @@ export const MobileProduction: React.FC = () => {
         
         // SUCCESS: Update local state and show success
         setProductionData({ ...productionData, button_status: 2, output_pairs: outputPairs });
-        clearSessionTargetPairs();
         runningSinceMsRef.current = null;
         
         if (finishResult?.data?.summary_updated && finishResult?.data?.total_output_pairs !== undefined) {
@@ -1495,14 +1518,16 @@ export const MobileProduction: React.FC = () => {
         if (!productionData) return;
         
         if (productionData.button_status === 2) {
-            // After FINISH, reset to initial state without database record
-            const resetTargetMins = getScaledTargetMins(12);
+            // After FINISH, reset to initial state without database record.
+            // Keep Target Pairs / BIN selection (e.g. 6) for the next cycle.
+            const pairs = clampTargetPairs(selectedTargetPairs);
+            const resetTargetMins = getScaledTargetMins(pairs);
             const resetData: ProductionData = {
                 ...productionData,
                 id: undefined, // Remove ID so next START creates new record
                 prod_date: getLocalDateString(),
                 output_pairs: 0,
-                target_pairs: 12,
+                target_pairs: pairs,
                 target_mins: resetTargetMins,
                 actual_time: 0,
                 button_status: 3,
@@ -1511,8 +1536,8 @@ export const MobileProduction: React.FC = () => {
                 finish_time: null,
                 idle_start_time: null
             };
-            setSelectedTargetPairs(12);
-            clearSessionTargetPairs();
+            setSelectedTargetPairs(pairs);
+            writeSessionTargetPairs(pairs);
             setProductionData(resetData);
             setActualTimeCounter(0);
             runningSinceMsRef.current = null;
@@ -1608,6 +1633,49 @@ export const MobileProduction: React.FC = () => {
         return calculateStatus().bgColor;
     };
 
+    const isTargetTimeExceeded =
+        !!productionData &&
+        productionData.button_status === 1 &&
+        !productionData.is_paused &&
+        Number(productionData.target_mins || 0) > 0 &&
+        actualTimeCounter / 60 > Number(productionData.target_mins || 0);
+    const normalizedButtonStatus = Number(productionData?.button_status ?? 0);
+    const showStartPressHint =
+        !!productionData &&
+        (normalizedButtonStatus === 3 || normalizedButtonStatus === 2 || productionData.is_paused || normalizedButtonStatus === 0);
+    const showFinishPressHint =
+        isTargetTimeExceeded;
+    const isLunchBreakActive = isLunchBreakTime(currentTime);
+    const idleMinutes = (() => {
+        if (!productionData) return 0;
+        const isRunning = productionData.button_status === 1 && !productionData.is_paused;
+        if (isRunning || startReminderAnchorRef.current === null || isLunchBreakActive) return 0;
+        const elapsedMs = getIdleMsExcludingLunch(startReminderAnchorRef.current, currentTime.getTime());
+        return Math.max(0, Math.floor(elapsedMs / 60000));
+    })();
+    const showStartButtonPressHint =
+        !!productionData &&
+        (normalizedButtonStatus === 3 || productionData.is_paused || normalizedButtonStatus === 0);
+    const showResetButtonPressHint =
+        !!productionData &&
+        normalizedButtonStatus === 2;
+    // Deterministic cue selection while START/RESET controls are visible.
+    const showStartPrimaryCue = normalizedButtonStatus !== 2;
+    const showResetPrimaryCue = normalizedButtonStatus === 2;
+    const actionMarqueeMessage = (() => {
+        if (showFinishPressHint) {
+            return 'Target exceeded. Tap FINISH when cycle is complete.';
+        }
+        if (showStartPressHint) {
+            if (isLunchBreakActive) return 'Lunch time started.';
+            if (productionData?.button_status === 2) {
+                return `Production is idle for ${idleMinutes} min. Tap RESET, then tap START.`;
+            }
+            return `Production is idle for ${idleMinutes} min. Tap START to begin cycle.`;
+        }
+        return '';
+    })();
+
     // --- RENDER ---
 
     // Show QR code when machine is selected but no employee yet — poll for session in background
@@ -1660,34 +1728,6 @@ export const MobileProduction: React.FC = () => {
         );
     }
 
-    const isTargetTimeExceeded =
-        !!productionData &&
-        productionData.button_status === 1 &&
-        !productionData.is_paused &&
-        Number(productionData.target_mins || 0) > 0 &&
-        actualTimeCounter / 60 > Number(productionData.target_mins || 0);
-    const normalizedButtonStatus = Number(productionData?.button_status ?? 0);
-    const showStartPressHint =
-        !!productionData &&
-        (normalizedButtonStatus === 3 || normalizedButtonStatus === 2 || productionData.is_paused || normalizedButtonStatus === 0);
-    const showFinishPressHint =
-        isTargetTimeExceeded;
-    const idleMinutes = (() => {
-        if (!productionData) return 0;
-        const isRunning = productionData.button_status === 1 && !productionData.is_paused;
-        if (isRunning || startReminderAnchorRef.current === null) return 0;
-        const elapsedMs = currentTime.getTime() - startReminderAnchorRef.current;
-        return Math.max(0, Math.floor(elapsedMs / 60000));
-    })();
-    const showStartButtonPressHint =
-        !!productionData &&
-        (normalizedButtonStatus === 3 || productionData.is_paused || normalizedButtonStatus === 0);
-    const showResetButtonPressHint =
-        !!productionData &&
-        normalizedButtonStatus === 2;
-    // Deterministic cue selection while START/RESET controls are visible.
-    const showStartPrimaryCue = normalizedButtonStatus !== 2;
-    const showResetPrimaryCue = normalizedButtonStatus === 2;
     const currentLoggedInUser = (() => {
         try {
             if (typeof localStorage === 'undefined') return null;
@@ -2007,7 +2047,7 @@ export const MobileProduction: React.FC = () => {
                                 <select
                                     value={selectedTargetPairs}
                                     onChange={(e) => handleTargetPairsChange(Number(e.target.value))}
-                                    disabled={loading || productionData.button_status === 1}
+                                    disabled={loading}
                                     className="w-full text-2xl md:text-3xl font-bold text-green-900 bg-white border border-green-300 rounded-lg px-2 py-1"
                                 >
                                     {Array.from({ length: 12 }, (_, i) => i + 1).map((pairCount) => (
@@ -2057,26 +2097,6 @@ export const MobileProduction: React.FC = () => {
 
                     {/* Control Buttons */}
                     <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
-                        {showStartPressHint && (
-                            <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
-                                <div className="flex items-center justify-center min-h-[44px] text-amber-800">
-                                    <p className="text-sm font-semibold text-center">
-                                        {productionData.button_status === 2
-                                            ? `Production is idle for ${idleMinutes} min. Tap RESET, then tap START.`
-                                            : `Production is idle for ${idleMinutes} min. Tap START to begin cycle.`}
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                        {showFinishPressHint && (
-                            <div className="mb-3 rounded-xl border border-red-300 bg-red-50 px-3 py-2.5">
-                                <div className="flex items-center justify-center min-h-[44px] text-red-800">
-                                    <p className="text-sm font-semibold text-center">
-                                        Target exceeded. Tap FINISH when cycle is complete.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
                         <div className="flex gap-3 md:gap-4">
                             {normalizedButtonStatus === 3 || normalizedButtonStatus === 2 ? (
                                 <>
@@ -2086,12 +2106,15 @@ export const MobileProduction: React.FC = () => {
                                         title={normalizedButtonStatus === 2 ? "Cycle finished. Click RESET to start a new cycle." : ""}
                                         className={`relative flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                                             showStartButtonPressHint
-                                                ? 'ring-4 ring-amber-300/80 ring-offset-2 ring-offset-white animate-pulse'
+                                                ? 'ring-4 ring-yellow-300 ring-offset-2 ring-offset-white animate-pulse shadow-[0_0_0_6px_rgba(253,224,71,0.45)]'
                                                 : ''
                                         }`}
                                     >
                                         {showStartButtonPressHint && (
-                                            <span className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/25 animate-ping" />
+                                            <>
+                                                <span className="pointer-events-none absolute inset-0 rounded-xl border-4 border-yellow-300/90 animate-pulse" />
+                                                <span className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/35 animate-ping" />
+                                            </>
                                         )}
                                         {loading ? (
                                             <Loader2 className="h-5 w-5 animate-spin" />
@@ -2101,8 +2124,8 @@ export const MobileProduction: React.FC = () => {
                                                 <span>START</span>
                                                 {showStartPrimaryCue && (
                                                     <Hand
-                                                        className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
-                                                        strokeWidth={2.8}
+                                                        className="h-10 w-10 text-yellow-100 animate-bounce drop-shadow-[0_0_10px_rgba(254,240,138,1)]"
+                                                        strokeWidth={3}
                                                     />
                                                 )}
                                             </>
@@ -2113,19 +2136,22 @@ export const MobileProduction: React.FC = () => {
                                         disabled={loading}
                                         className={`relative flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2 ${
                                             showResetButtonPressHint
-                                                ? 'ring-4 ring-amber-300/80 ring-offset-2 ring-offset-white animate-pulse'
+                                                ? 'ring-4 ring-yellow-300 ring-offset-2 ring-offset-white animate-pulse shadow-[0_0_0_6px_rgba(253,224,71,0.45)]'
                                                 : ''
                                         }`}
                                     >
                                         {showResetButtonPressHint && (
-                                            <span className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/25 animate-ping" />
+                                            <>
+                                                <span className="pointer-events-none absolute inset-0 rounded-xl border-4 border-yellow-300/90 animate-pulse" />
+                                                <span className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/35 animate-ping" />
+                                            </>
                                         )}
                                         <RotateCcw className="h-5 w-5" />
                                         <span>RESET</span>
                                         {showResetPrimaryCue && (
                                             <Hand
-                                                className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
-                                                strokeWidth={2.8}
+                                                className="h-10 w-10 text-yellow-100 animate-bounce drop-shadow-[0_0_10px_rgba(254,240,138,1)]"
+                                                strokeWidth={3}
                                             />
                                         )}
                                     </button>
@@ -2164,6 +2190,13 @@ export const MobileProduction: React.FC = () => {
                                 </>
                             ) : null}
                         </div>
+                        {actionMarqueeMessage && (
+                            <div className="mt-3 rounded-xl border-2 border-red-300 bg-red-50 px-2 py-1.5 shadow-sm">
+                                <marquee behavior="scroll" direction="left" scrollAmount={6} className="text-sm md:text-base font-bold text-red-700">
+                                    {actionMarqueeMessage}
+                                </marquee>
+                            </div>
+                        )}
                     </div>
                         </>
                 </div>
