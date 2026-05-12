@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, X, Download, Loader2, Search, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -27,6 +28,7 @@ const ARCHIVE_TABLES = ['customers', 'groups_master', 'leather', 'styles', 'colo
 const USAGE_CHECK_TABLES = ['groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees'];
 
 export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
+  const navigate = useNavigate();
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<MasterRecord | null>(null);
@@ -493,6 +495,14 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
         </div>
       )}
 
+      {/* Hint banner for work_centres */}
+      {table === 'work_centres' && (
+        <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" /></svg>
+          Click a row to view its machines on the mobile production screen.
+        </div>
+      )}
+
       {/* Records Table */}
       <div className="bg-white rounded-lg shadow">
         {fetchLoading ? (
@@ -551,7 +561,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {records.map((record) => (
-                <tr key={record.id}>
+                <tr
+                  key={record.id}
+                  onClick={table === 'work_centres' && !isArchivedRecord(record) ? () => navigate(`/mobile?line=${encodeURIComponent(record.name)}`) : undefined}
+                  className={table === 'work_centres' && !isArchivedRecord(record) ? 'cursor-pointer hover:bg-blue-50 transition-colors' : ''}
+                >
                   {table === 'machine_centres' && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {record.machine_id || 'N/A'}

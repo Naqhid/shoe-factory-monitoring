@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 
 export const TVDashboard: React.FC = () => {
+    const navigate = useNavigate();
     const PINNED_LINE_STORAGE_KEY = 'tv_dashboard_pinned_line_id';
     const [workCentres, setWorkCentres] = useState<any[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -431,7 +433,11 @@ export const TVDashboard: React.FC = () => {
                             {lowerSection.linePerformance?.map((line: any, index: number) => {
                                 const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
                                 return (
-                                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                                    <tr
+                                        key={index}
+                                        onClick={() => navigate(`/mobile?line=${encodeURIComponent(line.line_name)}`)}
+                                        className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
+                                    >
                                         <td className="px-4 py-4 text-sm font-semibold text-gray-800">{line.line_name}</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-blue-600">{line.target}</td>
                                         <td className="px-4 py-4 text-center text-lg font-bold text-green-600">{line.output}</td>

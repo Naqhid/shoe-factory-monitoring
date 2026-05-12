@@ -40,9 +40,8 @@ interface WorkCentre {
   name: string;
 }
 
-const today = new Date().toLocaleDateString('en-CA');
-
 const LogPage: React.FC = () => {
+  const today = new Date().toLocaleDateString('en-CA');
   const [logs, setLogs] = React.useState<SessionLogEntry[]>([]);
   const [workCentres, setWorkCentres] = React.useState<WorkCentre[]>([]);
   const [selectedWorkCentre, setSelectedWorkCentre] = React.useState<string>('all');

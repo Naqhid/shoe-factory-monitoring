@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Factory, Users, Loader2 } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Factory, Loader2 } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 
 interface MachineEntry {
@@ -13,8 +13,11 @@ interface MachineEntry {
 
 export const MobileLineSelector: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [machines, setMachines] = useState<MachineEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lines, setLines] = useState<string[]>([]);
+  const [selectedLine, setSelectedLine] = useState<string>('');
 
   useEffect(() => {
     const userInfo = localStorage.getItem('user_info');
@@ -28,21 +31,30 @@ export const MobileLineSelector: React.FC = () => {
       }
     }
 
-    // Fetch all machines
     apiFetch(`${API_BASE_URL}/api/masters/machine_centres?limit=100`)
       .then(r => r.json())
       .then(result => {
         if (result.success) {
-          // Only show machines that have a machine_id set, sorted by machine_id
           const valid = result.data
             .filter((m: any) => m.machine_id)
             .sort((a: any, b: any) => a.machine_id.localeCompare(b.machine_id));
           setMachines(valid);
+          const uniqueLines = Array.from(
+            new Set(valid.map((m: any) => m.work_centre_name).filter(Boolean))
+          ) as string[];
+          setLines(uniqueLines.sort());
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [navigate]);
+
+  // Pre-select line from ?line= query param
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const lineParam = params.get('line');
+    if (lineParam) setSelectedLine(lineParam);
+  }, [location.search]);
 
   const userInfo = localStorage.getItem('user_info');
   const user = userInfo ? JSON.parse(userInfo) : null;
@@ -54,6 +66,10 @@ export const MobileLineSelector: React.FC = () => {
     );
   }
 
+  const filteredMachines = selectedLine
+    ? machines.filter(m => m.work_centre_name === selectedLine)
+    : machines;
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-md mx-auto">
@@ -63,13 +79,28 @@ export const MobileLineSelector: React.FC = () => {
           <p className="text-gray-500">Choose a machine to access mobile production</p>
         </div>
 
+        {lines.length > 0 && (
+          <div className="mb-4">
+            <select
+              value={selectedLine}
+              onChange={e => setSelectedLine(e.target.value)}
+              className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Lines</option>
+              {lines.map(line => (
+                <option key={line} value={line}>{line}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           </div>
         ) : (
           <div className="space-y-3">
-            {machines.map((machine) => (
+            {filteredMachines.map((machine) => (
               <Link
                 key={machine.id}
                 to={`/mobile/${encodeURIComponent(machine.machine_id)}`}
@@ -96,6 +127,9 @@ export const MobileLineSelector: React.FC = () => {
                 </div>
               </Link>
             ))}
+            {filteredMachines.length === 0 && (
+              <p className="text-center text-gray-400 py-8">No machines found for this line.</p>
+            )}
           </div>
         )}
       </div>
