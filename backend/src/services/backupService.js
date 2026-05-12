@@ -36,11 +36,21 @@ function runBackup() {
 
   exec(cmd, { shell: false }, (err) => {
     if (err) {
-      logger.error(`DB backup failed: ${err.message}`);
+      logger.error(`DB backup FAILED (mysqldump error): ${err.message}`);
+      // Delete the empty file so it doesn't get committed to git as 0 bytes
+      if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
       return;
     }
-    const size = fs.existsSync(filepath) ? (fs.statSync(filepath).size / 1024).toFixed(1) : 0;
-    logger.info(`DB backup created: ${filename} (${size} KB)`);
+
+    // Guard: if file is missing or 0 bytes, the dump silently failed
+    const fileSize = fs.existsSync(filepath) ? fs.statSync(filepath).size : 0;
+    if (fileSize < 1024) {
+      logger.error(`DB backup FAILED: output file is ${fileSize} bytes (expected >1KB). Deleting empty file.`);
+      if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+      return;
+    }
+
+    logger.info(`DB backup created: ${filename} (${(fileSize / 1024).toFixed(1)} KB)`);
     pruneOldBackups();
     gitPush(filename);
   });

@@ -205,7 +205,7 @@ export const MobileProduction: React.FC = () => {
     const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number }>>([]);
     const [timingLoading, setTimingLoading] = useState(false);
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
-    const [selectedTargetPairs, setSelectedTargetPairs] = useState(12);
+    const [selectedTargetPairs, setSelectedTargetPairs] = useState(6);
     const baseTargetMinsRef = React.useRef(0);
     const baseTargetPairsRef = React.useRef(12);
     
@@ -226,7 +226,7 @@ export const MobileProduction: React.FC = () => {
     };
 
     const clampTargetPairs = React.useCallback((value: number) => {
-        if (!Number.isFinite(value)) return 12;
+        if (!Number.isFinite(value)) return 6;
         return Math.max(1, Math.min(12, Math.round(value)));
     }, []);
 
@@ -241,7 +241,7 @@ export const MobileProduction: React.FC = () => {
         const safeBaseMins = Number(targetMins || 0);
         baseTargetPairsRef.current = 12;
         baseTargetMinsRef.current = safeBaseMins > 0 ? safeBaseMins : 0;
-        const nextSelected = 12;
+        const nextSelected = 6;
         setSelectedTargetPairs(nextSelected);
         return getScaledTargetMins(nextSelected);
     }, [getScaledTargetMins]);
@@ -277,9 +277,9 @@ export const MobileProduction: React.FC = () => {
     }, [effectiveMachineId, urlEmpId]);
 
     const readSessionTargetPairs = React.useCallback(() => {
-        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return 12;
+        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return 6;
         const raw = sessionStorage.getItem(targetPairsSessionKey);
-        if (!raw) return 12;
+        if (!raw) return 6;
         return clampTargetPairs(Number(raw));
     }, [clampTargetPairs, targetPairsSessionKey]);
 
@@ -1037,7 +1037,7 @@ export const MobileProduction: React.FC = () => {
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
                         const rememberedPairs = readSessionTargetPairs();
-                        if (rememberedPairs !== 12) {
+                        if (rememberedPairs !== 6) {
                             const rememberedTargetMins = getScaledTargetMins(rememberedPairs);
                             setSelectedTargetPairs(rememberedPairs);
                             setProductionData((prev) => prev ? {
@@ -1099,7 +1099,7 @@ export const MobileProduction: React.FC = () => {
                             emp_id: employee.id,
                             output_pairs: 0,
                             target_mins: scaledTargetMins,
-                            target_pairs: 12,
+                            target_pairs: 6,
                             start_time: null,
                             finish_time: null,
                             idle_start_time: null,
@@ -1110,7 +1110,7 @@ export const MobileProduction: React.FC = () => {
                         };
                         setProductionData(defaultData);
                         const rememberedPairs = readSessionTargetPairs();
-                        if (rememberedPairs !== 12) {
+                        if (rememberedPairs !== 6) {
                             const rememberedTargetMins = getScaledTargetMins(rememberedPairs);
                             setSelectedTargetPairs(rememberedPairs);
                             setProductionData((prev) => prev ? {

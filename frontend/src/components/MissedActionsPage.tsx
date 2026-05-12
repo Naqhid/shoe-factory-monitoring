@@ -59,8 +59,65 @@ type DailyReportLine = {
 const LOCAL_META_KEY = 'missed_actions_meta_v2';
 const DAILY_MY_LINE_KEY = 'missed_actions_daily_my_line_v1';
 
+const ROOT_CAUSE_OPTIONS = ['Forgot to start', 'Forgot to finish', 'No operator', 'Machine issue', 'Material shortage', 'Waiting approval', 'Other'];
+
+const RootCauseSelect: React.FC<{
+  value: string | null | undefined;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+  className?: string;
+}> = ({ value, onChange, disabled, className }) => {
+  const isOther = !!value && value !== 'Other' && !ROOT_CAUSE_OPTIONS.slice(0, -1).includes(value);
+  const selectValue = isOther ? 'Other' : (value || '');
+  const [customText, setCustomText] = React.useState(isOther ? (value || '') : '');
+  const [showInput, setShowInput] = React.useState(isOther);
+
+  React.useEffect(() => {
+    if (isOther) { setCustomText(value || ''); setShowInput(true); }
+  }, [value, isOther]);
+
+  if (showInput) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          autoFocus
+          type="text"
+          value={customText}
+          onChange={(e) => setCustomText(e.target.value)}
+          onBlur={() => { if (customText.trim()) onChange(customText.trim()); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && customText.trim()) onChange(customText.trim()); }}
+          disabled={disabled}
+          placeholder="Type reason…"
+          className={`px-2 py-1 text-xs border border-blue-400 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${className || ''}`}
+        />
+        <button
+          type="button"
+          onClick={() => { setCustomText(''); setShowInput(false); onChange(''); }}
+          className="text-gray-400 hover:text-red-500 text-xs font-bold px-1"
+          title="Clear"
+        >✕</button>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={selectValue}
+      onChange={(e) => {
+        if (e.target.value === 'Other') { setCustomText(''); setShowInput(true); }
+        else onChange(e.target.value);
+      }}
+      disabled={disabled}
+      className={className}
+    >
+      <option value="">Select cause</option>
+      {ROOT_CAUSE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+};
+
 export const MissedActionsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline'>('live');
+  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator'>('live');
   const [isLoading, setIsLoading] = React.useState(true);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -244,6 +301,11 @@ export const MissedActionsPage: React.FC = () => {
   React.useEffect(() => {
     if (activeTab !== 'discipline') return;
     // Discipline tab reuses dailyEvents — trigger a fetch if data is empty
+    if (dailyEvents.length === 0 && !dailyLoading) fetchDailyReport();
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    if (activeTab !== 'operator') return;
     if (dailyEvents.length === 0 && !dailyLoading) fetchDailyReport();
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -561,6 +623,54 @@ export const MissedActionsPage: React.FC = () => {
     return groups;
   }, [dailyLineMachineGroups, dailyMyLineOnly, preferredDailyLine, dailyBreachedOnly, dailyTopOffendersOnly]);
 
+  const operatorRows = React.useMemo(() => {
+    const map = new Map<string, {
+      employee_code: string;
+      employee_name: string;
+      total_cycles: number;
+      late_cycles: number;
+      slow_cycles: number;
+      both_cycles: number;
+      forgot_start: number;
+      forgot_finish: number;
+      total_inactive_mins: number;
+      total_extra_mins: number;
+      total_lost_mins: number;
+    }>();
+    dailyEvents.forEach((e) => {
+      const key = e.employee_code || 'N/A';
+      if (!map.has(key)) map.set(key, {
+        employee_code: key,
+        employee_name: e.employee_name || key,
+        total_cycles: 0,
+        late_cycles: 0,
+        slow_cycles: 0,
+        both_cycles: 0,
+        forgot_start: 0,
+        forgot_finish: 0,
+        total_inactive_mins: 0,
+        total_extra_mins: 0,
+        total_lost_mins: 0,
+      });
+      const row = map.get(key)!;
+      const late = Math.round(e.inactive_mins || 0);
+      const extra = Math.round(e.extra_mins || 0);
+      const rc = (e.root_cause || '').toLowerCase();
+      row.total_cycles += 1;
+      if (late > 0 && extra > 0) row.both_cycles += 1;
+      else if (late > 0) row.late_cycles += 1;
+      else if (extra > 0) row.slow_cycles += 1;
+      if (rc === 'forgot to start') row.forgot_start += 1;
+      if (rc === 'forgot to finish') row.forgot_finish += 1;
+      row.total_inactive_mins += late;
+      row.total_extra_mins += extra;
+      row.total_lost_mins += late + extra;
+    });
+    return Array.from(map.values())
+      .filter((r) => r.total_lost_mins > 0)
+      .sort((a, b) => b.total_lost_mins - a.total_lost_mins);
+  }, [dailyEvents]);
+
   const previousDayTrend = React.useMemo(() => {
     if (!weeklyTrend || weeklyTrend.length < 2) return null;
     const sorted = [...weeklyTrend].sort((a, b) => String(a.day).localeCompare(String(b.day)));
@@ -859,6 +969,13 @@ export const MissedActionsPage: React.FC = () => {
           >
             Cycle Discipline
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('operator')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'operator' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+          >
+            Operator Report
+          </button>
         </div>
 
         {activeTab === 'live' ? (
@@ -1100,19 +1217,12 @@ export const MissedActionsPage: React.FC = () => {
 
                           <div className="space-y-2">
                             <label className="block text-[11px] font-semibold text-gray-500 uppercase">Root Cause</label>
-                            <select
-                              value={item.state?.root_cause || ''}
-                              onChange={(e) => saveRootCause(item, e.target.value)}
+                            <RootCauseSelect
+                              value={item.state?.root_cause}
+                              onChange={(val) => saveRootCause(item, val)}
                               disabled={savingRootCause === item.issue_key}
                               className="w-full px-2 py-2 text-xs border border-gray-300 rounded bg-white"
-                            >
-                              <option value="">Select cause</option>
-                              <option value="No operator">No operator</option>
-                              <option value="Machine issue">Machine issue</option>
-                              <option value="Material shortage">Material shortage</option>
-                              <option value="Waiting approval">Waiting approval</option>
-                              <option value="Other">Other</option>
-                            </select>
+                            />
                           </div>
 
                           {item.state?.acknowledged && item.state.acknowledged_by && (
@@ -1227,19 +1337,12 @@ export const MissedActionsPage: React.FC = () => {
                                 </div>
                               </td>
                               <td className="px-3 py-3.5 text-sm">
-                                <select
-                                  value={item.state?.root_cause || ''}
-                                  onChange={(e) => saveRootCause(item, e.target.value)}
+                                <RootCauseSelect
+                                  value={item.state?.root_cause}
+                                  onChange={(val) => saveRootCause(item, val)}
                                   disabled={savingRootCause === item.issue_key}
                                   className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
-                                >
-                                  <option value="">Select cause</option>
-                                  <option value="No operator">No operator</option>
-                                  <option value="Machine issue">Machine issue</option>
-                                  <option value="Material shortage">Material shortage</option>
-                                  <option value="Waiting approval">Waiting approval</option>
-                                  <option value="Other">Other</option>
-                                </select>
+                                />
                               </td>
                               <td className="px-3 py-3.5 text-sm text-gray-600">
                                 {item.state?.acknowledged && item.state.acknowledged_by && (
@@ -1624,11 +1727,10 @@ export const MissedActionsPage: React.FC = () => {
                                         <td className="px-3 py-2.5 text-sm font-semibold text-blue-700">{formatMinutes(row.inactive_mins)}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold text-amber-700">{formatMinutes(row.extra_mins)}</td>
                                         <td className="px-3 py-2.5 text-sm">
-                                          <select
-                                            value={row.root_cause || ''}
-                                            onChange={(e) => {
+                                          <RootCauseSelect
+                                            value={row.root_cause}
+                                            onChange={(val) => {
                                               const key = `daily__${row.id}`;
-                                              const val = e.target.value;
                                               setDailyEvents((prev) => prev.map((ev) => ev.id === row.id ? { ...ev, root_cause: val } : ev));
                                               apiFetch(`${API_BASE}/api/missed-actions/root-cause`, {
                                                 method: 'POST',
@@ -1639,14 +1741,7 @@ export const MissedActionsPage: React.FC = () => {
                                                 .catch(() => toast.error('Failed to save root cause'));
                                             }}
                                             className="px-1.5 py-1 text-xs border border-gray-300 rounded bg-white"
-                                          >
-                                            <option value="">—</option>
-                                            <option value="No operator">No operator</option>
-                                            <option value="Machine issue">Machine issue</option>
-                                            <option value="Material shortage">Material shortage</option>
-                                            <option value="Waiting approval">Waiting approval</option>
-                                            <option value="Other">Other</option>
-                                          </select>
+                                          />
                                         </td>
                                       </tr>
                                     ))}
@@ -1977,6 +2072,230 @@ export const MissedActionsPage: React.FC = () => {
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {activeTab === 'operator' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
+                  <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => setDailyReportDate(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">To</label>
+                  <input type="date" value={dailyDateTo} min={dailyReportDate} onChange={(e) => setDailyDateTo(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
+                  <select value={dailyLine} onChange={(e) => setDailyLine(e.target.value)} disabled={dailyLoading} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white disabled:opacity-60">
+                    <option value="all">{dailyLoading ? 'Loading…' : 'All Lines'}</option>
+                    {dailyByLine.map((l) => <option key={l.work_centre_name} value={l.work_centre_name}>{l.work_centre_name}</option>)}
+                  </select>
+                </div>
+                <button type="button" onClick={fetchDailyReport} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
+                  {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  disabled={operatorRows.length === 0}
+                  onClick={() => {
+                    const headers = ['operator', 'code', 'total_cycles', 'late_starts', 'slow_finishes', 'both', 'inactive_mins', 'extra_mins', 'total_lost_mins'];
+                    const csv = [headers.join(','), ...operatorRows.map((r) => [
+                      `"${r.employee_name}"`, `"${r.employee_code}"`,
+                      r.total_cycles, r.late_cycles, r.slow_cycles, r.both_cycles,
+                      r.total_inactive_mins, r.total_extra_mins, r.total_lost_mins,
+                    ].join(','))].join('\n');
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+                    a.download = `operator_report_${dailyReportDate}_to_${dailyDateTo}.csv`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                  }}
+                  className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-60"
+                >
+                  <Download className="h-4 w-4" /> Export CSV
+                </button>
+              </div>
+            </div>
+
+            {dailyLoading ? (
+              <div className="py-16 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>
+            ) : operatorRows.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-500">No operator issues found for this period.</div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-red-50 rounded-xl border-2 border-red-300 p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase text-red-700">Operators With Issues</p>
+                    <p className="text-4xl font-black text-red-800 mt-1">{operatorRows.length}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-xl border-2 border-blue-300 p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase text-blue-700">Forgot to Start</p>
+                    <p className="text-4xl font-black text-blue-800 mt-1">{operatorRows.reduce((s, r) => s + r.forgot_start, 0)}</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-xl border-2 border-amber-300 p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase text-amber-700">Forgot to Finish</p>
+                    <p className="text-4xl font-black text-amber-800 mt-1">{operatorRows.reduce((s, r) => s + r.forgot_finish, 0)}</p>
+                  </div>
+                  <div className="bg-white rounded-xl border-2 border-gray-300 p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase text-gray-500">Total Lost Mins</p>
+                    <p className="text-4xl font-black text-gray-900 mt-1">{operatorRows.reduce((s, r) => s + r.total_lost_mins, 0)}</p>
+                  </div>
+                </div>
+
+                {/* Forget Tracker — top 5 operators who forget most */}
+                {(() => {
+                  const forgotStart = [...operatorRows]
+                    .map((r) => ({ ...r, forgot: r.forgot_start }))
+                    .filter((r) => r.forgot > 0)
+                    .sort((a, b) => b.forgot - a.forgot)
+                    .slice(0, 5);
+                  const forgotFinish = [...operatorRows]
+                    .map((r) => ({ ...r, forgot: r.forgot_finish }))
+                    .filter((r) => r.forgot > 0)
+                    .sort((a, b) => b.forgot - a.forgot)
+                    .slice(0, 5);
+                  if (forgotStart.length === 0 && forgotFinish.length === 0) return (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+                      No "Forgot to start" or "Forgot to finish" root causes recorded yet for this period. Set root cause on cycles to track this.
+                    </div>
+                  );
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+                        <div className="px-3 py-2 bg-amber-50 border-b border-amber-200">
+                          <span className="text-sm font-semibold text-amber-800">🟡 Forgot to START</span>
+                          <span className="ml-2 text-xs text-amber-600">(late start cycles)</span>
+                        </div>
+                        <div className="divide-y divide-gray-100">
+                          {forgotStart.map((r, idx) => {
+                            const rate = r.total_cycles > 0 ? Math.round((r.forgot / r.total_cycles) * 100) : 0;
+                            const severity = rate >= 50 ? 'bg-red-100 text-red-700' : rate >= 25 ? 'bg-amber-100 text-amber-700' : 'bg-yellow-50 text-yellow-700';
+                            return (
+                              <div key={r.employee_code} className="flex items-center justify-between px-3 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-gray-400 w-5">#{idx + 1}</span>
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-800">{r.employee_name}</p>
+                                    <p className="text-xs text-gray-400">{r.employee_code}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${severity}`}>{rate}% of cycles</span>
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">{r.forgot}× forgot</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+                        <div className="px-3 py-2 bg-red-50 border-b border-red-200">
+                          <span className="text-sm font-semibold text-red-800">🔴 Forgot to FINISH</span>
+                          <span className="ml-2 text-xs text-red-500">(slow/over-target cycles)</span>
+                        </div>
+                        <div className="divide-y divide-gray-100">
+                          {forgotFinish.map((r, idx) => {
+                            const rate = r.total_cycles > 0 ? Math.round((r.forgot / r.total_cycles) * 100) : 0;
+                            const severity = rate >= 50 ? 'bg-red-100 text-red-700' : rate >= 25 ? 'bg-amber-100 text-amber-700' : 'bg-orange-50 text-orange-700';
+                            return (
+                              <div key={r.employee_code} className="flex items-center justify-between px-3 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-gray-400 w-5">#{idx + 1}</span>
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-800">{r.employee_name}</p>
+                                    <p className="text-xs text-gray-400">{r.employee_code}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${severity}`}>{rate}% of cycles</span>
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">{r.forgot}× forgot</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                    <span className="text-sm font-semibold text-gray-700">Operator Ranking — worst first</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                      <thead className="bg-white border-b border-gray-100">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">#</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Operator</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Cycles</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Late Starts</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Slow Finishes</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Both</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Forget Rate</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive (m)</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra (m)</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Total Lost</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Bar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {operatorRows.map((row, idx) => {
+                          const maxLost = operatorRows[0].total_lost_mins;
+                          const barPct = Math.max(4, Math.round((row.total_lost_mins / maxLost) * 100));
+                          const isWorst = idx === 0;
+                          return (
+                            <tr key={row.employee_code} className={isWorst ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                              <td className="px-3 py-3 text-xs font-bold text-gray-400">#{idx + 1}</td>
+                              <td className="px-3 py-3">
+                                <p className="text-sm font-semibold text-gray-800">{row.employee_name}</p>
+                                <p className="text-xs text-gray-400">{row.employee_code}</p>
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-700">{row.total_cycles}</td>
+                              <td className="px-3 py-3">
+                                {row.late_cycles + row.both_cycles > 0
+                                  ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{row.late_cycles + row.both_cycles}×</span>
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-3 py-3">
+                                {row.slow_cycles + row.both_cycles > 0
+                                  ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">{row.slow_cycles + row.both_cycles}×</span>
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-3 py-3">
+                                {row.both_cycles > 0
+                                  ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">{row.both_cycles}×</span>
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-3 py-3">
+                                {(() => {
+                                  const totalForgot = row.forgot_start + row.forgot_finish;
+                                  const rate = row.total_cycles > 0 ? Math.round((totalForgot / row.total_cycles) * 100) : 0;
+                                  const cls = rate >= 50 ? 'bg-red-100 text-red-700' : rate >= 25 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700';
+                                  return <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cls}`}>{rate}%</span>;
+                                })()}
+                              </td>
+                              <td className="px-3 py-3 text-sm font-semibold text-blue-700">{row.total_inactive_mins}m</td>
+                              <td className="px-3 py-3 text-sm font-semibold text-amber-700">{row.total_extra_mins}m</td>
+                              <td className="px-3 py-3 text-sm font-bold text-red-700">{row.total_lost_mins}m</td>
+                              <td className="px-3 py-3 w-28">
+                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-red-400 rounded-full" style={{ width: `${barPct}%` }} />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
