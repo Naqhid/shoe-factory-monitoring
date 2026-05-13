@@ -1937,92 +1937,84 @@ export const MobileProduction: React.FC = () => {
                             </svg>
                         </button>
                         {headerExpanded && (
-                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm px-4 pb-4">
-                                <div className="col-span-2 md:col-span-6 flex items-center justify-between">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm px-4 pb-3">
+                                <div className="col-span-2 md:col-span-6 text-center leading-tight">
+                                    <h1 className="text-xl md:text-2xl font-bold tracking-tight">MACHINE CENTRE PRODUCTION</h1>
+                                </div>
+                                <div className="col-span-2 md:col-span-6 flex items-center justify-between gap-2">
                                     <span className="text-[11px] md:text-xs font-semibold uppercase tracking-wide bg-white/15 px-2 py-1 rounded-md">
                                         Production Status
                                     </span>
                                     <button
+                                        type="button"
                                         onClick={() => { setShowTimingPopup(v => !v); if (!showTimingPopup) fetchTimingCycles(); }}
-                                        className="relative p-1.5 md:p-2 rounded-lg bg-white hover:bg-white/90 text-red-500"
+                                        className="relative shrink-0 touch-manipulation p-1.5 md:p-2 rounded-lg bg-white hover:bg-white/90 text-red-500 active:opacity-90"
                                         title="View late cycles"
                                     >
                                         <Bell className="h-4 w-4" />
                                         {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
                                     </button>
                                 </div>
-                                <div className="col-span-2 md:col-span-6 text-center">
-                                    <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
-                                </div>
                                 {loadingSummary ? (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/80 py-1">
                                         Loading daily pace…
                                     </div>
                                 ) : dailyPaceSnapshot ? (
-                                    <div className="col-span-2 md:col-span-6 grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-3 md:gap-2 lg:gap-3 text-center">
+                                    <div className="col-span-2 md:col-span-6 grid w-full min-w-0 grid-cols-1 gap-2 md:grid-cols-2 md:gap-2 text-center">
                                         <div
-                                            className={`w-full min-w-0 rounded-xl px-3 py-3 sm:px-3 sm:py-2.5 md:px-2 md:py-2.5 border shadow-md ${
-                                                totalOutputToday >= dailyPaceSnapshot.expected
-                                                    ? 'bg-emerald-500/20 border-emerald-300/55 ring-1 ring-emerald-400/35'
-                                                    : 'bg-amber-950/35 border-amber-300/45 ring-1 ring-amber-400/30'
+                                            className={`w-full min-w-0 rounded-xl px-3 py-2.5 sm:px-3 sm:py-2 md:px-3 md:py-2 border shadow-md ring-1 ${
+                                                dailyPaceSnapshot.gap >= 0
+                                                    ? 'bg-emerald-600/20 border-emerald-300/55 ring-emerald-400/30'
+                                                    : 'bg-red-950/50 border-red-400/45 ring-red-500/35'
                                             }`}
+                                            title="Output vs shift-time target (24 pairs/hr, 9:00–5:30, lunch out). Gap = actual minus expected for elapsed productive time."
                                         >
                                             <p className="text-[11px] sm:text-xs uppercase opacity-90 font-semibold tracking-wide text-white">
                                                 Actual vs pace
                                             </p>
-                                            <p className="text-[10px] sm:text-[11px] text-white/70 mt-1 leading-snug max-w-full mx-auto break-words px-0.5">
-                                                Output so far vs 24 pairs/hr (shift)
-                                            </p>
                                             <div
-                                                className="mt-2 md:mt-1.5 flex items-baseline justify-center gap-2 sm:gap-2.5 flex-nowrap"
-                                                aria-label={`${totalOutputToday} pairs produced, ${dailyPaceSnapshot.expected} pairs target for elapsed shift time`}
+                                                className="mt-1.5 md:mt-1 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1"
+                                                aria-label={`${totalOutputToday} pairs produced, ${dailyPaceSnapshot.expected} expected by now, gap ${dailyPaceSnapshot.gap}`}
                                             >
-                                                <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-emerald-300 drop-shadow-sm min-w-0">
-                                                    {totalOutputToday}
-                                                </span>
-                                                <span className="text-xl sm:text-lg md:text-2xl font-semibold text-white/50 shrink-0 leading-none pb-0.5 sm:pb-0">
-                                                    /
-                                                </span>
-                                                <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-white min-w-0">
-                                                    {dailyPaceSnapshot.expected}
-                                                </span>
+                                                <div className="flex items-baseline justify-center gap-2 sm:gap-2.5 flex-nowrap tabular-nums">
+                                                    <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold text-emerald-300 drop-shadow-sm min-w-0">
+                                                        {totalOutputToday}
+                                                    </span>
+                                                    <span className="text-xl sm:text-lg md:text-2xl font-semibold text-white/50 shrink-0 leading-none pb-0.5 sm:pb-0">
+                                                        /
+                                                    </span>
+                                                    <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-white min-w-0">
+                                                        {dailyPaceSnapshot.expected}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-baseline justify-center gap-1.5 border-t border-white/20 pt-1.5 mt-0.5 w-full min-[400px]:border-t-0 min-[400px]:border-l min-[400px]:border-white/25 min-[400px]:pt-0 min-[400px]:mt-0 min-[400px]:pl-4 min-[400px]:w-auto min-[400px]:basis-auto">
+                                                    <span
+                                                        className={`text-[10px] sm:text-[11px] uppercase tracking-wide ${
+                                                            dailyPaceSnapshot.gap >= 0 ? 'text-white/65' : 'text-white/85'
+                                                        }`}
+                                                    >
+                                                        Gap
+                                                    </span>
+                                                    <span
+                                                        className={`text-[1.35rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums ${
+                                                            dailyPaceSnapshot.gap >= 0 ? 'text-emerald-200' : 'text-white drop-shadow-sm'
+                                                        }`}
+                                                    >
+                                                        {dailyPaceSnapshot.gap > 0 ? '+' : ''}
+                                                        {dailyPaceSnapshot.gap}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <p className="text-[10px] sm:text-[11px] opacity-80 mt-1.5 md:mt-1 max-w-full mx-auto break-words px-0.5">
-                                                pairs · actual / target-by-time
-                                            </p>
-                                            <p className="text-[10px] opacity-65 mt-0.5 max-w-full mx-auto break-words px-0.5 leading-snug">
-                                                24/hr · 9:00–5:30 · lunch excluded
+                                            <p className="text-[10px] sm:text-[11px] opacity-80 mt-1 md:mt-0.5 max-w-full mx-auto break-words px-0.5 leading-snug">
+                                                pairs · 24/hr · 9–5:30 · lunch out
                                             </p>
                                         </div>
-                                        <div className="w-full min-w-0 rounded-xl bg-white/10 px-3 py-3 sm:px-3 sm:py-2.5 md:px-2 md:py-2.5 border border-white/25 shadow-md ring-1 ring-white/10">
+                                        <div className="w-full min-w-0 rounded-xl bg-white/10 px-3 py-2.5 sm:px-3 sm:py-2 md:px-2 md:py-2 border border-white/25 shadow-md ring-1 ring-white/10">
                                             <p className="text-[11px] sm:text-xs uppercase opacity-80 font-semibold tracking-wide">Day target</p>
-                                            <p className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-sky-100 mt-2 md:mt-1">
+                                            <p className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-sky-100 mt-1.5 md:mt-1">
                                                 {dailyPaceSnapshot.daily}
                                             </p>
-                                            <p className="text-[10px] sm:text-[11px] opacity-75 mt-1.5 md:mt-1">pairs (line plan)</p>
-                                        </div>
-                                        <div
-                                            className={`w-full min-w-0 rounded-xl px-3 py-3 sm:px-3 sm:py-2.5 md:px-2 md:py-2.5 border shadow-md ring-1 ${
-                                                dailyPaceSnapshot.gap >= 0
-                                                    ? 'bg-emerald-600/25 border-emerald-300/50 ring-emerald-400/30'
-                                                    : 'bg-red-950/50 border-red-400/45 ring-red-500/35'
-                                            }`}
-                                        >
-                                            <p className="text-[11px] sm:text-xs uppercase opacity-90 font-semibold tracking-wide text-white">
-                                                Gap vs pace
-                                            </p>
-                                            <p className="text-[10px] sm:text-[11px] text-white/70 mt-1 leading-snug max-w-full mx-auto break-words px-0.5">
-                                                Actual minus target-by-time
-                                            </p>
-                                            <p
-                                                className={`text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums mt-2 md:mt-1 ${
-                                                    dailyPaceSnapshot.gap >= 0 ? 'text-emerald-200' : 'text-amber-200'
-                                                }`}
-                                            >
-                                                {dailyPaceSnapshot.gap > 0 ? '+' : ''}
-                                                {dailyPaceSnapshot.gap}
-                                            </p>
-                                            <p className="text-[10px] sm:text-[11px] opacity-75 mt-1.5 md:mt-1">pairs</p>
+                                            <p className="text-[10px] sm:text-[11px] opacity-75 mt-1 md:mt-0.5">pairs (line plan)</p>
                                         </div>
                                     </div>
                                 ) : (
@@ -2030,25 +2022,7 @@ export const MobileProduction: React.FC = () => {
                                         No production plan for this line today — expected pace and day target are unavailable.
                                     </div>
                                 )}
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Process Name</p>
-                                        <p className="font-semibold truncate">{machineName || 'N/A'}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Line Name</p>
-                                        <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Machine ID</p>
-                                        <p className="font-semibold truncate">{resolvedMachineId || productionData.machine_id}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Operator</p>
                                         <p className="font-semibold truncate">
@@ -2056,13 +2030,25 @@ export const MobileProduction: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
                                     <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Date & Time</p>
-                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                        <p className="text-xs opacity-80">Machine ID</p>
+                                        <p className="font-semibold truncate">{resolvedMachineId || productionData.machine_id}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Line Name</p>
+                                        <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Process Name</p>
+                                        <p className="font-semibold truncate">{machineName || 'N/A'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Bins Completed (Today)</p>
                                         <p className="font-semibold truncate">
@@ -2075,9 +2061,16 @@ export const MobileProduction: React.FC = () => {
                                         <p className="text-[11px] opacity-80">1 bin = {MOBILE_PAIRS_PER_BIN} pairs</p>
                                     </div>
                                 </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Date & Time</p>
+                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    </div>
+                                </div>
                                 <button
+                                    type="button"
                                     onClick={toggleIdleReminder}
-                                    className={`flex items-center justify-center gap-2 rounded-lg p-2 transition-colors border ${
+                                    className={`col-span-2 flex touch-manipulation select-none items-center justify-center gap-2 rounded-lg px-2 py-2 transition-colors border active:opacity-90 ${
                                         idleReminderEnabled
                                             ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-300/60'
                                             : 'bg-gray-500/20 hover:bg-gray-500/30 border-gray-300/60'
@@ -2129,7 +2122,13 @@ export const MobileProduction: React.FC = () => {
                                 <p className="text-3xl md:text-5xl font-bold text-blue-900">{Number(productionData.target_mins || 0).toFixed(1)}</p>
                                 <p className="text-xs text-blue-600 mt-1">mins</p>
                             </div>
-                            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm relative">
+                            <div
+                                className={`bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm relative ${
+                                    productionData.button_status === 1 && !productionData.is_paused
+                                        ? 'animate-cycle-active-blink'
+                                        : ''
+                                }`}
+                            >
                                 {productionData.button_status === 1 && !productionData.is_paused && (
                                     <div className="absolute top-2 right-2">
                                         <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
