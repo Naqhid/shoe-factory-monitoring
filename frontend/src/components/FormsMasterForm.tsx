@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Plus, Edit, Trash2, X, Download, Loader2, MonitorUp, Copy, Square } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Download, Loader2, MonitorUp, Copy, Square, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -344,6 +344,16 @@ export const FormsMasterForm: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Forms Master</h1>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => fetchRecords()}
+              disabled={fetchLoading}
+              title="Reload from server"
+              className="bg-slate-100 text-slate-700 border border-slate-200 px-3 sm:px-4 py-2 rounded-md hover:bg-slate-200 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
+              <span className="sm:inline hidden">Refresh</span>
+            </button>
             <button
               onClick={copyViewerLink}
               className="bg-gray-700 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-gray-800 flex items-center justify-center gap-2 text-sm sm:text-base"

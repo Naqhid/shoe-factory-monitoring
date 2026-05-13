@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, Plus, Trash2, Download, Loader2 } from 'lucide-react';
+import { Save, Plus, Trash2, Download, Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -56,47 +56,14 @@ export const UserRightsForm: React.FC = () => {
   // Line items
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
 
-
-  // Fetch users and forms on mount
-  React.useEffect(() => {
-    const fetchAll = async () => {
-      setFetchLoading(true);
-      try {
-        const [usersRes, formsRes, rightsRes] = await Promise.all([
-          apiFetch(`${API_BASE}/api/masters/users`),
-          apiFetch(`${API_BASE}/api/masters/forms_master`),
-          apiFetch(`${API_BASE}/api/user-rights`),
-        ]);
-        const [usersResult, formsResult, rightsResult] = await Promise.all([
-          usersRes.json(), formsRes.json(), rightsRes.json(),
-        ]);
-        if (usersResult.success) setUsers(usersResult.data);
-        if (formsResult.success) setForms(formsResult.data);
-        if (rightsResult.success) setExistingRecords(rightsResult.data);
-      } catch (error) {
-        toast.error('Error loading data');
-        console.error(error);
-      } finally {
-        setFetchLoading(false);
-      }
-    };
-    fetchAll();
-  }, []);
-
-  // When user is selected, populate User ID and load existing rights
-  const handleUserChange = async (userId: string) => {
-    setSelectedUserId(userId);
-
+  const loadRightsLinesForUser = async (userId: string, usersList: UserOption[]) => {
     if (!userId) {
       setSelectedUserCode('');
       setLines([emptyLine()]);
       return;
     }
-
-    const user = users.find(u => u.id === parseInt(userId));
+    const user = usersList.find((u) => u.id === parseInt(userId, 10));
     setSelectedUserCode(user?.code || '');
-
-    // Load existing rights for this user
     try {
       const response = await apiFetch(`${API_BASE}/api/user-rights/user/${userId}`);
       const result = await response.json();
@@ -115,6 +82,50 @@ export const UserRightsForm: React.FC = () => {
       console.error('Error loading user rights:', error);
       setLines([emptyLine()]);
     }
+  };
+
+  const loadMasterLists = async () => {
+    setFetchLoading(true);
+    try {
+      const [usersRes, formsRes, rightsRes] = await Promise.all([
+        apiFetch(`${API_BASE}/api/masters/users`),
+        apiFetch(`${API_BASE}/api/masters/forms_master`),
+        apiFetch(`${API_BASE}/api/user-rights`),
+      ]);
+      const [usersResult, formsResult, rightsResult] = await Promise.all([
+        usersRes.json(),
+        formsRes.json(),
+        rightsRes.json(),
+      ]);
+      const usersList: UserOption[] = usersResult.success ? usersResult.data : [];
+      if (usersResult.success) setUsers(usersList);
+      if (formsResult.success) setForms(formsResult.data);
+      if (rightsResult.success) setExistingRecords(rightsResult.data);
+      return usersList;
+    } catch (error) {
+      toast.error('Error loading data');
+      console.error(error);
+      return [];
+    } finally {
+      setFetchLoading(false);
+    }
+  };
+
+  const refreshAll = async () => {
+    const uid = selectedUserId;
+    const usersList = await loadMasterLists();
+    if (uid) await loadRightsLinesForUser(uid, usersList);
+  };
+
+  // Fetch users and forms on mount
+  React.useEffect(() => {
+    void loadMasterLists();
+  }, []);
+
+  // When user is selected, populate User ID and load existing rights
+  const handleUserChange = async (userId: string) => {
+    setSelectedUserId(userId);
+    await loadRightsLinesForUser(userId, users);
   };
 
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
@@ -240,14 +251,26 @@ export const UserRightsForm: React.FC = () => {
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">User Rights</h1>
-          <button
-            onClick={handleExportToExcel}
-            className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-green-700 flex items-center justify-center gap-2 text-sm sm:text-base"
-          >
-            <Download className="h-4 w-4" />
-            <span className="sm:inline hidden">Export to Excel</span>
-            <span className="sm:hidden">Export</span>
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => void refreshAll()}
+              disabled={fetchLoading}
+              title="Reload users, forms, and rights from server"
+              className="bg-slate-100 text-slate-700 border border-slate-200 px-3 sm:px-4 py-2 rounded-md hover:bg-slate-200 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
+              <span className="sm:inline hidden">Refresh</span>
+            </button>
+            <button
+              onClick={handleExportToExcel}
+              className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-green-700 flex items-center justify-center gap-2 text-sm sm:text-base"
+            >
+              <Download className="h-4 w-4" />
+              <span className="sm:inline hidden">Export to Excel</span>
+              <span className="sm:hidden">Export</span>
+            </button>
+          </div>
         </div>
       </header>
 

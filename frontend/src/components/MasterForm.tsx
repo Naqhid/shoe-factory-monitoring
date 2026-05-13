@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, X, Download, Loader2, Search, RotateCcw } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Download, Loader2, Search, RotateCcw, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -341,6 +341,16 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                 {showArchived ? 'Hide Archived' : 'Show Archived'}
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => fetchRecords()}
+              disabled={fetchLoading}
+              title="Reload list from server"
+              className="bg-slate-100 text-slate-700 border border-slate-200 px-3 sm:px-4 py-2 rounded-md hover:bg-slate-200 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
+              <span className="sm:inline hidden">Refresh</span>
+            </button>
             <button
               onClick={handleExportToExcel}
               className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-green-700 flex items-center justify-center gap-2 text-sm sm:text-base"

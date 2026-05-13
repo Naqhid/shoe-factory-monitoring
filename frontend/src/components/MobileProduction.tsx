@@ -39,10 +39,56 @@ const normalizePauseState = <T extends ProductionData>(record: T): T => {
 };
 
 const FRIDAY_INDEX = 5; // Sunday=0 ... Friday=5
+/** Mon–Thu, Sat (and Sun): lunch 1:30 PM – 2:00 PM */
 const DEFAULT_LUNCH_START_MINUTES = 13 * 60 + 30; // 1:30 PM
 const DEFAULT_LUNCH_END_MINUTES = 14 * 60; // 2:00 PM
+/** Friday only: lunch 12:30 PM – 1:00 PM */
 const FRIDAY_LUNCH_START_MINUTES = 12 * 60 + 30; // 12:30 PM
 const FRIDAY_LUNCH_END_MINUTES = 13 * 60; // 1:00 PM
+
+/** Fixed pairs per bin on mobile (dropdown disabled until configurable again). */
+const MOBILE_PAIRS_PER_BIN = 6;
+
+/** Shift window for "expected by now" (local time). */
+const MOBILE_SHIFT_START_MINUTES = 9 * 60; // 9:00 AM
+const MOBILE_SHIFT_END_MINUTES = 17 * 60 + 30; // 5:30 PM
+
+/** Pace for expected-by-now (pairs per productive clock hour inside shift, lunch excluded). */
+const MOBILE_PAIRS_PER_HOUR_TARGET = 24;
+
+const getLunchBoundsMs = (d: Date) => {
+    const isFriday = d.getDay() === FRIDAY_INDEX;
+    const lunchS = isFriday ? FRIDAY_LUNCH_START_MINUTES : DEFAULT_LUNCH_START_MINUTES;
+    const lunchE = isFriday ? FRIDAY_LUNCH_END_MINUTES : DEFAULT_LUNCH_END_MINUTES;
+    const ls = new Date(d);
+    ls.setHours(Math.floor(lunchS / 60), lunchS % 60, 0, 0);
+    const le = new Date(d);
+    le.setHours(Math.floor(lunchE / 60), lunchE % 60, 0, 0);
+    return { lunchStartMs: ls.getTime(), lunchEndMs: le.getTime() };
+};
+
+/** Minutes in [rangeStartMs, rangeEndMs] on the same calendar day as `day`, excluding lunch overlap. */
+const productiveMinutesExcludingLunch = (day: Date, rangeStartMs: number, rangeEndMs: number) => {
+    if (rangeEndMs <= rangeStartMs) return 0;
+    const rawMin = (rangeEndMs - rangeStartMs) / 60000;
+    const { lunchStartMs, lunchEndMs } = getLunchBoundsMs(day);
+    const overlapStart = Math.max(rangeStartMs, lunchStartMs);
+    const overlapEnd = Math.min(rangeEndMs, lunchEndMs);
+    const lunchOverlapMin = overlapEnd > overlapStart ? (overlapEnd - overlapStart) / 60000 : 0;
+    return Math.max(0, rawMin - lunchOverlapMin);
+};
+
+/** Productive minutes from shift start through `now` (capped at shift end), lunch excluded. */
+const getProductiveElapsedMinutesInShift = (now: Date, shiftStartMin: number, shiftEndMin: number) => {
+    const shiftStart = new Date(now);
+    shiftStart.setHours(Math.floor(shiftStartMin / 60), shiftStartMin % 60, 0, 0);
+    const shiftEnd = new Date(now);
+    shiftEnd.setHours(Math.floor(shiftEndMin / 60), shiftEndMin % 60, 0, 0);
+    const t = Math.min(now.getTime(), shiftEnd.getTime());
+    const startMs = shiftStart.getTime();
+    if (t <= startMs) return 0;
+    return productiveMinutesExcludingLunch(now, startMs, t);
+};
 
 const getMinutesOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
 
@@ -185,6 +231,7 @@ export const MobileProduction: React.FC = () => {
     const [totalOutputToday, setTotalOutputToday] = useState(0);
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
+    const [dailyTargetPairs, setDailyTargetPairs] = useState<number | null>(null);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
     const [startReminderDue, setStartReminderDue] = useState(false);
@@ -205,7 +252,7 @@ export const MobileProduction: React.FC = () => {
     const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number }>>([]);
     const [timingLoading, setTimingLoading] = useState(false);
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
-    const [selectedTargetPairs, setSelectedTargetPairs] = useState(6);
+    const [selectedTargetPairs, setSelectedTargetPairs] = useState(MOBILE_PAIRS_PER_BIN);
     const baseTargetMinsRef = React.useRef(0);
     const baseTargetPairsRef = React.useRef(12);
     
@@ -225,10 +272,7 @@ export const MobileProduction: React.FC = () => {
         return 'N/A';
     };
 
-    const clampTargetPairs = React.useCallback((value: number) => {
-        if (!Number.isFinite(value)) return 6;
-        return Math.max(1, Math.min(12, Math.round(value)));
-    }, []);
+    const clampTargetPairs = React.useCallback((_value: number) => MOBILE_PAIRS_PER_BIN, []);
 
     const getScaledTargetMins = React.useCallback((pairs: number) => {
         const baseMins = Number(baseTargetMinsRef.current || 0);
@@ -241,7 +285,7 @@ export const MobileProduction: React.FC = () => {
         const safeBaseMins = Number(targetMins || 0);
         baseTargetPairsRef.current = 12;
         baseTargetMinsRef.current = safeBaseMins > 0 ? safeBaseMins : 0;
-        const nextSelected = 6;
+        const nextSelected = MOBILE_PAIRS_PER_BIN;
         setSelectedTargetPairs(nextSelected);
         return getScaledTargetMins(nextSelected);
     }, [getScaledTargetMins]);
@@ -276,22 +320,26 @@ export const MobileProduction: React.FC = () => {
         return `mobile_target_pairs_${effectiveMachineId}_${urlEmpId}`;
     }, [effectiveMachineId, urlEmpId]);
 
-    const readSessionTargetPairs = React.useCallback(() => {
-        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return 6;
-        const raw = sessionStorage.getItem(targetPairsSessionKey);
-        if (!raw) return 6;
-        return clampTargetPairs(Number(raw));
-    }, [clampTargetPairs, targetPairsSessionKey]);
-
     const writeSessionTargetPairs = React.useCallback((pairs: number) => {
         if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return;
         sessionStorage.setItem(targetPairsSessionKey, String(clampTargetPairs(pairs)));
     }, [clampTargetPairs, targetPairsSessionKey]);
 
-    const clearSessionTargetPairs = React.useCallback(() => {
-        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return;
-        sessionStorage.removeItem(targetPairsSessionKey);
-    }, [targetPairsSessionKey]);
+    const dailyPaceSnapshot = React.useMemo(() => {
+        const daily = dailyTargetPairs;
+        if (daily == null || daily <= 0) return null;
+        const productiveMins = getProductiveElapsedMinutesInShift(
+            currentTime,
+            MOBILE_SHIFT_START_MINUTES,
+            MOBILE_SHIFT_END_MINUTES
+        );
+        const productiveHours = productiveMins / 60;
+        const rawExpected = MOBILE_PAIRS_PER_HOUR_TARGET * productiveHours;
+        const expected = Math.min(daily, Math.round(rawExpected));
+        const actual = totalOutputToday;
+        const gap = actual - expected;
+        return { expected, daily, gap };
+    }, [currentTime, dailyTargetPairs, totalOutputToday]);
 
     // Update current time every second
     useEffect(() => {
@@ -859,10 +907,17 @@ export const MobileProduction: React.FC = () => {
                     
                     setTotalOutputToday(totalOutput);
                     setAvgEfficiencyToday(parseFloat(result.data.avg_efficiency_percent || 0).toFixed(1));
+                    const dtp = result.data.daily_target_pairs;
+                    setDailyTargetPairs(
+                        dtp !== null && dtp !== undefined && Number.isFinite(Number(dtp)) && Number(dtp) > 0
+                            ? Number(dtp)
+                            : null
+                    );
                     return;
                 } else {
                     setTotalOutputToday(0);
                     setAvgEfficiencyToday('0');
+                    setDailyTargetPairs(null);
                     return;
                 }
             }
@@ -1033,19 +1088,9 @@ export const MobileProduction: React.FC = () => {
                         setProductionData({
                             ...normalizedRecord,
                             target_mins: scaledTargetMins,
-                            target_pairs: 12,
+                            target_pairs: MOBILE_PAIRS_PER_BIN,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
-                        const rememberedPairs = readSessionTargetPairs();
-                        if (rememberedPairs !== 6) {
-                            const rememberedTargetMins = getScaledTargetMins(rememberedPairs);
-                            setSelectedTargetPairs(rememberedPairs);
-                            setProductionData((prev) => prev ? {
-                                ...prev,
-                                target_pairs: rememberedPairs,
-                                target_mins: rememberedTargetMins,
-                            } : prev);
-                        }
                         runningSinceMsRef.current = normalizedRecord.start_time
                             ? new Date(normalizedRecord.start_time).getTime()
                             : null;
@@ -1099,7 +1144,7 @@ export const MobileProduction: React.FC = () => {
                             emp_id: employee.id,
                             output_pairs: 0,
                             target_mins: scaledTargetMins,
-                            target_pairs: 6,
+                            target_pairs: MOBILE_PAIRS_PER_BIN,
                             start_time: null,
                             finish_time: null,
                             idle_start_time: null,
@@ -1109,16 +1154,6 @@ export const MobileProduction: React.FC = () => {
                             is_paused: false
                         };
                         setProductionData(defaultData);
-                        const rememberedPairs = readSessionTargetPairs();
-                        if (rememberedPairs !== 6) {
-                            const rememberedTargetMins = getScaledTargetMins(rememberedPairs);
-                            setSelectedTargetPairs(rememberedPairs);
-                            setProductionData((prev) => prev ? {
-                                ...prev,
-                                target_pairs: rememberedPairs,
-                                target_mins: rememberedTargetMins,
-                            } : prev);
-                        }
                         runningSinceMsRef.current = null;
                         // Fetch summary data immediately after setting production data
                         await fetchSummaryData(effectiveMachineId);
@@ -1559,18 +1594,6 @@ export const MobileProduction: React.FC = () => {
         return parseFloat(((actualMins / productionData.target_mins) * 100).toFixed(1));
     };
 
-    const handleTargetPairsChange = (nextValue: number) => {
-        const clamped = clampTargetPairs(nextValue);
-        setSelectedTargetPairs(clamped);
-        writeSessionTargetPairs(clamped);
-        if (!productionData) return;
-        setProductionData({
-            ...productionData,
-            target_pairs: clamped,
-            target_mins: getScaledTargetMins(clamped),
-        });
-    };
-
     const calculateStatus = () => {
         if (!productionData) return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
 
@@ -1931,6 +1954,82 @@ export const MobileProduction: React.FC = () => {
                                 <div className="col-span-2 md:col-span-6 text-center">
                                     <h1 className="text-xl md:text-2xl font-bold">MACHINE CENTRE PRODUCTION</h1>
                                 </div>
+                                {loadingSummary ? (
+                                    <div className="col-span-2 md:col-span-6 text-center text-xs text-white/80 py-1">
+                                        Loading daily pace…
+                                    </div>
+                                ) : dailyPaceSnapshot ? (
+                                    <div className="col-span-2 md:col-span-6 grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-3 md:gap-2 lg:gap-3 text-center">
+                                        <div
+                                            className={`w-full min-w-0 rounded-xl px-3 py-3 sm:px-3 sm:py-2.5 md:px-2 md:py-2.5 border shadow-md ${
+                                                totalOutputToday >= dailyPaceSnapshot.expected
+                                                    ? 'bg-emerald-500/20 border-emerald-300/55 ring-1 ring-emerald-400/35'
+                                                    : 'bg-amber-950/35 border-amber-300/45 ring-1 ring-amber-400/30'
+                                            }`}
+                                        >
+                                            <p className="text-[11px] sm:text-xs uppercase opacity-90 font-semibold tracking-wide text-white">
+                                                Actual vs pace
+                                            </p>
+                                            <p className="text-[10px] sm:text-[11px] text-white/70 mt-1 leading-snug max-w-full mx-auto break-words px-0.5">
+                                                Output so far vs 24 pairs/hr (shift)
+                                            </p>
+                                            <div
+                                                className="mt-2 md:mt-1.5 flex items-baseline justify-center gap-2 sm:gap-2.5 flex-nowrap"
+                                                aria-label={`${totalOutputToday} pairs produced, ${dailyPaceSnapshot.expected} pairs target for elapsed shift time`}
+                                            >
+                                                <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-emerald-300 drop-shadow-sm min-w-0">
+                                                    {totalOutputToday}
+                                                </span>
+                                                <span className="text-xl sm:text-lg md:text-2xl font-semibold text-white/50 shrink-0 leading-none pb-0.5 sm:pb-0">
+                                                    /
+                                                </span>
+                                                <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-white min-w-0">
+                                                    {dailyPaceSnapshot.expected}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] sm:text-[11px] opacity-80 mt-1.5 md:mt-1 max-w-full mx-auto break-words px-0.5">
+                                                pairs · actual / target-by-time
+                                            </p>
+                                            <p className="text-[10px] opacity-65 mt-0.5 max-w-full mx-auto break-words px-0.5 leading-snug">
+                                                24/hr · 9:00–5:30 · lunch excluded
+                                            </p>
+                                        </div>
+                                        <div className="w-full min-w-0 rounded-xl bg-white/10 px-3 py-3 sm:px-3 sm:py-2.5 md:px-2 md:py-2.5 border border-white/25 shadow-md ring-1 ring-white/10">
+                                            <p className="text-[11px] sm:text-xs uppercase opacity-80 font-semibold tracking-wide">Day target</p>
+                                            <p className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-sky-100 mt-2 md:mt-1">
+                                                {dailyPaceSnapshot.daily}
+                                            </p>
+                                            <p className="text-[10px] sm:text-[11px] opacity-75 mt-1.5 md:mt-1">pairs (line plan)</p>
+                                        </div>
+                                        <div
+                                            className={`w-full min-w-0 rounded-xl px-3 py-3 sm:px-3 sm:py-2.5 md:px-2 md:py-2.5 border shadow-md ring-1 ${
+                                                dailyPaceSnapshot.gap >= 0
+                                                    ? 'bg-emerald-600/25 border-emerald-300/50 ring-emerald-400/30'
+                                                    : 'bg-red-950/50 border-red-400/45 ring-red-500/35'
+                                            }`}
+                                        >
+                                            <p className="text-[11px] sm:text-xs uppercase opacity-90 font-semibold tracking-wide text-white">
+                                                Gap vs pace
+                                            </p>
+                                            <p className="text-[10px] sm:text-[11px] text-white/70 mt-1 leading-snug max-w-full mx-auto break-words px-0.5">
+                                                Actual minus target-by-time
+                                            </p>
+                                            <p
+                                                className={`text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums mt-2 md:mt-1 ${
+                                                    dailyPaceSnapshot.gap >= 0 ? 'text-emerald-200' : 'text-amber-200'
+                                                }`}
+                                            >
+                                                {dailyPaceSnapshot.gap > 0 ? '+' : ''}
+                                                {dailyPaceSnapshot.gap}
+                                            </p>
+                                            <p className="text-[10px] sm:text-[11px] opacity-75 mt-1.5 md:mt-1">pairs</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="col-span-2 md:col-span-6 text-center text-xs text-white/70 px-2 py-2 rounded-lg bg-white/5 border border-white/10">
+                                        No production plan for this line today — expected pace and day target are unavailable.
+                                    </div>
+                                )}
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Process Name</p>
@@ -1969,11 +2068,11 @@ export const MobileProduction: React.FC = () => {
                                         <p className="font-semibold truncate">
                                             {loadingSummary
                                                 ? '...'
-                                                : Number.isInteger(totalOutputToday / 12)
-                                                    ? totalOutputToday / 12
-                                                    : (totalOutputToday / 12).toFixed(2)}
+                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
+                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
+                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
                                         </p>
-                                        <p className="text-[11px] opacity-80">1 bin = 12 pairs</p>
+                                        <p className="text-[11px] opacity-80">1 bin = {MOBILE_PAIRS_PER_BIN} pairs</p>
                                     </div>
                                 </div>
                                 <button
@@ -2045,14 +2144,12 @@ export const MobileProduction: React.FC = () => {
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
                                 <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs / BIN</p>
                                 <select
-                                    value={selectedTargetPairs}
-                                    onChange={(e) => handleTargetPairsChange(Number(e.target.value))}
-                                    disabled={loading}
-                                    className="w-full text-2xl md:text-3xl font-bold text-green-900 bg-white border border-green-300 rounded-lg px-2 py-1"
+                                    value={MOBILE_PAIRS_PER_BIN}
+                                    aria-label="Target pairs per bin (fixed)"
+                                    disabled
+                                    className="w-full text-2xl md:text-3xl font-bold text-green-900 bg-gray-100 border border-green-300 rounded-lg px-2 py-1 cursor-not-allowed opacity-90"
                                 >
-                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((pairCount) => (
-                                        <option key={pairCount} value={pairCount}>{pairCount}</option>
-                                    ))}
+                                    <option value={MOBILE_PAIRS_PER_BIN}>{MOBILE_PAIRS_PER_BIN}</option>
                                 </select>
                                 <p className="text-xs text-green-600 mt-1">pairs</p>
                             </div>

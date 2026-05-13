@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch, API_BASE_URL } from '../services/api';
 
@@ -119,11 +119,23 @@ export const RolesMasterForm: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <h2 className="text-2xl font-bold">Role Management</h2>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-          <Plus className="h-4 w-4" /> Add Role
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => fetchRoles()}
+            disabled={fetchLoading}
+            title="Reload from server"
+            className="flex items-center gap-2 bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+            <Plus className="h-4 w-4" /> Add Role
+          </button>
+        </div>
       </div>
 
       {showForm && (

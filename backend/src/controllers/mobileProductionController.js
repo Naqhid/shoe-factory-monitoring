@@ -1705,64 +1705,142 @@ exports.getLiveMachineStatus = async (req, res, next) => {
   }
 };
 
+/** URL / DB sometimes disagree on leading zeros (e.g. "02" vs "2"). */
+const expandMachineIdKeys = (machineId) => {
+  const raw = String(machineId || '').trim();
+  if (!raw) return [];
+  const keys = new Set([raw]);
+  if (/^\d+$/.test(raw)) {
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n)) {
+      keys.add(String(n));
+      keys.add(String(n).padStart(2, '0'));
+    }
+  }
+  return [...keys];
+};
+
 // Get summary data for a specific machine and date
 exports.getSummaryByMachineAndDate = async (req, res, next) => {
   try {
     const { machineId, date } = req.params;
     logger.info(`Fetching summary for machine: ${machineId}, date: ${date}`);
-    
+
+    const machineKeys = expandMachineIdKeys(machineId);
+    const inList = machineKeys.length ? machineKeys : [machineId];
+    const ph = inList.map(() => '?').join(', ');
+
+    let workCentreId = null;
+
+    const [mcFromMaster] = await db.query(
+      `SELECT work_centre_id FROM machine_centres
+       WHERE machine_id IN (${ph}) OR code IN (${ph})
+       LIMIT 1`,
+      [...inList, ...inList]
+    );
+    if (mcFromMaster.length > 0 && mcFromMaster[0].work_centre_id != null) {
+      workCentreId = mcFromMaster[0].work_centre_id;
+    }
+
+    if (workCentreId == null) {
+      const [sessRows] = await db.query(
+        `SELECT work_centre_id FROM mobile_sessions
+         WHERE machine_id IN (${ph}) AND status = 'active'
+         ORDER BY activated_at DESC
+         LIMIT 1`,
+        [...inList]
+      );
+      if (sessRows.length > 0 && sessRows[0].work_centre_id != null) {
+        workCentreId = sessRows[0].work_centre_id;
+      }
+    }
+
+    if (workCentreId == null) {
+      const [prodWcRows] = await db.query(
+        `SELECT work_centre_id FROM machine_centre_production
+         WHERE machine_id IN (${ph}) AND DATE(prod_date) = DATE(?)
+         ORDER BY id DESC
+         LIMIT 1`,
+        [...inList, date]
+      );
+      if (prodWcRows.length > 0 && prodWcRows[0].work_centre_id != null) {
+        workCentreId = prodWcRows[0].work_centre_id;
+      }
+    }
+
+    let dailyTargetPairs = null;
+    let planManHoursMinutes = null;
+    if (workCentreId != null) {
+      // Match TV dashboard / line performance: sum all styles for the line+date, tolerate DATE vs DATETIME
+      const [planAgg] = await db.query(
+        `SELECT
+           COALESCE(SUM(total_target_per_day), 0) AS total_target_sum,
+           COALESCE(MAX(NULLIF(man_hours_minutes, 0)), NULL) AS man_hours_pick
+         FROM production_plan
+         WHERE work_centre_id = ?
+           AND DATE(plan_date) = DATE(?)
+           AND deleted_at IS NULL`,
+        [workCentreId, date]
+      );
+      if (planAgg.length > 0) {
+        const sumT = parseInt(planAgg[0].total_target_sum, 10);
+        if (Number.isFinite(sumT) && sumT > 0) {
+          dailyTargetPairs = sumT;
+        }
+        const mh = parseInt(planAgg[0].man_hours_pick, 10);
+        if (Number.isFinite(mh) && mh > 0) {
+          planManHoursMinutes = mh;
+        }
+      }
+    }
+
     // CRITICAL FIX: Always recalculate from production records to ensure fresh data
     // Don't rely solely on summary table which may have stale/generated column issues
     // Use DATE(prod_date) to handle timezone differences in date comparison
     const [productionRows] = await db.query(`
       SELECT 
-        SUM(output_pairs) as total_output_pairs,
-        SUM(target_mins) as total_target_mins,
-        SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)) as total_actual_mins,
-        SUM(COALESCE(idle_mins, 0)) as total_idle_mins,
+        COALESCE(SUM(output_pairs), 0) as total_output_pairs,
+        COALESCE(SUM(target_mins), 0) as total_target_mins,
+        COALESCE(SUM(TIMESTAMPDIFF(MINUTE, start_time, finish_time)), 0) as total_actual_mins,
+        COALESCE(SUM(COALESCE(idle_mins, 0)), 0) as total_idle_mins,
         COUNT(*) as total_cycles
       FROM machine_centre_production
-      WHERE machine_id = ? AND DATE(prod_date) = ? AND button_status = 2
-    `, [machineId, date]);
-    
-    const prodData = productionRows[0];
-    
-    if (!prodData || !prodData.total_output_pairs) {
-      logger.info(`No finished production records found for ${machineId} on ${date}`);
-      return res.json({ success: true, data: null });
-    }
-    
-    // Calculate derived values
-    const totalOutput = parseInt(prodData.total_output_pairs) || 0;
+      WHERE machine_id IN (${ph}) AND DATE(prod_date) = DATE(?) AND button_status = 2
+    `, [...inList, date]);
+
+    const prodData = productionRows[0] || {};
+
+    const totalOutput = parseInt(prodData.total_output_pairs, 10) || 0;
     const totalTargetMins = parseFloat(prodData.total_target_mins) || 0;
     const totalActualMins = parseFloat(prodData.total_actual_mins) || 0;
     const totalIdleMins = parseFloat(prodData.total_idle_mins) || 0;
-    
+    const totalCycles = parseInt(prodData.total_cycles, 10) || 0;
+
     // Efficiency = (target / actual) * 100 (higher is better - they beat the target)
-    const avgEfficiency = totalActualMins > 0 
+    const avgEfficiency = totalActualMins > 0
       ? ((totalTargetMins / totalActualMins) * 100).toFixed(1)
       : '0';
     const cumAvgTime = totalOutput > 0
       ? (totalActualMins / totalOutput).toFixed(2)
       : '0';
-    
+
     const result = {
       machine_id: machineId,
       prod_date: date,
+      work_centre_id: workCentreId,
       total_output_pairs: totalOutput,
       total_target_mins: totalTargetMins,
       total_actual_mins: totalActualMins,
       total_idle_mins: totalIdleMins,
       avg_efficiency_percent: avgEfficiency,
       cum_avg_time: cumAvgTime,
-      total_cycles: parseInt(prodData.total_cycles) || 0
+      total_cycles: totalCycles,
+      daily_target_pairs: dailyTargetPairs,
+      plan_man_hours_minutes: planManHoursMinutes,
     };
-    
+
     logger.info(`Fresh calc for ${machineId}: ${JSON.stringify(result)}`);
-    
-    // Note: Summary is already updated atomically by transaction in updateStatus
-    // No background sync needed - prevents race conditions
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     logger.error('Error fetching summary data:', error);
