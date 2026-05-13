@@ -7,6 +7,8 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "setup-db": "node setup-db.js",
+    "restore-db": "node scripts/restore-florence-from-env.js",
+    "db-print-grant": "node scripts/print-mysql-grant-for-this-pc.js",
     "fix-definers": "node fix-db-definers.js",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop shoe-factory-monitoring",

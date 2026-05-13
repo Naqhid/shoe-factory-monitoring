@@ -8,8 +8,36 @@ const BACKUP_DIR = process.env.BACKUP_DIR
   : path.resolve(__dirname, '../../data/backups');
 
 const RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS || '30');
-const BACKUP_HOUR    = parseInt(process.env.BACKUP_HOUR || '17');   // 5 PM default
-const BACKUP_MINUTE  = parseInt(process.env.BACKUP_MINUTE || '0');
+const BACKUP_HOUR = parseInt(process.env.BACKUP_HOUR || '17', 10);
+const BACKUP_MINUTE = parseInt(process.env.BACKUP_MINUTE || '0', 10);
+
+/** @returns {{ hour: number, minute: number }[]} */
+function parseBackupTimeSlots() {
+  const raw = (process.env.BACKUP_TIMES || '').trim();
+  if (raw) {
+    const slots = [];
+    const seen = new Set();
+    for (const part of raw.split(',')) {
+      const m = part.trim().match(/^(\d{1,2}):(\d{1,2})$/);
+      if (!m) {
+        logger.warn(`BACKUP_TIMES: ignored invalid entry "${part.trim()}"`);
+        continue;
+      }
+      const hour = parseInt(m[1], 10);
+      const minute = parseInt(m[2], 10);
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        logger.warn(`BACKUP_TIMES: out of range "${part.trim()}"`);
+        continue;
+      }
+      const key = `${hour}:${minute}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      slots.push({ hour, minute });
+    }
+    if (slots.length) return slots;
+  }
+  return [{ hour: BACKUP_HOUR, minute: BACKUP_MINUTE }];
+}
 
 function ensureBackupDir() {
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -60,7 +88,7 @@ function gitPush(filename) {
   const repoRoot = path.resolve(__dirname, '../../..');
   const branch = process.env.GIT_BACKUP_BRANCH || 'develop';
   const date = new Date().toLocaleString();
-  const message = `chore: daily DB backup ${filename} - ${date}`;
+  const message = `chore: DB backup ${filename} - ${date}`;
 
   const gitCmd = `git -C "${repoRoot}" add . && git -C "${repoRoot}" commit -m "${message}" && git -C "${repoRoot}" push origin ${branch}`;
 
@@ -91,20 +119,33 @@ function pruneOldBackups() {
   }
 }
 
-function scheduleDaily() {
+function scheduleRecurringSlot(hour, minute) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const label = `${pad(hour)}:${pad(minute)}`;
+
   const scheduleNext = () => {
     const now = new Date();
     const next = new Date();
-    next.setHours(BACKUP_HOUR, BACKUP_MINUTE, 0, 0);
+    next.setHours(hour, minute, 0, 0);
     if (next <= now) next.setDate(next.getDate() + 1);
     const delay = next - now;
-    logger.info(`Next DB backup scheduled at ${next.toLocaleString()} (in ${Math.round(delay / 60000)} min)`);
+    logger.info(
+      `Next DB backup (${label}) at ${next.toLocaleString()} (in ${Math.round(delay / 60000)} min)`
+    );
     setTimeout(() => {
       runBackup();
-      scheduleNext(); // reschedule for next day
+      scheduleNext();
     }, delay);
   };
+
   scheduleNext();
+}
+
+function scheduleDaily() {
+  const slots = parseBackupTimeSlots();
+  for (const { hour, minute } of slots) {
+    scheduleRecurringSlot(hour, minute);
+  }
 }
 
 function listBackups() {
