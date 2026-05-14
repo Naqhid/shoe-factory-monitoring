@@ -1,6 +1,9 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 
+/** Standard working hours for prorating daily pair targets (matches production_routing_header.target_per_hour = target_per_day / 8). */
+const SHIFT_HOURS = 8;
+
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function parseRequestedDate(rawDate) {
@@ -94,15 +97,47 @@ class HourlyOutputController {
 
       const average = avgResult[0]?.average ? parseFloat(avgResult[0].average).toFixed(1) : 0;
 
-      const [planData] = await db.query(
-        'SELECT total_target_per_day FROM production_plan WHERE work_centre_id = ? AND plan_date = ? LIMIT 1',
+      // Daily pairs: prefer production routing header (source of truth for line capacity), else production plan.
+      // Routing join matches productionTrackerController.getSummary so hourly pacing stays consistent with planning.
+      const [targetRows] = await db.query(
+        `
+        SELECT
+          COALESCE(prh.target_per_day, pp.total_target_per_day, 0) AS daily_target,
+          pp.total_target_per_day AS plan_target_per_day,
+          prh.target_per_day AS routing_target_per_day
+        FROM production_plan pp
+        LEFT JOIN production_routing_header prh ON prh.id = (
+          SELECT prh2.id
+          FROM production_routing_header prh2
+          WHERE prh2.style_id = pp.style_id
+            AND DATE(prh2.created_on) <= DATE(pp.plan_date)
+          ORDER BY prh2.created_on DESC, prh2.id DESC
+          LIMIT 1
+        )
+        WHERE pp.work_centre_id = ?
+          AND DATE(pp.plan_date) = DATE(?)
+          AND pp.deleted_at IS NULL
+        LIMIT 1
+        `,
         [workCentreId, requestedDate]
       );
-      const target = planData[0]?.total_target_per_day
-        ? Math.ceil(planData[0].total_target_per_day / 8)
-        : 0;
 
-      res.json({ success: true, data: { hourlyData: formattedData, average: parseFloat(average), target } });
+      const dailyTarget = Number(targetRows[0]?.daily_target) || 0;
+      // Integer hourly pairs — same convention as ProductionRoutingForm (round(day / 8)).
+      const hourlyPace = dailyTarget > 0 ? Math.round(dailyTarget / SHIFT_HOURS) : 0;
+
+      res.json({
+        success: true,
+        data: {
+          hourlyData: formattedData,
+          average: parseFloat(average),
+          /** Hourly pair pace for chart reference line (= dailyTarget / SHIFT_HOURS). */
+          target: hourlyPace,
+          /** Full shift daily target (pairs); use for totals / achievement %, not (hourly × bucket count). */
+          dailyTarget,
+          shiftHours: SHIFT_HOURS,
+        },
+      });
     } catch (error) {
       logger.error('Error fetching hourly output:', error);
       res.status(500).json({ success: false, error: error.message });

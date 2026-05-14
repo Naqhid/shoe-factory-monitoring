@@ -2,6 +2,111 @@ const pool = require('../../config/database');
 const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
+/**
+ * Core activation used by POST /activate and bulk assign-from-employees.
+ * @param {*} dbPool mysql pool
+ * @param {{ machine_id: string, work_centre_id?: number|null, emp_id: string }} params — `emp_id` is employees.code (same as single activate API).
+ * @returns {Promise<{ ok: true, session_id: string } | { ok: false, status: number, message: string }>}
+ */
+async function activateMachineSessionCore(dbPool, { machine_id, work_centre_id, emp_id }) {
+    try {
+        if (!machine_id || !emp_id) {
+            return { ok: false, status: 400, message: 'Missing machine or employee info' };
+        }
+
+        let parsedMachineId = machine_id;
+        let parsedWorkCentreId = work_centre_id;
+
+        if (typeof machine_id === 'string' && machine_id.includes('|')) {
+            const [wcCode, mcId] = machine_id.split('|');
+            parsedMachineId = mcId.trim();
+
+            const [wcRows] = await dbPool.execute(
+                'SELECT id FROM work_centres WHERE code = ? OR name = ?',
+                [wcCode.trim(), wcCode.trim()]
+            );
+            if (wcRows.length === 0) {
+                return { ok: false, status: 400, message: `Work centre "${wcCode}" not found` };
+            }
+            parsedWorkCentreId = wcRows[0].id;
+        }
+
+        const [empRows] = await dbPool.execute('SELECT id, code FROM employees WHERE code = ?', [emp_id]);
+        if (empRows.length === 0) {
+            return { ok: false, status: 400, message: `Employee Code ${emp_id} not found` };
+        }
+
+        let finalWorkCentreId = parsedWorkCentreId;
+        if (!finalWorkCentreId) {
+            const [machineRows] = await dbPool.execute(
+                'SELECT machine_id, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?',
+                [parsedMachineId, parsedMachineId]
+            );
+            if (machineRows.length > 0) {
+                finalWorkCentreId = machineRows[0].work_centre_id;
+            } else if (parsedMachineId !== 'DEMO-MACHINE-01') {
+                return { ok: false, status: 400, message: `Machine ${parsedMachineId} not found` };
+            }
+        }
+
+        const [employeeActiveRows] = await dbPool.execute(
+            `SELECT machine_id
+             FROM mobile_sessions
+             WHERE emp_code = ?
+               AND status = 'active'
+               AND DATE(activated_at) = CURDATE()
+             ORDER BY activated_at DESC
+             LIMIT 1`,
+            [emp_id]
+        );
+        if (employeeActiveRows.length > 0 && String(employeeActiveRows[0].machine_id) !== String(parsedMachineId)) {
+            return {
+                ok: false,
+                status: 409,
+                message: `Operator ${emp_id} is already active on machine ${employeeActiveRows[0].machine_id}. Please finish/logout there first.`,
+            };
+        }
+
+        await dbPool.execute(
+            `UPDATE mobile_sessions
+             SET status = 'expired'
+             WHERE emp_code = ?
+               AND status = 'active'
+               AND DATE(activated_at) < CURDATE()`,
+            [emp_id]
+        );
+
+        await dbPool.execute(
+            `UPDATE mobile_sessions
+             SET status = 'expired'
+             WHERE machine_id = ?
+               AND status = 'active'
+               AND DATE(activated_at) < CURDATE()`,
+            [parsedMachineId]
+        );
+
+        const [existing] = await dbPool.execute('SELECT session_id FROM mobile_sessions WHERE machine_id = ?', [parsedMachineId]);
+        const finalSessionId = existing.length > 0 ? existing[0].session_id : randomUUID();
+
+        await dbPool.execute(
+            `INSERT INTO mobile_sessions (session_id, machine_id, work_centre_id, emp_id, emp_code, status, activated_at) 
+             VALUES (?, ?, ?, ?, ?, 'active', NOW())
+             ON DUPLICATE KEY UPDATE 
+             work_centre_id = VALUES(work_centre_id), 
+             emp_id = VALUES(emp_id), 
+             emp_code = VALUES(emp_code),
+             status = 'active', 
+             activated_at = NOW()`,
+            [finalSessionId, parsedMachineId, finalWorkCentreId || 1, empRows[0].id, emp_id]
+        );
+
+        return { ok: true, session_id: finalSessionId };
+    } catch (error) {
+        logger.error('activateMachineSessionCore', error);
+        return { ok: false, status: 500, message: error.message || 'Activation failed' };
+    }
+}
+
 const mobileSessionController = {
     // 1. Create a new session (called by Display Device)
     createSession: async (req, res, next) => {
@@ -76,114 +181,81 @@ const mobileSessionController = {
     activateSession: async (req, res, next) => {
         try {
             const { machine_id, work_centre_id, emp_id } = req.body;
-
-            if (!machine_id || !emp_id) {
-                return res.status(400).json({ success: false, message: 'Missing machine or employee info' });
+            const result = await activateMachineSessionCore(pool, { machine_id, work_centre_id, emp_id });
+            if (!result.ok) {
+                return res.status(result.status).json({ success: false, message: result.message });
             }
-
-            // Parse QR format: "work_centre_code|machine_id" e.g. "Stitching-line|01"
-            let parsedMachineId = machine_id;
-            let parsedWorkCentreId = work_centre_id;
-
-            if (machine_id.includes('|')) {
-                const [wcCode, mcId] = machine_id.split('|');
-                parsedMachineId = mcId.trim();
-
-                // Resolve work centre by code
-                const [wcRows] = await pool.execute(
-                    'SELECT id FROM work_centres WHERE code = ? OR name = ?',
-                    [wcCode.trim(), wcCode.trim()]
-                );
-                if (wcRows.length === 0) {
-                    return res.status(400).json({ success: false, message: `Work centre "${wcCode}" not found` });
-                }
-                parsedWorkCentreId = wcRows[0].id;
-            }
-
-            // 1. Resolve Employee
-            const [empRows] = await pool.execute(
-                'SELECT id, code FROM employees WHERE code = ?',
-                [emp_id]
-            );
-            if (empRows.length === 0) {
-                return res.status(400).json({ success: false, message: `Employee Code ${emp_id} not found` });
-            }
-            const finalEmpId = empRows[0].code;
-
-            // 2. Resolve Machine — if not parsed from QR, fall back to machine_centres lookup
-            let finalWorkCentreId = parsedWorkCentreId;
-            if (!finalWorkCentreId) {
-                const [machineRows] = await pool.execute(
-                    'SELECT machine_id, work_centre_id FROM machine_centres WHERE machine_id = ? OR code = ?',
-                    [parsedMachineId, parsedMachineId]
-                );
-                if (machineRows.length > 0) {
-                    finalWorkCentreId = machineRows[0].work_centre_id;
-                } else if (parsedMachineId !== 'DEMO-MACHINE-01') {
-                    return res.status(400).json({ success: false, message: `Machine ${parsedMachineId} not found` });
-                }
-            }
-
-            // 2.5 Enforce one active machine per operator (same day).
-            // Prevents same operator being active on multiple machines simultaneously.
-            const [employeeActiveRows] = await pool.execute(
-                `SELECT machine_id
-                 FROM mobile_sessions
-                 WHERE emp_code = ?
-                   AND status = 'active'
-                   AND DATE(activated_at) = CURDATE()
-                 ORDER BY activated_at DESC
-                 LIMIT 1`,
-                [emp_id]
-            );
-            if (employeeActiveRows.length > 0 && String(employeeActiveRows[0].machine_id) !== String(parsedMachineId)) {
-                return res.status(409).json({
-                    success: false,
-                    message: `Operator ${emp_id} is already active on machine ${employeeActiveRows[0].machine_id}. Please finish/logout there first.`
-                });
-            }
-
-            // 2.6 Hygiene: expire older active sessions for this operator from previous days.
-            // Keeps session table clean and avoids stale "active" rows accumulating.
-            await pool.execute(
-                `UPDATE mobile_sessions
-                 SET status = 'expired'
-                 WHERE emp_code = ?
-                   AND status = 'active'
-                   AND DATE(activated_at) < CURDATE()`,
-                [emp_id]
-            );
-
-            // Also expire older active rows for this machine from previous days.
-            await pool.execute(
-                `UPDATE mobile_sessions
-                 SET status = 'expired'
-                 WHERE machine_id = ?
-                   AND status = 'active'
-                   AND DATE(activated_at) < CURDATE()`,
-                [parsedMachineId]
-            );
-
-            // 3. Upsert session by machine_id
-            const [existing] = await pool.execute('SELECT session_id FROM mobile_sessions WHERE machine_id = ?', [parsedMachineId]);
-            const finalSessionId = existing.length > 0 ? existing[0].session_id : randomUUID();
-
-            await pool.execute(
-                `INSERT INTO mobile_sessions (session_id, machine_id, work_centre_id, emp_id, emp_code, status, activated_at) 
-                 VALUES (?, ?, ?, ?, ?, 'active', NOW())
-                 ON DUPLICATE KEY UPDATE 
-                 work_centre_id = VALUES(work_centre_id), 
-                 emp_id = VALUES(emp_id), 
-                 emp_code = VALUES(emp_code),
-                 status = 'active', 
-                 activated_at = NOW()`,
-                [finalSessionId, parsedMachineId, finalWorkCentreId || 1, empRows[0].id, emp_id]
-            );
-
             res.json({
                 success: true,
                 message: 'Machine session activated',
-                session_id: finalSessionId
+                session_id: result.session_id,
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    /**
+     * Activate mobile_sessions for every employee that has machine_centre_id set (employee ↔ machine),
+     * using the same rules as POST /activate. Skips Toe Stitching (and common typos) by machine name.
+     * Optional: ?work_centre_id=5 to limit to one line.
+     */
+    activateFromEmployeeMachineAssignments: async (req, res, next) => {
+        try {
+            const wcFilter = req.query.work_centre_id != null && req.query.work_centre_id !== ''
+                ? Number(req.query.work_centre_id)
+                : null;
+
+            let sql = `
+                SELECT e.code AS emp_code,
+                       mc.machine_id AS machine_id,
+                       mc.work_centre_id AS work_centre_id,
+                       mc.name AS machine_name
+                FROM employees e
+                INNER JOIN machine_centres mc ON mc.id = e.machine_centre_id
+                WHERE e.machine_centre_id IS NOT NULL
+                  AND COALESCE(e.is_active, 1) = 1
+                  AND LOWER(CONCAT(COALESCE(mc.name, ''), ' ', COALESCE(mc.machine_name, ''))) NOT LIKE '%toe%stitch%'
+            `;
+            const params = [];
+            if (wcFilter != null && !Number.isNaN(wcFilter)) {
+                sql += ' AND e.work_centre_id = ?';
+                params.push(wcFilter);
+            }
+            sql += ' ORDER BY mc.machine_id, e.code';
+
+            const [rows] = await pool.execute(sql, params);
+
+            const results = [];
+            for (const row of rows) {
+                const r = await activateMachineSessionCore(pool, {
+                    machine_id: row.machine_id,
+                    work_centre_id: row.work_centre_id,
+                    emp_id: String(row.emp_code),
+                });
+                results.push({
+                    machine_id: row.machine_id,
+                    machine_name: row.machine_name,
+                    emp_code: String(row.emp_code),
+                    success: r.ok,
+                    session_id: r.ok ? r.session_id : undefined,
+                    error: r.ok ? undefined : r.message,
+                    httpStatus: r.ok ? 200 : r.status,
+                });
+            }
+
+            const succeeded = results.filter((x) => x.success).length;
+            const failed = results.length - succeeded;
+
+            res.json({
+                success: true,
+                message: `Processed ${results.length} assignment(s): ${succeeded} activated, ${failed} failed or skipped.`,
+                summary: {
+                    total: results.length,
+                    succeeded,
+                    failed,
+                },
+                results,
             });
         } catch (error) {
             next(error);
@@ -520,7 +592,7 @@ const mobileSessionController = {
                  ELSE idle_stop_time
                END,
                output_pairs = CASE
-                 WHEN COALESCE(output_pairs, 0) <= 0 THEN 12
+                 WHEN COALESCE(output_pairs, 0) <= 0 THEN 6
                  ELSE output_pairs
                END,
                button_status = 2

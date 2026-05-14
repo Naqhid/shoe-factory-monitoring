@@ -1449,7 +1449,7 @@ exports.updateStatus = async (req, res, next) => {
         }
 
         const normalizedOutputPairs = Number(output_pairs);
-        const finishOutputPairsRaw = Number.isFinite(normalizedOutputPairs) && normalizedOutputPairs > 0 ? normalizedOutputPairs : 12;
+        const finishOutputPairsRaw = Number.isFinite(normalizedOutputPairs) && normalizedOutputPairs > 0 ? normalizedOutputPairs : 6;
         const finishOutputPairs = Math.max(1, Math.min(12, Math.round(finishOutputPairsRaw)));
         if (finishOutputPairs !== normalizedOutputPairs) {
           logger.warn(`[STATUS-CHANGE] Record ${id}: invalid finish output_pairs=${output_pairs}. Forcing to ${finishOutputPairs}.`);

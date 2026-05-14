@@ -577,6 +577,7 @@ app.delete('/api/user-rights/user/:userId', authenticate, requireAdminAccess, us
 // Mobile session routes (public)
 app.post('/api/mobile-session/init', mobileSessionController.createSession);
 app.post('/api/mobile-session/activate', mobileSessionController.activateSession);
+app.post('/api/mobile-session/activate-from-assignments', mobileSessionController.activateFromEmployeeMachineAssignments);
 app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.findActiveSession);
 app.get('/api/mobile-session/waiting-for/:machine_id', mobileSessionController.findWaitingSession);
 app.get('/api/mobile-session/latest-active/:machineId?', mobileSessionController.getLatestActiveSession);

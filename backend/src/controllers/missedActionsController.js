@@ -49,7 +49,9 @@ const computeShiftInactiveMinutes = ({ baselineTs, startTs, startReminderMins })
   return Math.max(0, gapExcludingLunch - startReminderMins);
 };
 
-const parseActionRows = (rows, startReminderMins, finishGraceMins) => {
+const formatShiftStartLabel = () => `${String(SHIFT_START_HOUR).padStart(2, '0')}:${String(SHIFT_START_MINUTE).padStart(2, '0')}`;
+
+const parseActionRows = (rows, startReminderMins, finishGraceMins, now = new Date()) => {
   const data = [];
 
   rows.forEach((row) => {
@@ -83,15 +85,30 @@ const parseActionRows = (rows, startReminderMins, finishGraceMins) => {
         overdueMins = minsSinceStart - (targetMins + finishGraceMins);
         message = `Cycle running for ${minsSinceStart} mins (target ${targetMins} mins).`;
       }
-    } else if (hasFinishedCycleAfterSession && minsSinceFinish >= startReminderMins) {
+    } else if (hasFinishedCycleAfterSession) {
+      const finishTs = row.last_finish_time ? new Date(row.last_finish_time) : null;
+      if (!finishTs || !Number.isFinite(finishTs.getTime())) return;
+      const shiftOverdueMins = computeShiftInactiveMinutes({
+        baselineTs: finishTs,
+        startTs: now,
+        startReminderMins,
+      });
+      if (shiftOverdueMins <= 0) return;
       actionType = 'START_PENDING';
-      overdueMins = minsSinceFinish - startReminderMins;
+      overdueMins = shiftOverdueMins;
       message = `Last cycle finished ${minsSinceFinish} mins ago; next cycle not started.`;
     } else if (!hasAnyCycleActivityAfterSession) {
-      if (minsSinceActivation < startReminderMins) return;
+      const activatedAt = row.activated_at ? new Date(row.activated_at) : null;
+      if (!activatedAt || !Number.isFinite(activatedAt.getTime())) return;
+      const shiftOverdueMins = computeShiftInactiveMinutes({
+        baselineTs: activatedAt,
+        startTs: now,
+        startReminderMins,
+      });
+      if (shiftOverdueMins <= 0) return;
       actionType = 'START_PENDING';
-      overdueMins = minsSinceActivation - startReminderMins;
-      message = `Session active for ${minsSinceActivation} mins with no cycle started.`;
+      overdueMins = shiftOverdueMins;
+      message = `No cycle started since shift ${formatShiftStartLabel()} (logged in ${minsSinceActivation} min ago).`;
     }
 
     if (actionType) {
@@ -179,7 +196,8 @@ exports.getMissedActions = async (req, res, next) => {
       [sessionLookbackHours]
     );
 
-    const data = parseActionRows(rows, startReminderMins, finishGraceMins);
+    const now = new Date();
+    const data = parseActionRows(rows, startReminderMins, finishGraceMins, now);
     const issueKeys = data.map((i) => i.issue_key);
     const stateByKey = {};
     if (issueKeys.length > 0) {
@@ -199,7 +217,7 @@ exports.getMissedActions = async (req, res, next) => {
       });
     }
 
-    const now = Date.now();
+    const nowMs = now.getTime();
     const dataWithState = data.map((item) => {
       const state = stateByKey[item.issue_key] || null;
       const snoozedUntilTs = state?.snoozed_until ? new Date(state.snoozed_until).getTime() : null;
@@ -211,7 +229,7 @@ exports.getMissedActions = async (req, res, next) => {
           acknowledged_by: state?.acknowledged_by || null,
           snoozed_until: state?.snoozed_until || null,
           snooze_duration_mins: state?.snooze_duration_mins || null,
-          is_snoozed: !!(snoozedUntilTs && snoozedUntilTs > now),
+          is_snoozed: !!(snoozedUntilTs && snoozedUntilTs > nowMs),
           root_cause: state?.root_cause || null,
         },
       };

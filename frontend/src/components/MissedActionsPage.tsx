@@ -56,6 +56,16 @@ type DailyReportLine = {
   extra_mins: number;
 };
 
+/** In-app confirm for operator bulk root cause when all loss cycles already have a cause */
+type OperatorBulkOverwritePending = {
+  employeeCode: string;
+  employeeName: string;
+  lossCycleCount: number;
+  rootCause: string;
+  /** Loss-cycle row ids at prompt time (same set as former confirm(true) branch) */
+  cycleIds: number[];
+};
+
 const LOCAL_META_KEY = 'missed_actions_meta_v2';
 const DAILY_MY_LINE_KEY = 'missed_actions_daily_my_line_v1';
 
@@ -171,6 +181,7 @@ export const MissedActionsPage: React.FC = () => {
     }
   });
   const [savingRootCause, setSavingRootCause] = React.useState<string | null>(null);
+  const [operatorBulkOverwritePending, setOperatorBulkOverwritePending] = React.useState<OperatorBulkOverwritePending | null>(null);
   const prevCriticalKeys = React.useRef<Set<string>>(new Set());
   const isFirstFetch = React.useRef(true);
   const audioCtxRef = React.useRef<AudioContext | null>(null);
@@ -624,7 +635,7 @@ export const MissedActionsPage: React.FC = () => {
   }, [dailyLineMachineGroups, dailyMyLineOnly, preferredDailyLine, dailyBreachedOnly, dailyTopOffendersOnly]);
 
   const operatorRows = React.useMemo(() => {
-    const map = new Map<string, {
+    type Agg = {
       employee_code: string;
       employee_name: string;
       total_cycles: number;
@@ -636,7 +647,9 @@ export const MissedActionsPage: React.FC = () => {
       total_inactive_mins: number;
       total_extra_mins: number;
       total_lost_mins: number;
-    }>();
+      rootCauseCounts: Map<string, number>;
+    };
+    const map = new Map<string, Agg>();
     dailyEvents.forEach((e) => {
       const key = e.employee_code || 'N/A';
       if (!map.has(key)) map.set(key, {
@@ -651,11 +664,13 @@ export const MissedActionsPage: React.FC = () => {
         total_inactive_mins: 0,
         total_extra_mins: 0,
         total_lost_mins: 0,
+        rootCauseCounts: new Map(),
       });
       const row = map.get(key)!;
       const late = Math.round(e.inactive_mins || 0);
       const extra = Math.round(e.extra_mins || 0);
       const rc = (e.root_cause || '').toLowerCase();
+      const rcLabel = (e.root_cause || '').trim();
       row.total_cycles += 1;
       if (late > 0 && extra > 0) row.both_cycles += 1;
       else if (late > 0) row.late_cycles += 1;
@@ -665,10 +680,24 @@ export const MissedActionsPage: React.FC = () => {
       row.total_inactive_mins += late;
       row.total_extra_mins += extra;
       row.total_lost_mins += late + extra;
+      if (rcLabel) {
+        row.rootCauseCounts.set(rcLabel, (row.rootCauseCounts.get(rcLabel) || 0) + 1);
+      }
     });
     return Array.from(map.values())
       .filter((r) => r.total_lost_mins > 0)
-      .sort((a, b) => b.total_lost_mins - a.total_lost_mins);
+      .sort((a, b) => b.total_lost_mins - a.total_lost_mins)
+      .map((r) => {
+        const parts = [...r.rootCauseCounts.entries()]
+          .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
+          .map(([label, n]) => `${label} (${n}×)`);
+        const root_cause_summary = parts.length ? parts.join(' · ') : '—';
+        const {
+          rootCauseCounts: _omit,
+          ...rest
+        } = r;
+        return { ...rest, root_cause_summary };
+      });
   }, [dailyEvents]);
 
   const previousDayTrend = React.useMemo(() => {
@@ -758,6 +787,132 @@ export const MissedActionsPage: React.FC = () => {
       setSavingRootCause(null);
     }
   };
+
+  /**
+   * Operator-ranking row edits map to many daily cycles (`missed_action_states.issue_key` = `daily__${cycleId}`).
+   * Bulk rules: for a non-empty cause, apply to loss cycles (inactive+extra > 0) for that operator that still have an empty root_cause.
+   * If every such cycle already has a cause, toast and offer in-app confirm to overwrite all loss cycles for that operator.
+   * Clearing: remove root_cause only on cycles that currently have one (among loss cycles).
+   */
+  const applyOperatorBulkRootCause = React.useCallback(
+    async (employeeCode: string, trimmed: string, targets: Array<{ id: number }>, usedOverwriteAll: boolean) => {
+      const saveKey = `operator__${employeeCode}`;
+      setSavingRootCause(saveKey);
+      try {
+        await Promise.all(
+          targets.map((ev) =>
+            apiFetch(`${API_BASE}/api/missed-actions/root-cause`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ issue_key: `daily__${ev.id}`, root_cause: trimmed }),
+            })
+          )
+        );
+        await fetchDailyReport();
+        if (trimmed) {
+          toast.success(
+            usedOverwriteAll
+              ? `Root cause applied to ${targets.length} cycle(s) (replaced existing)`
+              : `Root cause applied to ${targets.length} cycle(s)`
+          );
+        } else {
+          toast.success(`Root cause cleared on ${targets.length} cycle(s)`);
+        }
+      } catch {
+        toast.error('Failed to save root cause(s)');
+        await fetchDailyReport();
+      } finally {
+        setSavingRootCause(null);
+      }
+    },
+    [fetchDailyReport]
+  );
+
+  const saveOperatorBulkRootCause = React.useCallback(
+    async (employeeCode: string, rootCause: string) => {
+      const opKey = (e: DailyReportEvent) => e.employee_code || 'N/A';
+      const lostMins = (e: DailyReportEvent) => Math.round(Number(e.inactive_mins || 0)) + Math.round(Number(e.extra_mins || 0));
+      const candidates = dailyEvents.filter((e) => opKey(e) === employeeCode && lostMins(e) > 0);
+      if (candidates.length === 0) {
+        toast.error('No cycles with time loss for this operator in the current report.');
+        return;
+      }
+      const trimmed = rootCause.trim();
+      let targets: DailyReportEvent[];
+      let usedOverwriteAll = false;
+      if (!trimmed) {
+        targets = candidates.filter((e) => !!(e.root_cause || '').trim());
+        if (targets.length === 0) {
+          toast('Nothing to clear — no saved root causes on loss cycles for this operator.');
+          return;
+        }
+      } else {
+        const emptyRoots = candidates.filter((e) => !(e.root_cause || '').trim());
+        if (emptyRoots.length > 0) {
+          targets = emptyRoots;
+        } else {
+          toast('All loss cycles already have a root cause.', { duration: 4000 });
+          const displayName = (candidates[0]?.employee_name || '').trim() || employeeCode;
+          setOperatorBulkOverwritePending({
+            employeeCode,
+            employeeName: displayName,
+            lossCycleCount: candidates.length,
+            rootCause: trimmed,
+            cycleIds: candidates.map((c) => c.id),
+          });
+          return;
+        }
+      }
+      await applyOperatorBulkRootCause(employeeCode, trimmed, targets, usedOverwriteAll);
+    },
+    [dailyEvents, applyOperatorBulkRootCause]
+  );
+
+  const cancelOperatorBulkOverwrite = React.useCallback(() => {
+    setOperatorBulkOverwritePending(null);
+  }, []);
+
+  const confirmOperatorBulkOverwrite = React.useCallback(async () => {
+    const pending = operatorBulkOverwritePending;
+    if (!pending) return;
+    setOperatorBulkOverwritePending(null);
+    const targets = pending.cycleIds.map((id) => ({ id }));
+    await applyOperatorBulkRootCause(pending.employeeCode, pending.rootCause.trim(), targets, true);
+  }, [operatorBulkOverwritePending, applyOperatorBulkRootCause]);
+
+  React.useEffect(() => {
+    if (!operatorBulkOverwritePending) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOperatorBulkOverwritePending(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [operatorBulkOverwritePending]);
+
+  const operatorRowRootCauseSelectValue = React.useMemo(() => {
+    const map = new Map<string, string | undefined>();
+    const byOp = new Map<string, DailyReportEvent[]>();
+    dailyEvents.forEach((e) => {
+      const lost = Math.round(Number(e.inactive_mins || 0)) + Math.round(Number(e.extra_mins || 0));
+      if (lost <= 0) return;
+      const k = e.employee_code || 'N/A';
+      if (!byOp.has(k)) byOp.set(k, []);
+      byOp.get(k)!.push(e);
+    });
+    byOp.forEach((list, k) => {
+      const roots = list.map((e) => (e.root_cause || '').trim()).filter(Boolean);
+      if (roots.length === 0) {
+        map.set(k, undefined);
+        return;
+      }
+      const first = roots[0]!;
+      map.set(k, roots.every((r) => r === first) ? first : undefined);
+    });
+    return map;
+  }, [dailyEvents]);
 
   const logLocalAction = (item: MissedAction, action: string) => {
     const key = item.issue_key;
@@ -946,6 +1101,54 @@ export const MissedActionsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 px-2 py-4 sm:px-3 sm:py-6">
+      {operatorBulkOverwritePending && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) cancelOperatorBulkOverwrite();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="operator-bulk-overwrite-title"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="operator-bulk-overwrite-title" className="text-lg font-bold text-gray-900">
+              Replace root causes on all loss cycles?
+            </h2>
+            <p className="text-sm text-gray-600 mt-3 leading-relaxed">
+              Apply{' '}
+              <span className="font-semibold text-gray-900">&quot;{operatorBulkOverwritePending.rootCause}&quot;</span>
+              {' '}to all{' '}
+              <span className="font-semibold text-gray-900">{operatorBulkOverwritePending.lossCycleCount}</span>
+              {' '}loss cycle(s) for{' '}
+              <span className="font-semibold text-gray-900">{operatorBulkOverwritePending.employeeName}</span>
+              {' '}
+              <span className="text-gray-500">({operatorBulkOverwritePending.employeeCode})</span>
+              . Existing root causes on those cycles will be replaced.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={cancelOperatorBulkOverwrite}
+                className="px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { void confirmOperatorBulkOverwrite(); }}
+                className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="w-full space-y-4">
         <div className="bg-white border border-gray-200 rounded-xl p-2 shadow-sm inline-flex gap-2">
           <button
@@ -2102,10 +2305,12 @@ export const MissedActionsPage: React.FC = () => {
                   type="button"
                   disabled={operatorRows.length === 0}
                   onClick={() => {
-                    const headers = ['operator', 'code', 'total_cycles', 'late_starts', 'slow_finishes', 'both', 'inactive_mins', 'extra_mins', 'total_lost_mins'];
+                    const headers = ['operator', 'code', 'total_cycles', 'late_starts', 'slow_finishes', 'both', 'root_causes', 'inactive_mins', 'extra_mins', 'total_lost_mins'];
+                    const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
                     const csv = [headers.join(','), ...operatorRows.map((r) => [
-                      `"${r.employee_name}"`, `"${r.employee_code}"`,
+                      esc(r.employee_name), esc(r.employee_code),
                       r.total_cycles, r.late_cycles, r.slow_cycles, r.both_cycles,
+                      esc(r.root_cause_summary || '—'),
                       r.total_inactive_mins, r.total_extra_mins, r.total_lost_mins,
                     ].join(','))].join('\n');
                     const a = document.createElement('a');
@@ -2237,6 +2442,7 @@ export const MissedActionsPage: React.FC = () => {
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Slow Finishes</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Both</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Forget Rate</th>
+                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase min-w-[10rem]">Root Causes</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive (m)</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra (m)</th>
                           <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Total Lost</th>
@@ -2278,6 +2484,22 @@ export const MissedActionsPage: React.FC = () => {
                                   const cls = rate >= 50 ? 'bg-red-100 text-red-700' : rate >= 25 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700';
                                   return <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cls}`}>{rate}%</span>;
                                 })()}
+                              </td>
+                              <td className="px-3 py-3 max-w-[16rem] align-top">
+                                <RootCauseSelect
+                                  value={operatorRowRootCauseSelectValue.get(row.employee_code)}
+                                  onChange={(val) => { void saveOperatorBulkRootCause(row.employee_code, val); }}
+                                  disabled={dailyLoading || savingRootCause === `operator__${row.employee_code}`}
+                                  className="px-1.5 py-1 text-xs border border-gray-300 rounded bg-white w-full max-w-[14rem]"
+                                />
+                                {row.root_cause_summary !== '—' && (
+                                  <p
+                                    className="text-[10px] text-gray-400 mt-1 leading-snug line-clamp-2"
+                                    title={row.root_cause_summary}
+                                  >
+                                    Summary: {row.root_cause_summary}
+                                  </p>
+                                )}
                               </td>
                               <td className="px-3 py-3 text-sm font-semibold text-blue-700">{row.total_inactive_mins}m</td>
                               <td className="px-3 py-3 text-sm font-semibold text-amber-700">{row.total_extra_mins}m</td>

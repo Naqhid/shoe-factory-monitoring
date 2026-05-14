@@ -46,8 +46,16 @@ const DEFAULT_LUNCH_END_MINUTES = 14 * 60; // 2:00 PM
 const FRIDAY_LUNCH_START_MINUTES = 12 * 60 + 30; // 12:30 PM
 const FRIDAY_LUNCH_END_MINUTES = 13 * 60; // 1:00 PM
 
-/** Fixed pairs per bin on mobile (dropdown disabled until configurable again). */
+/** Default pairs per BIN when no session preference (matches historical mobile default). */
 const MOBILE_PAIRS_PER_BIN = 6;
+/** Allowed target pairs per cycle; must match server finish clamp (1–12). */
+const MOBILE_TARGET_PAIR_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+
+function clampMobileTargetPairs(value: unknown): number {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return MOBILE_PAIRS_PER_BIN;
+    return Math.min(12, Math.max(1, n));
+}
 
 /** Shift window for "expected by now" (local time). */
 const MOBILE_SHIFT_START_MINUTES = 9 * 60; // 9:00 AM
@@ -272,23 +280,12 @@ export const MobileProduction: React.FC = () => {
         return 'N/A';
     };
 
-    const clampTargetPairs = React.useCallback((_value: number) => MOBILE_PAIRS_PER_BIN, []);
-
     const getScaledTargetMins = React.useCallback((pairs: number) => {
         const baseMins = Number(baseTargetMinsRef.current || 0);
         const basePairs = Number(baseTargetPairsRef.current || 12);
         if (baseMins <= 0 || basePairs <= 0) return 0;
         return Number(((baseMins * pairs) / basePairs).toFixed(1));
     }, []);
-
-    const initializeTargetPairBaseline = React.useCallback((targetMins: number, _targetPairs: number) => {
-        const safeBaseMins = Number(targetMins || 0);
-        baseTargetPairsRef.current = 12;
-        baseTargetMinsRef.current = safeBaseMins > 0 ? safeBaseMins : 0;
-        const nextSelected = MOBILE_PAIRS_PER_BIN;
-        setSelectedTargetPairs(nextSelected);
-        return getScaledTargetMins(nextSelected);
-    }, [getScaledTargetMins]);
 
     // Parse URL params at component level for rendering access
     const pathParts = location.pathname.split('/');
@@ -320,10 +317,79 @@ export const MobileProduction: React.FC = () => {
         return `mobile_target_pairs_${effectiveMachineId}_${urlEmpId}`;
     }, [effectiveMachineId, urlEmpId]);
 
-    const writeSessionTargetPairs = React.useCallback((pairs: number) => {
-        if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return;
-        sessionStorage.setItem(targetPairsSessionKey, String(clampTargetPairs(pairs)));
-    }, [clampTargetPairs, targetPairsSessionKey]);
+    const writeSessionTargetPairs = React.useCallback(
+        (pairs: number) => {
+            if (!targetPairsSessionKey || typeof sessionStorage === 'undefined') return;
+            sessionStorage.setItem(targetPairsSessionKey, String(clampMobileTargetPairs(pairs)));
+        },
+        [targetPairsSessionKey]
+    );
+
+    const initializeTargetPairBaseline = React.useCallback(
+        (
+            refreshedBaseMins12: number,
+            _planningTrayPairs: number,
+            opts?: { resumeRecordTargetMins?: number | null; resumeRecordTargetPairs?: number | null }
+        ): { scaledTargetMins: number; targetPairs: number } => {
+            const safeBase = Number(refreshedBaseMins12 || 0);
+            baseTargetPairsRef.current = 12;
+            baseTargetMinsRef.current = safeBase > 0 ? safeBase : 0;
+
+            let next = MOBILE_PAIRS_PER_BIN;
+            const resumePairsRaw = opts?.resumeRecordTargetPairs;
+            const resumePairs =
+                resumePairsRaw != null && Number.isFinite(Number(resumePairsRaw)) && Number(resumePairsRaw) > 0
+                    ? clampMobileTargetPairs(resumePairsRaw)
+                    : null;
+            const resumeTm = opts?.resumeRecordTargetMins;
+            if (resumePairs != null) {
+                let pairs = resumePairs;
+                // Legacy rows: target_pairs stuck at 12 while target_mins matches a 6-pair scale (routing baseline / 2).
+                if (
+                    pairs === 12 &&
+                    safeBase > 0 &&
+                    resumeTm != null &&
+                    Number.isFinite(Number(resumeTm)) &&
+                    Number(resumeTm) > 0
+                ) {
+                    const expectedMinsFor6 = (safeBase * 6) / 12;
+                    const tm = Number(resumeTm);
+                    if (Math.abs(tm - expectedMinsFor6) <= Math.max(0.25, safeBase * 0.03)) {
+                        pairs = MOBILE_PAIRS_PER_BIN;
+                    }
+                }
+                next = pairs;
+            } else if (
+                resumeTm != null &&
+                Number.isFinite(Number(resumeTm)) &&
+                Number(resumeTm) > 0 &&
+                safeBase > 0
+            ) {
+                // Infer tray size only when DB did not store target_pairs (legacy rows).
+                next = clampMobileTargetPairs(Math.round((Number(resumeTm) / safeBase) * 12));
+            } else if (targetPairsSessionKey && typeof sessionStorage !== 'undefined') {
+                const raw = sessionStorage.getItem(targetPairsSessionKey);
+                if (raw != null && raw !== '') {
+                    next = clampMobileTargetPairs(Number(raw));
+                }
+            }
+
+            setSelectedTargetPairs(next);
+            writeSessionTargetPairs(next);
+            return { scaledTargetMins: getScaledTargetMins(next), targetPairs: next };
+        },
+        [getScaledTargetMins, targetPairsSessionKey, writeSessionTargetPairs]
+    );
+
+    const handleTargetPairsChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        if (!productionData) return;
+        const next = clampMobileTargetPairs(Number(e.target.value));
+        setSelectedTargetPairs(next);
+        writeSessionTargetPairs(next);
+        const scaled = getScaledTargetMins(next);
+        // Local + session only while this screen is open; START/FINISH send the chosen pairs to the API.
+        setProductionData({ ...productionData, target_mins: scaled, target_pairs: next });
+    };
 
     const dailyPaceSnapshot = React.useMemo(() => {
         const daily = dailyTargetPairs;
@@ -1031,11 +1097,10 @@ export const MobileProduction: React.FC = () => {
                     if (activeRecord) {
                         // Use the unfinished record ONLY if it's truly in progress (button_status = 1 or 3)
                         // If button_status = 2 (finished), create new record instead
-                        const [empRes, macRes, wcRes, planningRes, initRes] = await Promise.all([
+                        const [empRes, macRes, wcRes, initRes] = await Promise.all([
                             apiFetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
-                            apiFetch(`${API_BASE}/api/production-planning`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/mobile-production/init/${effectiveMachineId}/${urlEmpId}`).then(r => r.json())
                         ]);
 
@@ -1047,15 +1112,8 @@ export const MobileProduction: React.FC = () => {
                         const machine = macRes.data?.find((m: any) => (m.machine_id === effectiveMachineId || m.code === urlMachineId));
                         const workCentre = wcRes.data?.find((wc: any) => wc.id === activeRecord.work_centre_id);
 
-                        // Get target_pairs from planning if not set
-                        let targetPairs = activeRecord.target_pairs || 0;
-                        if (targetPairs === 0) {
-                            const matchingPlans = planningRes.data?.filter((p: any) => p.work_centre_id === activeRecord.work_centre_id) || [];
-                            const planning = matchingPlans.sort((a: any, b: any) => 
-                                new Date(b.plan_date).getTime() - new Date(a.plan_date).getTime()
-                            )[0];
-                            targetPairs = planning?.target_pairs_per_tray || 0;
-                        }
+                        // Prefer pairs saved on the open cycle; do not substitute planning tray (often 12) as mobile default.
+                        const targetPairsFromDb = Number(activeRecord.target_pairs || 0);
 
                         // Always refresh target_mins from latest routing for this machine/work-centre.
                         // This prevents stale unfinished records (e.g. old 16.6) from overriding current routing.
@@ -1063,7 +1121,14 @@ export const MobileProduction: React.FC = () => {
                             initRes?.success && typeof initRes?.data?.targetMins !== 'undefined'
                                 ? Number(initRes.data.targetMins)
                                 : Number(activeRecord.target_mins || 0);
-                        const scaledTargetMins = initializeTargetPairBaseline(refreshedTargetMins, Number(targetPairs || 12));
+                        const { scaledTargetMins, targetPairs: binPairs } = initializeTargetPairBaseline(
+                            refreshedTargetMins,
+                            MOBILE_PAIRS_PER_BIN,
+                            {
+                                resumeRecordTargetMins: Number(activeRecord.target_mins ?? 0) || null,
+                                resumeRecordTargetPairs: targetPairsFromDb > 0 ? targetPairsFromDb : null,
+                            }
+                        );
 
                         setSessionStatus('active');
                         setQrData(effectiveMachineId);
@@ -1088,7 +1153,7 @@ export const MobileProduction: React.FC = () => {
                         setProductionData({
                             ...normalizedRecord,
                             target_mins: scaledTargetMins,
-                            target_pairs: MOBILE_PAIRS_PER_BIN,
+                            target_pairs: binPairs,
                             work_centre_name: workCentre?.work_centre_name || workCentre?.name
                         });
                         runningSinceMsRef.current = normalizedRecord.start_time
@@ -1114,8 +1179,20 @@ export const MobileProduction: React.FC = () => {
                             return;
                         }
 
-                        const { employee, machine, workCentre, targetMins, targetPairs, existingRecord } = result.data;
-                        const scaledTargetMins = initializeTargetPairBaseline(Number(targetMins || 0), Number(targetPairs || 12));
+                        const { employee, machine, workCentre, targetMins, existingRecord } = result.data;
+                        const { scaledTargetMins, targetPairs: binPairs } = initializeTargetPairBaseline(
+                            Number(targetMins || 0),
+                            MOBILE_PAIRS_PER_BIN,
+                            existingRecord
+                                ? {
+                                      resumeRecordTargetMins: Number(existingRecord.target_mins ?? 0) || null,
+                                      resumeRecordTargetPairs:
+                                          Number(existingRecord.target_pairs || 0) > 0
+                                              ? Number(existingRecord.target_pairs)
+                                              : null,
+                                  }
+                                : undefined
+                        );
 
                         setSessionStatus('active');
                         setQrData(effectiveMachineId);
@@ -1144,7 +1221,7 @@ export const MobileProduction: React.FC = () => {
                             emp_id: employee.id,
                             output_pairs: 0,
                             target_mins: scaledTargetMins,
-                            target_pairs: MOBILE_PAIRS_PER_BIN,
+                            target_pairs: binPairs,
                             start_time: null,
                             finish_time: null,
                             idle_start_time: null,
@@ -1194,7 +1271,7 @@ export const MobileProduction: React.FC = () => {
             }, 5000); // 5 second polling as requested
             return () => clearInterval(globalSyncInterval);
         }
-    }, [location.pathname, location.search, API_BASE, navigate, urlMachineId, urlEmpId, sessionToken]);
+    }, [location.pathname, location.search, API_BASE, navigate, urlMachineId, urlEmpId, sessionToken, initializeTargetPairBaseline, effectiveMachineId]);
 
 
     // Retry helper — retries up to maxRetries times with exponential backoff
@@ -1275,9 +1352,14 @@ export const MobileProduction: React.FC = () => {
             
             setLoading(true);
             try {
+                const pairsAtStart = clampMobileTargetPairs(selectedTargetPairs);
+                const scaledAtStart = getScaledTargetMins(pairsAtStart);
                 const result = await withRetry(async () => {
                     const payload = {
                         ...productionData,
+                        target_mins: scaledAtStart,
+                        target_pairs: pairsAtStart,
+                        output_pairs: 0,
                         // Always stamp new cycle with current local date from browser session.
                         // This avoids stale in-memory prod_date causing false duplicate conflicts.
                         prod_date: getLocalDateString(),
@@ -1304,7 +1386,14 @@ export const MobileProduction: React.FC = () => {
                     }
                     return data;
                 });
-                setProductionData({ ...productionData!, id: result.data.id, button_status: 1, is_paused: false });
+                setProductionData({
+                    ...productionData!,
+                    id: result.data.id,
+                    button_status: 1,
+                    is_paused: false,
+                    target_mins: scaledAtStart,
+                    target_pairs: pairsAtStart,
+                });
                 setActualTimeCounter(0);
                 runningSinceMsRef.current = Date.now();
                 toast.success('Production started');
@@ -1431,7 +1520,7 @@ export const MobileProduction: React.FC = () => {
         toast.dismiss('mobile-action-hint');
         if (!productionData?.id) return;
         setLoading(true);
-        const outputPairs = clampTargetPairs(selectedTargetPairs);
+        const outputPairs = clampMobileTargetPairs(selectedTargetPairs);
         const maxFinishRetries = 5;
         let finishSuccess = false;
         let finishResult: any;
@@ -1555,7 +1644,7 @@ export const MobileProduction: React.FC = () => {
         if (productionData.button_status === 2) {
             // After FINISH, reset to initial state without database record.
             // Keep Target Pairs / BIN selection (e.g. 6) for the next cycle.
-            const pairs = clampTargetPairs(selectedTargetPairs);
+            const pairs = clampMobileTargetPairs(selectedTargetPairs);
             const resetTargetMins = getScaledTargetMins(pairs);
             const resetData: ProductionData = {
                 ...productionData,
@@ -2054,11 +2143,17 @@ export const MobileProduction: React.FC = () => {
                                         <p className="font-semibold truncate">
                                             {loadingSummary
                                                 ? '...'
-                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
-                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
-                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
+                                                : Number.isInteger(
+                                                      totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs))
+                                                  )
+                                                    ? totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs))
+                                                    : (
+                                                          totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs))
+                                                      ).toFixed(2)}
                                         </p>
-                                        <p className="text-[11px] opacity-80">1 bin = {MOBILE_PAIRS_PER_BIN} pairs</p>
+                                        <p className="text-[11px] opacity-80">
+                                            ~bins at {clampMobileTargetPairs(selectedTargetPairs)} pr/bin (1–12 cap)
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
@@ -2141,16 +2236,25 @@ export const MobileProduction: React.FC = () => {
                                 </p>
                             </div>
                             <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
-                                <p className="text-xs font-semibold text-green-700 uppercase mb-1">Target Pairs / BIN</p>
+                                <p className="text-xs font-semibold text-green-700 uppercase mb-1">
+                                    Target Pairs / BIN <span className="font-normal normal-case text-green-600">(1–12)</span>
+                                </p>
                                 <select
-                                    value={MOBILE_PAIRS_PER_BIN}
-                                    aria-label="Target pairs per bin (fixed)"
-                                    disabled
-                                    className="w-full text-2xl md:text-3xl font-bold text-green-900 bg-gray-100 border border-green-300 rounded-lg px-2 py-1 cursor-not-allowed opacity-90"
+                                    value={selectedTargetPairs}
+                                    aria-label="Target pairs per bin for this cycle"
+                                    disabled={loading}
+                                    onChange={handleTargetPairsChange}
+                                    className="w-full text-2xl md:text-3xl font-bold text-green-900 border border-green-300 rounded-lg px-2 py-1 bg-white cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                                 >
-                                    <option value={MOBILE_PAIRS_PER_BIN}>{MOBILE_PAIRS_PER_BIN}</option>
+                                    {MOBILE_TARGET_PAIR_OPTIONS.map((n) => (
+                                        <option key={n} value={n}>
+                                            {n}
+                                        </option>
+                                    ))}
                                 </select>
-                                <p className="text-xs text-green-600 mt-1">pairs</p>
+                                <p className="text-xs text-green-600 mt-1">
+                                    Default {MOBILE_PAIRS_PER_BIN} — choice is sent on START / FINISH (not written mid-cycle)
+                                </p>
                             </div>
                             <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm relative">
                                 <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>

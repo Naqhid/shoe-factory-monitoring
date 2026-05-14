@@ -3,7 +3,15 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { API_BASE_URL, apiFetch } from '../services/api';
 
 interface HourlyData { hour: string; production: number; }
-interface HourlyOutputData { hourlyData: HourlyData[]; average: number; target: number; }
+interface HourlyOutputData {
+  hourlyData: HourlyData[];
+  average: number;
+  /** Hourly pair pace (daily target ÷ shift hours) — chart reference line. */
+  target: number;
+  /** Full-day pair target from routing (preferred) or plan — use for summary Target / achievement. */
+  dailyTarget?: number;
+  shiftHours?: number;
+}
 interface MachineHourlyData {
   machine_id: string; machine_name: string;
   hourlyData: HourlyData[]; average: number; total: number;
@@ -123,6 +131,21 @@ export const HourlyOutputChart: React.FC<Props> = ({
   const noData = viewMode === 'line'
     ? chartDataLine.length === 0
     : selectedMachine === 'all' ? chartDataMachineAll.length === 0 : chartDataMachineSingle.length === 0;
+
+  const shiftHoursForTarget = lineData?.shiftHours ?? 8;
+  const dailyTargetForSummary: number = !lineData
+    ? 0
+    : lineData.dailyTarget != null && lineData.dailyTarget > 0
+      ? lineData.dailyTarget
+      : lineData.target > 0
+        ? lineData.target * shiftHoursForTarget
+        : 0;
+  const lineHourlyTotalOutput =
+    lineData?.hourlyData.reduce((sum, h) => sum + h.production, 0) ?? 0;
+  const lineAchievementPct =
+    dailyTargetForSummary > 0
+      ? Math.round((lineHourlyTotalOutput / dailyTargetForSummary) * 100)
+      : 0;
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
@@ -244,18 +267,16 @@ export const HourlyOutputChart: React.FC<Props> = ({
             <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
               <div className="bg-orange-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Target</p>
-                <p className="text-3xl font-bold text-orange-600">{lineData.target * lineData.hourlyData.length}</p>
+                <p className="text-3xl font-bold text-orange-600">{dailyTargetForSummary}</p>
               </div>
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Output</p>
-                <p className="text-3xl font-bold text-blue-600">{lineData.hourlyData.reduce((sum, h) => sum + h.production, 0)}</p>
+                <p className="text-3xl font-bold text-blue-600">{lineHourlyTotalOutput}</p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Achievement %</p>
                 <p className="text-3xl font-bold text-green-600">
-                  {lineData.target > 0 && lineData.hourlyData.length > 0
-                    ? Math.round((lineData.hourlyData.reduce((sum, h) => sum + h.production, 0) / (lineData.target * lineData.hourlyData.length)) * 100)
-                    : 0}%
+                  {lineAchievementPct}%
                 </p>
               </div>
             </div>
