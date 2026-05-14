@@ -54,6 +54,19 @@ export const Layout: React.FC<LayoutProps> = ({
     };
   }, []);
 
+  React.useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
+
   return (
     <>
       {/* Fixed header when sidebar is closed */}
@@ -96,7 +109,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </div>
       )}
 
-      <div className="flex h-screen bg-gray-100 overflow-hidden">
+      <div className="flex h-[100dvh] min-h-0 max-h-[100dvh] bg-gray-100 overflow-hidden">
         <Navigation
           activeMenu={activeMenu}
           sidebarOpen={sidebarOpen}
@@ -107,12 +120,12 @@ export const Layout: React.FC<LayoutProps> = ({
         />
 
         {/* Main content area */}
-        <div className={`flex-1 flex flex-col min-w-0 ${sidebarOpen ? 'lg:ml-64' : ''}`}>
+        <div className={`flex-1 flex flex-col min-h-0 min-w-0 ${sidebarOpen ? 'lg:ml-64' : ''}`}>
           {/* Spacer for fixed header when sidebar is closed */}
           {!sidebarOpen && !hideTopHeader && <div className="h-20 flex-shrink-0"></div>}
           
-          {/* Content wrapper */}
-          <div className="flex-1 overflow-auto min-h-0 h-full">
+          {/* Content wrapper — sole vertical scroll for app shell */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain">
             {children}
           </div>
         </div>

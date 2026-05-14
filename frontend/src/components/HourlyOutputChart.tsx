@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
 import { API_BASE_URL, apiFetch } from '../services/api';
 
 interface HourlyData { hour: string; production: number; }
@@ -75,6 +75,78 @@ export const HourlyOutputChart: React.FC<Props> = ({
     return () => window.removeEventListener('resize', updateMobileState);
   }, []);
 
+  /** TV-friendly: pill badge above each point (high contrast, no hover). */
+  const tvLabelFontSize = isMobile ? 13 : 20;
+  const tvLabelPadX = isMobile ? 7 : 10;
+  const tvLabelPadY = isMobile ? 4 : 5;
+
+  const TvLineProductionLabel = (props: any) => {
+    const { x, y, value } = props;
+    if (x == null || y == null || value == null) return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const text = String(Math.round(n));
+    const fs = tvLabelFontSize;
+    const w = Math.max(28, text.length * fs * 0.62 + tvLabelPadX * 2);
+    const h = fs + tvLabelPadY * 2;
+    const border = '#1d4ed8';
+    const left = x - w / 2;
+    const top = y - h - 10;
+    return (
+      <g transform={`translate(${left},${top})`}>
+        <rect
+          width={w}
+          height={h}
+          rx={8}
+          fill="#ffffff"
+          stroke={border}
+          strokeWidth={2.5}
+          opacity={0.98}
+        />
+        <text
+          x={w / 2}
+          y={h / 2 + fs * 0.32}
+          textAnchor="middle"
+          fill="#0f172a"
+          fontSize={fs}
+          fontWeight={800}
+          style={{ paintOrder: 'stroke fill', stroke: '#ffffff', strokeWidth: 3 }}
+        >
+          {text}
+        </text>
+      </g>
+    );
+  };
+
+  const createTvMachineProductionLabel = (accent: string) => (props: any) => {
+    const { x, y, value } = props;
+    if (x == null || y == null || value == null) return null;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const text = String(Math.round(n));
+    const fs = tvLabelFontSize - 1;
+    const w = Math.max(26, text.length * fs * 0.62 + tvLabelPadX * 2);
+    const h = fs + tvLabelPadY * 2;
+    const left = x - w / 2;
+    const top = y - h - 8;
+    return (
+      <g transform={`translate(${left},${top})`}>
+        <rect width={w} height={h} rx={7} fill="#ffffff" stroke={accent} strokeWidth={2} opacity={0.95} />
+        <text
+          x={w / 2}
+          y={h / 2 + fs * 0.32}
+          textAnchor="middle"
+          fill="#0f172a"
+          fontSize={fs}
+          fontWeight={800}
+          style={{ paintOrder: 'stroke fill', stroke: '#ffffff', strokeWidth: 2.5 }}
+        >
+          {text}
+        </text>
+      </g>
+    );
+  };
+
   const CustomTick = ({ x, y, payload }: any) => {
     const text = payload.value;
     if (text?.includes(' - ')) {
@@ -113,8 +185,10 @@ export const HourlyOutputChart: React.FC<Props> = ({
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-lg p-6 flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
-        <span className="text-gray-600">Loading...</span>
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3" />
+          <span className="text-gray-600">Loading...</span>
+        </div>
       </div>
     );
   }
@@ -157,10 +231,10 @@ export const HourlyOutputChart: React.FC<Props> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
-      {showProgress && (
+    <div className="bg-white rounded-lg shadow-lg p-6 2xl:rounded-3xl 2xl:shadow-2xl 2xl:p-8 motion-safe:animate-tv-section-in motion-safe:[animation-delay:40ms] max-sm:motion-safe:animate-none motion-reduce:animate-none">
+        {showProgress && (
         <div className="mb-4">
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full rounded-full h-2.5 bg-gray-200">
             <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
           </div>
         </div>
@@ -168,11 +242,10 @@ export const HourlyOutputChart: React.FC<Props> = ({
 
       {/* Header + controls */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-2xl font-bold text-blue-600">
+        <h2 className="text-lg sm:text-2xl 2xl:text-3xl font-bold text-blue-600">
           {workCentreName ? `${workCentreName} - Hourly Output` : 'Hourly Output'}
         </h2>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          {/* View mode dropdown */}
           <select
             value={viewMode}
             onChange={e => { setViewMode(e.target.value as 'line' | 'machine'); setSelectedMachine('all'); }}
@@ -182,7 +255,6 @@ export const HourlyOutputChart: React.FC<Props> = ({
             <option value="machine">Machine Hourly Output</option>
           </select>
 
-          {/* Machine selector (only in machine mode) */}
           {viewMode === 'machine' && (
             <select
               value={selectedMachine}
@@ -210,13 +282,13 @@ export const HourlyOutputChart: React.FC<Props> = ({
       </div>
 
       {noData ? (
-        <div className="flex items-center justify-center h-64 text-gray-400 text-lg">No data available</div>
+        <div className="flex items-center justify-center h-64 text-lg text-gray-400">No data available</div>
       ) : (
         <>
-          <div className={isMobile ? 'h-[280px]' : 'h-[400px]'}>
+          <div className={isMobile ? 'h-[280px]' : 'h-[400px] min-h-[300px] 2xl:h-[min(44vh,520px)] 2xl:min-h-[440px]'}>
           <ResponsiveContainer width="100%" height="100%">
             {viewMode === 'line' ? (
-              <LineChart data={chartDataLine} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
+              <LineChart data={chartDataLine} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                 <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
@@ -228,10 +300,13 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 {lineData?.average ? <ReferenceLine y={lineData.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5"
                   label={{ value: `Avg: ${lineData.average}`, position: 'right', fill: '#22c55e', fontSize: 14, fontWeight: 600 }} /> : null}
                 <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={4}
-                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name="Hourly Production" />
+                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name="Hourly Production"
+                  isAnimationActive={false}>
+                  <LabelList dataKey="production" content={TvLineProductionLabel} />
+                </Line>
               </LineChart>
             ) : selectedMachine === 'all' ? (
-              <LineChart data={chartDataMachineAll} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
+              <LineChart data={chartDataMachineAll} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                 <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
@@ -242,11 +317,14 @@ export const HourlyOutputChart: React.FC<Props> = ({
                   <Line key={m.machine_id} type="monotone" dataKey={m.machine_id}
                     stroke={COLORS[i % COLORS.length]} strokeWidth={3}
                     dot={{ fill: COLORS[i % COLORS.length], r: 5 }} activeDot={{ r: 7 }}
-                    name={`${m.machine_id} - ${m.machine_name}`} />
+                    name={`${m.machine_id} - ${m.machine_name}`}
+                    isAnimationActive={false}>
+                    <LabelList dataKey={m.machine_id} content={createTvMachineProductionLabel(COLORS[i % COLORS.length])} />
+                  </Line>
                 ))}
               </LineChart>
             ) : (
-              <LineChart data={chartDataMachineSingle} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
+              <LineChart data={chartDataMachineSingle} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                 <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
@@ -256,7 +334,10 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 {activeMachine?.average ? <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5"
                   label={{ value: `Avg: ${activeMachine.average}`, position: 'right', fill: '#22c55e', fontSize: 14, fontWeight: 600 }} /> : null}
                 <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={4}
-                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name={`${activeMachine?.machine_name} Output`} />
+                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name={`${activeMachine?.machine_name} Output`}
+                  isAnimationActive={false}>
+                  <LabelList dataKey="production" content={TvLineProductionLabel} />
+                </Line>
               </LineChart>
             )}
           </ResponsiveContainer>
@@ -302,9 +383,12 @@ export const HourlyOutputChart: React.FC<Props> = ({
           {viewMode === 'machine' && selectedMachine === 'all' && (
             <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
               {machineData.map((m, i) => (
-                <div key={m.machine_id} className="p-3 rounded-lg border text-center cursor-pointer hover:shadow-md transition-shadow"
+                <div
+                  key={m.machine_id}
+                  className="p-3 rounded-lg border text-center cursor-pointer hover:shadow-md transition-shadow"
                   style={{ borderColor: COLORS[i % COLORS.length] }}
-                  onClick={() => setSelectedMachine(m.machine_id)}>
+                  onClick={() => setSelectedMachine(m.machine_id)}
+                >
                   <p className="text-xs font-semibold text-gray-500">{m.machine_id} - {m.machine_name}</p>
                   <p className="text-2xl font-bold mt-1" style={{ color: COLORS[i % COLORS.length] }}>{m.total}</p>
                   <p className="text-xs text-gray-400">pairs today</p>

@@ -621,7 +621,11 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     {isArchiveTable && isArchivedRecord(record) ? (
                       <button
-                        onClick={() => handleRestore(record.id)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRestore(record.id);
+                        }}
                         className="text-emerald-600 hover:text-emerald-800 inline-flex items-center gap-1"
                       >
                         <RotateCcw className="h-4 w-4" /> Restore
@@ -629,13 +633,21 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     ) : (
                       <>
                         <button
-                          onClick={() => handleEdit(record)}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(record);
+                          }}
                           className="text-blue-600 hover:text-blue-900 mr-3"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(record.id)}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(record.id);
+                          }}
                           className="text-red-600 hover:text-red-900"
                         >
                           <Trash2 className="h-4 w-4" />

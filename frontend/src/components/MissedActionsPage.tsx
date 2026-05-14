@@ -81,16 +81,23 @@ const RootCauseSelect: React.FC<{
   const selectValue = isOther ? 'Other' : (value || '');
   const [customText, setCustomText] = React.useState(isOther ? (value || '') : '');
   const [showInput, setShowInput] = React.useState(isOther);
+  const prevIsOtherRef = React.useRef(isOther);
 
   React.useEffect(() => {
-    if (isOther) { setCustomText(value || ''); setShowInput(true); }
+    if (isOther) {
+      setCustomText(value || '');
+      setShowInput(true);
+    } else if (prevIsOtherRef.current && !isOther) {
+      setShowInput(false);
+      setCustomText('');
+    }
+    prevIsOtherRef.current = isOther;
   }, [value, isOther]);
 
   if (showInput) {
     return (
       <div className="flex items-center gap-1">
         <input
-          autoFocus
           type="text"
           value={customText}
           onChange={(e) => setCustomText(e.target.value)}
@@ -182,6 +189,8 @@ export const MissedActionsPage: React.FC = () => {
   });
   const [savingRootCause, setSavingRootCause] = React.useState<string | null>(null);
   const [operatorBulkOverwritePending, setOperatorBulkOverwritePending] = React.useState<OperatorBulkOverwritePending | null>(null);
+  /** Per operator: `__bulk__` or production row `id` for single-cycle root cause */
+  const [operatorRootScope, setOperatorRootScope] = React.useState<Record<string, string>>({});
   const prevCriticalKeys = React.useRef<Set<string>>(new Set());
   const isFirstFetch = React.useRef(true);
   const audioCtxRef = React.useRef<AudioContext | null>(null);
@@ -192,6 +201,10 @@ export const MissedActionsPage: React.FC = () => {
     if (tab === 'daily') setActiveTab('daily');
     if (tab === 'live') setActiveTab('live');
   }, []);
+
+  React.useEffect(() => {
+    setOperatorRootScope({});
+  }, [dailyReportDate, dailyDateTo, dailyLine]);
 
   React.useEffect(() => {
     if (dailyLine === 'all') return;
@@ -277,8 +290,9 @@ export const MissedActionsPage: React.FC = () => {
     return () => window.clearInterval(id);
   }, [fetchData]);
 
-  const fetchDailyReport = React.useCallback(async () => {
-    setDailyLoading(true);
+  const fetchDailyReport = React.useCallback(async (opts?: { skipLoading?: boolean }) => {
+    const skipLoading = opts?.skipLoading === true;
+    if (!skipLoading) setDailyLoading(true);
     setDailyError(null);
     try {
       const params = new URLSearchParams();
@@ -300,7 +314,7 @@ export const MissedActionsPage: React.FC = () => {
     } catch (e: any) {
       setDailyError(e.message || 'Failed to load daily report');
     } finally {
-      setDailyLoading(false);
+      if (!skipLoading) setDailyLoading(false);
     }
   }, [dailyLine, dailyReportDate, dailyDateTo]);
 
@@ -794,6 +808,59 @@ export const MissedActionsPage: React.FC = () => {
    * If every such cycle already has a cause, toast and offer in-app confirm to overwrite all loss cycles for that operator.
    * Clearing: remove root_cause only on cycles that currently have one (among loss cycles).
    */
+  const formatCycleOptionLabel = (ev: DailyReportEvent) => {
+    const machine = (ev.machine_name || ev.machine_id || '—').toString().trim();
+    let timePart = '—';
+    try {
+      const d = new Date(ev.start_time);
+      if (!Number.isNaN(d.getTime())) {
+        timePart = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+    } catch {
+      timePart = String(ev.start_time || '').slice(0, 16) || '—';
+    }
+    const lost = Math.round(Number(ev.inactive_mins || 0)) + Math.round(Number(ev.extra_mins || 0));
+    return `${machine} · ${timePart} · ${lost}m`;
+  };
+
+  const saveOperatorSingleCycleRootCause = React.useCallback(
+    async (employeeCode: string, cycleId: number, rootCause: string) => {
+      const ev = dailyEvents.find((e) => e.id === cycleId);
+      if (!ev || (ev.employee_code || 'N/A') !== employeeCode) {
+        toast.error('Cycle not found for this operator.');
+        return;
+      }
+      const lost = Math.round(Number(ev.inactive_mins || 0)) + Math.round(Number(ev.extra_mins || 0));
+      if (lost <= 0) {
+        toast.error('Not a loss cycle.');
+        return;
+      }
+      const trimmed = rootCause.trim();
+      if (!trimmed && !(ev.root_cause || '').trim()) {
+        toast('Nothing to clear on this cycle.');
+        return;
+      }
+      const saveKey = `operator__${employeeCode}__${cycleId}`;
+      setSavingRootCause(saveKey);
+      try {
+        await apiFetch(`${API_BASE}/api/missed-actions/root-cause`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ issue_key: `daily__${cycleId}`, root_cause: trimmed }),
+        });
+        setSavingRootCause(null);
+        await fetchDailyReport({ skipLoading: true });
+        toast.success(trimmed ? 'Root cause saved for this cycle' : 'Root cause cleared for this cycle');
+      } catch {
+        toast.error('Failed to save root cause');
+        await fetchDailyReport({ skipLoading: true });
+      } finally {
+        setSavingRootCause(null);
+      }
+    },
+    [dailyEvents, fetchDailyReport]
+  );
+
   const applyOperatorBulkRootCause = React.useCallback(
     async (employeeCode: string, trimmed: string, targets: Array<{ id: number }>, usedOverwriteAll: boolean) => {
       const saveKey = `operator__${employeeCode}`;
@@ -808,7 +875,8 @@ export const MissedActionsPage: React.FC = () => {
             })
           )
         );
-        await fetchDailyReport();
+        setSavingRootCause(null);
+        await fetchDailyReport({ skipLoading: true });
         if (trimmed) {
           toast.success(
             usedOverwriteAll
@@ -820,7 +888,7 @@ export const MissedActionsPage: React.FC = () => {
         }
       } catch {
         toast.error('Failed to save root cause(s)');
-        await fetchDailyReport();
+        await fetchDailyReport({ skipLoading: true });
       } finally {
         setSavingRootCause(null);
       }
@@ -1100,7 +1168,7 @@ export const MissedActionsPage: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-100 px-2 py-4 sm:px-3 sm:py-6">
+    <div className="bg-gray-100 px-2 py-4 sm:px-3 sm:py-6">
       {operatorBulkOverwritePending && (
         <div
           className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1640,7 +1708,7 @@ export const MissedActionsPage: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={fetchDailyReport}
+                  onClick={() => { void fetchDailyReport(); }}
                   disabled={dailyLoading}
                   className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60"
                 >
@@ -2022,7 +2090,7 @@ export const MissedActionsPage: React.FC = () => {
                     <option value="operator">Operator name</option>
                   </select>
                 </div>
-                <button type="button" onClick={fetchDailyReport} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
+                <button type="button" onClick={() => { void fetchDailyReport(); }} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Refresh
                 </button>
@@ -2297,7 +2365,7 @@ export const MissedActionsPage: React.FC = () => {
                     {dailyByLine.map((l) => <option key={l.work_centre_name} value={l.work_centre_name}>{l.work_centre_name}</option>)}
                   </select>
                 </div>
-                <button type="button" onClick={fetchDailyReport} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
+                <button type="button" onClick={() => { void fetchDailyReport(); }} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Refresh
                 </button>
@@ -2485,21 +2553,72 @@ export const MissedActionsPage: React.FC = () => {
                                   return <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cls}`}>{rate}%</span>;
                                 })()}
                               </td>
-                              <td className="px-3 py-3 max-w-[16rem] align-top">
-                                <RootCauseSelect
-                                  value={operatorRowRootCauseSelectValue.get(row.employee_code)}
-                                  onChange={(val) => { void saveOperatorBulkRootCause(row.employee_code, val); }}
-                                  disabled={dailyLoading || savingRootCause === `operator__${row.employee_code}`}
-                                  className="px-1.5 py-1 text-xs border border-gray-300 rounded bg-white w-full max-w-[14rem]"
-                                />
-                                {row.root_cause_summary !== '—' && (
-                                  <p
-                                    className="text-[10px] text-gray-400 mt-1 leading-snug line-clamp-2"
-                                    title={row.root_cause_summary}
-                                  >
-                                    Summary: {row.root_cause_summary}
-                                  </p>
-                                )}
+                              <td className="px-3 py-3 max-w-[18rem] align-top">
+                                {(() => {
+                                  const lossList = dailyEvents
+                                    .filter((e) => {
+                                      const lost = Math.round(Number(e.inactive_mins || 0)) + Math.round(Number(e.extra_mins || 0));
+                                      return (e.employee_code || 'N/A') === row.employee_code && lost > 0;
+                                    })
+                                    .slice()
+                                    .sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
+                                  const scopeKey = row.employee_code;
+                                  const scope = operatorRootScope[scopeKey] || '__bulk__';
+                                  const opCode = String(row.employee_code);
+                                  const bulkSaveKey = `operator__${opCode}`;
+                                  const savingThisOperator =
+                                    savingRootCause === bulkSaveKey ||
+                                    (typeof savingRootCause === 'string' && savingRootCause.startsWith(`${bulkSaveKey}__`));
+                                  const rcValue =
+                                    scope === '__bulk__'
+                                      ? operatorRowRootCauseSelectValue.get(row.employee_code)
+                                      : (lossList.find((e) => String(e.id) === scope)?.root_cause ?? '');
+                                  return (
+                                    <>
+                                      {lossList.length > 1 && (
+                                        <label className="block mb-1">
+                                          <span className="sr-only">Apply root cause to</span>
+                                          <select
+                                            value={scope}
+                                            onChange={(e) => {
+                                              setOperatorRootScope((prev) => ({ ...prev, [scopeKey]: e.target.value }));
+                                            }}
+                                            disabled={dailyLoading || savingThisOperator}
+                                            className="w-full max-w-[16rem] mb-1.5 px-1.5 py-1 text-[11px] font-semibold border border-gray-300 rounded bg-gray-50 text-gray-800"
+                                          >
+                                            <option value="__bulk__">All loss cycles ({lossList.length})</option>
+                                            {lossList.map((ev) => (
+                                              <option key={ev.id} value={String(ev.id)}>
+                                                One: {formatCycleOptionLabel(ev)}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                      )}
+                                      <RootCauseSelect
+                                        key={`${opCode}-${scope}-${rcValue ?? ''}`}
+                                        value={rcValue}
+                                        onChange={(val) => {
+                                          if (scope === '__bulk__') {
+                                            void saveOperatorBulkRootCause(row.employee_code, val);
+                                          } else {
+                                            void saveOperatorSingleCycleRootCause(row.employee_code, Number(scope), val);
+                                          }
+                                        }}
+                                        disabled={dailyLoading || savingThisOperator}
+                                        className="px-1.5 py-1 text-xs border border-gray-300 rounded bg-white w-full max-w-[16rem]"
+                                      />
+                                      {row.root_cause_summary !== '—' && (
+                                        <p
+                                          className="text-[10px] text-gray-400 mt-1 leading-snug line-clamp-2"
+                                          title={row.root_cause_summary}
+                                        >
+                                          Summary: {row.root_cause_summary}
+                                        </p>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </td>
                               <td className="px-3 py-3 text-sm font-semibold text-blue-700">{row.total_inactive_mins}m</td>
                               <td className="px-3 py-3 text-sm font-semibold text-amber-700">{row.total_extra_mins}m</td>

@@ -45,7 +45,9 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                 AND ms.status = 'active'
                 AND DATE(ms.activated_at) = ?
             LEFT JOIN employees e ON e.id = ms.emp_id
-            WHERE mc.work_centre_id = ? OR mcs.work_centre_id = ?
+            WHERE (mc.work_centre_id = ? OR mcs.work_centre_id = ?)
+              AND mc.deleted_at IS NULL
+              AND COALESCE(mc.is_active, 1) = 1
             ORDER BY mc.machine_id
         `, [workCentreId, date, date, workCentreId, workCentreId, date, workCentreId, workCentreId]);
 
@@ -163,6 +165,8 @@ exports.getDashboard = async (req, res) => {
                 ON mcs.work_centre_id = pp.work_centre_id 
                 AND DATE(pp.plan_date) = DATE(?)
             WHERE mc.work_centre_id = ?
+              AND mc.deleted_at IS NULL
+              AND COALESCE(mc.is_active, 1) = 1
               AND (
                 mcs.id IS NULL
                 OR mcs.total_output_pairs = 0
