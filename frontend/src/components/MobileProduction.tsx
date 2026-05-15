@@ -2252,9 +2252,7 @@ export const MobileProduction: React.FC = () => {
                                         </option>
                                     ))}
                                 </select>
-                                <p className="text-xs text-green-600 mt-1">
-                                    Default {MOBILE_PAIRS_PER_BIN} — choice is sent on START / FINISH (not written mid-cycle)
-                                </p>
+                               
                             </div>
                             <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm relative">
                                 <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>
