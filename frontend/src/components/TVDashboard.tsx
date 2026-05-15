@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
+import { TV_ACCENT, TV_BG, TV_KPI_CARD, TV_KPI_LABEL, TV_KPI_VALUE, TV_PANEL, tvPctTextClass } from './tvDashboardTheme';
 
 export const TVDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -207,13 +208,13 @@ export const TVDashboard: React.FC = () => {
 
     if (errorMessage && !dashboardData) {
         return (
-            <div className="min-h-[100dvh] bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center p-6">
-                <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full text-center">
-                    <h2 className="text-2xl font-bold text-red-600 mb-3">Dashboard Unavailable</h2>
-                    <p className="text-gray-700 mb-6">{errorMessage}</p>
+            <div className="min-h-[100dvh] bg-[#003399] flex items-center justify-center p-6">
+                <div className={`${TV_PANEL} rounded-lg p-8 max-w-lg w-full text-center text-white`}>
+                    <h2 className="text-2xl font-bold text-red-300 mb-3">Dashboard Unavailable</h2>
+                    <p className="text-white/80 mb-6">{errorMessage}</p>
                     <button
                         onClick={() => window.location.reload()}
-                        className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        className="bg-white/20 text-white px-5 py-2 rounded border border-white/40 hover:bg-white/30 transition-colors"
                     >
                         Retry
                     </button>
@@ -224,8 +225,8 @@ export const TVDashboard: React.FC = () => {
 
     if (loading || !dashboardData) {
         return (
-            <div className="min-h-[100dvh] bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
-                <div className="text-white text-2xl motion-safe:animate-pulse">Loading Dashboard...</div>
+            <div className="min-h-[100dvh] bg-[#003399] flex items-center justify-center">
+                <div className="text-[#CCFF00] text-2xl motion-safe:animate-pulse">Loading Dashboard...</div>
             </div>
         );
     }
@@ -269,13 +270,8 @@ export const TVDashboard: React.FC = () => {
     }));
 
     return (
-        <div className="min-h-[100dvh] bg-red bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-6 2xl:p-10 2xl:max-w-[min(122rem,96vw)] mx-auto">
-            <div key={String(currentWorkCentreId ?? currentIndex)} className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 2xl:p-10 mb-4 sm:mb-6 2xl:mb-8 relative overflow-hidden ring-1 ring-white/10 motion-safe:hover:ring-white/25 transition-[box-shadow] duration-500 motion-safe:animate-tv-section-in max-sm:motion-safe:animate-none motion-reduce:animate-none">
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute top-0 left-0 w-72 h-72 sm:w-96 sm:h-96 max-sm:w-44 max-sm:h-44 bg-white rounded-full blur-3xl opacity-[0.12] max-sm:opacity-[0.05] max-sm:blur-2xl motion-safe:animate-tv-shimmer max-sm:motion-safe:animate-none motion-reduce:opacity-10" />
-                    <div className="absolute bottom-0 right-0 w-80 h-80 sm:w-[28rem] sm:h-[28rem] max-sm:w-48 max-sm:h-48 bg-indigo-300/40 rounded-full blur-3xl opacity-[0.15] max-sm:opacity-[0.06] max-sm:blur-2xl motion-safe:animate-tv-shimmer max-sm:motion-safe:animate-none motion-reduce:opacity-10" style={{ animationDelay: '2.5s' }} />
-                </div>
-                <div className="relative z-10 isolate">
+        <div className={`min-h-[100dvh] ${TV_BG} text-white p-3 sm:p-6 2xl:p-10 2xl:max-w-[min(122rem,96vw)] mx-auto font-sans`}>
+            <div key={String(currentWorkCentreId ?? currentIndex)} className={`${TV_PANEL} rounded-lg p-4 sm:p-8 2xl:p-10 mb-4 sm:mb-6 2xl:mb-8 motion-safe:animate-tv-section-in max-sm:motion-safe:animate-none motion-reduce:animate-none`}>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl sm:text-4xl lg:text-5xl 2xl:text-6xl font-bold text-white drop-shadow-lg tracking-tight">{topSection.workCentreName}</h1>
@@ -318,50 +314,50 @@ export const TVDashboard: React.FC = () => {
                                         console.warn('Failed to persist pinned work centre preference:', error);
                                     }
                                 }}
-                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${pinnedWorkCentreId ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-slate-100 text-slate-700'}`}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${pinnedWorkCentreId ? 'bg-fuchsia-500/25 text-fuchsia-200 border border-fuchsia-400/40' : 'bg-white/15 text-white/90 border border-white/25'}`}
                             >
                                 {pinnedWorkCentreId ? 'Pinned Line' : 'Auto Rotate'}
                             </button>
-                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isOffline ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isOffline ? 'bg-red-500/25 text-red-200 border border-red-400/40' : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40'}`}>
                                 {isOffline ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
                                 {isOffline ? 'Offline' : 'Online'}
                             </div>
-                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isCriticalStale ? 'bg-red-100 text-red-700' : isStale ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isCriticalStale ? 'bg-red-500/25 text-red-200 border border-red-400/40' : isStale ? 'bg-amber-500/25 text-amber-200 border border-amber-400/40' : 'bg-blue-400/25 text-blue-100 border border-blue-300/40'}`}>
                                 <AlertTriangle className="h-3.5 w-3.5" />
                                 {secondsSinceUpdate === null ? 'No live data yet' : isCriticalStale ? `Data stale (${secondsSinceUpdate}s)` : isStale ? `Data aging (${secondsSinceUpdate}s)` : `Live (${secondsSinceUpdate}s ago)`}
                             </div>
-                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isRefreshing ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${isRefreshing ? 'bg-indigo-500/25 text-indigo-200 border border-indigo-400/40' : 'bg-white/15 text-white/90 border border-white/25'}`}>
                                 <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                                 {isRefreshing ? 'Refreshing...' : 'Auto-refresh 10s'}
                             </div>
-                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${needActionCount > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${needActionCount > 0 ? 'bg-red-500/25 text-red-200 border border-red-400/40' : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40'}`}>
                                 <AlertTriangle className="h-3.5 w-3.5" />
                                 Lines Below Target: {needActionCount}
                             </div>
                             {topPerformer && (
-                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-cyan-100 text-cyan-700">
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-cyan-500/25 text-cyan-200 border border-cyan-400/40">
                                     <TrendingUp className="h-3.5 w-3.5" />
                                     Best: {topPerformer.line_name || '-'} ({Number(topPerformer.efficiency || 0)}%)
                                 </div>
                             )}
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-sky-100 text-sky-700">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-sky-500/25 text-sky-200 border border-sky-400/40">
                                 Shift Used: {shiftWindow.elapsedPct}%
                             </div>
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-violet-100 text-violet-700">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-violet-500/25 text-violet-200 border border-violet-400/40">
                                 Remaining: {shiftWindow.remainingMin}m
                             </div>
-                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${targetGap > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${targetGap > 0 ? 'bg-rose-500/25 text-rose-200 border border-rose-400/40' : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40'}`}>
                                 {recoveryLabel}
                             </div>
                             {retryAttempts > 0 && (
-                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-orange-100 text-orange-700">
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-semibold bg-orange-500/25 text-orange-200 border border-orange-400/40">
                                     Retry attempt {retryAttempts}
                                 </div>
                             )}
                         </div>
                     )}
                     {(partialWarning || errorMessage || isOffline || isCriticalStale) && (
-                        <div className={`rounded-xl px-4 py-3 text-sm font-semibold mb-4 ${isOffline || isCriticalStale ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
+                        <div className={`rounded-xl px-4 py-3 text-sm font-semibold mb-4 ${isOffline || isCriticalStale ? 'bg-red-500/25 text-red-200 border border-red-400/40' : 'bg-amber-500/25 text-amber-200 border border-amber-400/40'}`}>
                             {isOffline
                                 ? 'Connection lost. Showing last available data. Auto-retry is active.'
                                 : isCriticalStale
@@ -370,31 +366,31 @@ export const TVDashboard: React.FC = () => {
                         </div>
                     )}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 2xl:gap-8">
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-0 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                        <div className={`${TV_KPI_CARD} motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-0 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none`}>
                             <Target className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-white mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
                             <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Target</div>
                             <div className="text-white text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300">{topSection.target}</div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                        <div className={`${TV_KPI_CARD} motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none`}>
                             <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-green-300 mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
                             <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Output</div>
-                            <div className="text-white text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300">{topSection.output}</div>
+                            <div className="text-[#CCFF00] text-2xl sm:text-4xl 2xl:text-5xl font-bold tabular-nums">{topSection.output}</div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                        <div className={`${TV_KPI_CARD} motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none`}>
                             <Activity className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-purple-300 mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
-                            <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Output %</div>
-                            <div className={`text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300 ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                            <div className={TV_KPI_LABEL}>Output %</div>
+                            <div className={`${TV_KPI_VALUE} ${tvPctTextClass(topSection.outputPercent)}`}>
                                 {topSection.outputPercent}%
                             </div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                        <div className={`${TV_KPI_CARD} motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none`}>
                             <Zap className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-yellow-300 mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
-                            <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Efficiency %</div>
-                            <div className={`text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300 ${topSection.efficiencyPercent >= 90 ? 'text-green-300' : topSection.efficiencyPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                            <div className={TV_KPI_LABEL}>Efficiency %</div>
+                            <div className={`${TV_KPI_VALUE} ${tvPctTextClass(topSection.efficiencyPercent)}`}>
                                 {topSection.efficiencyPercent}%
                             </div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 flex items-center justify-center col-span-2 sm:col-span-1 hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-200 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                        <div className={`${TV_KPI_CARD} flex items-center justify-center col-span-2 sm:col-span-1 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-200 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none`}>
                             {topSection.showHappyEmoji ? (
                                 <Smile className="h-16 w-16 sm:h-24 sm:w-24 2xl:h-28 2xl:w-28 text-green-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" />
                             ) : topSection.showMediumEmoji ? (
@@ -404,30 +400,29 @@ export const TVDashboard: React.FC = () => {
                             )}
                         </div>
                     </div>
-                </div>
             </div>
 
             <div className="grid grid-cols-1 2xl:grid-cols-2 2xl:gap-8 2xl:items-start">
             <div className="mb-4 sm:mb-6 2xl:mb-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
-            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 2xl:p-10 border border-gray-100 ring-1 ring-slate-200/60 transition-shadow duration-500 hover:shadow-[0_25px_60px_-15px_rgba(30,64,175,0.2)]">
+            <div className={`${TV_PANEL} rounded-lg p-4 sm:p-8 2xl:p-10`}>
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl 2xl:text-3xl font-bold text-blue-600">LINE PERFORMANCE</h3>
+                    <h3 className="text-lg sm:text-xl lg:text-2xl 2xl:text-3xl font-bold text-white uppercase tracking-wider">Line Performance</h3>
                     {dashboardAgeSec !== null && dashboardAgeSec > 30 && (
-                        <span className="text-xs 2xl:text-sm font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">Stale metrics</span>
+                        <span className="text-xs 2xl:text-sm font-semibold px-2 py-1 rounded border border-amber-400/50 bg-amber-500/20 text-amber-200">Stale metrics</span>
                     )}
                 </div>
                 <div className="overflow-x-auto -mx-1 px-1">
                     <table className="min-w-full">
                         <thead>
-                            <tr className="border-b-2 border-gray-200">
-                                <th className="px-4 py-3 2xl:px-6 2xl:py-4 text-left text-sm 2xl:text-base font-bold text-gray-700">LINE</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">TARGET</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">OUTPUT</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">OUTPUT %</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">EFFICIENCY %</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">WIP</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-yellow-600">REWORK</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-red-600">REJECTION</th>
+                            <tr className="border-b-2 border-white/40">
+                                <th className="px-4 py-3 2xl:px-6 2xl:py-4 text-left text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">Line</th>
+                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">Target</th>
+                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">Output</th>
+                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">Output %</th>
+                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">Efficiency %</th>
+                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">WIP</th>
+                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-[#CCFF00] uppercase tracking-wide">Rework</th>
+                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-red-300 uppercase tracking-wide">Rejection</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -437,25 +432,21 @@ export const TVDashboard: React.FC = () => {
                                     <tr
                                         key={index}
                                         onClick={() => navigate(`/mobile?line=${encodeURIComponent(line.line_name)}`)}
-                                        className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors duration-200 motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100"
+                                        className="border-b border-white/20 hover:bg-white/10 cursor-pointer transition-colors duration-200 motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100"
                                         style={{ animationDelay: `${Math.min(index, 12) * 55 + 40}ms` }}
                                     >
-                                        <td className="px-4 py-4 2xl:px-6 2xl:py-5 text-sm 2xl:text-lg font-semibold text-gray-800">{line.line_name}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-blue-600 tabular-nums">{line.target}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-green-600 tabular-nums">{line.output}</td>
+                                        <td className="px-4 py-4 2xl:px-6 2xl:py-5 text-sm 2xl:text-lg font-bold text-[#CCFF00]">{line.line_name}</td>
+                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-white tabular-nums">{line.target}</td>
+                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-[#CCFF00] tabular-nums">{line.output}</td>
                                         <td className="px-4 py-4 2xl:px-6 text-center">
-                                            <span className={`inline-block px-3 py-1 2xl:px-4 2xl:py-1.5 rounded-full text-lg 2xl:text-xl font-bold text-white shadow-sm transition-transform duration-300 motion-safe:hover:scale-105 ${
-                                                Number(line.output_percentage) >= 90 ? 'bg-green-500' : Number(line.output_percentage) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`}>{line.output_percentage}%</span>
+                                            <span className={`text-lg 2xl:text-2xl font-bold tabular-nums ${tvPctTextClass(Number(line.output_percentage))}`}>{line.output_percentage}%</span>
                                         </td>
                                         <td className="px-4 py-4 2xl:px-6 text-center">
-                                            <span className={`inline-block px-3 py-1 2xl:px-4 2xl:py-1.5 rounded-full text-lg 2xl:text-xl font-bold text-white shadow-sm transition-transform duration-300 motion-safe:hover:scale-105 ${
-                                                Number(line.efficiency) >= 90 ? 'bg-green-500' : Number(line.efficiency) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`}>{line.efficiency}%</span>
+                                            <span className={`text-lg 2xl:text-2xl font-bold tabular-nums ${tvPctTextClass(Number(line.efficiency))}`}>{line.efficiency}%</span>
                                         </td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-red-600 tabular-nums">{line.wip || 0}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-yellow-600 tabular-nums">{rw.total_rework}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-red-600 tabular-nums">{rw.total_rejection}</td>
+                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-white tabular-nums">{line.wip || 0}</td>
+                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-[#CCFF00] tabular-nums">{rw.total_rework}</td>
+                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-red-300 tabular-nums">{rw.total_rejection}</td>
                                     </tr>
                                 );
                             })}
@@ -473,14 +464,15 @@ export const TVDashboard: React.FC = () => {
                     showProgress={workCentres.length > 1}
                     progress={progress}
                     date={currentDate}
+                    variant="airport"
                 />
 
-                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 2xl:p-10 border border-gray-100 transition-all duration-500 hover:shadow-[0_25px_60px_-15px_rgba(220,38,38,0.12)] ring-1 ring-slate-200/60">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl 2xl:text-3xl font-bold text-red-600 mb-4 sm:mb-6 flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6 2xl:h-8 2xl:w-8 text-red-600 motion-safe:animate-pulse motion-reduce:animate-none" />
+                <div className={`${TV_PANEL} rounded-lg p-4 sm:p-8 2xl:p-10`}>
+                    <h3 className="text-lg sm:text-xl lg:text-2xl 2xl:text-3xl font-bold text-white uppercase tracking-wider mb-4 sm:mb-6 flex items-center gap-2">
+                        <TrendingUp className="h-6 w-6 2xl:h-8 2xl:w-8 text-red-300 motion-safe:animate-pulse motion-reduce:animate-none" />
                         Top 3 Bottleneck Machines
                         {reworkAgeSec !== null && reworkAgeSec > 30 && (
-                            <span className="text-xs 2xl:text-sm font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700 ml-2">Rework stale</span>
+                            <span className="text-xs 2xl:text-sm font-semibold px-2 py-1 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/40 ml-2">Rework stale</span>
                         )}
                     </h3>
                     {lowerSection.bottlenecks.length > 0 ? (
@@ -488,26 +480,26 @@ export const TVDashboard: React.FC = () => {
                             {lowerSection.bottlenecks.map((item: any, index: number) => (
                                 <div
                                     key={index}
-                                    className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 rounded-lg p-3 sm:p-4 2xl:p-5 shadow-sm hover:shadow-lg transition-all duration-500 motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100 2xl:hover:translate-x-1"
+                                    className="bg-gradient-to-r border border-white/25 border-l-4 border-l-red-400 bg-[#001a4d]/90 rounded p-3 sm:p-4 2xl:p-5 shadow-sm hover:shadow-lg transition-all duration-500 motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100 2xl:hover:translate-x-1"
                                     style={{ animationDelay: `${180 + index * 90}ms` }}
                                 >
                                     <div className="flex justify-between items-center gap-2">
                                         <div className="flex-1 min-w-0 flex items-center gap-2">
-                                            <span className="text-red-600 font-bold text-lg 2xl:text-xl bg-white px-2 py-1 rounded shadow-sm">#{index + 1}</span>
+                                            <span className="text-[#CCFF00] font-bold text-lg 2xl:text-xl bg-[#003399] px-2 border border-white/30 py-1 rounded shadow-sm">#{index + 1}</span>
                                             <div className="flex-1 min-w-0">
-                                                <div className="text-gray-800 font-bold text-sm sm:text-lg 2xl:text-2xl truncate">{item.machine_centre_name}</div>
-                                                <div className="text-gray-600 text-xs sm:text-sm 2xl:text-lg truncate">{item.work_centre_name}</div>
+                                                <div className="text-[#CCFF00] font-bold text-sm sm:text-lg 2xl:text-2xl truncate">{item.machine_centre_name}</div>
+                                                <div className="text-white/70 text-xs sm:text-sm 2xl:text-lg truncate">{item.work_centre_name}</div>
                                             </div>
                                         </div>
-                                        <div className="text-red-600 text-2xl sm:text-3xl 2xl:text-4xl font-bold flex-shrink-0 bg-white px-3 py-1 2xl:px-4 2xl:py-2 rounded-lg shadow-sm tabular-nums">{item.efficiency}%</div>
+                                        <div className="text-white text-2xl sm:text-3xl 2xl:text-4xl font-bold flex-shrink-0 bg-red-600/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-lg shadow-sm tabular-nums">{item.efficiency}%</div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="flex items-center justify-center h-48 sm:h-64 2xl:h-72 text-gray-400">
+                        <div className="flex items-center justify-center h-48 sm:h-64 2xl:h-72 text-white/50">
                             <div className="text-center px-4 motion-safe:animate-tv-section-in motion-reduce:animate-none">
-                                <Smile className="h-12 w-12 sm:h-16 sm:w-16 2xl:h-20 2xl:w-20 mx-auto mb-3 sm:mb-4 text-green-400 motion-safe:animate-tv-breathe motion-reduce:animate-none" />
+                                <Smile className="h-12 w-12 sm:h-16 sm:w-16 2xl:h-20 2xl:w-20 mx-auto mb-3 sm:mb-4 text-[#CCFF00] motion-safe:animate-tv-breathe motion-reduce:animate-none" />
                                 <div className="text-sm sm:text-xl 2xl:text-2xl">No Bottlenecks - All machines performing well!</div>
                             </div>
                         </div>

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
+import { Target, TrendingUp, Activity } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
+import { TV_ACCENT, TV_KPI_CARD, TV_KPI_LABEL, TV_KPI_VALUE, tvPctTextClass } from './tvDashboardTheme';
 
 interface HourlyData { hour: string; production: number; }
 interface HourlyOutputData {
@@ -23,13 +25,16 @@ interface Props {
   showProgress?: boolean;
   progress?: number;
   date?: string;
+  /** Airport-style panel for TV dashboard (dark blue board). */
+  variant?: 'default' | 'airport';
 }
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
 
 export const HourlyOutputChart: React.FC<Props> = ({
-  workCentreId, workCentreName, showProgress = false, progress = 0, date
+  workCentreId, workCentreName, showProgress = false, progress = 0, date, variant = 'default'
 }) => {
+  const isAirport = variant === 'airport';
   const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState<'line' | 'machine'>('line');
   const [lineData, setLineData] = useState<HourlyOutputData | null>(null);
@@ -230,26 +235,46 @@ export const HourlyOutputChart: React.FC<Props> = ({
     }
   };
 
+  const panelClass = isAirport
+    ? 'border border-white/25 bg-[#002266]/70 backdrop-blur-sm rounded-lg p-6 2xl:p-8 text-white'
+    : 'bg-white rounded-lg shadow-lg p-6 2xl:rounded-3xl 2xl:shadow-2xl 2xl:p-8';
+  const titleClass = isAirport ? 'text-lg sm:text-2xl 2xl:text-3xl font-bold text-white uppercase tracking-wider' : 'text-lg sm:text-2xl 2xl:text-3xl font-bold text-blue-600';
+  const selectClass = isAirport
+    ? 'w-full sm:w-auto px-3 py-2 border border-white/30 rounded-lg text-xs sm:text-sm font-medium text-white bg-[#001a4d] focus:ring-2 focus:ring-[#CCFF00]'
+    : 'w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500';
+  const btnClass = isAirport
+    ? 'w-full sm:w-auto px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-[#003399] bg-[#CCFF00] hover:bg-[#b8e600] disabled:opacity-50 disabled:cursor-not-allowed'
+    : 'w-full sm:w-auto px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed';
+  const gridStroke = isAirport ? 'rgba(255,255,255,0.15)' : '#e0e0e0';
+  const axisStroke = isAirport ? '#CCFF00' : '#3b82f6';
+  const axisFill = isAirport ? '#CCFF00' : '#22c55e';
+  const lineStroke = isAirport ? '#CCFF00' : '#3b82f6';
+  const kpiCardClass = isAirport ? TV_KPI_CARD : 'p-4 rounded-lg';
+  const kpiLabelClass = isAirport ? TV_KPI_LABEL : 'text-sm text-gray-600';
+  const kpiValueClass = isAirport ? TV_KPI_VALUE : 'text-3xl font-bold';
+  const achievementValueClass = (pct: number) =>
+    isAirport ? `${TV_KPI_VALUE} ${tvPctTextClass(pct)}` : 'text-3xl font-bold text-green-600';
+
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 2xl:rounded-3xl 2xl:shadow-2xl 2xl:p-8 motion-safe:animate-tv-section-in motion-safe:[animation-delay:40ms] max-sm:motion-safe:animate-none motion-reduce:animate-none">
+    <div className={`${panelClass} motion-safe:animate-tv-section-in motion-safe:[animation-delay:40ms] max-sm:motion-safe:animate-none motion-reduce:animate-none`}>
         {showProgress && (
         <div className="mb-4">
-          <div className="w-full rounded-full h-2.5 bg-gray-200">
-            <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
+          <div className={`w-full rounded-full h-2.5 ${isAirport ? 'bg-white/20' : 'bg-gray-200'}`}>
+            <div className={`${isAirport ? 'bg-[#CCFF00]' : 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500'} h-2.5 rounded-full transition-all duration-100`} style={{ width: `${progress}%` }} />
           </div>
         </div>
       )}
 
       {/* Header + controls */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-2xl 2xl:text-3xl font-bold text-blue-600">
+        <h2 className={titleClass}>
           {workCentreName ? `${workCentreName} - Hourly Output` : 'Hourly Output'}
         </h2>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <select
             value={viewMode}
             onChange={e => { setViewMode(e.target.value as 'line' | 'machine'); setSelectedMachine('all'); }}
-            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
+            className={selectClass}
           >
             <option value="line">Line Hourly Output</option>
             <option value="machine">Machine Hourly Output</option>
@@ -259,7 +284,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             <select
               value={selectedMachine}
               onChange={e => setSelectedMachine(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
+              className={selectClass}
             >
               <option value="all">All Machines</option>
               {machineData.map(m => (
@@ -274,7 +299,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             type="button"
             onClick={handleManualRefresh}
             disabled={refreshing}
-            className="w-full sm:w-auto px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
+            className={btnClass}
           >
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
@@ -282,35 +307,35 @@ export const HourlyOutputChart: React.FC<Props> = ({
       </div>
 
       {noData ? (
-        <div className="flex items-center justify-center h-64 text-lg text-gray-400">No data available</div>
+        <div className={`flex items-center justify-center h-64 text-lg ${isAirport ? 'text-white/50' : 'text-gray-400'}`}>No data available</div>
       ) : (
         <>
           <div className={isMobile ? 'h-[280px]' : 'h-[400px] min-h-[300px] 2xl:h-[min(44vh,520px)] 2xl:min-h-[440px]'}>
           <ResponsiveContainer width="100%" height="100%">
             {viewMode === 'line' ? (
               <LineChart data={chartDataLine} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
-                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke={axisStroke} height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
+                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: axisFill }} stroke={axisFill}
+                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: axisFill } }} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: '16px', fontWeight: 600 }} iconSize={18} />
                 {lineData?.target ? <ReferenceLine y={lineData.target} stroke="#f97316" strokeWidth={3}
                   label={{ value: `Target: ${lineData.target}`, position: 'right', fill: '#f97316', fontSize: 14, fontWeight: 600 }} /> : null}
                 {lineData?.average ? <ReferenceLine y={lineData.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5"
                   label={{ value: `Avg: ${lineData.average}`, position: 'right', fill: '#22c55e', fontSize: 14, fontWeight: 600 }} /> : null}
-                <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={4}
-                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name="Hourly Production"
+                <Line type="monotone" dataKey="production" stroke={lineStroke} strokeWidth={4}
+                  dot={{ fill: lineStroke, r: 6 }} activeDot={{ r: 8 }} name="Hourly Production"
                   isAnimationActive={false}>
                   <LabelList dataKey="production" content={TvLineProductionLabel} />
                 </Line>
               </LineChart>
             ) : selectedMachine === 'all' ? (
               <LineChart data={chartDataMachineAll} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
-                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke={axisStroke} height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
+                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: axisFill }} stroke={axisFill}
+                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: axisFill } }} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: '14px', fontWeight: 600 }} iconSize={16} />
                 {machineData.map((m, i) => (
@@ -325,10 +350,10 @@ export const HourlyOutputChart: React.FC<Props> = ({
               </LineChart>
             ) : (
               <LineChart data={chartDataMachineSingle} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
-                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke={axisStroke} height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
+                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: axisFill }} stroke={axisFill}
+                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: axisFill } }} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: '16px', fontWeight: 600 }} iconSize={18} />
                 {activeMachine?.average ? <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5"
@@ -345,18 +370,21 @@ export const HourlyOutputChart: React.FC<Props> = ({
 
           {/* Summary cards */}
           {viewMode === 'line' && lineData && (
-            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
-              <div className="bg-orange-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Target</p>
-                <p className="text-3xl font-bold text-orange-600">{dailyTargetForSummary}</p>
+            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 2xl:gap-6 text-center">
+              <div className={isAirport ? kpiCardClass : 'bg-orange-50 p-4 rounded-lg'}>
+                {isAirport && <Target className="h-8 w-8 sm:h-10 sm:w-10 2xl:h-12 2xl:w-12 text-white mx-auto mb-2" />}
+                <p className={isAirport ? kpiLabelClass : 'text-sm text-gray-600'}>Target</p>
+                <p className={isAirport ? `${kpiValueClass} text-white` : 'text-3xl font-bold text-orange-600'}>{dailyTargetForSummary}</p>
               </div>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Output</p>
-                <p className="text-3xl font-bold text-blue-600">{lineHourlyTotalOutput}</p>
+              <div className={isAirport ? kpiCardClass : 'bg-blue-50 p-4 rounded-lg'}>
+                {isAirport && <TrendingUp className="h-8 w-8 sm:h-10 sm:w-10 2xl:h-12 2xl:w-12 text-green-300 mx-auto mb-2" />}
+                <p className={isAirport ? kpiLabelClass : 'text-sm text-gray-600'}>Output</p>
+                <p className={isAirport ? `${kpiValueClass} ${TV_ACCENT}` : 'text-3xl font-bold text-blue-600'}>{lineHourlyTotalOutput}</p>
               </div>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Achievement %</p>
-                <p className="text-3xl font-bold text-green-600">
+              <div className={isAirport ? kpiCardClass : 'bg-green-50 p-4 rounded-lg'}>
+                {isAirport && <Activity className="h-8 w-8 sm:h-10 sm:w-10 2xl:h-12 2xl:w-12 text-purple-300 mx-auto mb-2" />}
+                <p className={isAirport ? kpiLabelClass : 'text-sm text-gray-600'}>Achievement %</p>
+                <p className={achievementValueClass(lineAchievementPct)}>
                   {lineAchievementPct}%
                 </p>
               </div>
@@ -364,18 +392,18 @@ export const HourlyOutputChart: React.FC<Props> = ({
           )}
 
           {viewMode === 'machine' && selectedMachine !== 'all' && activeMachine && (
-            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Current Hour</p>
-                <p className="text-3xl font-bold text-blue-600">{activeMachine.hourlyData[activeMachine.hourlyData.length - 1]?.production || 0}</p>
+            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 2xl:gap-6 text-center">
+              <div className={isAirport ? kpiCardClass : 'bg-blue-50 p-4 rounded-lg'}>
+                <p className={isAirport ? kpiLabelClass : 'text-sm text-gray-600'}>Current Hour</p>
+                <p className={isAirport ? 'text-[#CCFF00] text-2xl sm:text-3xl 2xl:text-4xl font-bold tabular-nums' : 'text-3xl font-bold text-blue-600'}>{activeMachine.hourlyData[activeMachine.hourlyData.length - 1]?.production || 0}</p>
               </div>
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Total Today</p>
-                <p className="text-3xl font-bold text-purple-600">{activeMachine.total}</p>
+              <div className={isAirport ? kpiCardClass : 'bg-purple-50 p-4 rounded-lg'}>
+                <p className={isAirport ? kpiLabelClass : 'text-sm text-gray-600'}>Total Today</p>
+                <p className={isAirport ? 'text-white text-2xl sm:text-3xl 2xl:text-4xl font-bold tabular-nums' : 'text-3xl font-bold text-purple-600'}>{activeMachine.total}</p>
               </div>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Average</p>
-                <p className="text-3xl font-bold text-green-600">{activeMachine.average}</p>
+              <div className={isAirport ? kpiCardClass : 'bg-green-50 p-4 rounded-lg'}>
+                <p className={isAirport ? kpiLabelClass : 'text-sm text-gray-600'}>Average</p>
+                <p className={isAirport ? 'text-green-300 text-2xl sm:text-3xl 2xl:text-4xl font-bold tabular-nums' : 'text-3xl font-bold text-green-600'}>{activeMachine.average}</p>
               </div>
             </div>
           )}
@@ -385,13 +413,17 @@ export const HourlyOutputChart: React.FC<Props> = ({
               {machineData.map((m, i) => (
                 <div
                   key={m.machine_id}
-                  className="p-3 rounded-lg border text-center cursor-pointer hover:shadow-md transition-shadow"
-                  style={{ borderColor: COLORS[i % COLORS.length] }}
+                  className={
+                    isAirport
+                      ? 'p-3 rounded-lg border border-white/30 bg-[#001a4d]/80 text-center cursor-pointer hover:bg-[#001a4d] transition-colors'
+                      : 'p-3 rounded-lg border text-center cursor-pointer hover:shadow-md transition-shadow'
+                  }
+                  style={isAirport ? undefined : { borderColor: COLORS[i % COLORS.length] }}
                   onClick={() => setSelectedMachine(m.machine_id)}
                 >
-                  <p className="text-xs font-semibold text-gray-500">{m.machine_id} - {m.machine_name}</p>
-                  <p className="text-2xl font-bold mt-1" style={{ color: COLORS[i % COLORS.length] }}>{m.total}</p>
-                  <p className="text-xs text-gray-400">pairs today</p>
+                  <p className={isAirport ? 'text-xs font-semibold text-white/70' : 'text-xs font-semibold text-gray-500'}>{m.machine_id} - {m.machine_name}</p>
+                  <p className={`text-2xl font-bold mt-1 tabular-nums ${isAirport ? 'text-[#CCFF00]' : ''}`} style={isAirport ? undefined : { color: COLORS[i % COLORS.length] }}>{m.total}</p>
+                  <p className={isAirport ? 'text-xs text-white/50' : 'text-xs text-gray-400'}>pairs today</p>
                 </div>
               ))}
             </div>
