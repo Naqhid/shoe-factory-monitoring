@@ -23,12 +23,16 @@ interface Props {
   showProgress?: boolean;
   progress?: number;
   date?: string;
+  /** Fill parent height; compact header/chart for viewport-fit TV dashboard. */
+  fitContainer?: boolean;
+  /** Hide title (e.g. when carousel header shows it). */
+  hideTitle?: boolean;
 }
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
 
 export const HourlyOutputChart: React.FC<Props> = ({
-  workCentreId, workCentreName, showProgress = false, progress = 0, date
+  workCentreId, workCentreName, showProgress = false, progress = 0, date, fitContainer = false, hideTitle = false
 }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState<'line' | 'machine'>('line');
@@ -184,7 +188,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6 flex items-center justify-center h-64">
+      <div className={`bg-white rounded-lg shadow-lg flex items-center justify-center ${fitContainer ? 'h-full min-h-0 p-3' : 'p-6 h-64'}`}>
         <div className="flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3" />
           <span className="text-gray-600">Loading...</span>
@@ -221,6 +225,20 @@ export const HourlyOutputChart: React.FC<Props> = ({
       ? Math.round((lineHourlyTotalOutput / dailyTargetForSummary) * 100)
       : 0;
 
+  const chartMargin = fitContainer
+    ? { top: 36, right: 12, left: 8, bottom: 56 }
+    : { top: 42, right: 20, left: 20, bottom: 64 };
+
+  const lineChartLegendPayload = [
+    { value: 'Hourly Production', type: 'line' as const, color: '#3b82f6' },
+    ...(lineData?.target
+      ? [{ value: `Target: ${lineData.target}`, type: 'line' as const, color: '#f97316' }]
+      : []),
+    ...(lineData?.average
+      ? [{ value: `Avg: ${lineData.average}`, type: 'line' as const, color: '#22c55e' }]
+      : []),
+  ];
+
   const handleManualRefresh = async () => {
     setRefreshing(true);
     try {
@@ -231,9 +249,15 @@ export const HourlyOutputChart: React.FC<Props> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 2xl:rounded-3xl 2xl:shadow-2xl 2xl:p-8 motion-safe:animate-tv-section-in motion-safe:[animation-delay:40ms] max-sm:motion-safe:animate-none motion-reduce:animate-none">
+    <div
+      className={`bg-white rounded-lg shadow-lg motion-safe:animate-tv-section-in motion-safe:[animation-delay:40ms] max-sm:motion-safe:animate-none motion-reduce:animate-none ${
+        fitContainer
+          ? 'h-full min-h-0 flex flex-col overflow-hidden p-3 sm:p-4'
+          : 'p-6 2xl:rounded-3xl 2xl:shadow-2xl 2xl:p-8'
+      }`}
+    >
         {showProgress && (
-        <div className="mb-4">
+        <div className={fitContainer ? 'mb-2 flex-shrink-0' : 'mb-4'}>
           <div className="w-full rounded-full h-2.5 bg-gray-200">
             <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
           </div>
@@ -241,15 +265,17 @@ export const HourlyOutputChart: React.FC<Props> = ({
       )}
 
       {/* Header + controls */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-2xl 2xl:text-3xl font-bold text-blue-600">
+      <div className={`flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2 flex-shrink-0 ${fitContainer ? 'mb-2' : 'gap-3 mb-4 sm:mb-6'}`}>
+        {!hideTitle && (
+        <h2 className={`font-bold text-blue-600 truncate ${fitContainer ? 'text-sm sm:text-base' : 'text-lg sm:text-2xl 2xl:text-3xl'}`}>
           {workCentreName ? `${workCentreName} - Hourly Output` : 'Hourly Output'}
         </h2>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+        )}
+        <div className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto ${fitContainer ? 'sm:gap-1.5' : 'sm:gap-3'} ${hideTitle ? 'sm:ml-auto' : ''}`}>
           <select
             value={viewMode}
             onChange={e => { setViewMode(e.target.value as 'line' | 'machine'); setSelectedMachine('all'); }}
-            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
+            className={`w-full sm:w-auto border border-gray-300 rounded-lg font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 ${fitContainer ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-xs sm:text-sm'}`}
           >
             <option value="line">Line Hourly Output</option>
             <option value="machine">Machine Hourly Output</option>
@@ -259,7 +285,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             <select
               value={selectedMachine}
               onChange={e => setSelectedMachine(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
+              className={`w-full sm:w-auto border border-gray-300 rounded-lg font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 ${fitContainer ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-xs sm:text-sm'}`}
             >
               <option value="all">All Machines</option>
               {machineData.map(m => (
@@ -274,7 +300,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             type="button"
             onClick={handleManualRefresh}
             disabled={refreshing}
-            className="w-full sm:w-auto px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
+            className={`w-full sm:w-auto rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed ${fitContainer ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-xs sm:text-sm'}`}
           >
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
@@ -282,23 +308,37 @@ export const HourlyOutputChart: React.FC<Props> = ({
       </div>
 
       {noData ? (
-        <div className="flex items-center justify-center h-64 text-lg text-gray-400">No data available</div>
+        <div className={`flex items-center justify-center text-gray-400 ${fitContainer ? 'flex-1 min-h-0 text-sm' : 'h-64 text-lg'}`}>No data available</div>
       ) : (
         <>
-          <div className={isMobile ? 'h-[280px]' : 'h-[400px] min-h-[300px] 2xl:h-[min(44vh,520px)] 2xl:min-h-[440px]'}>
+          <div
+            className={
+              fitContainer
+                ? 'flex-1 min-h-0 w-full'
+                : isMobile
+                  ? 'h-[280px]'
+                  : 'h-[400px] min-h-[300px] 2xl:h-[min(44vh,520px)] 2xl:min-h-[440px]'
+            }
+          >
           <ResponsiveContainer width="100%" height="100%">
             {viewMode === 'line' ? (
-              <LineChart data={chartDataLine} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
+              <LineChart data={chartDataLine} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                 <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
                   label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
                 <Tooltip />
-                <Legend wrapperStyle={{ fontSize: '16px', fontWeight: 600 }} iconSize={18} />
-                {lineData?.target ? <ReferenceLine y={lineData.target} stroke="#f97316" strokeWidth={3}
-                  label={{ value: `Target: ${lineData.target}`, position: 'right', fill: '#f97316', fontSize: 14, fontWeight: 600 }} /> : null}
-                {lineData?.average ? <ReferenceLine y={lineData.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5"
-                  label={{ value: `Avg: ${lineData.average}`, position: 'right', fill: '#22c55e', fontSize: 14, fontWeight: 600 }} /> : null}
+                <Legend
+                  payload={lineChartLegendPayload}
+                  wrapperStyle={{ fontSize: fitContainer ? '12px' : '14px', fontWeight: 600, paddingTop: 4 }}
+                  iconSize={fitContainer ? 14 : 18}
+                />
+                {lineData?.target ? (
+                  <ReferenceLine y={lineData.target} stroke="#f97316" strokeWidth={3} ifOverflow="extendDomain" />
+                ) : null}
+                {lineData?.average ? (
+                  <ReferenceLine y={lineData.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5" ifOverflow="extendDomain" />
+                ) : null}
                 <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={4}
                   dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name="Hourly Production"
                   isAnimationActive={false}>
@@ -324,15 +364,25 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 ))}
               </LineChart>
             ) : (
-              <LineChart data={chartDataMachineSingle} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
+              <LineChart data={chartDataMachineSingle} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                 <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
                   label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
                 <Tooltip />
-                <Legend wrapperStyle={{ fontSize: '16px', fontWeight: 600 }} iconSize={18} />
-                {activeMachine?.average ? <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5"
-                  label={{ value: `Avg: ${activeMachine.average}`, position: 'right', fill: '#22c55e', fontSize: 14, fontWeight: 600 }} /> : null}
+                <Legend
+                  payload={[
+                    { value: `${activeMachine?.machine_name ?? 'Machine'} Output`, type: 'line', color: '#3b82f6' },
+                    ...(activeMachine?.average
+                      ? [{ value: `Avg: ${activeMachine.average}`, type: 'line' as const, color: '#22c55e' }]
+                      : []),
+                  ]}
+                  wrapperStyle={{ fontSize: fitContainer ? '12px' : '14px', fontWeight: 600, paddingTop: 4 }}
+                  iconSize={fitContainer ? 14 : 18}
+                />
+                {activeMachine?.average ? (
+                  <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5" ifOverflow="extendDomain" />
+                ) : null}
                 <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={4}
                   dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name={`${activeMachine?.machine_name} Output`}
                   isAnimationActive={false}>
@@ -344,7 +394,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
           </div>
 
           {/* Summary cards */}
-          {viewMode === 'line' && lineData && (
+          {viewMode === 'line' && lineData && !fitContainer && (
             <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
               <div className="bg-orange-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Target</p>
@@ -363,7 +413,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             </div>
           )}
 
-          {viewMode === 'machine' && selectedMachine !== 'all' && activeMachine && (
+          {viewMode === 'machine' && selectedMachine !== 'all' && activeMachine && !fitContainer && (
             <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Current Hour</p>
@@ -380,7 +430,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             </div>
           )}
 
-          {viewMode === 'machine' && selectedMachine === 'all' && (
+          {viewMode === 'machine' && selectedMachine === 'all' && !fitContainer && (
             <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
               {machineData.map((m, i) => (
                 <div

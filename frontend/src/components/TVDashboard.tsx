@@ -26,6 +26,11 @@ export const TVDashboard: React.FC = () => {
     const [reworkUpdatedAt, setReworkUpdatedAt] = useState<Date | null>(null);
     const staleReloadTimerRef = React.useRef<number | null>(null);
     const [showStatusBar, setShowStatusBar] = useState(false);
+    const [detailCarouselIndex, setDetailCarouselIndex] = useState(0);
+    const [detailCarouselProgress, setDetailCarouselProgress] = useState(0);
+
+    const DETAIL_CAROUSEL_SLIDES = 2;
+    const DETAIL_CAROUSEL_MS = 30000;
 
     useEffect(() => {
         const now = new Date();
@@ -91,9 +96,9 @@ export const TVDashboard: React.FC = () => {
             setIsRefreshing(true);
             try {
                 const workCentreId = workCentres[currentIndex].id;
-                const [dashRes, reworkRes] = await Promise.allSettled([
+                const [dashRes] = await Promise.allSettled([
                     apiFetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`),
-                    apiFetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`)
+                    // apiFetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`),
                 ]);
 
                 let dashboardUpdated = false;
@@ -117,19 +122,19 @@ export const TVDashboard: React.FC = () => {
                     warnings.push('Live dashboard feed is unreachable.');
                 }
 
-                if (reworkRes.status === 'fulfilled') {
-                    const reworkResult = await reworkRes.value.json();
-                    if (reworkResult.success && Array.isArray(reworkResult.data)) {
-                        setReworkUpdatedAt(new Date());
-                        const map: Record<number, { total_rework: number; total_rejection: number }> = {};
-                        reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
-                        setReworkSummary(map);
-                    } else {
-                        warnings.push('Rework/rejection summary is unavailable.');
-                    }
-                } else {
-                    warnings.push('Rework/rejection feed is unreachable.');
-                }
+                // if (reworkRes.status === 'fulfilled') {
+                //     const reworkResult = await reworkRes.value.json();
+                //     if (reworkResult.success && Array.isArray(reworkResult.data)) {
+                //         setReworkUpdatedAt(new Date());
+                //         const map: Record<number, { total_rework: number; total_rejection: number }> = {};
+                //         reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
+                //         setReworkSummary(map);
+                //     } else {
+                //         warnings.push('Rework/rejection summary is unavailable.');
+                //     }
+                // } else {
+                //     warnings.push('Rework/rejection feed is unreachable.');
+                // }
 
                 if (!dashboardUpdated) {
                     setRetryAttempts((prev) => prev + 1);
@@ -178,6 +183,29 @@ export const TVDashboard: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        setDetailCarouselIndex(0);
+        setDetailCarouselProgress(0);
+    }, [currentIndex]);
+
+    useEffect(() => {
+        setDetailCarouselProgress(0);
+        const rotateInterval = setInterval(() => {
+            setDetailCarouselIndex((prev) => (prev + 1) % DETAIL_CAROUSEL_SLIDES);
+            setDetailCarouselProgress(0);
+        }, DETAIL_CAROUSEL_MS);
+        return () => clearInterval(rotateInterval);
+    }, [currentIndex]);
+
+    useEffect(() => {
+        const tickMs = 100;
+        const increment = (tickMs / DETAIL_CAROUSEL_MS) * 100;
+        const interval = setInterval(() => {
+            setDetailCarouselProgress((prev) => Math.min(prev + increment, 100));
+        }, tickMs);
+        return () => clearInterval(interval);
+    }, [detailCarouselIndex, currentIndex]);
+
     const secondsSinceLastSuccess = lastUpdatedAt ? Math.floor((currentTime.getTime() - lastUpdatedAt.getTime()) / 1000) : null;
     const isCriticalStaleNow = secondsSinceLastSuccess !== null && secondsSinceLastSuccess > 120;
     const sectionAge = (ts: Date | null) => ts ? Math.floor((currentTime.getTime() - ts.getTime()) / 1000) : null;
@@ -207,7 +235,7 @@ export const TVDashboard: React.FC = () => {
 
     if (errorMessage && !dashboardData) {
         return (
-            <div className="min-h-[100dvh] bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center p-6">
+            <div className="h-full min-h-0 bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center p-6">
                 <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full text-center">
                     <h2 className="text-2xl font-bold text-red-600 mb-3">Dashboard Unavailable</h2>
                     <p className="text-gray-700 mb-6">{errorMessage}</p>
@@ -224,7 +252,7 @@ export const TVDashboard: React.FC = () => {
 
     if (loading || !dashboardData) {
         return (
-            <div className="min-h-[100dvh] bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
+            <div className="h-full min-h-0 bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
                 <div className="text-white text-2xl motion-safe:animate-pulse">Loading Dashboard...</div>
             </div>
         );
@@ -269,16 +297,16 @@ export const TVDashboard: React.FC = () => {
     }));
 
     return (
-        <div className="min-h-[100dvh] bg-red bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-6 2xl:p-10 2xl:max-w-[min(122rem,96vw)] mx-auto">
-            <div key={String(currentWorkCentreId ?? currentIndex)} className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 2xl:p-10 mb-4 sm:mb-6 2xl:mb-8 relative overflow-hidden ring-1 ring-white/10 motion-safe:hover:ring-white/25 transition-[box-shadow] duration-500 motion-safe:animate-tv-section-in max-sm:motion-safe:animate-none motion-reduce:animate-none">
+        <div className="h-full min-h-0 flex flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-2 sm:p-3 max-w-[min(122rem,96vw)] mx-auto">
+            <div key={String(currentWorkCentreId ?? currentIndex)} className="flex-shrink-0 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-xl sm:rounded-2xl shadow-xl p-2 sm:p-3 mb-2 relative overflow-hidden ring-1 ring-white/10 motion-safe:animate-tv-section-in max-sm:motion-safe:animate-none motion-reduce:animate-none">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute top-0 left-0 w-72 h-72 sm:w-96 sm:h-96 max-sm:w-44 max-sm:h-44 bg-white rounded-full blur-3xl opacity-[0.12] max-sm:opacity-[0.05] max-sm:blur-2xl motion-safe:animate-tv-shimmer max-sm:motion-safe:animate-none motion-reduce:opacity-10" />
                     <div className="absolute bottom-0 right-0 w-80 h-80 sm:w-[28rem] sm:h-[28rem] max-sm:w-48 max-sm:h-48 bg-indigo-300/40 rounded-full blur-3xl opacity-[0.15] max-sm:opacity-[0.06] max-sm:blur-2xl motion-safe:animate-tv-shimmer max-sm:motion-safe:animate-none motion-reduce:opacity-10" style={{ animationDelay: '2.5s' }} />
                 </div>
                 <div className="relative z-10 isolate">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-2xl sm:text-4xl lg:text-5xl 2xl:text-6xl font-bold text-white drop-shadow-lg tracking-tight">{topSection.workCentreName}</h1>
+                    <div className="flex flex-row justify-between items-center mb-1.5 sm:mb-2 gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <h1 className="text-sm sm:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg tracking-tight truncate">{topSection.workCentreName}</h1>
                             <button
                                 type="button"
                                 onClick={() => setShowStatusBar(v => !v)}
@@ -291,14 +319,14 @@ export const TVDashboard: React.FC = () => {
                                 )}
                             </button>
                         </div>
-                        <div className="text-left sm:text-right rounded-xl px-4 py-2 2xl:px-6 2xl:py-3 ring-1 bg-slate-950/50 backdrop-blur-md ring-white/30 max-sm:drop-shadow-md sm:bg-white/10 sm:backdrop-blur-sm sm:ring-white/15">
-                            <div className="text-white text-lg sm:text-2xl 2xl:text-3xl font-semibold max-sm:font-bold tabular-nums">
+                        <div className="text-right rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 ring-1 bg-slate-950/50 backdrop-blur-md ring-white/30 sm:bg-white/10 flex-shrink-0 leading-tight">
+                            <div className="text-white text-[10px] sm:text-lg font-semibold tabular-nums whitespace-nowrap">
                                 {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             </div>
-                            <div className="text-blue-100 text-base sm:text-xl 2xl:text-2xl font-medium tabular-nums">
+                            <div className="text-blue-100 text-[10px] sm:text-base font-medium tabular-nums whitespace-nowrap">
                                 {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                             </div>
-                            <div className="text-blue-100 text-xs sm:text-sm mt-1 font-medium">
+                            <div className="hidden sm:block text-blue-100 text-[10px] sm:text-xs mt-0.5 font-medium whitespace-nowrap">
                                 Last update: {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Waiting...'}
                             </div>
                         </div>
@@ -369,70 +397,100 @@ export const TVDashboard: React.FC = () => {
                                     : partialWarning || errorMessage}
                         </div>
                     )}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 2xl:gap-8">
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-0 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <Target className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-white mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
-                            <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Target</div>
-                            <div className="text-white text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300">{topSection.target}</div>
+                    <div className="grid grid-cols-5 gap-1 sm:gap-2 min-w-0">
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-0 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                            <Target className="h-4 w-4 sm:h-7 sm:w-7 text-white mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Target</div>
+                            <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.target}</div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-green-300 mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
-                            <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Output</div>
-                            <div className="text-white text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300">{topSection.output}</div>
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                            <TrendingUp className="h-4 w-4 sm:h-7 sm:w-7 text-green-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output</div>
+                            <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.output}</div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <Activity className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-purple-300 mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
-                            <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Output %</div>
-                            <div className={`text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300 ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                            <Activity className="h-4 w-4 sm:h-7 sm:w-7 text-purple-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output %</div>
+                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {topSection.outputPercent}%
                             </div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 text-center hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <Zap className="h-8 w-8 sm:h-12 sm:w-12 2xl:h-14 2xl:w-14 text-yellow-300 mx-auto mb-2 sm:mb-3 drop-shadow-md transition-transform duration-500 motion-safe:hover:scale-110" />
-                            <div className="text-white/90 text-xs sm:text-sm 2xl:text-base mb-1 sm:mb-2 font-medium">Efficiency %</div>
-                            <div className={`text-2xl sm:text-4xl 2xl:text-5xl font-bold drop-shadow-md max-sm:[text-shadow:0_2px_8px_rgba(0,0,0,0.45)] tabular-nums transition-transform duration-300 ${topSection.efficiencyPercent >= 90 ? 'text-green-300' : topSection.efficiencyPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                            <Zap className="h-4 w-4 sm:h-7 sm:w-7 text-yellow-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Efficiency %</div>
+                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${topSection.efficiencyPercent >= 90 ? 'text-green-300' : topSection.efficiencyPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {topSection.efficiencyPercent}%
                             </div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-6 2xl:p-8 flex items-center justify-center col-span-2 sm:col-span-1 hover:bg-white/35 transition-all duration-500 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-200 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1 sm:p-2 flex items-center justify-center min-w-0 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-200 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             {topSection.showHappyEmoji ? (
-                                <Smile className="h-16 w-16 sm:h-24 sm:w-24 2xl:h-28 2xl:w-28 text-green-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" />
+                                <Smile className="h-7 w-7 sm:h-14 sm:w-14 text-green-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" />
                             ) : topSection.showMediumEmoji ? (
-                                <Meh className="h-16 w-16 sm:h-24 sm:w-24 2xl:h-28 2xl:w-28 text-yellow-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.4s' }} />
+                                <Meh className="h-7 w-7 sm:h-14 sm:w-14 text-yellow-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.4s' }} />
                             ) : (
-                                <Frown className="h-16 w-16 sm:h-24 sm:w-24 2xl:h-28 2xl:w-28 text-red-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.2s' }} />
+                                <Frown className="h-7 w-7 sm:h-14 sm:w-14 text-red-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.2s' }} />
                             )}
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 2xl:grid-cols-2 2xl:gap-8 2xl:items-start">
-            <div className="mb-4 sm:mb-6 2xl:mb-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
-            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 2xl:p-10 border border-gray-100 ring-1 ring-slate-200/60 transition-shadow duration-500 hover:shadow-[0_25px_60px_-15px_rgba(30,64,175,0.2)]">
-                <div className="flex items-center justify-between mb-4 sm:mb-6">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl 2xl:text-3xl font-bold text-blue-600">LINE PERFORMANCE</h3>
-                    {dashboardAgeSec !== null && dashboardAgeSec > 30 && (
-                        <span className="text-xs 2xl:text-sm font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">Stale metrics</span>
-                    )}
+            <div className="flex-1 min-h-0 grid grid-cols-2 gap-2 sm:gap-3 overflow-hidden min-w-0">
+            <div className="min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
+            <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg border border-gray-100 ring-1 ring-slate-200/60 overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-3 sm:px-4 pt-3 pb-2 flex-shrink-0 border-b border-gray-100">
+                    <h3 className="text-sm sm:text-base font-bold text-blue-600 truncate">
+                        {detailCarouselIndex === 0
+                            ? 'LINE PERFORMANCE'
+                            : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
+                    </h3>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        {dashboardAgeSec !== null && dashboardAgeSec > 30 && detailCarouselIndex === 0 && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Stale</span>
+                        )}
+                        <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
+                            {['Line table', 'Hourly chart'].map((label, i) => (
+                                <button
+                                    key={label}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={detailCarouselIndex === i}
+                                    aria-label={label}
+                                    onClick={() => {
+                                        setDetailCarouselIndex(i);
+                                        setDetailCarouselProgress(0);
+                                    }}
+                                    className={`h-2 rounded-full transition-all duration-300 ${
+                                        detailCarouselIndex === i ? 'w-6 bg-blue-600' : 'w-2 bg-gray-300 hover:bg-gray-400'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                    </div>
                 </div>
-                <div className="overflow-x-auto -mx-1 px-1">
-                    <table className="min-w-full">
-                        <thead>
+                <div className="relative flex-1 min-h-0 overflow-hidden">
+                    <div
+                        className="flex h-full transition-transform duration-700 ease-in-out motion-reduce:transition-none"
+                        style={{ transform: `translateX(-${detailCarouselIndex * 100}%)` }}
+                    >
+                        <div className="min-w-full h-full flex flex-col p-3 sm:p-4 pt-2">
+                <div className="flex-1 min-h-0 overflow-auto -mx-1 px-1">
+                    <table className="min-w-full text-xs sm:text-sm">
+                        <thead className="sticky top-0 bg-white z-10">
                             <tr className="border-b-2 border-gray-200">
-                                <th className="px-4 py-3 2xl:px-6 2xl:py-4 text-left text-sm 2xl:text-base font-bold text-gray-700">LINE</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">TARGET</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">OUTPUT</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">OUTPUT %</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">EFFICIENCY %</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-gray-700">WIP</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-yellow-600">REWORK</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-red-600">REJECTION</th>
+                                <th className="px-2 py-1.5 text-left font-bold text-gray-700">LINE</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">TARGET</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT %</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">EFFICIENCY %</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">WIP</th>
+                                {/* <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th> */}
                             </tr>
                         </thead>
                         <tbody>
                             {lowerSection.linePerformance?.map((line: any, index: number) => {
-                                const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
+                                // const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
                                 return (
                                     <tr
                                         key={index}
@@ -440,80 +498,95 @@ export const TVDashboard: React.FC = () => {
                                         className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors duration-200 motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100"
                                         style={{ animationDelay: `${Math.min(index, 12) * 55 + 40}ms` }}
                                     >
-                                        <td className="px-4 py-4 2xl:px-6 2xl:py-5 text-sm 2xl:text-lg font-semibold text-gray-800">{line.line_name}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-blue-600 tabular-nums">{line.target}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-green-600 tabular-nums">{line.output}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center">
-                                            <span className={`inline-block px-3 py-1 2xl:px-4 2xl:py-1.5 rounded-full text-lg 2xl:text-xl font-bold text-white shadow-sm transition-transform duration-300 motion-safe:hover:scale-105 ${
+                                        <td className="px-2 py-2 font-semibold text-gray-800">{line.line_name}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-blue-600 tabular-nums">{line.target}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-green-600 tabular-nums">{line.output}</td>
+                                        <td className="px-2 py-2 text-center">
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
                                                 Number(line.output_percentage) >= 90 ? 'bg-green-500' : Number(line.output_percentage) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
                                             }`}>{line.output_percentage}%</span>
                                         </td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center">
-                                            <span className={`inline-block px-3 py-1 2xl:px-4 2xl:py-1.5 rounded-full text-lg 2xl:text-xl font-bold text-white shadow-sm transition-transform duration-300 motion-safe:hover:scale-105 ${
+                                        <td className="px-2 py-2 text-center">
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
                                                 Number(line.efficiency) >= 90 ? 'bg-green-500' : Number(line.efficiency) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
                                             }`}>{line.efficiency}%</span>
                                         </td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-red-600 tabular-nums">{line.wip || 0}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-yellow-600 tabular-nums">{rw.total_rework}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-red-600 tabular-nums">{rw.total_rejection}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums">{line.wip || 0}</td>
+                                        {/* <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums">{rw.total_rework}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums">{rw.total_rejection}</td> */}
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
                 </div>
+                        </div>
+                        <div className="min-w-full h-full flex flex-col min-h-0">
+                            <HourlyOutputChart
+                                workCentreId={currentWorkCentreId}
+                                workCentreName={lowerSection.workCentreName}
+                                showProgress={false}
+                                progress={progress}
+                                date={currentDate}
+                                fitContainer
+                                hideTitle
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="px-3 sm:px-4 pb-3 flex-shrink-0">
+                    <div className="w-full rounded-full h-1.5 bg-gray-200 overflow-hidden">
+                        <div
+                            className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100 motion-reduce:transition-none"
+                            style={{ width: `${detailCarouselProgress}%` }}
+                        />
+                    </div>
+                    <p className="text-[9px] sm:text-[10px] text-gray-400 text-center mt-0.5 tabular-nums hidden sm:block">
+                        Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
+                    </p>
+                </div>
             </div>
             </div>
 
-            <div className="motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
-            <div className="space-y-4 sm:space-y-6 2xl:space-y-8">
-                <HourlyOutputChart 
-                    workCentreId={currentWorkCentreId} 
-                    workCentreName={lowerSection.workCentreName}
-                    showProgress={workCentres.length > 1}
-                    progress={progress}
-                    date={currentDate}
-                />
-
-                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 2xl:p-10 border border-gray-100 transition-all duration-500 hover:shadow-[0_25px_60px_-15px_rgba(220,38,38,0.12)] ring-1 ring-slate-200/60">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl 2xl:text-3xl font-bold text-red-600 mb-4 sm:mb-6 flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6 2xl:h-8 2xl:w-8 text-red-600 motion-safe:animate-pulse motion-reduce:animate-none" />
+            <div className="min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
+                <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg p-2 sm:p-3 border border-gray-100 ring-1 ring-slate-200/60">
+                    <h3 className="text-xs sm:text-sm font-bold text-red-600 mb-1.5 flex items-center gap-1.5 flex-shrink-0">
+                        <TrendingUp className="h-3.5 w-3.5 text-red-600 motion-safe:animate-pulse motion-reduce:animate-none" />
                         Top 3 Bottleneck Machines
-                        {reworkAgeSec !== null && reworkAgeSec > 30 && (
-                            <span className="text-xs 2xl:text-sm font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700 ml-2">Rework stale</span>
-                        )}
+                        {/* {reworkAgeSec !== null && reworkAgeSec > 30 && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 ml-1">Rework stale</span>
+                        )} */}
                     </h3>
                     {lowerSection.bottlenecks.length > 0 ? (
-                        <div className="space-y-3 sm:space-y-4 2xl:space-y-5">
+                        <div className="flex-1 min-h-0 flex flex-col justify-center gap-2">
                             {lowerSection.bottlenecks.map((item: any, index: number) => (
                                 <div
                                     key={index}
-                                    className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 rounded-lg p-3 sm:p-4 2xl:p-5 shadow-sm hover:shadow-lg transition-all duration-500 motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100 2xl:hover:translate-x-1"
+                                    className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 rounded-md px-2 py-1.5 shadow-sm motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100"
                                     style={{ animationDelay: `${180 + index * 90}ms` }}
                                 >
-                                    <div className="flex justify-between items-center gap-2">
-                                        <div className="flex-1 min-w-0 flex items-center gap-2">
-                                            <span className="text-red-600 font-bold text-lg 2xl:text-xl bg-white px-2 py-1 rounded shadow-sm">#{index + 1}</span>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-gray-800 font-bold text-sm sm:text-lg 2xl:text-2xl truncate">{item.machine_centre_name}</div>
-                                                <div className="text-gray-600 text-xs sm:text-sm 2xl:text-lg truncate">{item.work_centre_name}</div>
+                                    <div className="flex justify-between items-center gap-1.5">
+                                        <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                                            <span className="text-red-600 font-bold text-[10px] bg-white px-1 py-0.5 rounded shadow-sm">#{index + 1}</span>
+                                            <div className="flex-1 min-w-0 leading-tight">
+                                                <div className="text-gray-800 font-bold text-[11px] sm:text-xs truncate">{item.machine_centre_name}</div>
+                                                <div className="text-gray-600 text-[10px] truncate">{item.work_centre_name}</div>
                                             </div>
                                         </div>
-                                        <div className="text-red-600 text-2xl sm:text-3xl 2xl:text-4xl font-bold flex-shrink-0 bg-white px-3 py-1 2xl:px-4 2xl:py-2 rounded-lg shadow-sm tabular-nums">{item.efficiency}%</div>
+                                        <div className="text-red-600 text-sm font-bold flex-shrink-0 bg-white px-1.5 py-0.5 rounded shadow-sm tabular-nums">{item.efficiency}%</div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="flex items-center justify-center h-48 sm:h-64 2xl:h-72 text-gray-400">
-                            <div className="text-center px-4 motion-safe:animate-tv-section-in motion-reduce:animate-none">
-                                <Smile className="h-12 w-12 sm:h-16 sm:w-16 2xl:h-20 2xl:w-20 mx-auto mb-3 sm:mb-4 text-green-400 motion-safe:animate-tv-breathe motion-reduce:animate-none" />
-                                <div className="text-sm sm:text-xl 2xl:text-2xl">No Bottlenecks - All machines performing well!</div>
+                        <div className="py-2 flex items-center justify-center text-gray-400">
+                            <div className="text-center px-2 motion-safe:animate-tv-section-in motion-reduce:animate-none">
+                                <Smile className="h-6 w-6 mx-auto mb-0.5 text-green-400 motion-safe:animate-tv-breathe motion-reduce:animate-none" />
+                                <div className="text-[10px] sm:text-xs">No Bottlenecks - All machines performing well!</div>
                             </div>
                         </div>
                     )}
                 </div>
-            </div>
             </div>
             </div>
         </div>
