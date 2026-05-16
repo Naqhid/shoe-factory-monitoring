@@ -421,8 +421,7 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">Output %</th>
                                 <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">Efficiency %</th>
                                 <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-white uppercase tracking-wide">WIP</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-[#CCFF00] uppercase tracking-wide">Rework</th>
-                                <th className="px-4 py-3 2xl:px-6 text-center text-sm 2xl:text-base font-bold text-red-300 uppercase tracking-wide">Rejection</th>
+                                
                             </tr>
                         </thead>
                         <tbody>
@@ -445,9 +444,7 @@ export const TVDashboard: React.FC = () => {
                                             <span className={`text-lg 2xl:text-2xl font-bold tabular-nums ${tvPctTextClass(Number(line.efficiency))}`}>{line.efficiency}%</span>
                                         </td>
                                         <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-white tabular-nums">{line.wip || 0}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-[#CCFF00] tabular-nums">{rw.total_rework}</td>
-                                        <td className="px-4 py-4 2xl:px-6 text-center text-lg 2xl:text-2xl font-bold text-red-300 tabular-nums">{rw.total_rejection}</td>
-                                    </tr>
+                                                </tr>
                                 );
                             })}
                         </tbody>

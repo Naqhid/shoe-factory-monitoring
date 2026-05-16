@@ -152,27 +152,36 @@ exports.getDashboard = async (req, res) => {
             SELECT 
                 mc.name as machine_centre_name,
                 wc.name as work_centre_name,
-                ROUND(COALESCE(mcs.avg_efficiency_percent, 0), 1) as efficiency,
-                GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(mcs.total_output_pairs, 0)) as wip,
-                COALESCE(mcs.total_output_pairs, 0) as output
+                ROUND(
+                    CASE
+                        WHEN COALESCE(SUM(p.output_pairs), 0) = 0 THEN 0
+                        WHEN SUM(TIMESTAMPDIFF(MINUTE, p.start_time, p.finish_time)) > 0
+                            THEN (SUM(p.target_mins) / SUM(TIMESTAMPDIFF(MINUTE, p.start_time, p.finish_time))) * 100
+                        ELSE 0
+                    END, 1
+                ) as efficiency,
+                GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(SUM(p.output_pairs), 0)) as wip,
+                COALESCE(SUM(p.output_pairs), 0) as output
             FROM machine_centres mc
             JOIN work_centres wc ON mc.work_centre_id = wc.id
-            LEFT JOIN machine_centre_summary mcs 
-                ON mcs.machine_id = mc.machine_id 
-                AND mcs.work_centre_id = mc.work_centre_id
-                AND mcs.prod_date = ?
-            LEFT JOIN production_plan pp 
-                ON mcs.work_centre_id = pp.work_centre_id 
+            JOIN machine_centre_production p
+                ON p.machine_id = mc.machine_id
+                AND p.work_centre_id = mc.work_centre_id
+                AND DATE(p.prod_date) = DATE(?)
+                AND p.button_status = 2
+                AND TIMESTAMPDIFF(MINUTE, p.start_time, p.finish_time) <= 510
+            LEFT JOIN production_plan pp
+                ON mc.work_centre_id = pp.work_centre_id
                 AND DATE(pp.plan_date) = DATE(?)
             WHERE mc.work_centre_id = ?
               AND mc.deleted_at IS NULL
               AND COALESCE(mc.is_active, 1) = 1
-              AND (
-                mcs.id IS NULL
-                OR mcs.total_output_pairs = 0
-                OR mcs.avg_efficiency_percent < 70
-              )
-            ORDER BY COALESCE(mcs.avg_efficiency_percent, 0) ASC
+            GROUP BY mc.id, mc.name, wc.name, pp.total_target_per_day
+            HAVING
+                SUM(p.output_pairs) = 0
+                OR (SUM(TIMESTAMPDIFF(MINUTE, p.start_time, p.finish_time)) > 0
+                    AND (SUM(p.target_mins) / SUM(TIMESTAMPDIFF(MINUTE, p.start_time, p.finish_time))) * 100 < 70)
+            ORDER BY efficiency ASC
             LIMIT 3
         `, [today, today, workCentreId]);
 
