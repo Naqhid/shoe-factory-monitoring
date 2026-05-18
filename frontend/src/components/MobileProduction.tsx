@@ -394,17 +394,25 @@ export const MobileProduction: React.FC = () => {
     const dailyPaceSnapshot = React.useMemo(() => {
         const daily = dailyTargetPairs;
         if (daily == null || daily <= 0) return null;
-        const productiveMins = getProductiveElapsedMinutesInShift(
-            currentTime,
-            MOBILE_SHIFT_START_MINUTES,
-            MOBILE_SHIFT_END_MINUTES
+        const now = currentTime;
+        const shiftStart = new Date(now);
+        shiftStart.setHours(Math.floor(MOBILE_SHIFT_START_MINUTES / 60), MOBILE_SHIFT_START_MINUTES % 60, 0, 0);
+        const shiftEnd = new Date(now);
+        shiftEnd.setHours(Math.floor(MOBILE_SHIFT_END_MINUTES / 60), MOBILE_SHIFT_END_MINUTES % 60, 0, 0);
+        const totalShiftMins = Math.max(1, Math.floor((shiftEnd.getTime() - shiftStart.getTime()) / 60000));
+        const elapsedMins = Math.max(
+            1,
+            Math.min(
+                Math.max(0, Math.floor((Math.min(now.getTime(), shiftEnd.getTime()) - shiftStart.getTime()) / 60000)),
+                totalShiftMins
+            )
         );
-        const productiveHours = productiveMins / 60;
-        const rawExpected = MOBILE_PAIRS_PER_HOUR_TARGET * productiveHours;
-        const expected = Math.min(daily, Math.round(rawExpected));
+        const expected = Math.round((daily * elapsedMins) / totalShiftMins);
         const actual = totalOutputToday;
         const gap = actual - expected;
-        return { expected, daily, gap };
+        const projectedEod = elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalShiftMins) : 0;
+        const remainingMins = Math.max(0, Math.floor((shiftEnd.getTime() - Math.min(now.getTime(), shiftEnd.getTime())) / 60000));
+        return { expected, daily, gap, projectedEod, remainingMins };
     }, [currentTime, dailyTargetPairs, totalOutputToday]);
 
     // Update current time every second
@@ -2052,18 +2060,18 @@ export const MobileProduction: React.FC = () => {
                                     <div className="col-span-2 md:col-span-6 grid w-full min-w-0 grid-cols-1 gap-2 md:grid-cols-2 md:gap-2 text-center">
                                         <div
                                             className={`w-full min-w-0 rounded-xl px-3 py-2.5 sm:px-3 sm:py-2 md:px-3 md:py-2 border shadow-md ring-1 ${
-                                                dailyPaceSnapshot.gap >= 0
+                                                dailyPaceSnapshot.projectedEod >= dailyPaceSnapshot.daily
                                                     ? 'bg-emerald-600/20 border-emerald-300/55 ring-emerald-400/30'
                                                     : 'bg-red-950/50 border-red-400/45 ring-red-500/35'
                                             }`}
-                                            title="Output vs shift-time target (24 pairs/hr, 9:00–5:30, lunch out). Gap = actual minus expected for elapsed productive time."
+                                            title="Actual output vs projected end-of-day output at current pace (9:00–5:30). Projected = (actual ÷ elapsed mins) × total shift mins."
                                         >
                                             <p className="text-[11px] sm:text-xs uppercase opacity-90 font-semibold tracking-wide text-white">
                                                 Actual vs pace
                                             </p>
                                             <div
                                                 className="mt-1.5 md:mt-1 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1"
-                                                aria-label={`${totalOutputToday} pairs produced, ${dailyPaceSnapshot.expected} expected by now, gap ${dailyPaceSnapshot.gap}`}
+                                                aria-label={`${totalOutputToday} pairs produced, ${dailyPaceSnapshot.projectedEod} projected end of day`}
                                             >
                                                 <div className="flex items-baseline justify-center gap-2 sm:gap-2.5 flex-nowrap tabular-nums">
                                                     <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold text-emerald-300 drop-shadow-sm min-w-0">
@@ -2073,29 +2081,26 @@ export const MobileProduction: React.FC = () => {
                                                         /
                                                     </span>
                                                     <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-white min-w-0">
-                                                        {dailyPaceSnapshot.expected}
+                                                        {dailyPaceSnapshot.projectedEod}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-baseline justify-center gap-1.5 border-t border-white/20 pt-1.5 mt-0.5 w-full min-[400px]:border-t-0 min-[400px]:border-l min-[400px]:border-white/25 min-[400px]:pt-0 min-[400px]:mt-0 min-[400px]:pl-4 min-[400px]:w-auto min-[400px]:basis-auto">
                                                     <span
                                                         className={`text-[10px] sm:text-[11px] uppercase tracking-wide ${
-                                                            dailyPaceSnapshot.gap >= 0 ? 'text-white/65' : 'text-white/85'
+                                                            dailyPaceSnapshot.projectedEod >= dailyPaceSnapshot.daily ? 'text-white/65' : 'text-white/85'
                                                         }`}
                                                     >
-                                                        Gap
+                                                        {dailyPaceSnapshot.projectedEod >= dailyPaceSnapshot.daily ? '▲ On track' : '▼ Short by'}
                                                     </span>
-                                                    <span
-                                                        className={`text-[1.35rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums ${
-                                                            dailyPaceSnapshot.gap >= 0 ? 'text-emerald-200' : 'text-white drop-shadow-sm'
-                                                        }`}
-                                                    >
-                                                        {dailyPaceSnapshot.gap > 0 ? '+' : ''}
-                                                        {dailyPaceSnapshot.gap}
-                                                    </span>
+                                                    {dailyPaceSnapshot.projectedEod < dailyPaceSnapshot.daily && (
+                                                        <span className="text-[1.35rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-white drop-shadow-sm">
+                                                            {dailyPaceSnapshot.daily - dailyPaceSnapshot.projectedEod}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                             <p className="text-[10px] sm:text-[11px] opacity-80 mt-1 md:mt-0.5 max-w-full mx-auto break-words px-0.5 leading-snug">
-                                                pairs · 24/hr · 9–5:30 · lunch out
+                                                pairs · projected EOD · {dailyPaceSnapshot.remainingMins}m left
                                             </p>
                                         </div>
                                         <div className="w-full min-w-0 rounded-xl bg-white/10 px-3 py-2.5 sm:px-3 sm:py-2 md:px-2 md:py-2 border border-white/25 shadow-md ring-1 ring-white/10">
