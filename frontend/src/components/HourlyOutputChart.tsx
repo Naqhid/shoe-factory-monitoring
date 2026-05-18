@@ -152,7 +152,27 @@ export const HourlyOutputChart: React.FC<Props> = ({
   };
 
   const CustomTick = ({ x, y, payload }: any) => {
-    const text = payload.value;
+    const text: string = payload.value || '';
+    // In fitContainer (TV) mode: show short label horizontally to avoid clipping
+    if (fitContainer) {
+      // Convert "9 AM - 10 AM" → "9-10" or "9:00" → "9"
+      let short = text;
+      if (text.includes(' - ')) {
+        const [from, to] = text.split(' - ');
+        const fromH = from.replace(' AM', '').replace(' PM', '').trim();
+        const toH = to.replace(' AM', '').replace(' PM', '').trim();
+        short = `${fromH}-${toH}`;
+      } else {
+        short = text.replace(':00', '').replace(' ', '');
+      }
+      return (
+        <g transform={`translate(${x},${y})`}>
+          <text x={0} y={0} dy={14} textAnchor="middle" fill="#3b82f6" fontSize={12} fontWeight={700}>
+            {short}
+          </text>
+        </g>
+      );
+    }
     if (text?.includes(' - ')) {
       const [t, n] = text.split(' - ');
       return (
@@ -226,7 +246,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
       : 0;
 
   const chartMargin = fitContainer
-    ? { top: 36, right: 12, left: 8, bottom: 56 }
+    ? { top: 36, right: 12, left: 8, bottom: 24 }
     : { top: 42, right: 20, left: 20, bottom: 64 };
 
   const lineChartLegendPayload = [
@@ -324,7 +344,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
             {viewMode === 'line' ? (
               <LineChart data={chartDataLine} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={fitContainer ? 28 : (isMobile ? 60 : 80)} interval={isMobile ? 'preserveStartEnd' : 0} />
                 <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
                   label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
                 <Tooltip />
