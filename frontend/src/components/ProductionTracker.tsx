@@ -646,9 +646,20 @@ export const ProductionTracker: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
                 <div className="bg-[#f7f9ff] rounded-2xl p-2.5 sm:p-3.5 text-slate-900 border border-[#dbe5ff] min-h-[104px] sm:min-h-[clamp(128px,18vh,220px)] flex flex-col justify-center">
-                  <div className="text-xs sm:text-sm text-slate-500 font-semibold mb-1">Projected Output</div>
-                  <div className="text-3xl sm:text-5xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
-                  <div className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-semibold text-slate-600">Pairs</div>
+                  <div className="text-xs sm:text-sm text-slate-500 font-semibold mb-1">Projected EOD Output</div>
+                  <div className={`text-3xl sm:text-5xl font-bold leading-none ${
+                    shiftProjection.projected >= Number(topSection?.target || 0) ? 'text-green-600' : 'text-red-500'
+                  }`}>{shiftProjection.projected.toLocaleString()}</div>
+                  <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm font-semibold text-slate-500">
+                    Target: {Number(topSection?.target || 0).toLocaleString()} · {shiftProjection.minutesToShiftEnd}m left
+                  </div>
+                  <div className={`mt-1 text-xs font-semibold ${
+                    shiftProjection.shortfall > 0 ? 'text-red-500' : 'text-green-600'
+                  }`}>
+                    {shiftProjection.shortfall > 0
+                      ? `▼ Short by ${shiftProjection.shortfall} pairs at current pace`
+                      : `▲ On track to meet target`}
+                  </div>
                 </div>
                 <button
                   type="button"
