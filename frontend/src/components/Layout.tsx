@@ -9,6 +9,8 @@ interface LayoutProps {
   children: React.ReactNode;
   activeMenu?: string;
   hideTopHeader?: boolean;
+  /** When true, main content fills the viewport with no page scroll (e.g. TV dashboard). */
+  fitViewport?: boolean;
   hideSidebarToggleButton?: boolean;
   hideLogout?: boolean;
   hideAlertBell?: boolean;
@@ -18,6 +20,7 @@ export const Layout: React.FC<LayoutProps> = ({
   children,
   activeMenu = '',
   hideTopHeader = false,
+  fitViewport = false,
   hideSidebarToggleButton = false,
   hideLogout = false,
   hideAlertBell = false
@@ -45,6 +48,10 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   const user = getUserInfo();
+
+  React.useEffect(() => {
+    if (fitViewport) setSidebarOpen(false);
+  }, [fitViewport]);
 
   React.useEffect(() => {
     const toggleSidebar = () => setSidebarOpen((prev) => !prev);
@@ -124,8 +131,14 @@ export const Layout: React.FC<LayoutProps> = ({
           {/* Spacer for fixed header when sidebar is closed */}
           {!sidebarOpen && !hideTopHeader && <div className="h-20 flex-shrink-0"></div>}
           
-          {/* Content wrapper — sole vertical scroll for app shell */}
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain">
+          {/* Content wrapper — sole vertical scroll for app shell (disabled when fitViewport) */}
+          <div
+            className={
+              fitViewport
+                ? 'flex-1 min-h-0 overflow-hidden flex flex-col'
+                : 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain'
+            }
+          >
             {children}
           </div>
         </div>
