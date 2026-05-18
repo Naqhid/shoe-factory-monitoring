@@ -172,9 +172,15 @@ exports.getDashboard = async (req, res) => {
                 OR mcs.total_output_pairs = 0
                 OR mcs.avg_efficiency_percent < 70
               )
+              AND EXISTS (
+                SELECT 1 FROM mobile_sessions ms
+                WHERE ms.machine_id = mc.machine_id
+                  AND ms.status = 'active'
+                  AND DATE(ms.activated_at) = DATE(?)
+              )
             ORDER BY COALESCE(mcs.avg_efficiency_percent, 0) ASC
             LIMIT 3
-        `, [today, today, workCentreId]);
+        `, [today, today, workCentreId, today]);
 
         const [linePerformance] = await pool.query(`
             SELECT 
