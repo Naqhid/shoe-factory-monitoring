@@ -802,24 +802,47 @@ export const ProductionTracker: React.FC = () => {
                 ) : (
                   <>
                     <p className="text-xs text-slate-500 mb-2">
-                      Bottleneck hint: {lineMachines.filter((m: any) => Number(m.total_output_pairs || 0) === 0).length} idle machines
+                      {lineMachines.filter((m: any) => m.emp_code && Number(m.total_output_pairs || 0) === 0).length === 0
+                        ? <span className="font-semibold text-green-600">✓ No Bottlenecks - All machines performing well!</span>
+                        : <span>Bottleneck hint: <span className="font-bold text-red-600">{lineMachines.filter((m: any) => m.emp_code && Number(m.total_output_pairs || 0) === 0).length} idle machines</span></span>
+                      }
                     </p>
                     <div className="space-y-1.5 max-h-44 overflow-auto pr-1">
-                    {lineMachines.slice(0, 10).map((machine: any, idx: number) => (
-                      <div key={`${machine.machine_id || idx}`} className="flex items-center justify-between text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
+                    {[...lineMachines].filter((m: any) => m.emp_code).sort((a: any, b: any) => Number(a.total_output_pairs || 0) - Number(b.total_output_pairs || 0)).slice(0, 10).map((machine: any, idx: number) => {
+                      const output = Number(machine.total_output_pairs || 0);
+                      const isBottleneck = output === 0;
+                      return (
+                      <div key={`${machine.machine_id || idx}`} className={`flex items-center justify-between text-sm rounded-lg px-2.5 py-1.5 border-l-4 ${
+                        isBottleneck
+                          ? 'bg-red-50 border-red-500 border border-red-200'
+                          : 'bg-white border-green-500 border border-slate-200'
+                      }`}>
                         <span className="font-semibold text-slate-700">
                           {machine.machine_id || '—'}
                           {(machine.machine_name || machine.machine_centre_name || machine.name) && (
                             <span className="text-slate-500 font-medium"> - {machine.machine_name || machine.machine_centre_name || machine.name}</span>
                           )}
                         </span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          Number(machine.total_output_pairs || 0) > 0 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {Number(machine.total_output_pairs || 0) > 0 ? 'Active' : 'Idle'}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {machine.emp_code && (
+                            <span className="text-[10px] text-slate-400 font-medium">{machine.emp_name || machine.emp_code}</span>
+                          )}
+                          {Number(machine.avg_efficiency_percent) > 0 && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              Number(machine.avg_efficiency_percent) >= 90 ? 'bg-green-100 text-green-700'
+                              : Number(machine.avg_efficiency_percent) >= 70 ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-red-100 text-red-700'
+                            }`}>{Number(machine.avg_efficiency_percent)}%</span>
+                          )}
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            isBottleneck ? 'bg-red-500 text-white' : 'bg-green-100 text-green-700'
+                          }`}>
+                            {isBottleneck ? '⚠ Bottleneck' : `✓ ${output} pairs`}
+                          </span>
+                        </div>
                       </div>
-                    ))}
+                      );
+                    })}
                     </div>
                   </>
                 )}

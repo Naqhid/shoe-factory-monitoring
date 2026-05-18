@@ -203,7 +203,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [workCentreId, setWorkCentreId] = React.useState('');
   const [machineId, setMachineId] = React.useState('');
   const [empId, setEmpId] = React.useState('');
-  const [entryDate] = React.useState(getTodayLocalDate());
+  const [entryDate, setEntryDate] = React.useState(getTodayLocalDate());
   const [hourlySlot, setHourlySlot] = React.useState('');
   const [slotType, setSlotType] = React.useState<SlotType>('hourly');
   const [manualStartTime, setManualStartTime] = React.useState('');
@@ -420,6 +420,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     setEditingId(null);
     setShowForm(false);
     setSlotConflictWarning('');
+    setEntryDate(getTodayLocalDate());
   };
 
   const requestDiscardManualFormChanges = React.useCallback(() => {
@@ -944,12 +945,14 @@ export const ManualProductionEntryForm: React.FC = () => {
   const handleEdit = (row: ManualEntryRow) => {
     const start = new Date(row.start_time);
     const derivedHour = Number.isNaN(start.getTime()) ? 0 : start.getHours();
+    const derivedMinute = Number.isNaN(start.getTime()) ? 0 : start.getMinutes();
     setShowForm(true);
     setEditingId(row.id);
+    setEntryDate(String(row.prod_date || '').slice(0, 10) || getTodayLocalDate());
     setWorkCentreId(String(row.work_centre_id));
     setMachineId(row.machine_id);
     setEmpId(row.emp_id);
-    setHourlySlot(String(Math.max(0, Math.min(23, derivedHour))));
+    setHourlySlot(`${pad2(Math.max(0, Math.min(23, derivedHour)))}:${pad2(derivedMinute)}`);
     setTargetMins(String(Number(row.target_mins || 0)));
     setOutputPairs(String(Number(row.output_pairs || 0)));
     setStoppageReason(
@@ -1208,8 +1211,14 @@ export const ManualProductionEntryForm: React.FC = () => {
                 </p>
               </div>
               <div className="text-right mr-2">
-                <div className="text-xs uppercase tracking-wide text-gray-500">Date</div>
-                <div className="text-sm font-semibold text-gray-800">{entryDate}</div>
+                <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">Date</label>
+                <input
+                  type="date"
+                  value={entryDate}
+                  onChange={(e) => setEntryDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                  disabled={loading}
+                />
               </div>
               <button
                 type="button"
