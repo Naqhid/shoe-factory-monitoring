@@ -22,6 +22,7 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                 COALESCE(mc.machine_name, mc.name) AS machine_name,
                 mc.machine_id,
                 COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
+                COALESCE(ROUND(mcs.avg_efficiency_percent, 1), 0) AS avg_efficiency_percent,
                 COALESCE(
                     (SELECT ROUND(SUM(prl.mins_12_prs_box), 2)
                      FROM production_routing_lines prl

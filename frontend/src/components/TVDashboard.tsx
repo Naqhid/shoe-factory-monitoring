@@ -435,11 +435,11 @@ export const TVDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 grid grid-cols-2 gap-2 sm:gap-3 overflow-hidden min-w-0">
-            <div className="min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
+            <div className="flex-1 min-h-0 grid grid-cols-4 gap-2 sm:gap-3 overflow-hidden min-w-0">
+            <div className="col-span-3 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
             <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg border border-gray-100 ring-1 ring-slate-200/60 overflow-hidden">
                 <div className="flex items-center justify-between gap-2 px-3 sm:px-4 pt-3 pb-2 flex-shrink-0 border-b border-gray-100">
-                    <h3 className="text-sm sm:text-base font-bold text-blue-600 truncate">
+                    <h3 className="font-bold text-blue-600 truncate" style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}>
                         {detailCarouselIndex === 0
                             ? 'LINE PERFORMANCE'
                             : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
@@ -461,7 +461,7 @@ export const TVDashboard: React.FC = () => {
                                         setDetailCarouselProgress(0);
                                     }}
                                     className={`h-2 rounded-full transition-all duration-300 ${
-                                        detailCarouselIndex === i ? 'w-6 bg-blue-600' : 'w-2 bg-gray-300 hover:bg-gray-400'
+                                        detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
                                     }`}
                                 />
                             ))}
@@ -476,7 +476,7 @@ export const TVDashboard: React.FC = () => {
                         <div className="min-w-full h-full flex flex-col p-3 sm:p-4 pt-2">
                 <div className="flex-1 min-h-0 overflow-auto -mx-1 px-1">
                     <table className="min-w-full text-xs sm:text-sm">
-                        <thead className="sticky top-0 bg-white z-10">
+                        <thead className="sticky top-0 z-10 bg-white">
                             <tr className="border-b-2 border-gray-200">
                                 <th className="px-2 py-1.5 text-left font-bold text-gray-700">LINE</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">TARGET</th>
@@ -521,7 +521,7 @@ export const TVDashboard: React.FC = () => {
                     </table>
                 </div>
                         </div>
-                        <div className="min-w-full h-full flex flex-col min-h-0">
+                        <div className="min-w-full h-full flex flex-col min-h-0" style={{ background: 'rgba(239,246,255,0.95)', borderRadius: '12px', overflow: 'hidden' }}>
                             <HourlyOutputChart
                                 workCentreId={currentWorkCentreId}
                                 workCentreName={lowerSection.workCentreName}
@@ -534,23 +534,23 @@ export const TVDashboard: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                <div className="px-3 sm:px-4 pb-3 flex-shrink-0">
+                <div className="px-3 mt-2 sm:px-4 pb-3 flex-shrink-0">
                     <div className="w-full rounded-full h-1.5 bg-gray-200 overflow-hidden">
                         <div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100 motion-reduce:transition-none"
+                            className="h-full rounded-full bg-blue-500 transition-[width] duration-100 motion-reduce:transition-none"
                             style={{ width: `${detailCarouselProgress}%` }}
                         />
                     </div>
-                    <p className="text-[9px] sm:text-[10px] text-gray-400 text-center mt-0.5 tabular-nums hidden sm:block">
+                    <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold text-center mt-0.5 tabular-nums hidden sm:block">
                         Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
                     </p>
                 </div>
             </div>
             </div>
 
-            <div className="min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
+            <div className="col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
                 <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg p-2 sm:p-3 border border-gray-100 ring-1 ring-slate-200/60">
-                    <h3 className="text-xs sm:text-sm font-bold text-red-600 mb-1.5 flex items-center gap-1.5 flex-shrink-0">
+                    <h3 className="font-bold text-red-600 mb-1.5 flex items-center gap-1.5 flex-shrink-0" style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}>
                         <TrendingUp className="h-3.5 w-3.5 text-red-600 motion-safe:animate-pulse motion-reduce:animate-none" />
                         Top 3 Bottleneck Machines
                         {/* {reworkAgeSec !== null && reworkAgeSec > 30 && (
@@ -558,7 +558,7 @@ export const TVDashboard: React.FC = () => {
                         )} */}
                     </h3>
                     {lowerSection.bottlenecks.length > 0 ? (
-                        <div className="flex-1 min-h-0 flex flex-col justify-center gap-2">
+                        <div className="flex-1 min-h-0 flex flex-col justify-start gap-2">
                             {lowerSection.bottlenecks.map((item: any, index: number) => (
                                 <div
                                     key={index}
@@ -582,7 +582,7 @@ export const TVDashboard: React.FC = () => {
                         <div className="py-2 flex items-center justify-center text-gray-400">
                             <div className="text-center px-2 motion-safe:animate-tv-section-in motion-reduce:animate-none">
                                 <Smile className="h-6 w-6 mx-auto mb-0.5 text-green-400 motion-safe:animate-tv-breathe motion-reduce:animate-none" />
-                                <div className="text-[10px] sm:text-xs">No Bottlenecks - All machines performing well!</div>
+                                <div className="text-[10px] sm:text-xs text-gray-500">No Bottlenecks - All machines performing well!</div>
                             </div>
                         </div>
                     )}
