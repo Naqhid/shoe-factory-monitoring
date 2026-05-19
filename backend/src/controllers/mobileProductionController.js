@@ -1620,14 +1620,39 @@ exports.updateStatus = async (req, res, next) => {
 exports.delete = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [result] = await db.query('DELETE FROM machine_centre_production WHERE id = ?', [id]);
 
-    if (result.affectedRows === 0) {
+    // Fetch record metadata before deleting so we can recalculate the summary
+    const [existingRows] = await db.query(
+      'SELECT id, prod_date, work_centre_id, machine_id, emp_id FROM machine_centre_production WHERE id = ?',
+      [id]
+    );
+
+    if (existingRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Production data not found' });
     }
 
-    res.json({ success: true, message: 'Production data deleted successfully' });
+    const existing = existingRows[0];
+
+    let summaryData = null;
+    await withTransaction(async (conn) => {
+      const [result] = await conn.execute('DELETE FROM machine_centre_production WHERE id = ?', [id]);
+      if (result.affectedRows === 0) {
+        throw Object.assign(new Error('Production data not found'), { status: 404 });
+      }
+      // Recalculate summary so TV dashboard and reports stay in sync
+      summaryData = await recalcSummaryForDayMachineEmployee(conn, {
+        prodDate: existing.prod_date,
+        workCentreId: existing.work_centre_id,
+        machineId: existing.machine_id,
+        empId: existing.emp_id,
+      });
+    }, { isolationLevel: 'READ COMMITTED' });
+
+    res.json({ success: true, message: 'Production data deleted successfully', data: summaryData });
   } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
     logger.error('Error deleting production data:', error);
     next(error);
   }
