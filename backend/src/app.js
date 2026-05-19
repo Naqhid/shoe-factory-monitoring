@@ -527,6 +527,7 @@ app.get('/api/masters/:table/code/:code', validate.allowedTable, authenticateUse
 app.get('/api/masters/:table/:id/usage', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.numericId, masterController.getUsage.bind(masterController));
 app.post('/api/masters/:table/:id/restore', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.restore.bind(masterController));
 app.get('/api/masters/employees/emp_id/:empId', masterController.getByEmpId);
+app.post('/api/masters/employees/quick-register', masterController.quickRegisterEmployee.bind(masterController));
 app.get('/api/masters/machine_centres/machine_id/:machineId', masterController.getByMachineId);
 app.post('/api/masters/:table', validate.allowedTable, authenticate, requireAdminAccess, masterController.create.bind(masterController));
 app.put('/api/masters/:table/:id', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.update.bind(masterController));

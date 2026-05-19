@@ -24,10 +24,13 @@ export const MobileLineSetupForm: React.FC = () => {
   const [scanningEmployee, setScanningEmployee] = React.useState(false);
   const [scanningMachine, setScanningMachine] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
-  const [lastScanned, setLastScanned] = React.useState<string | null>(null);
-  const [showTestHelpers, setShowTestHelpers] = React.useState(false);
   const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
   const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
+
+  // New employee registration dialog state
+  const [newEmpDialog, setNewEmpDialog] = React.useState<{ open: boolean; empCode: string }>({ open: false, empCode: '' });
+  const [newEmpName, setNewEmpName] = React.useState('');
+  const [newEmpSaving, setNewEmpSaving] = React.useState(false);
 
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -99,14 +102,51 @@ export const MobileLineSetupForm: React.FC = () => {
           }));
           toast.success(`Employee detected: ${result.data.name}`, { id: loadingToast });
         } else {
-          setFormData(prev => ({ ...prev, employee_id: empId, employee_name: 'Unknown Employee' }));
-          toast.error(`Employee ${empId} not found`, { id: loadingToast });
+          // Employee not found — prompt to register on the spot
+          toast.dismiss(loadingToast);
+          setNewEmpName('');
+          setNewEmpDialog({ open: true, empCode: empId });
         }
       } catch (error) {
         toast.error('Connection error while fetching employee. Please try again.', { id: loadingToast });
       } finally {
         setIsProcessing(false);
       }
+    }
+  };
+
+  const handleRegisterNewEmployee = async () => {
+    const name = newEmpName.trim();
+    if (!name) {
+      toast.error('Please enter the employee name');
+      return;
+    }
+    setNewEmpSaving(true);
+    const loadingToast = toast.loading('Registering employee...');
+    try {
+      const response = await apiFetch(`${API_BASE}/api/masters/employees/quick-register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: newEmpDialog.empCode, name, work_centre_id: 5 }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setFormData(prev => ({
+          ...prev,
+          employee_id: newEmpDialog.empCode,
+          employee_db_id: result.data.id,
+          employee_name: name,
+          work_centre_id: result.data.work_centre_id,
+        }));
+        toast.success(`Employee registered: ${name}`, { id: loadingToast });
+        setNewEmpDialog({ open: false, empCode: '' });
+      } else {
+        toast.error(result.error || 'Failed to register employee', { id: loadingToast });
+      }
+    } catch (error) {
+      toast.error('Connection error. Please try again.', { id: loadingToast });
+    } finally {
+      setNewEmpSaving(false);
     }
   };
 
@@ -195,6 +235,28 @@ export const MobileLineSetupForm: React.FC = () => {
     }
   };
 
+  // Manual entry toggle state
+  const [manualEmpEntry, setManualEmpEntry] = React.useState(false);
+  const [manualMachEntry, setManualMachEntry] = React.useState(false);
+  const [manualEmpInput, setManualEmpInput] = React.useState('');
+  const [manualMachInput, setManualMachInput] = React.useState('');
+
+  const handleManualEmployeeSubmit = async () => {
+    const empId = manualEmpInput.trim();
+    if (!empId) return;
+    await handleEmployeeScan({ text: empId });
+    setManualEmpInput('');
+    setManualEmpEntry(false);
+  };
+
+  const handleManualMachineSubmit = async () => {
+    const machId = manualMachInput.trim();
+    if (!machId) return;
+    await handleMachineScan({ text: machId });
+    setManualMachInput('');
+    setManualMachEntry(false);
+  };
+
   const handleScanError = (err: any) => {
     console.error('Scanner error:', err);
     // Suppress common errors like 'Permission denied' or 'Not found' from being too aggressive 
@@ -242,12 +304,58 @@ export const MobileLineSetupForm: React.FC = () => {
               >
                 <QrCode className="h-5 w-5" /> Scan Employee Card
               </button>
-              <input
-                type="text"
-                value={formData.employee_name || 'Waiting for scan...'}
-                readOnly
-                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-gray-600 font-medium"
-              />
+              <button
+                type="button"
+                onClick={() => { setManualEmpEntry(v => !v); setManualEmpInput(''); }}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+              >
+                {manualEmpEntry ? 'Hide manual entry' : "Can't scan? Type employee code"}
+              </button>
+              {manualEmpEntry && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualEmpInput}
+                    onChange={e => setManualEmpInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleManualEmployeeSubmit()}
+                    placeholder="e.g. EMP-1001"
+                    className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualEmployeeSubmit}
+                    disabled={!manualEmpInput.trim() || isProcessing}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
+                  >
+                    Go
+                  </button>
+                </div>
+              )}
+              {formData.employee_id ? (
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-green-600 font-semibold truncate">{formData.employee_id}</p>
+                    <p className="text-sm text-gray-800 font-medium truncate">{formData.employee_name}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, employee_id: '', employee_db_id: undefined, employee_name: '', work_centre_id: undefined }));
+                      setManualEmpEntry(false);
+                      setManualEmpInput('');
+                    }}
+                    className="shrink-0 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
+                    title="Clear employee"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-gray-400 text-sm font-medium">
+                  Waiting for scan...
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -259,25 +367,115 @@ export const MobileLineSetupForm: React.FC = () => {
               >
                 <QrCode className="h-5 w-5" /> Scan Machine QR
               </button>
-              <input
-                type="text"
-                value={formData.machine_name || formData.machine_id || 'Waiting for scan...'}
-                readOnly
-                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-gray-600 font-medium"
-              />
+              <button
+                type="button"
+                onClick={() => { setManualMachEntry(v => !v); setManualMachInput(''); }}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+              >
+                {manualMachEntry ? 'Hide manual entry' : "Can't scan? Type machine ID"}
+              </button>
+              {manualMachEntry && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualMachInput}
+                    onChange={e => setManualMachInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleManualMachineSubmit()}
+                    placeholder="e.g. MAC-001 or 07"
+                    className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualMachineSubmit}
+                    disabled={!manualMachInput.trim() || isProcessing}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
+                  >
+                    Go
+                  </button>
+                </div>
+              )}
+              {formData.machine_id ? (
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-green-600 font-semibold truncate">{formData.machine_id}</p>
+                    <p className="text-sm text-gray-800 font-medium truncate">{formData.machine_name || formData.machine_id}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, machine_id: '', machine_name: undefined }));
+                      setManualMachEntry(false);
+                      setManualMachInput('');
+                    }}
+                    className="shrink-0 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
+                    title="Clear machine"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-gray-400 text-sm font-medium">
+                  Waiting for scan...
+                </div>
+              )}
             </div>
 
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white p-4 rounded-xl font-bold text-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                disabled={loading || !formData.employee_id || !formData.machine_id}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-4 rounded-xl font-bold text-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
               >
                 <Save className="h-6 w-6" /> {loading ? 'Syncing...' : 'COMPLETE SETUP'}
               </button>
             </div>
           </form>
         </div>
+
+        {/* New Employee Registration Dialog */}
+        {newEmpDialog.open && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+              <div className="mb-4">
+                <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <QrCode className="w-7 h-7 text-yellow-600" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-900 text-center mb-1">New Employee Detected</h2>
+                <p className="text-sm text-gray-500 text-center">
+                  Code <span className="font-semibold text-gray-700">{newEmpDialog.empCode}</span> is not registered.
+                  Enter the employee's name to add them.
+                </p>
+              </div>
+              <input
+                type="text"
+                value={newEmpName}
+                onChange={e => setNewEmpName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleRegisterNewEmployee()}
+                placeholder="Employee full name"
+                autoFocus
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setNewEmpDialog({ open: false, empCode: '' }); setNewEmpName(''); }}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegisterNewEmployee}
+                  disabled={newEmpSaving || !newEmpName.trim()}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold transition-colors"
+                >
+                  {newEmpSaving ? 'Saving...' : 'Register & Continue'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showSuccessDialog && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
