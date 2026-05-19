@@ -355,14 +355,6 @@ export const MobileProduction: React.FC = () => {
                         : MOBILE_PAIRS_PER_BIN;
                 }
                 next = pairs;
-            } else if (
-                resumeTm != null &&
-                Number.isFinite(Number(resumeTm)) &&
-                Number(resumeTm) > 0 &&
-                safeBase > 0
-            ) {
-                // Infer tray size only when DB did not store target_pairs (legacy rows).
-                next = clampMobileTargetPairs(Math.round((Number(resumeTm) / safeBase) * 12));
             } else if (targetPairsSessionKey && typeof sessionStorage !== 'undefined') {
                 const raw = sessionStorage.getItem(targetPairsSessionKey);
                 if (raw != null && raw !== '') {
