@@ -618,6 +618,42 @@ class MasterController {
     }
   }
 
+  // Public quick-register: called from mobile line setup when a scanned employee code is unknown.
+  // Creates the employee with the scanned code, provided name, and the first available work centre.
+  async quickRegisterEmployee(req, res) {
+    try {
+      const { code, name, work_centre_id } = req.body;
+      if (!code || !name) {
+        return res.status(400).json({ success: false, error: 'code and name are required' });
+      }
+
+      // Resolve work_centre_id: use provided value if valid, otherwise fall back to first available
+      let wcId = parseInt(work_centre_id) || null;
+      if (!wcId) {
+        const [[firstWc]] = await db.execute('SELECT id FROM work_centres ORDER BY id LIMIT 1');
+        if (!firstWc) return res.status(400).json({ success: false, error: 'No work centres configured' });
+        wcId = firstWc.id;
+      } else {
+        const [[wc]] = await db.execute('SELECT id FROM work_centres WHERE id = ?', [wcId]);
+        if (!wc) return res.status(400).json({ success: false, error: 'Work centre not found' });
+      }
+
+      const [r] = await db.execute(
+        'INSERT INTO employees (code, name, work_centre_id) VALUES (?, ?, ?)',
+        [code, name.trim(), wcId]
+      );
+
+      logger.info(`QUICK_REGISTER employee code=${code} name=${name} work_centre_id=${wcId} id=${r.insertId}`);
+      res.status(201).json({ success: true, data: { id: r.insertId, code, name: name.trim(), work_centre_id: wcId } });
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(400).json({ success: false, error: 'Employee code already exists' });
+      }
+      logger.error('Error in quickRegisterEmployee:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   async getByMachineId(req, res) {
     try {
       const { machineId } = req.params;

@@ -29,6 +29,11 @@ export const MobileLineSetupForm: React.FC = () => {
   const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
   const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
 
+  // New employee registration dialog state
+  const [newEmpDialog, setNewEmpDialog] = React.useState<{ open: boolean; empCode: string }>({ open: false, empCode: '' });
+  const [newEmpName, setNewEmpName] = React.useState('');
+  const [newEmpSaving, setNewEmpSaving] = React.useState(false);
+
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const fetchWithRetry = async (url: string, init?: RequestInit, retries = 2): Promise<Response> => {
@@ -99,14 +104,51 @@ export const MobileLineSetupForm: React.FC = () => {
           }));
           toast.success(`Employee detected: ${result.data.name}`, { id: loadingToast });
         } else {
-          setFormData(prev => ({ ...prev, employee_id: empId, employee_name: 'Unknown Employee' }));
-          toast.error(`Employee ${empId} not found`, { id: loadingToast });
+          // Employee not found — prompt to register on the spot
+          toast.dismiss(loadingToast);
+          setNewEmpName('');
+          setNewEmpDialog({ open: true, empCode: empId });
         }
       } catch (error) {
         toast.error('Connection error while fetching employee. Please try again.', { id: loadingToast });
       } finally {
         setIsProcessing(false);
       }
+    }
+  };
+
+  const handleRegisterNewEmployee = async () => {
+    const name = newEmpName.trim();
+    if (!name) {
+      toast.error('Please enter the employee name');
+      return;
+    }
+    setNewEmpSaving(true);
+    const loadingToast = toast.loading('Registering employee...');
+    try {
+      const response = await apiFetch(`${API_BASE}/api/masters/employees/quick-register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: newEmpDialog.empCode, name, work_centre_id: 5 }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setFormData(prev => ({
+          ...prev,
+          employee_id: newEmpDialog.empCode,
+          employee_db_id: result.data.id,
+          employee_name: name,
+          work_centre_id: result.data.work_centre_id,
+        }));
+        toast.success(`Employee registered: ${name}`, { id: loadingToast });
+        setNewEmpDialog({ open: false, empCode: '' });
+      } else {
+        toast.error(result.error || 'Failed to register employee', { id: loadingToast });
+      }
+    } catch (error) {
+      toast.error('Connection error. Please try again.', { id: loadingToast });
+    } finally {
+      setNewEmpSaving(false);
     }
   };
 
@@ -278,6 +320,50 @@ export const MobileLineSetupForm: React.FC = () => {
             </div>
           </form>
         </div>
+
+        {/* New Employee Registration Dialog */}
+        {newEmpDialog.open && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+              <div className="mb-4">
+                <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <QrCode className="w-7 h-7 text-yellow-600" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-900 text-center mb-1">New Employee Detected</h2>
+                <p className="text-sm text-gray-500 text-center">
+                  Code <span className="font-semibold text-gray-700">{newEmpDialog.empCode}</span> is not registered.
+                  Enter the employee's name to add them.
+                </p>
+              </div>
+              <input
+                type="text"
+                value={newEmpName}
+                onChange={e => setNewEmpName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleRegisterNewEmployee()}
+                placeholder="Employee full name"
+                autoFocus
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setNewEmpDialog({ open: false, empCode: '' }); setNewEmpName(''); }}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegisterNewEmployee}
+                  disabled={newEmpSaving || !newEmpName.trim()}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold transition-colors"
+                >
+                  {newEmpSaving ? 'Saving...' : 'Register & Continue'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showSuccessDialog && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
