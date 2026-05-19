@@ -328,7 +328,7 @@ export const MobileLineSetupForm: React.FC = () => {
                     disabled={!manualEmpInput.trim() || isProcessing}
                     className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
                   >
-                    Go
+                    Verify
                   </button>
                 </div>
               )}
@@ -381,7 +381,7 @@ export const MobileLineSetupForm: React.FC = () => {
                     value={manualMachInput}
                     onChange={e => setManualMachInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleManualMachineSubmit()}
-                    placeholder="e.g. MAC-001 or 07"
+                    placeholder="e.g. MAC-001"
                     className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
                     autoFocus
                   />
@@ -391,7 +391,7 @@ export const MobileLineSetupForm: React.FC = () => {
                     disabled={!manualMachInput.trim() || isProcessing}
                     className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
                   >
-                    Go
+                    Verify
                   </button>
                 </div>
               )}
