@@ -24,8 +24,6 @@ export const MobileLineSetupForm: React.FC = () => {
   const [scanningEmployee, setScanningEmployee] = React.useState(false);
   const [scanningMachine, setScanningMachine] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
-  const [lastScanned, setLastScanned] = React.useState<string | null>(null);
-  const [showTestHelpers, setShowTestHelpers] = React.useState(false);
   const [scannerKey, setScannerKey] = React.useState(0); // To force re-mount on open
   const [showSuccessDialog, setShowSuccessDialog] = React.useState(false);
 
@@ -334,12 +332,30 @@ export const MobileLineSetupForm: React.FC = () => {
                   </button>
                 </div>
               )}
-              <input
-                type="text"
-                value={formData.employee_name || 'Waiting for scan...'}
-                readOnly
-                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-gray-600 font-medium"
-              />
+              {formData.employee_id ? (
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-green-600 font-semibold truncate">{formData.employee_id}</p>
+                    <p className="text-sm text-gray-800 font-medium truncate">{formData.employee_name}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, employee_id: '', employee_db_id: undefined, employee_name: '', work_centre_id: undefined }));
+                      setManualEmpEntry(false);
+                      setManualEmpInput('');
+                    }}
+                    className="shrink-0 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
+                    title="Clear employee"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-gray-400 text-sm font-medium">
+                  Waiting for scan...
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -379,19 +395,37 @@ export const MobileLineSetupForm: React.FC = () => {
                   </button>
                 </div>
               )}
-              <input
-                type="text"
-                value={formData.machine_name || formData.machine_id || 'Waiting for scan...'}
-                readOnly
-                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-gray-600 font-medium"
-              />
+              {formData.machine_id ? (
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-green-600 font-semibold truncate">{formData.machine_id}</p>
+                    <p className="text-sm text-gray-800 font-medium truncate">{formData.machine_name || formData.machine_id}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, machine_id: '', machine_name: undefined }));
+                      setManualMachEntry(false);
+                      setManualMachInput('');
+                    }}
+                    className="shrink-0 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
+                    title="Clear machine"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-gray-400 text-sm font-medium">
+                  Waiting for scan...
+                </div>
+              )}
             </div>
 
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white p-4 rounded-xl font-bold text-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                disabled={loading || !formData.employee_id || !formData.machine_id}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-4 rounded-xl font-bold text-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
               >
                 <Save className="h-6 w-6" /> {loading ? 'Syncing...' : 'COMPLETE SETUP'}
               </button>
