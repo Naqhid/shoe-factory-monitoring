@@ -409,6 +409,34 @@ class AlertController {
             return !activeSet.has(String(row.machine_id));
           });
         }
+
+        // Hide session-specific alerts (over_target, no_scan_heartbeat, idle_too_long, machine_idle)
+        // for machines that have no active session today — the session has ended so the alert is stale.
+        const sessionAlertTypes = new Set(['over_target', 'no_scan_heartbeat', 'idle_too_long', 'machine_idle']);
+        const sessionAlertMachines = Array.from(
+          new Set(
+            filteredRows
+              .filter((r) => sessionAlertTypes.has(r.alert_type) && r.machine_id)
+              .map((r) => String(r.machine_id))
+          )
+        );
+        if (sessionAlertMachines.length > 0) {
+          const placeholders = sessionAlertMachines.map(() => '?').join(',');
+          const [activeSessions] = await db.execute(
+            `SELECT DISTINCT ms.machine_id
+             FROM mobile_sessions ms
+             WHERE ms.status = 'active'
+               AND DATE(ms.activated_at) = ?
+               AND ms.machine_id IN (${placeholders})`,
+            [alertDate, ...sessionAlertMachines]
+          );
+          const activeSessionMachines = new Set(activeSessions.map((r) => String(r.machine_id)));
+          filteredRows = filteredRows.filter((row) => {
+            if (!sessionAlertTypes.has(row.alert_type) || !row.machine_id) return true;
+            // Only show if the machine currently has an active session.
+            return activeSessionMachines.has(String(row.machine_id));
+          });
+        }
       }
 
       const totalCount = filteredRows.length;

@@ -197,7 +197,8 @@ const mobileSessionController = {
 
     /**
      * Activate mobile_sessions for every employee that has machine_centre_id set (employee ↔ machine),
-     * using the same rules as POST /activate. Skips Toe Stitching (and common typos) by machine name.
+     * using the same rules as POST /activate. Skips Toe Stitching and Folding by machine name
+     * (these machines use a different workflow and should not be auto-activated).
      * Optional: ?work_centre_id=5 to limit to one line.
      */
     activateFromEmployeeMachineAssignments: async (req, res, next) => {
@@ -216,6 +217,7 @@ const mobileSessionController = {
                 WHERE e.machine_centre_id IS NOT NULL
                   AND COALESCE(e.is_active, 1) = 1
                   AND LOWER(CONCAT(COALESCE(mc.name, ''), ' ', COALESCE(mc.machine_name, ''))) NOT LIKE '%toe%stitch%'
+                  AND LOWER(CONCAT(COALESCE(mc.name, ''), ' ', COALESCE(mc.machine_name, ''))) NOT LIKE '%fold%'
             `;
             const params = [];
             if (wcFilter != null && !Number.isNaN(wcFilter)) {

@@ -344,29 +344,17 @@ export const MobileProduction: React.FC = () => {
             const resumeTm = opts?.resumeRecordTargetMins;
             if (resumePairs != null) {
                 let pairs = resumePairs;
-                // Legacy rows: target_pairs stuck at 12 while target_mins matches a 6-pair scale (routing baseline / 2).
-                if (
-                    pairs === 12 &&
-                    safeBase > 0 &&
-                    resumeTm != null &&
-                    Number.isFinite(Number(resumeTm)) &&
-                    Number(resumeTm) > 0
-                ) {
-                    const expectedMinsFor6 = (safeBase * 6) / 12;
-                    const tm = Number(resumeTm);
-                    if (Math.abs(tm - expectedMinsFor6) <= Math.max(0.25, safeBase * 0.03)) {
-                        pairs = MOBILE_PAIRS_PER_BIN;
-                    }
+                // target_pairs = 12 in the DB is the planning/routing baseline, NOT an operator choice.
+                // Always treat it as the default (6) unless sessionStorage has a confirmed operator selection.
+                if (pairs === 12) {
+                    const sessionStored = targetPairsSessionKey && typeof sessionStorage !== 'undefined'
+                        ? sessionStorage.getItem(targetPairsSessionKey)
+                        : null;
+                    pairs = sessionStored != null && sessionStored !== ''
+                        ? clampMobileTargetPairs(Number(sessionStored))
+                        : MOBILE_PAIRS_PER_BIN;
                 }
                 next = pairs;
-            } else if (
-                resumeTm != null &&
-                Number.isFinite(Number(resumeTm)) &&
-                Number(resumeTm) > 0 &&
-                safeBase > 0
-            ) {
-                // Infer tray size only when DB did not store target_pairs (legacy rows).
-                next = clampMobileTargetPairs(Math.round((Number(resumeTm) / safeBase) * 12));
             } else if (targetPairsSessionKey && typeof sessionStorage !== 'undefined') {
                 const raw = sessionStorage.getItem(targetPairsSessionKey);
                 if (raw != null && raw !== '') {
