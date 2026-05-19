@@ -176,6 +176,27 @@ const initDb = async () => {
         logger.error('Failed to archive old data on startup:', archiveError.message);
       }
     }
+
+    // ── MES WIP daily state table ─────────────────────────────────────────────
+    // Persists Opening WIP, Input (Heel Grip Machine), Current WIP, Closing WIP
+    // per work centre per day. Formula: Current WIP = Opening WIP + Input - Output
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS wip_daily_state (
+        id              INT AUTO_INCREMENT PRIMARY KEY,
+        work_centre_id  INT NOT NULL,
+        state_date      DATE NOT NULL,
+        opening_wip     INT NOT NULL DEFAULT 0,
+        today_input     INT NOT NULL DEFAULT 0,
+        current_wip     INT NOT NULL DEFAULT 0,
+        closing_wip     INT NOT NULL DEFAULT 0,
+        is_closed       TINYINT(1) NOT NULL DEFAULT 0,
+        created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_wip_wc_date (work_centre_id, state_date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    logger.info('wip_daily_state table ready');
+
   } catch (e) {
     logger.error('Failed to init database:', e.message);
   }
