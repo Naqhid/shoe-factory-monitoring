@@ -237,7 +237,27 @@ export const MobileLineSetupForm: React.FC = () => {
     }
   };
 
-  const handleScanError = (err: any) => {
+  // Manual entry toggle state
+  const [manualEmpEntry, setManualEmpEntry] = React.useState(false);
+  const [manualMachEntry, setManualMachEntry] = React.useState(false);
+  const [manualEmpInput, setManualEmpInput] = React.useState('');
+  const [manualMachInput, setManualMachInput] = React.useState('');
+
+  const handleManualEmployeeSubmit = async () => {
+    const empId = manualEmpInput.trim();
+    if (!empId) return;
+    await handleEmployeeScan({ text: empId });
+    setManualEmpInput('');
+    setManualEmpEntry(false);
+  };
+
+  const handleManualMachineSubmit = async () => {
+    const machId = manualMachInput.trim();
+    if (!machId) return;
+    await handleMachineScan({ text: machId });
+    setManualMachInput('');
+    setManualMachEntry(false);
+  };
     console.error('Scanner error:', err);
     // Suppress common errors like 'Permission denied' or 'Not found' from being too aggressive 
     // but show them once properly.
@@ -284,6 +304,34 @@ export const MobileLineSetupForm: React.FC = () => {
               >
                 <QrCode className="h-5 w-5" /> Scan Employee Card
               </button>
+              <button
+                type="button"
+                onClick={() => { setManualEmpEntry(v => !v); setManualEmpInput(''); }}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+              >
+                {manualEmpEntry ? 'Hide manual entry' : "Can't scan? Type employee code"}
+              </button>
+              {manualEmpEntry && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualEmpInput}
+                    onChange={e => setManualEmpInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleManualEmployeeSubmit()}
+                    placeholder="e.g. EMP-1001"
+                    className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualEmployeeSubmit}
+                    disabled={!manualEmpInput.trim() || isProcessing}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
+                  >
+                    Go
+                  </button>
+                </div>
+              )}
               <input
                 type="text"
                 value={formData.employee_name || 'Waiting for scan...'}
@@ -301,6 +349,34 @@ export const MobileLineSetupForm: React.FC = () => {
               >
                 <QrCode className="h-5 w-5" /> Scan Machine QR
               </button>
+              <button
+                type="button"
+                onClick={() => { setManualMachEntry(v => !v); setManualMachInput(''); }}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+              >
+                {manualMachEntry ? 'Hide manual entry' : "Can't scan? Type machine ID"}
+              </button>
+              {manualMachEntry && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualMachInput}
+                    onChange={e => setManualMachInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleManualMachineSubmit()}
+                    placeholder="e.g. MAC-001 or 07"
+                    className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualMachineSubmit}
+                    disabled={!manualMachInput.trim() || isProcessing}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
+                  >
+                    Go
+                  </button>
+                </div>
+              )}
               <input
                 type="text"
                 value={formData.machine_name || formData.machine_id || 'Waiting for scan...'}
