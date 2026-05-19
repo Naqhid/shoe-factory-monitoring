@@ -258,6 +258,8 @@ export const MobileLineSetupForm: React.FC = () => {
     setManualMachInput('');
     setManualMachEntry(false);
   };
+
+  const handleScanError = (err: any) => {
     console.error('Scanner error:', err);
     // Suppress common errors like 'Permission denied' or 'Not found' from being too aggressive 
     // but show them once properly.
