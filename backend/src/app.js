@@ -733,6 +733,17 @@ logger.info('Running on HTTP (HTTPS disabled for mobile compatibility)');
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server started on port ${PORT} (${useHttps ? 'HTTPS' : 'HTTP'}) and listening on all interfaces`);
   fileWatcherService.start();
+  mobileSessionController.expireAllActiveSessions()
+    .then((count) => {
+      if (count > 0) {
+        logger.info(`Startup cleanup: expired ${count} stale active mobile session(s).`);
+      } else {
+        logger.info('Startup cleanup: no stale active mobile sessions found.');
+      }
+    })
+    .catch((err) => {
+      logger.error('Startup cleanup failed:', err.message || err);
+    });
 });
 
 const gracefulShutdown = (signal) => {

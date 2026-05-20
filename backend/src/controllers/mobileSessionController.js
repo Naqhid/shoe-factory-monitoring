@@ -203,6 +203,20 @@ const mobileSessionController = {
      */
     activateFromEmployeeMachineAssignments: async (req, res, next) => {
         try {
+            const clearActiveSessionsParam = String(req.query.clear_active_sessions || req.query.clear_sessions || '').trim().toLowerCase();
+            const shouldClearActiveSessions = ['1', 'true', 'yes', 'y', 'on'].includes(clearActiveSessionsParam);
+            let clearedSessionsCount = 0;
+
+            if (shouldClearActiveSessions) {
+                const [clearResult] = await pool.execute(
+                    `UPDATE mobile_sessions
+                     SET status = 'expired'
+                     WHERE status = 'active'
+                       AND DATE(activated_at) = CURDATE()`
+                );
+                clearedSessionsCount = clearResult?.affectedRows || 0;
+            }
+
             const wcFilter = req.query.work_centre_id != null && req.query.work_centre_id !== ''
                 ? Number(req.query.work_centre_id)
                 : null;
@@ -251,11 +265,12 @@ const mobileSessionController = {
 
             res.json({
                 success: true,
-                message: `Processed ${results.length} assignment(s): ${succeeded} activated, ${failed} failed or skipped.`,
+                message: `Processed ${results.length} assignment(s): ${succeeded} activated, ${failed} failed or skipped.${shouldClearActiveSessions ? ` Cleared ${clearedSessionsCount} active session(s) before re-activation.` : ''}`,
                 summary: {
                     total: results.length,
                     succeeded,
                     failed,
+                    clearedActiveSessions: shouldClearActiveSessions ? clearedSessionsCount : undefined,
                 },
                 results,
             });
