@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen } from 'lucide-react';
+import { Smile, Frown, Meh, TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
@@ -308,6 +308,9 @@ export const TVDashboard: React.FC = () => {
         targetGap > 0
             ? `Gap: ${targetGap}`
             : `Ahead: ${Math.max(0, Number(topSection.output || 0) - Number(topSection.target || 0))}`;
+    const overallInputPercent = Number(topSection.target || 0) > 0
+        ? Math.round((Number(topSection.input || 0) / Number(topSection.target || 0)) * 100)
+        : 0;
 
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
@@ -430,26 +433,26 @@ export const TVDashboard: React.FC = () => {
                                 {formatInput(topSection.input)}
                             </div>
                         </div>
-                        {/* ── Output ── */}
+                        {/* ── Input % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                            <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-sky-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input %</div>
+                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${overallInputPercent >= 90 ? 'text-green-300' : overallInputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                                {overallInputPercent}%
+                            </div>
+                        </div>
+                        {/* ── Output ── */}
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <TrendingUp className="h-4 w-4 sm:h-7 sm:w-7 text-green-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output</div>
                             <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.output}</div>
                         </div>
                         {/* ── Output % ── */}
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Activity className="h-4 w-4 sm:h-7 sm:w-7 text-purple-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output %</div>
                             <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {topSection.outputPercent}%
-                            </div>
-                        </div>
-                        {/* ── Efficiency % ── */}
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <Zap className="h-4 w-4 sm:h-7 sm:w-7 text-yellow-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Efficiency %</div>
-                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${topSection.efficiencyPercent >= 90 ? 'text-green-300' : topSection.efficiencyPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
-                                {topSection.efficiencyPercent}%
                             </div>
                         </div>
                         {/* ── WIP (MES formula) — replaces emoji slot, emoji moves inline ── */}
@@ -521,9 +524,9 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">TARGET</th>
                                 {/* INPUT column — live Heel Grip Machine quantity */}
                                 <th className="px-2 py-1.5 text-center font-bold text-cyan-600">INPUT</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">INPUT %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT %</th>
-                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">EFFICIENCY %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">WIP</th>
                                 {/* <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th> */}
@@ -532,6 +535,10 @@ export const TVDashboard: React.FC = () => {
                         <tbody>
                             {lowerSection.linePerformance?.map((line: any, index: number) => {
                                 // const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
+                                const lineTarget = Number(line.target || 0);
+                                const lineInputPercent = lineTarget > 0
+                                    ? Math.round((Number(line.input || 0) / lineTarget) * 100)
+                                    : 0;
                                 return (
                                     <tr
                                         key={index}
@@ -545,16 +552,16 @@ export const TVDashboard: React.FC = () => {
                                         <td className="px-2 py-2 text-center font-bold text-cyan-600 tabular-nums">
                                             {formatInput(line.input)}
                                         </td>
+                                        <td className="px-2 py-2 text-center">
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
+                                                lineInputPercent >= 90 ? 'bg-green-500' : lineInputPercent >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                                            }`}>{lineInputPercent}%</span>
+                                        </td>
                                         <td className="px-2 py-2 text-center font-bold text-green-600 tabular-nums">{line.output}</td>
                                         <td className="px-2 py-2 text-center">
                                             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
                                                 Number(line.output_percentage) >= 90 ? 'bg-green-500' : Number(line.output_percentage) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
                                             }`}>{line.output_percentage}%</span>
-                                        </td>
-                                        <td className="px-2 py-2 text-center">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
-                                                Number(line.efficiency) >= 90 ? 'bg-green-500' : Number(line.efficiency) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`}>{line.efficiency}%</span>
                                         </td>
                                         {/* WIP — MES formula: Opening WIP + Input - Output */}
                                         <td className={`px-2 py-2 text-center font-bold tabular-nums ${
