@@ -677,6 +677,7 @@ exports.createManualEntry = async (req, res, next) => {
 exports.getManualEntries = async (req, res, next) => {
   try {
     const { date, from_date, to_date, work_centre_id, machine_id, emp_id, search } = req.query;
+    const type = String(req.query.type || 'manual').trim().toLowerCase();
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const rawLimit = String(req.query.limit || '20').trim().toLowerCase();
     const useAll = rawLimit === 'all';
@@ -696,8 +697,15 @@ exports.getManualEntries = async (req, res, next) => {
     };
     const sortBy = sortByMap[sortByRaw] || sortByMap.created_at;
 
-    let where = 'WHERE mcp.button_status = 2 AND mcp.stoppage_reason IS NOT NULL AND mcp.stoppage_reason LIKE ?';
-    const params = ['MANUAL:%'];
+    let where = 'WHERE mcp.button_status = 2 AND mcp.stoppage_reason IS NOT NULL';
+    const params = [];
+    if (type === 'manual') {
+      where += ' AND mcp.stoppage_reason LIKE ?';
+      params.push('MANUAL:%');
+    } else if (type === 'bottleneck') {
+      where += ' AND mcp.stoppage_reason LIKE ?';
+      params.push('BOTTLENECK:%');
+    }
     if (date) {
       where += ' AND DATE(mcp.prod_date) = ?';
       params.push(date);
@@ -819,7 +827,7 @@ exports.updateManualEntry = async (req, res, next) => {
     } = req.body;
 
     const [existingRows] = await db.query(
-      `SELECT * FROM machine_centre_production WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND stoppage_reason LIKE 'MANUAL:%'`,
+      `SELECT * FROM machine_centre_production WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND (stoppage_reason LIKE 'MANUAL:%' OR stoppage_reason LIKE 'BOTTLENECK:%')`,
       [id]
     );
     if (existingRows.length === 0) {
@@ -895,6 +903,7 @@ exports.updateManualEntry = async (req, res, next) => {
         });
       }
 
+      const isBottleneckEntry = entry_type === 'bottleneck' || String(existingRows[0].stoppage_reason || '').startsWith('BOTTLENECK:');
       const afterData = {
         id: Number(id),
         prod_date: prodDate,
@@ -905,7 +914,9 @@ exports.updateManualEntry = async (req, res, next) => {
         finish_time,
         target_mins: enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
-        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
+        stoppage_reason: isBottleneckEntry
+          ? `BOTTLENECK:${(stoppage_reason || '').trim()} [Approved By: ${approverIdentity}]`
+          : `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
       };
 
       const scaledTargetMins = enforcedTargets.targetMins * (manualOutputPairs / 12);
@@ -970,7 +981,7 @@ exports.deleteManualEntry = async (req, res, next) => {
     const [existingRows] = await db.query(
       `SELECT id, prod_date, work_centre_id, machine_id, emp_id
        FROM machine_centre_production
-       WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND stoppage_reason LIKE 'MANUAL:%'`,
+       WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND (stoppage_reason LIKE 'MANUAL:%' OR stoppage_reason LIKE 'BOTTLENECK:%')`,
       [id]
     );
     if (existingRows.length === 0) {
