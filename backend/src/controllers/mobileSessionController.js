@@ -561,6 +561,59 @@ const mobileSessionController = {
         }
     },
 
+    // Deactivate an active session from logs
+    deactivateSession: async (req, res, next) => {
+        try {
+            const { session_id } = req.body || {};
+            if (!session_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'session_id is required'
+                });
+            }
+
+            const [rows] = await pool.execute(
+                `SELECT session_id, machine_id, emp_code, status
+                 FROM mobile_sessions
+                 WHERE session_id = ?
+                 LIMIT 1`,
+                [session_id]
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Session not found'
+                });
+            }
+
+            const session = rows[0];
+            if (session.status !== 'active') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Session is not active and cannot be deactivated'
+                });
+            }
+
+            // Update session status to expired
+            await pool.execute(
+                `UPDATE mobile_sessions
+                 SET status = 'expired'
+                 WHERE session_id = ?`,
+                [session_id]
+            );
+
+            logger.info(`Session ${session_id} for machine ${session.machine_id} deactivated by user`);
+
+            res.json({
+                success: true,
+                message: 'Session deactivated successfully'
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
     // Reactivate a previously expired session from logs
     reactivateSessionFromLogs: async (req, res, next) => {
         try {

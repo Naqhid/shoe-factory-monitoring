@@ -341,6 +341,9 @@ export const ProductionTracker: React.FC = () => {
       .slice(0, 3);
   }, [enrichedLines, shiftProjection.inLast60]);
   const totalWip = linePerformance.reduce((sum: number, line: any) => sum + (Number(line.wip) || 0), 0);
+  const lineInputPercent = selectedLineDetail && Number(selectedLineDetail.target || 0) > 0
+    ? Math.round((Number(selectedLineDetail.input || 0) / Number(selectedLineDetail.target || 0)) * 100)
+    : 0;
   const outputPercent = Number(topSection?.outputPercent) || 0;
   const efficiencyPercent = Number(topSection?.efficiencyPercent) || 0;
   const efficiencyGaugePercent = Math.min(Math.max(efficiencyPercent, 0), 100);
@@ -817,9 +820,9 @@ export const ProductionTracker: React.FC = () => {
                 <div className="bg-sky-50 rounded-xl p-3">
                   <p className="text-xs text-slate-500 font-semibold">Input %</p>
                   <p className={`text-2xl font-bold ${
-                    Number(selectedLineDetail.input_percentage || 0) >= 90 ? 'text-green-600' : 
-                    Number(selectedLineDetail.input_percentage || 0) >= 70 ? 'text-yellow-600' : 'text-red-500'
-                  }`}>{Number(selectedLineDetail.input_percentage || 0)}%</p>
+                    lineInputPercent >= 90 ? 'text-green-600' : 
+                    lineInputPercent >= 70 ? 'text-yellow-600' : 'text-red-500'
+                  }`}>{lineInputPercent}%</p>
                 </div>
                 <div className="bg-orange-50 rounded-xl p-3">
                   <p className="text-xs text-slate-500 font-semibold">WIP</p>
@@ -830,15 +833,15 @@ export const ProductionTracker: React.FC = () => {
               <div className="bg-slate-50 rounded-xl p-3">
                 <p className="text-xs text-slate-500 font-semibold mb-1">Input Progress</p>
                 <p className="text-lg font-bold text-slate-800 mb-2">
-                  {formatInput(selectedLineDetail.input)} / {Number(selectedLineDetail.target || 0)} ({Number(selectedLineDetail.input_percentage || 0)}%)
+                  {formatInput(selectedLineDetail.input)} / {Number(selectedLineDetail.target || 0)} ({lineInputPercent}%)
                 </p>
                 <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full ${
-                      Number(selectedLineDetail.input_percentage || 0) >= 90 ? 'bg-green-500' : 
-                      Number(selectedLineDetail.input_percentage || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                      lineInputPercent >= 90 ? 'bg-green-500' : 
+                      lineInputPercent >= 70 ? 'bg-yellow-500' : 'bg-red-500'
                     }`}
-                    style={{ width: `${Math.min(Math.max(Number(selectedLineDetail.input_percentage || 0), 0), 100)}%` }}
+                    style={{ width: `${lineInputPercent}%` }}
                   />
                 </div>
               </div>
