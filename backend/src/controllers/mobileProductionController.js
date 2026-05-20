@@ -452,8 +452,12 @@ exports.createManualEntry = async (req, res, next) => {
       finish_time,
       output_pairs,
       stoppage_reason,
-      approved_by
+      approved_by,
+      entry_type
     } = req.body;
+
+    const entryType = String(entry_type || 'manual').toLowerCase();
+    const isBottleneckEntry = entryType === 'bottleneck';
 
     if (!work_centre_id || !machine_id || !emp_id || !start_time || !finish_time) {
       return res.status(400).json({
@@ -467,7 +471,7 @@ exports.createManualEntry = async (req, res, next) => {
         message: 'output_pairs is required and must be a number'
       });
     }
-    const manualOutputPairs = Math.max(0, Math.round(Number(output_pairs)));
+    const manualOutputPairs = isBottleneckEntry ? 0 : Math.max(0, Math.round(Number(output_pairs)));
 
     const start = new Date(start_time);
     const finish = new Date(finish_time);
@@ -561,26 +565,50 @@ exports.createManualEntry = async (req, res, next) => {
         });
       }
 
-      const [duplicateRows] = await conn.execute(
-        `SELECT id
-         FROM machine_centre_production
-         WHERE work_centre_id = ?
-           AND machine_id = ?
-           AND emp_id = ?
-           AND button_status = 2
-           AND stoppage_reason IS NOT NULL
-           AND stoppage_reason LIKE 'MANUAL:%'
-           AND start_time = ?
-           AND finish_time = ?
-         ORDER BY id DESC
-         LIMIT 1`,
-        [work_centre_id, machine_id, emp_id, normalizedStartTime, normalizedFinishTime]
-      );
-      if (duplicateRows.length > 0) {
-        throw Object.assign(new Error(`Duplicate manual entry for this machine/employee/time slot (record #${duplicateRows[0].id})`), {
-          statusCode: 409,
-          exposeMessage: `Duplicate manual entry for this machine/employee/time slot (record #${duplicateRows[0].id})`,
-        });
+      if (!isBottleneckEntry) {
+        const [duplicateRows] = await conn.execute(
+          `SELECT id
+           FROM machine_centre_production
+           WHERE work_centre_id = ?
+             AND machine_id = ?
+             AND emp_id = ?
+             AND button_status = 2
+             AND stoppage_reason IS NOT NULL
+             AND stoppage_reason LIKE 'MANUAL:%'
+             AND start_time = ?
+             AND finish_time = ?
+           ORDER BY id DESC
+           LIMIT 1`,
+          [work_centre_id, machine_id, emp_id, normalizedStartTime, normalizedFinishTime]
+        );
+        if (duplicateRows.length > 0) {
+          throw Object.assign(new Error(`Duplicate manual entry for this machine/employee/time slot (record #${duplicateRows[0].id})`), {
+            statusCode: 409,
+            exposeMessage: `Duplicate manual entry for this machine/employee/time slot (record #${duplicateRows[0].id})`,
+          });
+        }
+      } else {
+        const [duplicateRows] = await conn.execute(
+          `SELECT id
+           FROM machine_centre_production
+           WHERE work_centre_id = ?
+             AND machine_id = ?
+             AND emp_id = ?
+             AND button_status = 2
+             AND stoppage_reason IS NOT NULL
+             AND stoppage_reason LIKE 'BOTTLENECK:%'
+             AND start_time = ?
+             AND finish_time = ?
+           ORDER BY id DESC
+           LIMIT 1`,
+          [work_centre_id, machine_id, emp_id, normalizedStartTime, normalizedFinishTime]
+        );
+        if (duplicateRows.length > 0) {
+          throw Object.assign(new Error(`Duplicate bottleneck entry for this machine/employee/time slot (record #${duplicateRows[0].id})`), {
+            statusCode: 409,
+            exposeMessage: `Duplicate bottleneck entry for this machine/employee/time slot (record #${duplicateRows[0].id})`,
+          });
+        }
       }
 
       const afterData = {
@@ -590,9 +618,11 @@ exports.createManualEntry = async (req, res, next) => {
         emp_id,
         start_time,
         finish_time,
-        target_mins: enforcedTargets.targetMins * (manualOutputPairs / 12),
+        target_mins: isBottleneckEntry ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
-        stoppage_reason: `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
+        stoppage_reason: isBottleneckEntry
+          ? `BOTTLENECK:${(stoppage_reason || '').trim()} [Approved By: ${approverIdentity}]`
+          : `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
       };
 
       const [insertResult] = await conn.execute(
@@ -632,7 +662,7 @@ exports.createManualEntry = async (req, res, next) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Manual production entry saved successfully',
+      message: isBottleneckEntry ? 'Bottleneck entry saved successfully' : 'Manual production entry saved successfully',
       data: { id: insertedId, target_mins: enforcedTargets.targetMins, output_pairs: manualOutputPairs, ...summaryData }
     });
   } catch (error) {

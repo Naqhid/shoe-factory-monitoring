@@ -1,6 +1,6 @@
 import React from 'react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 
@@ -109,6 +109,7 @@ const buildSlotOptions = (slotMinutes: number) => {
 
 export const ManualProductionEntryForm: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Role guard — read once on mount
   const currentUser = React.useMemo(() => {
@@ -127,7 +128,16 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [loadingEntries, setLoadingEntries] = React.useState(false);
   const [editingId, setEditingId] = React.useState<number | null>(null);
+  const [entryMode, setEntryMode] = React.useState<'production' | 'bottleneck'>('production');
   const [showForm, setShowForm] = React.useState(false);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('mode') === 'bottleneck') {
+      setEntryMode('bottleneck');
+      setShowForm(true);
+    }
+  }, [location.search]);
   const [tableDateFilter, setTableDateFilter] = React.useState(getNowLocalDateTime().split('T')[0]);
   const [tableToDateFilter, setTableToDateFilter] = React.useState(getNowLocalDateTime().split('T')[0]);
   const [tableWorkCentreFilter, setTableWorkCentreFilter] = React.useState('');
@@ -223,9 +233,10 @@ export const ManualProductionEntryForm: React.FC = () => {
       manualFinishTime ||
       Number(outputPairs || 0) > 0 ||
       (stoppageReason || '').trim() ||
-      (editReason || '').trim()
+      (editReason || '').trim() ||
+      entryMode === 'bottleneck'
     );
-  }, [showForm, workCentreId, machineId, empId, hourlySlot, manualStartTime, manualFinishTime, outputPairs, stoppageReason, editReason]);
+  }, [showForm, workCentreId, machineId, empId, hourlySlot, manualStartTime, manualFinishTime, outputPairs, stoppageReason, editReason, entryMode]);
 
   React.useEffect(() => {
     const loadMasters = async () => {
@@ -279,11 +290,13 @@ export const ManualProductionEntryForm: React.FC = () => {
     return byLine.filter((e) => !blockedEmpCodes.has(String(e.code)));
   }, [employees, workCentreId, activeSessions, machineId]);
 
-  const hasSlotSelection = slotType === 'manual'
+  const hasSlotSelection = entryMode === 'bottleneck'
     ? !!manualStartTime && !!manualFinishTime
-    : !!hourlySlot;
+    : slotType === 'manual'
+      ? !!manualStartTime && !!manualFinishTime
+      : !!hourlySlot;
   const canSubmit =
-    !!workCentreId && !!machineId && !!empId && hasSlotSelection && !loading;
+    !!workCentreId && !!machineId && !!empId && hasSlotSelection && !!stoppageReason.trim() && !loading;
 
   const selectedSlotMinutes = React.useMemo(() => {
     const match = SLOT_TYPES.find((slot) => slot.value === slotType);
@@ -417,6 +430,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     setOutputPairs('0');
     setStoppageReason('');
     setEditReason('');
+    setEntryMode('production');
     setEditingId(null);
     setShowForm(false);
     setSlotConflictWarning('');
@@ -812,7 +826,7 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const usingManualSlot = slotType === 'manual';
+    const usingManualSlot = entryMode === 'bottleneck' || slotType === 'manual';
     if (!workCentreId || !machineId || !empId || (!usingManualSlot && !hourlySlot) || (usingManualSlot && (!manualStartTime || !manualFinishTime))) {
       toast.error('Please fill required fields');
       return;
@@ -864,7 +878,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     }
     // Reason required
     if (!stoppageReason.trim()) {
-      toast.error('Reason is required for manual entries.');
+      toast.error(entryMode === 'bottleneck' ? 'M4 analysis is required for bottleneck entries.' : 'Reason is required for manual entries.');
       return;
     }
     // Duplicate slot warning check
@@ -883,7 +897,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       toast.error('Please provide an edit reason.');
       return;
     }
-    const outputValue = Math.round(Number(outputPairs || 0));
+    const outputValue = entryMode === 'bottleneck' ? 0 : Math.round(Number(outputPairs || 0));
     if (Number.isNaN(outputValue) || outputValue < 0) {
       toast.error('Output pairs must be 0 or greater');
       return;
@@ -904,6 +918,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       output_pairs: outputValue,
       stoppage_reason: stoppageReason.trim() || null,
       approved_by: currentUser?.username || currentUser?.name || currentUser?.email || currentUser?.id || null,
+      entry_type: entryMode,
       audit_reason: editingId ? editReason.trim() : undefined,
     };
 
@@ -947,6 +962,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     const derivedHour = Number.isNaN(start.getTime()) ? 0 : start.getHours();
     const derivedMinute = Number.isNaN(start.getTime()) ? 0 : start.getMinutes();
     setShowForm(true);
+    setEntryMode('production');
     setEditingId(row.id);
     setEntryDate(String(row.prod_date || '').slice(0, 10) || getTodayLocalDate());
     setWorkCentreId(String(row.work_centre_id));
@@ -1201,13 +1217,39 @@ export const ManualProductionEntryForm: React.FC = () => {
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
+            <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEntryMode('production');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${entryMode === 'production' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  >
+                    Manual Production
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEntryMode('bottleneck');
+                      setSlotType('manual');
+                      setOutputPairs('0');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${entryMode === 'bottleneck' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  >
+                    Bottleneck Entry
+                  </button>
+                </div>
                 <h2 className="text-xl font-bold text-gray-900">
-                  {editingId ? 'Edit Manual Entry' : 'Manual Production Entry'}
+                  {editingId ? 'Edit Manual Entry' : entryMode === 'bottleneck' ? 'Bottleneck Entry' : 'Manual Production Entry'}
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Use this when supervisor/admin needs to enter a completed cycle manually.
+                  {editingId
+                    ? 'Edit a saved manual production cycle.'
+                    : entryMode === 'bottleneck'
+                      ? 'Record a bottleneck event with explicit start/finish timing and M4 analysis for the TV dashboard.'
+                      : 'Use this when supervisor/admin needs to enter a completed cycle manually.'}
                 </p>
               </div>
               <div className="text-right mr-2">
@@ -1301,27 +1343,9 @@ export const ManualProductionEntryForm: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Slot Type *</label>
-              <select
-                value={slotType}
-                onChange={(e) => {
-                  setSlotType(e.target.value as SlotType);
-                  setHourlySlot('');
-                  setManualStartTime('');
-                  setManualFinishTime('');
-                }}
-                className="w-full border border-gray-300 rounded-lg p-2.5 mb-2"
-                required
-                disabled={loading}
-              >
-                {SLOT_TYPES.map((slot) => (
-                  <option key={slot.value} value={slot.value}>
-                    {slot.label}
-                  </option>
-                ))}
-              </select>
-              {slotType === 'manual' ? (
+            {entryMode === 'bottleneck' ? (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bottleneck Timing *</label>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Start *</label>
@@ -1346,48 +1370,103 @@ export const ManualProductionEntryForm: React.FC = () => {
                     />
                   </div>
                 </div>
-              ) : (
-                <>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot *</label>
-                  <select
-                    value={hourlySlot}
-                    onChange={(e) => setHourlySlot(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg p-2.5"
-                    required
-                    disabled={loading}
-                  >
-                    <option value="">Select time slot</option>
-                    {slotOptions.map((slot) => (
-                      <option key={slot.value} value={slot.value}>
-                        {slot.label}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-            </div>
+                <p className="text-xs text-gray-500 mt-2">Enter the exact interval for the bottleneck event, for example 10:00 to 10:20.</p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Slot Type *</label>
+                <select
+                  value={slotType}
+                  onChange={(e) => {
+                    setSlotType(e.target.value as SlotType);
+                    setHourlySlot('');
+                    setManualStartTime('');
+                    setManualFinishTime('');
+                  }}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 mb-2"
+                  required
+                  disabled={loading}
+                >
+                  {SLOT_TYPES.map((slot) => (
+                    <option key={slot.value} value={slot.value}>
+                      {slot.label}
+                    </option>
+                  ))}
+                </select>
+                {slotType === 'manual' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start *</label>
+                      <input
+                        type="time"
+                        value={manualStartTime}
+                        onChange={(e) => setManualStartTime(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg p-2.5"
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Finish *</label>
+                      <input
+                        type="time"
+                        value={manualFinishTime}
+                        onChange={(e) => setManualFinishTime(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg p-2.5"
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot *</label>
+                    <select
+                      value={hourlySlot}
+                      onChange={(e) => setHourlySlot(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg p-2.5"
+                      required
+                      disabled={loading}
+                    >
+                      <option value="">Select time slot</option>
+                      {slotOptions.map((slot) => (
+                        <option key={slot.value} value={slot.value}>
+                          {slot.label}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Output Pairs *</label>
               <input
                 type="number"
                 min="0"
-                value={outputPairs}
+                value={entryMode === 'bottleneck' ? '0' : outputPairs}
                 onChange={(e) => setOutputPairs(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg p-2.5"
                 required
-                disabled={loading}
+                disabled={loading || entryMode === 'bottleneck'}
               />
+              {entryMode === 'bottleneck' && (
+                <p className="text-xs text-gray-500 mt-1">Bottleneck entries are recorded with zero output pairs.</p>
+              )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason <span className="text-red-500">*</span></label>
-              <input
-                type="text"
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {entryMode === 'bottleneck' ? 'M4 Analysis' : 'Reason'} <span className="text-red-500">*</span>
+              </label>
+              <textarea
                 value={stoppageReason}
                 onChange={(e) => setStoppageReason(e.target.value)}
-                className={`w-full border rounded-lg p-2.5 ${!stoppageReason.trim() ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
-                placeholder="Required: explain why this cycle was entered manually"
+                className={`w-full border rounded-lg p-2.5 min-h-[100px] ${!stoppageReason.trim() ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                placeholder={entryMode === 'bottleneck'
+                  ? 'Enter M4 analysis details for the bottleneck event'
+                  : 'Required: explain why this cycle was entered manually'}
                 disabled={loading}
               />
             </div>

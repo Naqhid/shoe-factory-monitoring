@@ -561,6 +561,71 @@ const mobileSessionController = {
         }
     },
 
+    // Reactivate a previously expired session from logs
+    reactivateSessionFromLogs: async (req, res, next) => {
+        try {
+            const { session_id } = req.body || {};
+            if (!session_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'session_id is required'
+                });
+            }
+
+            const [rows] = await pool.execute(
+                `SELECT session_id, machine_id, work_centre_id, emp_code, status
+                 FROM mobile_sessions
+                 WHERE session_id = ?
+                 LIMIT 1`,
+                [session_id]
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Session not found'
+                });
+            }
+
+            const session = rows[0];
+            if (!session.machine_id || !session.emp_code) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Session is missing machine or employee data and cannot be reactivated'
+                });
+            }
+
+            if (session.status === 'active') {
+                return res.json({
+                    success: true,
+                    message: 'Session is already active',
+                    session_id: session.session_id
+                });
+            }
+
+            const result = await activateMachineSessionCore(pool, {
+                machine_id: String(session.machine_id),
+                work_centre_id: session.work_centre_id || null,
+                emp_id: String(session.emp_code)
+            });
+
+            if (!result.ok) {
+                return res.status(result.status).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Session reactivated successfully',
+                session_id: result.session_id
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
     // 9. Active sessions snapshot for manual entry filtering (protected route)
     getActiveSessionsSnapshot: async (req, res, next) => {
         try {

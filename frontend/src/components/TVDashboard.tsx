@@ -11,8 +11,25 @@ export const TVDashboard: React.FC = () => {
     const [workCentres, setWorkCentres] = useState<any[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [dashboardData, setDashboardData] = useState<any>(null);
-    const [currentTime, setCurrentTime] = useState(new Date());
     const [loading, setLoading] = useState(true);
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    const formatTimeRange = (start?: string | null, finish?: string | null) => {
+        if (!start || !finish) return '';
+        const startDate = new Date(start);
+        const finishDate = new Date(finish);
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(finishDate.getTime())) return '';
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${pad(startDate.getHours())}:${pad(startDate.getMinutes())} to ${pad(finishDate.getHours())}:${pad(finishDate.getMinutes())}`;
+    };
+
+    const formatBottleneckDetail = (detail?: string | null) => {
+        if (!detail) return '';
+        return String(detail)
+            .replace(/^BOTTLENECK:/i, '')
+            .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
+            .trim();
+    };
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
     const [currentDate, setCurrentDate] = useState('');
@@ -603,10 +620,16 @@ export const TVDashboard: React.FC = () => {
                                             <span className="text-red-600 font-bold text-[10px] bg-white px-1 py-0.5 rounded shadow-sm">#{index + 1}</span>
                                             <div className="flex-1 min-w-0 leading-tight">
                                                 <div className="text-gray-800 font-bold text-[11px] sm:text-xs truncate">{item.machine_centre_name}</div>
-                                                <div className="text-gray-600 text-[10px] truncate">{item.work_centre_name}</div>
+                                                <div className="text-gray-600 text-[10px] truncate">
+                                                    {item.type === 1
+                                                        ? `${item.work_centre_name} • ${formatTimeRange(item.start_time, item.finish_time)} • ${formatBottleneckDetail(item.detail)}`
+                                                        : item.work_centre_name}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="text-red-600 text-sm font-bold flex-shrink-0 bg-white px-1.5 py-0.5 rounded shadow-sm tabular-nums">{item.efficiency}%</div>
+                                        <div className="text-red-600 text-sm font-bold flex-shrink-0 bg-white px-1.5 py-0.5 rounded shadow-sm tabular-nums">
+                                            {item.type === 1 ? 'BOTTLENECK' : `${item.efficiency}%`}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
