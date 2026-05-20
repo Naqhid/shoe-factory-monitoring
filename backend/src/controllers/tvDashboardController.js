@@ -204,90 +204,38 @@ exports.getDashboard = async (req, res) => {
         // but simplified (no per-machine opening WIP tracking needed here).
         const [bottlenecks] = await pool.query(`
             SELECT
-                machine_centre_name,
-                work_centre_name,
-                efficiency,
-                output,
-                start_time,
-                finish_time,
-                detail,
-                type
-            FROM (
-                SELECT
-                    mc.name as machine_centre_name,
-                    wc.name as work_centre_name,
-                    0 as efficiency,
-                    0 as output,
-                    mb.start_time,
-                    mb.finish_time,
-                    mb.stoppage_reason as detail,
-                    1 as type
-                FROM machine_centre_production mb
-                JOIN machine_centres mc
-                  ON mc.machine_id = mb.machine_id
-                  AND mc.work_centre_id = mb.work_centre_id
-                JOIN work_centres wc ON wc.id = mb.work_centre_id
-                JOIN (
-                    SELECT machine_id, work_centre_id, MAX(start_time) as latest_start
-                    FROM machine_centre_production
-                    WHERE work_centre_id = ?
-                      AND DATE(prod_date) = ?
-                      AND button_status = 2
-                      AND stoppage_reason LIKE 'BOTTLENECK:%'
-                    GROUP BY machine_id, work_centre_id
-                ) latest
-                  ON latest.machine_id = mb.machine_id
-                  AND latest.work_centre_id = mb.work_centre_id
-                  AND mb.start_time = latest.latest_start
-                WHERE mb.work_centre_id = ?
-                  AND DATE(mb.prod_date) = ?
-                  AND mb.button_status = 2
-                  AND mb.stoppage_reason LIKE 'BOTTLENECK:%'
-                UNION ALL
-                SELECT
-                    mc.name as machine_centre_name,
-                    wc.name as work_centre_name,
-                    ROUND(COALESCE(mcs.avg_efficiency_percent, 0), 1) as efficiency,
-                    COALESCE(mcs.total_output_pairs, 0) as output,
-                    NULL as start_time,
-                    NULL as finish_time,
-                    NULL as detail,
-                    2 as type
-                FROM machine_centres mc
-                JOIN work_centres wc ON mc.work_centre_id = wc.id
-                LEFT JOIN machine_centre_summary mcs
-                    ON mcs.machine_id = mc.machine_id
-                    AND mcs.work_centre_id = mc.work_centre_id
-                    AND mcs.prod_date = ?
-                LEFT JOIN production_plan pp
-                    ON mcs.work_centre_id = pp.work_centre_id
-                    AND DATE(pp.plan_date) = DATE(?)
-                WHERE mc.work_centre_id = ?
-                  AND mc.deleted_at IS NULL
-                  AND COALESCE(mc.is_active, 1) = 1
-                  AND (
-                    mcs.id IS NULL
-                    OR mcs.total_output_pairs = 0
-                    OR mcs.avg_efficiency_percent < 70
-                  )
-                  AND mc.machine_id NOT IN (
-                    SELECT machine_id
-                    FROM machine_centre_production
-                    WHERE work_centre_id = ?
-                      AND DATE(prod_date) = ?
-                      AND button_status = 2
-                      AND stoppage_reason LIKE 'BOTTLENECK:%'
-                  )
-                  AND EXISTS (
-                    SELECT 1 FROM mobile_sessions ms
-                    WHERE ms.machine_id = mc.machine_id
-                      AND ms.status = 'active'
-                      AND DATE(ms.activated_at) = DATE(?)
-                  )
-            ) combined
-            ORDER BY type ASC, COALESCE(start_time, '9999-12-31 23:59:59') ASC, efficiency ASC
+                mc.name AS machine_centre_name,
+                wc.name AS work_centre_name,
+                0 AS efficiency,
+                0 AS output,
+                mb.start_time,
+                mb.finish_time,
+                mb.stoppage_reason AS detail,
+                1 AS type
+            FROM machine_centre_production mb
+            JOIN machine_centres mc
+              ON mc.machine_id = mb.machine_id
+              AND mc.work_centre_id = mb.work_centre_id
+            JOIN work_centres wc ON wc.id = mb.work_centre_id
+            JOIN (
+                SELECT machine_id, work_centre_id, MAX(start_time) AS latest_start
+                FROM machine_centre_production
+                WHERE work_centre_id = ?
+                  AND DATE(prod_date) = ?
+                  AND button_status = 2
+                  AND stoppage_reason LIKE 'BOTTLENECK:%'
+                GROUP BY machine_id, work_centre_id
+            ) latest
+              ON latest.machine_id = mb.machine_id
+              AND latest.work_centre_id = mb.work_centre_id
+              AND mb.start_time = latest.latest_start
+            WHERE mb.work_centre_id = ?
+              AND DATE(mb.prod_date) = ?
+              AND mb.button_status = 2
+              AND mb.stoppage_reason LIKE 'BOTTLENECK:%'
+            ORDER BY mb.start_time ASC
             LIMIT 3
-        `, [workCentreId, today, workCentreId, today, today, today, workCentreId, workCentreId, today, today]);
+        `, [workCentreId, today, workCentreId, today]);
 
         // ── 9. Line Performance with MES WIP ─────────────────────────────────
         // Fetch raw line data first, then enrich with MES WIP per line.

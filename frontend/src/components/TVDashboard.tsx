@@ -623,19 +623,16 @@ export const TVDashboard: React.FC = () => {
                                     style={{ animationDelay: `${180 + index * 90}ms` }}
                                 >
                                     <div className="flex justify-between items-center gap-1.5">
-                                        <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                                            <span className="text-red-600 font-bold text-[10px] bg-white px-1 py-0.5 rounded shadow-sm">#{index + 1}</span>
-                                            <div className="flex-1 min-w-0 leading-tight">
-                                                <div className="text-gray-800 font-bold text-[11px] sm:text-xs truncate">{item.machine_centre_name}</div>
-                                                <div className="text-gray-600 text-[10px] truncate">
-                                                    {item.type === 1
-                                                        ? `${item.work_centre_name} • ${formatTimeRange(item.start_time, item.finish_time)} • ${formatBottleneckDetail(item.detail)}`
-                                                        : item.work_centre_name}
-                                                </div>
+                                        <div className="flex-1 min-w-0 leading-tight">
+                                            <div className="text-gray-800 font-bold text-[11px] sm:text-xs truncate">{item.machine_centre_name}</div>
+                                            <div className="text-gray-600 text-[10px] truncate">
+                                                {item.work_centre_name ? `${item.work_centre_name} • ` : ''}
+                                                {formatTimeRange(item.start_time, item.finish_time)}
+                                                {item.detail ? ` • ${formatBottleneckDetail(item.detail)}` : ''}
                                             </div>
                                         </div>
                                         <div className="text-red-600 text-sm font-bold flex-shrink-0 bg-white px-1.5 py-0.5 rounded shadow-sm tabular-nums">
-                                            {item.type === 1 ? 'BOTTLENECK' : `${item.efficiency}%`}
+                                            BOTTLENECK
                                         </div>
                                     </div>
                                 </div>
