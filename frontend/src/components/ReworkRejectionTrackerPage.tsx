@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Save, Calendar, Building, Cpu, Loader2, Edit, Trash2, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL, apiFetch } from '../services/api';
@@ -70,6 +71,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRow, setEditRow] = useState<Partial<SavedRecord>>({});
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const navigate = useNavigate();
 
   const reasonCategories = [
     { value: '', label: 'Select Category' },
@@ -308,9 +310,20 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
         onCancel={() => setDeleteId(null)}
         confirmText="Delete"
       />
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Rework / Rejection Tracker</h1>
-        <p className="text-gray-600">Track and manage rework and rejection quantities for production</p>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Rework / Rejection Tracker</h1>
+          <p className="text-gray-600">Track and manage rework and rejection quantities for production</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/manual_production_entry?mode=bottleneck')}
+            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+          >
+            Add Bottleneck Entry
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Activity,
   AlertTriangle,
+  ArrowDownToLine,
   BarChart3,
   Bell,
   Briefcase,
   ChevronRight,
   Menu,
+  PackageOpen,
   RefreshCw,
   SlidersHorizontal,
+  Target,
   Wifi,
   WifiOff,
   X,
@@ -19,6 +23,7 @@ import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { Reports } from './Reports';
+import { formatInput } from '../utils/wipUtils';
 
 const getTodayDate = () => {
   const today = new Date();
@@ -336,9 +341,15 @@ export const ProductionTracker: React.FC = () => {
       .slice(0, 3);
   }, [enrichedLines, shiftProjection.inLast60]);
   const totalWip = linePerformance.reduce((sum: number, line: any) => sum + (Number(line.wip) || 0), 0);
+  const lineInputPercent = selectedLineDetail && Number(selectedLineDetail.target || 0) > 0
+    ? Math.round((Number(selectedLineDetail.input || 0) / Number(selectedLineDetail.target || 0)) * 100)
+    : 0;
   const outputPercent = Number(topSection?.outputPercent) || 0;
   const efficiencyPercent = Number(topSection?.efficiencyPercent) || 0;
   const efficiencyGaugePercent = Math.min(Math.max(efficiencyPercent, 0), 100);
+  const overallInputPercent = Number(topSection?.target || 0) > 0
+    ? Math.round((Number(topSection?.input || 0) / Number(topSection?.target || 0)) * 100)
+    : 0;
   const alertCount = alertCardCount;
   const trackerSignalCount = shiftProjection.shortfall > 0 ? 1 : 0;
   const currentWorkCentreId = parseInt(selectedLine, 10) || workCentres[0]?.id || 1;
@@ -543,44 +554,61 @@ export const ProductionTracker: React.FC = () => {
 
           {activeMobileTab === 'dashboard' && (
             <div className="flex-1 min-h-0 flex flex-col gap-2 h-full">
-              <div className="grid grid-cols-4 gap-1 sm:gap-2 auto-rows-[minmax(96px,auto)]">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-2 auto-rows-[minmax(96px,auto)]">
+                {/* Target */}
                 <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
-                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Today Target</div>
-                  <div className="text-lg sm:text-3xl font-bold leading-none">{Number(topSection?.target || 0).toLocaleString()}</div>
-                  <div className="text-[11px] sm:text-sm font-semibold text-slate-500">Pairs</div>
+                  <Target className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600 mb-0.5" />
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Target</div>
+                  <div className="text-lg sm:text-2xl font-bold leading-none">{Number(topSection?.target || 0).toLocaleString()}</div>
                 </div>
 
+                {/* Input - TV Dashboard style */}
                 <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
-                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Produced</div>
-                  <div className="text-lg sm:text-3xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
-                  <div className="text-[11px] sm:text-sm font-semibold text-green-600 flex items-center justify-center gap-0.5">
-                    <TrendingUp className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> {outputPercent}%
+                  <ArrowDownToLine className="h-4 w-4 sm:h-6 sm:w-6 text-cyan-600 mb-0.5" />
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Input</div>
+                  <div className="text-lg sm:text-2xl font-bold leading-none text-cyan-600">
+                    {formatInput(topSection?.input)}
                   </div>
                 </div>
 
+                {/* Input % - TV Dashboard style */}
                 <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
-                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-1">Efficiency</div>
-                  <div
-                    className="h-12 w-12 sm:h-20 sm:w-20 rounded-full grid place-items-center"
-                    style={{
-                      background: `conic-gradient(#22c55e ${efficiencyGaugePercent * 3.6}deg, #e2e8f0 0deg)`,
-                    }}
-                  >
-                    <div className="h-9 w-9 sm:h-14 sm:w-14 rounded-full bg-white grid place-items-center px-1">
-                      <span className={`${efficiencyPercent >= 100 ? 'text-[10px] sm:text-xs' : 'text-xs sm:text-sm'} font-bold leading-none`}>
-                        {efficiencyPercent}%
-                      </span>
-                    </div>
+                  <ArrowDownToLine className="h-4 w-4 sm:h-6 sm:w-6 text-sky-600 mb-0.5" />
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Input %</div>
+                  <div className={`text-lg sm:text-2xl font-bold leading-none ${
+                    overallInputPercent >= 90 ? 'text-green-600' : overallInputPercent >= 70 ? 'text-yellow-600' : 'text-red-500'
+                  }`}>
+                    {overallInputPercent}%
                   </div>
                 </div>
 
+                {/* Output/Produced */}
                 <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
+                  <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-green-600 mb-0.5" />
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Output</div>
+                  <div className="text-lg sm:text-2xl font-bold leading-none">{Number(topSection?.output || 0).toLocaleString()}</div>
+                </div>
+
+                {/* Output % */}
+                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
+                  <Activity className="h-4 w-4 sm:h-6 sm:w-6 text-purple-600 mb-0.5" />
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">Output %</div>
+                  <div className={`text-lg sm:text-2xl font-bold leading-none ${
+                    outputPercent >= 90 ? 'text-green-600' : outputPercent >= 70 ? 'text-yellow-600' : 'text-red-500'
+                  }`}>
+                    {outputPercent}%
+                  </div>
+                </div>
+
+                {/* WIP */}
+                <div className="bg-[#f7f9ff] text-slate-900 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-[#dbe5ff] flex flex-col items-center justify-center text-center min-h-[108px] sm:min-h-[clamp(136px,18vh,210px)]">
+                  <PackageOpen className={`h-4 w-4 sm:h-6 sm:w-6 mb-0.5 ${totalWip > 0 ? 'text-orange-600' : 'text-emerald-600'}`} />
                   <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 mb-0.5">WIP</div>
-                  <div className="flex items-center justify-center gap-1 text-lg sm:text-3xl font-bold text-orange-600 leading-none">
-                    <Briefcase className="h-4 w-4 sm:h-6 sm:w-6" />
-                    <span>{totalWip.toLocaleString()}</span>
+                  <div className={`text-lg sm:text-2xl font-bold leading-none ${
+                    totalWip > 0 ? 'text-orange-600' : 'text-emerald-600'
+                  }`}>
+                    {totalWip.toLocaleString()}
                   </div>
-                  <div className="text-[11px] sm:text-sm font-semibold text-slate-500">Pairs</div>
                 </div>
               </div>
 
@@ -774,20 +802,47 @@ export const ProductionTracker: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-blue-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Output</p>
-                  <p className="text-2xl font-bold text-blue-700">{Number(selectedLineDetail.output || 0)}</p>
+                  <p className="text-xs text-slate-500 font-semibold">Target</p>
+                  <p className="text-2xl font-bold text-blue-700">{Number(selectedLineDetail.target || 0)}</p>
+                </div>
+                <div className="bg-cyan-50 rounded-xl p-3">
+                  <p className="text-xs text-slate-500 font-semibold">Input</p>
+                  <p className="text-2xl font-bold text-cyan-700">{formatInput(selectedLineDetail.input)}</p>
                 </div>
                 <div className="bg-indigo-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Target</p>
-                  <p className="text-2xl font-bold text-indigo-700">{Number(selectedLineDetail.target || 0)}</p>
+                  <p className="text-xs text-slate-500 font-semibold">Output</p>
+                  <p className="text-2xl font-bold text-indigo-700">{Number(selectedLineDetail.output || 0)}</p>
                 </div>
                 <div className="bg-green-50 rounded-xl p-3">
                   <p className="text-xs text-slate-500 font-semibold">Efficiency</p>
                   <p className="text-2xl font-bold text-green-700">{Number(selectedLineDetail.efficiency || 0)}%</p>
                 </div>
+                <div className="bg-sky-50 rounded-xl p-3">
+                  <p className="text-xs text-slate-500 font-semibold">Input %</p>
+                  <p className={`text-2xl font-bold ${
+                    lineInputPercent >= 90 ? 'text-green-600' : 
+                    lineInputPercent >= 70 ? 'text-yellow-600' : 'text-red-500'
+                  }`}>{lineInputPercent}%</p>
+                </div>
                 <div className="bg-orange-50 rounded-xl p-3">
                   <p className="text-xs text-slate-500 font-semibold">WIP</p>
                   <p className="text-2xl font-bold text-orange-700">{Number(selectedLineDetail.wip || 0)}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-3">
+                <p className="text-xs text-slate-500 font-semibold mb-1">Input Progress</p>
+                <p className="text-lg font-bold text-slate-800 mb-2">
+                  {formatInput(selectedLineDetail.input)} / {Number(selectedLineDetail.target || 0)} ({lineInputPercent}%)
+                </p>
+                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${
+                      lineInputPercent >= 90 ? 'bg-green-500' : 
+                      lineInputPercent >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${lineInputPercent}%` }}
+                  />
                 </div>
               </div>
 

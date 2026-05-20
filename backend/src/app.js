@@ -672,6 +672,7 @@ app.get('/api/tab-broadcast/:broadcastId/view', tabBroadcastController.viewerPag
 // Logs routes (protected)
 app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSessionController.getSessionLogs);
 app.get('/api/mobile-sessions/cycles', authenticate, requireLogsAccess, mobileSessionController.getCycleDetails);
+app.post('/api/mobile-sessions/reactivate', authenticate, requireLogsAccess, mobileSessionController.reactivateSessionFromLogs);
 app.get('/api/mobile-sessions/active-snapshot', authenticate, requireManualEntryAccess, mobileSessionController.getActiveSessionsSnapshot);
 
 // TV Dashboard routes

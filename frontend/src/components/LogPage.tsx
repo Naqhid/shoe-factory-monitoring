@@ -1,6 +1,7 @@
 import React from 'react';
 import { API_BASE_URL, apiFetch } from '../services/api';
-import { RefreshCw, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronRight, Clock, RotateCcw } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface SessionLogEntry {
   session_id: string;
@@ -51,6 +52,7 @@ const LogPage: React.FC = () => {
   const [expandedRows, setExpandedRows] = React.useState<Set<string>>(new Set());
   const [cycleDetails, setCycleDetails] = React.useState<Record<string, CycleDetail[]>>({});
   const [loadingCycles, setLoadingCycles] = React.useState<Set<string>>(new Set());
+  const [reactivatingSessions, setReactivatingSessions] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     const fetchWorkCentres = async () => {
@@ -169,6 +171,32 @@ const LogPage: React.FC = () => {
     }
   };
 
+  const handleReactivate = async (log: SessionLogEntry) => {
+    if (!log?.session_id || reactivatingSessions.has(log.session_id)) return;
+    setReactivatingSessions((prev) => new Set(prev).add(log.session_id));
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/mobile-sessions/reactivate`, {
+        method: 'POST',
+        body: JSON.stringify({ session_id: log.session_id }),
+      });
+      const result = await response.json();
+      if (response.ok && result.success) {
+        toast.success(result.message || 'Session reactivated');
+        await handleRefresh();
+      } else {
+        toast.error(result.message || 'Failed to reactivate session');
+      }
+    } catch {
+      toast.error('Unable to reactivate session');
+    } finally {
+      setReactivatingSessions((prev) => {
+        const next = new Set(prev);
+        next.delete(log.session_id);
+        return next;
+      });
+    }
+  };
+
   const handleRefresh = async () => {
     setLoading(true);
     setError('');
@@ -257,16 +285,17 @@ const LogPage: React.FC = () => {
               <th className="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Actual Time</th>
               <th className="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Current Cycle</th>
               <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+              <th className="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={11} className="px-4 py-6 text-center text-gray-500">Loading logs...</td>
+                <td colSpan={12} className="px-4 py-6 text-center text-gray-500">Loading logs...</td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-6 text-center text-gray-500">No login logs found for selected filters.</td>
+                <td colSpan={12} className="px-4 py-6 text-center text-gray-500">No login logs found for selected filters.</td>
               </tr>
             ) : (
               logs.map((log) => (
@@ -299,12 +328,29 @@ const LogPage: React.FC = () => {
                       {getCycleStatus(log.total_cycles, log.status, log.has_active_cycle)}
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-700 capitalize">{log.status}</td>
+                    <td className="px-3 py-3 text-sm text-center">
+                      {log.status !== 'active' ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReactivate(log);
+                          }}
+                          disabled={reactivatingSessions.has(log.session_id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <RotateCcw className={`h-3 w-3 ${reactivatingSessions.has(log.session_id) ? 'animate-spin' : ''}`} />
+                          {reactivatingSessions.has(log.session_id) ? 'Reactivating...' : 'Reactivate'}
+                        </button>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
                   </tr>
                   
                   {/* Expanded Cycle Details */}
                   {expandedRows.has(log.session_id) && (
                     <tr className="bg-gray-50">
-                      <td colSpan={11} className="px-3 py-3">
+                      <td colSpan={12} className="px-3 py-3">
                         <div className="ml-6 border-l-2 border-blue-300 pl-4">
                           <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                             <Clock className="h-4 w-4" />
