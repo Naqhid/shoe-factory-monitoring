@@ -1,4 +1,35 @@
+/**
+ * tvDashboardController.js
+ *
+ * TV Dashboard API controller.
+ *
+ * MES WIP LOGIC (replaces old Target - Output formula):
+ *   Current WIP = Opening WIP + Input - Output
+ *
+ *   - Input  : Production from Heel Grip Machine (machine_id = '03') — line entry point.
+ *   - Output : End-of-line completed production (existing logic, unchanged).
+ *   - Opening WIP : Previous day's closing WIP, carried forward automatically.
+ *
+ * Line 3 is the primary line using this WIP formula.
+ * All other lines also use the same formula (opening WIP defaults to 0 until seeded).
+ */
+
+'use strict';
+
 const pool = require('../../config/database');
+const wipStateService = require('../services/wipStateService');
+
+// ── Work Centre ID for Line 3 (Heel Grip is the input machine here) ──────────
+const LINE_3_WORK_CENTRE_ID = 3;
+
+// ── Machine ID constants ──────────────────────────────────────────────────────
+/** End-of-line Final Inspection machine for Line 2A (work_centre_id = 5) */
+const EOL_MACHINE_LINE_2A = '07';
+
+/** Heel Grip Machine — Input source for WIP calculation */
+const HEEL_GRIP_MACHINE_ID = wipStateService.HEEL_GRIP_MACHINE_ID; // '03'
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 exports.getWorkCentres = async (req, res) => {
     try {
@@ -64,31 +95,48 @@ exports.getDashboard = async (req, res) => {
         const { workCentreId } = req.params;
         const today = req.query.date || new Date().toISOString().split('T')[0];
 
+        // ── 1. Target ─────────────────────────────────────────────────────────
         const [planningData] = await pool.query(
             'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
             [today, workCentreId]
         );
-        // Get output from Machine 07 (Final Inspection) for Line 2A
+
+        // ── 2. Output (end-of-line) — UNCHANGED ──────────────────────────────
+        // For Line 2A (work_centre_id=5): use Machine 07 (Final Inspection) only.
+        // For all other lines: sum all machines.
         const [summaryData] = await pool.query(`
-            SELECT COALESCE(total_output_pairs, 0) as total_output 
+            SELECT COALESCE(total_output_pairs, 0) as total_output
                  , COALESCE(avg_efficiency_percent, 0) as eol_efficiency_percent
-            FROM machine_centre_summary 
+            FROM machine_centre_summary
             WHERE prod_date = ? AND work_centre_id = ? AND machine_id = '07'
             LIMIT 1
         `, [today, workCentreId]);
         const finalOutput = summaryData[0]?.total_output || 0;
+
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
         const target = planningData[0]?.total_target || 0;
         const output = finalOutput;
         const outputPercent = target > 0 ? (output / target) * 100 : 0;
-        // Keep efficiency basis aligned with output basis (end-of-line machine 07)
         const efficiencyPercent = summaryData[0]?.eol_efficiency_percent || 0;
+
+        // ── 3. Input from Heel Grip Machine (machine_id = '03') ───────────────
+        // This is the live input entering the production line today.
+        const overallInput = await wipStateService.getTodayInput(Number(workCentreId), today);
+
+        // ── 4. MES WIP: Opening WIP + Input - Output ──────────────────────────
+        // Replaces old formula: WIP = Target - Output
+        const wipData = await wipStateService.computeAndPersistWip(
+            Number(workCentreId),
+            today,
+            output
+        );
 
         let emojiType = 'sad';
         if (outputPercent >= 90 && efficiencyPercent >= 90) emojiType = 'happy';
         else if (outputPercent >= 70 && efficiencyPercent >= 70) emojiType = 'medium';
 
+        // ── 5. Work centre summary (middle section) ───────────────────────────
         const [wcPlanningData] = await pool.query(
             'SELECT SUM(total_target_per_day) as target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
             [today, workCentreId]
@@ -109,6 +157,7 @@ exports.getDashboard = async (req, res) => {
         const wcOutputPercent = wcTarget > 0 ? (wcOutput / wcTarget) * 100 : 0;
         const wcEfficiency = wcSummaryData[0]?.avg_efficiency || 0;
 
+        // ── 6. Attendance ─────────────────────────────────────────────────────
         const [attendanceTarget] = await pool.query(`
             SELECT COALESCE(SUM(prl.manpower), 0) as target_employees
             FROM production_plan pp
@@ -130,6 +179,7 @@ exports.getDashboard = async (req, res) => {
             WHERE DATE(activated_at) = DATE(?) AND status = 'active'
         `, [today]);
 
+        // ── 7. Hourly output ──────────────────────────────────────────────────
         const [avgHourlyData] = await pool.query(`
             SELECT AVG(hourly_output) AS avg_hourly_output
             FROM (
@@ -149,21 +199,23 @@ exports.getDashboard = async (req, res) => {
             ORDER BY hour
         `, [workCentreId, today]);
 
+        // ── 8. Bottlenecks ────────────────────────────────────────────────────
+        // NOTE: Bottleneck WIP is informational only — uses the same MES formula
+        // but simplified (no per-machine opening WIP tracking needed here).
         const [bottlenecks] = await pool.query(`
-            SELECT 
+            SELECT
                 mc.name as machine_centre_name,
                 wc.name as work_centre_name,
                 ROUND(COALESCE(mcs.avg_efficiency_percent, 0), 1) as efficiency,
-                GREATEST(0, COALESCE(pp.total_target_per_day, 0) - COALESCE(mcs.total_output_pairs, 0)) as wip,
                 COALESCE(mcs.total_output_pairs, 0) as output
             FROM machine_centres mc
             JOIN work_centres wc ON mc.work_centre_id = wc.id
-            LEFT JOIN machine_centre_summary mcs 
-                ON mcs.machine_id = mc.machine_id 
+            LEFT JOIN machine_centre_summary mcs
+                ON mcs.machine_id = mc.machine_id
                 AND mcs.work_centre_id = mc.work_centre_id
                 AND mcs.prod_date = ?
-            LEFT JOIN production_plan pp 
-                ON mcs.work_centre_id = pp.work_centre_id 
+            LEFT JOIN production_plan pp
+                ON mcs.work_centre_id = pp.work_centre_id
                 AND DATE(pp.plan_date) = DATE(?)
             WHERE mc.work_centre_id = ?
               AND mc.deleted_at IS NULL
@@ -183,21 +235,26 @@ exports.getDashboard = async (req, res) => {
             LIMIT 3
         `, [today, today, workCentreId, today]);
 
-        const [linePerformance] = await pool.query(`
-            SELECT 
+        // ── 9. Line Performance with MES WIP ─────────────────────────────────
+        // Fetch raw line data first, then enrich with MES WIP per line.
+        const [linePerformanceRaw] = await pool.query(`
+            SELECT
                 wc.id as work_centre_id,
                 wc.name as line_name,
                 COALESCE(pp.target, 0) as target,
                 -- For Line 2A (id=5), use Machine 07 output; for others, sum all machines
                 COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) as output,
-                CASE WHEN COALESCE(pp.target, 0) > 0 THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) / pp.target) * 100, 0) ELSE 0 END as output_percentage,
+                CASE WHEN COALESCE(pp.target, 0) > 0
+                     THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) / pp.target) * 100, 0)
+                     ELSE 0
+                END as output_percentage,
                 CASE
                     WHEN COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0) <= 0 THEN 0
                     WHEN COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0) > 0
-                        THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.target_mins ELSE mcsall.target_mins END, 0) / COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0)) * 100, 0)
+                        THEN ROUND((COALESCE(CASE WHEN wc.id = 5 THEN mcs07.target_mins ELSE mcsall.target_mins END, 0) /
+                                    COALESCE(CASE WHEN wc.id = 5 THEN mcs07.actual_mins ELSE mcsall.actual_mins END, 0)) * 100, 0)
                     ELSE 0
-                END as efficiency,
-                GREATEST(0, COALESCE(pp.target, 0) - COALESCE(CASE WHEN wc.id = 5 THEN mcs07.output ELSE mcsall.output END, 0)) as wip
+                END as efficiency
             FROM work_centres wc
             LEFT JOIN (
                 SELECT work_centre_id, SUM(total_target_per_day) as target
@@ -227,15 +284,52 @@ exports.getDashboard = async (req, res) => {
             ORDER BY wc.id
         `, [today, today, today]);
 
+        // Enrich each line with MES WIP (Opening WIP + Input - Output)
+        // and live Input from Heel Grip Machine
+        const linePerformance = await Promise.all(
+            linePerformanceRaw.map(async (line) => {
+                const lineWcId = Number(line.work_centre_id);
+                const lineOutput = Number(line.output || 0);
+
+                // Fetch live input from Heel Grip Machine for this line
+                const lineInput = await wipStateService.getTodayInput(lineWcId, today);
+
+                // Compute and persist MES WIP for this line
+                const lineWip = await wipStateService.computeAndPersistWip(
+                    lineWcId,
+                    today,
+                    lineOutput
+                );
+
+                return {
+                    work_centre_id: lineWcId,
+                    line_name: line.line_name,
+                    target: Math.round(line.target || 0),
+                    input: lineInput,                          // NEW: Heel Grip Machine input
+                    output: Math.round(lineOutput),
+                    output_percentage: Math.round(line.output_percentage || 0),
+                    efficiency: Math.round(line.efficiency || 0),
+                    wip: lineWip.currentWip,                  // NEW: MES WIP formula
+                    opening_wip: lineWip.openingWip,          // For transparency/debugging
+                };
+            })
+        );
+
+        // ── 10. Build response ────────────────────────────────────────────────
         res.json({
             success: true,
             data: {
                 topSection: {
                     workCentreName: 'Overall Performance',
                     target: Math.round(target),
+                    input: overallInput,                       // NEW: Heel Grip input
                     output: Math.round(output),
                     outputPercent: Math.round(outputPercent),
                     efficiencyPercent: Math.round(efficiencyPercent),
+                    // MES WIP fields for overall section
+                    openingWip: wipData.openingWip,
+                    currentWip: wipData.currentWip,
+                    closingWip: wipData.closingWip,
                     showHappyEmoji: emojiType === 'happy',
                     showMediumEmoji: emojiType === 'medium'
                 },
@@ -252,15 +346,7 @@ exports.getDashboard = async (req, res) => {
                 lowerSection: {
                     hourlyData: hourlyData,
                     bottlenecks: bottlenecks,
-                    linePerformance: linePerformance.map(line => ({
-                        work_centre_id: line.work_centre_id,
-                        line_name: line.line_name,
-                        target: Math.round(line.target || 0),
-                        output: Math.round(line.output || 0),
-                        output_percentage: Math.round(line.output_percentage || 0),
-                        efficiency: Math.round(line.efficiency || 0),
-                        wip: Math.round(line.wip || 0)
-                    })),
+                    linePerformance,
                     workCentreName: wcData[0]?.name || 'N/A'
                 }
             }

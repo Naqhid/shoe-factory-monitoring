@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Smile, Frown, Meh, TrendingUp, Target, Zap, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
+import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 
 export const TVDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -397,17 +398,28 @@ export const TVDashboard: React.FC = () => {
                                     : partialWarning || errorMessage}
                         </div>
                     )}
-                    <div className="grid grid-cols-5 gap-1 sm:gap-2 min-w-0">
+                    <div className="grid grid-cols-6 gap-1 sm:gap-2 min-w-0">
+                        {/* ── Target ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-0 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Target className="h-4 w-4 sm:h-7 sm:w-7 text-white mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Target</div>
                             <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.target}</div>
                         </div>
+                        {/* ── Input (Heel Grip Machine) — NEW MES card ── */}
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-[50ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                            <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-cyan-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input</div>
+                            <div className="text-cyan-300 text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
+                                {formatInput(topSection.input)}
+                            </div>
+                        </div>
+                        {/* ── Output ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <TrendingUp className="h-4 w-4 sm:h-7 sm:w-7 text-green-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output</div>
                             <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.output}</div>
                         </div>
+                        {/* ── Output % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Activity className="h-4 w-4 sm:h-7 sm:w-7 text-purple-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output %</div>
@@ -415,6 +427,7 @@ export const TVDashboard: React.FC = () => {
                                 {topSection.outputPercent}%
                             </div>
                         </div>
+                        {/* ── Efficiency % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Zap className="h-4 w-4 sm:h-7 sm:w-7 text-yellow-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Efficiency %</div>
@@ -422,15 +435,24 @@ export const TVDashboard: React.FC = () => {
                                 {topSection.efficiencyPercent}%
                             </div>
                         </div>
-                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1 sm:p-2 flex items-center justify-center min-w-0 shadow-lg motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-200 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            {topSection.showHappyEmoji ? (
-                                <Smile className="h-7 w-7 sm:h-14 sm:w-14 text-green-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" />
-                            ) : topSection.showMediumEmoji ? (
-                                <Meh className="h-7 w-7 sm:h-14 sm:w-14 text-yellow-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.4s' }} />
-                            ) : (
-                                <Frown className="h-7 w-7 sm:h-14 sm:w-14 text-red-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.2s' }} />
-                            )}
+                        {/* ── WIP (MES formula) — replaces emoji slot, emoji moves inline ── */}
+                        <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-200 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
+                            <PackageOpen className={`h-4 w-4 sm:h-7 sm:w-7 mx-auto mb-0.5 sm:mb-1 drop-shadow-md ${wipTextClass(topSection.currentWip ?? 0, topSection.target)}`} />
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">WIP</div>
+                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${wipTextClass(topSection.currentWip ?? 0, topSection.target)}`}>
+                                {formatWip(topSection.currentWip)}
+                            </div>
                         </div>
+                    </div>
+                    {/* ── Performance emoji — shown below KPI row ── */}
+                    <div className="flex justify-center mt-1.5 sm:mt-2">
+                        {topSection.showHappyEmoji ? (
+                            <Smile className="h-6 w-6 sm:h-10 sm:w-10 text-green-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" />
+                        ) : topSection.showMediumEmoji ? (
+                            <Meh className="h-6 w-6 sm:h-10 sm:w-10 text-yellow-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.4s' }} />
+                        ) : (
+                            <Frown className="h-6 w-6 sm:h-10 sm:w-10 text-red-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.2s' }} />
+                        )}
                     </div>
                 </div>
             </div>
@@ -480,6 +502,8 @@ export const TVDashboard: React.FC = () => {
                             <tr className="border-b-2 border-gray-200">
                                 <th className="px-2 py-1.5 text-left font-bold text-gray-700">LINE</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">TARGET</th>
+                                {/* INPUT column — live Heel Grip Machine quantity */}
+                                <th className="px-2 py-1.5 text-center font-bold text-cyan-600">INPUT</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">EFFICIENCY %</th>
@@ -500,6 +524,10 @@ export const TVDashboard: React.FC = () => {
                                     >
                                         <td className="px-2 py-2 font-semibold text-gray-800">{line.line_name}</td>
                                         <td className="px-2 py-2 text-center font-bold text-blue-600 tabular-nums">{line.target}</td>
+                                        {/* INPUT — live Heel Grip Machine quantity for this line */}
+                                        <td className="px-2 py-2 text-center font-bold text-cyan-600 tabular-nums">
+                                            {formatInput(line.input)}
+                                        </td>
                                         <td className="px-2 py-2 text-center font-bold text-green-600 tabular-nums">{line.output}</td>
                                         <td className="px-2 py-2 text-center">
                                             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
@@ -511,7 +539,12 @@ export const TVDashboard: React.FC = () => {
                                                 Number(line.efficiency) >= 90 ? 'bg-green-500' : Number(line.efficiency) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
                                             }`}>{line.efficiency}%</span>
                                         </td>
-                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums">{line.wip || 0}</td>
+                                        {/* WIP — MES formula: Opening WIP + Input - Output */}
+                                        <td className={`px-2 py-2 text-center font-bold tabular-nums ${
+                                            Number(line.wip) > 0 ? 'text-orange-600' : 'text-emerald-600'
+                                        }`}>
+                                            {formatWip(line.wip)}
+                                        </td>
                                         {/* <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums">{rw.total_rework}</td>
                                         <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums">{rw.total_rejection}</td> */}
                                     </tr>
