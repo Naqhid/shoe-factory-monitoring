@@ -151,6 +151,10 @@ export const HourlyOutputChart: React.FC<Props> = ({
     );
   };
 
+  /** TV dashboard (fitContainer): large axis labels readable from ~3m on 70" displays */
+  const tvAxisTickSize = fitContainer ? 22 : 13;
+  const tvAxisTickWeight = fitContainer ? 800 : 600;
+
   const CustomTick = ({ x, y, payload }: any) => {
     const text: string = payload.value || '';
     // In fitContainer (TV) mode: show short label horizontally to avoid clipping
@@ -167,7 +171,16 @@ export const HourlyOutputChart: React.FC<Props> = ({
       }
       return (
         <g transform={`translate(${x},${y})`}>
-          <text x={0} y={0} dy={14} textAnchor="middle" fill="#3b82f6" fontSize={12} fontWeight={700}>
+          <text
+            x={0}
+            y={0}
+            dy={20}
+            textAnchor="middle"
+            fill="#1e3a8a"
+            fontSize={tvAxisTickSize}
+            fontWeight={tvAxisTickWeight}
+            style={{ paintOrder: 'stroke fill', stroke: '#ffffff', strokeWidth: 4 }}
+          >
             {short}
           </text>
         </g>
@@ -246,8 +259,20 @@ export const HourlyOutputChart: React.FC<Props> = ({
       : 0;
 
   const chartMargin = fitContainer
-    ? { top: 36, right: 12, left: 8, bottom: 24 }
+    ? { top: 40, right: 16, left: 12, bottom: 52 }
     : { top: 42, right: 20, left: 20, bottom: 64 };
+
+  const xAxisHeight = fitContainer ? 56 : (isMobile ? 60 : 80);
+  const yAxisTickStyle = {
+    fontSize: tvAxisTickSize,
+    fontWeight: tvAxisTickWeight,
+    fill: '#15803d',
+  };
+  const yAxisLabelStyle = {
+    fontSize: fitContainer ? 18 : 15,
+    fontWeight: tvAxisTickWeight,
+    fill: '#15803d',
+  };
 
   const lineChartLegendPayload = [
     { value: 'Hourly Production', type: 'line' as const, color: '#3b82f6' },
@@ -344,14 +369,14 @@ export const HourlyOutputChart: React.FC<Props> = ({
             {viewMode === 'line' ? (
               <LineChart data={chartDataLine} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={fitContainer ? 28 : (isMobile ? 60 : 80)} interval={isMobile ? 'preserveStartEnd' : 0} />
-                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={xAxisHeight} interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0} />
+                <YAxis tick={yAxisTickStyle} stroke="#22c55e"
+                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: yAxisLabelStyle }} />
                 <Tooltip />
                 <Legend
                   payload={lineChartLegendPayload}
-                  wrapperStyle={{ fontSize: fitContainer ? '12px' : '14px', fontWeight: 600, paddingTop: 4 }}
-                  iconSize={fitContainer ? 14 : 18}
+                  wrapperStyle={{ fontSize: fitContainer ? '16px' : '14px', fontWeight: 700, paddingTop: 4 }}
+                  iconSize={fitContainer ? 20 : 18}
                 />
                 {lineData?.target ? (
                   <ReferenceLine y={lineData.target} stroke="#f97316" strokeWidth={3} ifOverflow="extendDomain" />
@@ -366,13 +391,13 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 </Line>
               </LineChart>
             ) : selectedMachine === 'all' ? (
-              <LineChart data={chartDataMachineAll} margin={{ top: 42, right: 30, left: 20, bottom: 60 }}>
+              <LineChart data={chartDataMachineAll} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
-                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={xAxisHeight} interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0} />
+                <YAxis tick={yAxisTickStyle} stroke="#22c55e"
+                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: yAxisLabelStyle }} />
                 <Tooltip />
-                <Legend wrapperStyle={{ fontSize: '14px', fontWeight: 600 }} iconSize={16} />
+                <Legend wrapperStyle={{ fontSize: fitContainer ? '16px' : '14px', fontWeight: 700 }} iconSize={fitContainer ? 20 : 16} />
                 {machineData.map((m, i) => (
                   <Line key={m.machine_id} type="monotone" dataKey={m.machine_id}
                     stroke={COLORS[i % COLORS.length]} strokeWidth={3}
@@ -386,9 +411,9 @@ export const HourlyOutputChart: React.FC<Props> = ({
             ) : (
               <LineChart data={chartDataMachineSingle} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={isMobile ? 60 : 80} interval={isMobile ? 'preserveStartEnd' : 0} />
-                <YAxis tick={{ fontSize: 13, fontWeight: 600, fill: '#22c55e' }} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: { fontSize: 15, fontWeight: 600, fill: '#22c55e' } }} />
+                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={xAxisHeight} interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0} />
+                <YAxis tick={yAxisTickStyle} stroke="#22c55e"
+                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: yAxisLabelStyle }} />
                 <Tooltip />
                 <Legend
                   payload={[
@@ -397,8 +422,8 @@ export const HourlyOutputChart: React.FC<Props> = ({
                       ? [{ value: `Avg: ${activeMachine.average}`, type: 'line' as const, color: '#22c55e' }]
                       : []),
                   ]}
-                  wrapperStyle={{ fontSize: fitContainer ? '12px' : '14px', fontWeight: 600, paddingTop: 4 }}
-                  iconSize={fitContainer ? 14 : 18}
+                  wrapperStyle={{ fontSize: fitContainer ? '16px' : '14px', fontWeight: 700, paddingTop: 4 }}
+                  iconSize={fitContainer ? 20 : 18}
                 />
                 {activeMachine?.average ? (
                   <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5" ifOverflow="extendDomain" />
