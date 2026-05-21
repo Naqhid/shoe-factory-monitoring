@@ -69,6 +69,10 @@ INCOMING_DIR=E:/Florence-IOT/incoming
 SUCCESS_DIR=E:/Florence-IOT/success
 FAILURE_DIR=E:/Florence-IOT/failure
 LOGS_DIR=E:/Florence-IOT/logs
+
+# WIP daily auto-close (server local time) — sets closing_wip for next-day carry-forward
+WIP_AUTO_CLOSE_ENABLED=true
+WIP_AUTO_CLOSE_TIME=18:45
 ```
 
 ### **4. Start Backend**

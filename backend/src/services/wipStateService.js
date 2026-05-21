@@ -113,7 +113,7 @@ async function getOrInitWipState(workCentreId, date) {
 
     // 2. No row for today — check for a previous day's closing WIP
     const [previous] = await pool.query(
-        `SELECT closing_wip
+        `SELECT closing_wip, current_wip, is_closed
          FROM wip_daily_state
          WHERE work_centre_id = ?
            AND state_date < ?
@@ -125,8 +125,11 @@ async function getOrInitWipState(workCentreId, date) {
     let openingWip;
 
     if (previous.length > 0) {
-        // Normal day-over-day carry-forward
-        openingWip = Math.round(Number(previous[0].closing_wip || 0));
+        // Carry-forward: prefer formal close; if day was not closed, use live current_wip
+        const prev = previous[0];
+        openingWip = prev.is_closed
+            ? Math.round(Number(prev.closing_wip || 0))
+            : Math.round(Number(prev.current_wip ?? prev.closing_wip ?? 0));
     } else {
         // Bootstrap: first time this feature runs.
         // We want current_wip to equal INITIAL_OPENING_WIP regardless of how
