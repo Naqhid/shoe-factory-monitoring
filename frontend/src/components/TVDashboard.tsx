@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Smile, Frown, Meh, TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen } from 'lucide-react';
+import { Smile, TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
@@ -436,7 +436,7 @@ export const TVDashboard: React.FC = () => {
                         {/* ── Input % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-sky-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input %</div>
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input efficiency %</div>
                             <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${overallInputPercent >= 90 ? 'text-green-300' : overallInputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {overallInputPercent}%
                             </div>
@@ -450,7 +450,7 @@ export const TVDashboard: React.FC = () => {
                         {/* ── Output % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Activity className="h-4 w-4 sm:h-7 sm:w-7 text-purple-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output %</div>
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output efficiency %</div>
                             <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {topSection.outputPercent}%
                             </div>
@@ -464,8 +464,8 @@ export const TVDashboard: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    {/* ── Performance emoji — shown below KPI row ── */}
-                    <div className="flex justify-center mt-1.5 sm:mt-2">
+                    {/* ── Performance emoji — shown below KPI row (disabled) ── */}
+                    {/* <div className="flex justify-center mt-1.5 sm:mt-2">
                         {topSection.showHappyEmoji ? (
                             <Smile className="h-6 w-6 sm:h-10 sm:w-10 text-green-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" />
                         ) : topSection.showMediumEmoji ? (
@@ -473,7 +473,7 @@ export const TVDashboard: React.FC = () => {
                         ) : (
                             <Frown className="h-6 w-6 sm:h-10 sm:w-10 text-red-300 drop-shadow-lg motion-safe:animate-tv-breathe motion-reduce:animate-none" style={{ animationDelay: '0.2s' }} />
                         )}
-                    </div>
+                    </div> */}
                 </div>
             </div>
 
