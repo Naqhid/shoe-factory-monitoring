@@ -31,6 +31,25 @@ interface Props {
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
 
+type ChartLegendItem = { label: string; color: string; dashed?: boolean };
+
+const TvChartLegend: React.FC<{ items: ChartLegendItem[] }> = ({ items }) => (
+  <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-2 py-2 flex-shrink-0 border-t border-slate-100 bg-white">
+    {items.map((item) => (
+      <span
+        key={item.label}
+        className="inline-flex items-center gap-2 text-sm sm:text-[15px] font-bold text-slate-700 whitespace-nowrap"
+      >
+        <span
+          className={`inline-block w-9 h-1 rounded-full ${item.dashed ? 'border-t-[3px] border-dashed bg-transparent' : ''}`}
+          style={item.dashed ? { borderColor: item.color } : { backgroundColor: item.color }}
+        />
+        {item.label}
+      </span>
+    ))}
+  </div>
+);
+
 export const HourlyOutputChart: React.FC<Props> = ({
   workCentreId, workCentreName, showProgress = false, progress = 0, date, fitContainer = false, hideTitle = false
 }) => {
@@ -155,27 +174,34 @@ export const HourlyOutputChart: React.FC<Props> = ({
   const tvAxisTickSize = fitContainer ? 22 : 13;
   const tvAxisTickWeight = fitContainer ? 800 : 600;
 
-  const CustomTick = ({ x, y, payload }: any) => {
+  const shortenHourLabel = (text: string) => {
+    if (!text.includes(' - ')) {
+      return text.replace(':00', '').replace(/\s*(AM|PM)/gi, '').trim();
+    }
+    const [from, to] = text.split(' - ');
+    const hourNum = (part: string) => {
+      const m = part.trim().match(/^(\d{1,2})/);
+      return m ? m[1] : part.replace(/\s*(AM|PM)/gi, '').trim();
+    };
+    return `${hourNum(from)}-${hourNum(to)}`;
+  };
+
+  const CustomTick = ({ x, y, payload, index, visibleTicksCount }: any) => {
     const text: string = payload.value || '';
     // In fitContainer (TV) mode: show short label horizontally to avoid clipping
     if (fitContainer) {
-      // Convert "9 AM - 10 AM" → "9-10" or "9:00" → "9"
-      let short = text;
-      if (text.includes(' - ')) {
-        const [from, to] = text.split(' - ');
-        const fromH = from.replace(' AM', '').replace(' PM', '').trim();
-        const toH = to.replace(' AM', '').replace(' PM', '').trim();
-        short = `${fromH}-${toH}`;
-      } else {
-        short = text.replace(':00', '').replace(' ', '');
-      }
+      const short = shortenHourLabel(text);
+      const tickCount = visibleTicksCount ?? 1;
+      const isFirst = index === 0;
+      const isLast = tickCount > 1 && index === tickCount - 1;
+      const textAnchor = isFirst ? 'start' : isLast ? 'end' : 'middle';
       return (
         <g transform={`translate(${x},${y})`}>
           <text
             x={0}
             y={0}
             dy={20}
-            textAnchor="middle"
+            textAnchor={textAnchor}
             fill="#1e3a8a"
             fontSize={tvAxisTickSize}
             fontWeight={tvAxisTickWeight}
@@ -259,23 +285,35 @@ export const HourlyOutputChart: React.FC<Props> = ({
       : 0;
 
   const chartMargin = fitContainer
-    ? { top: 40, right: 16, left: 12, bottom: 52 }
+    ? { top: 40, right: 20, left: 28, bottom: 52 }
     : { top: 42, right: 20, left: 20, bottom: 64 };
 
   const xAxisHeight = fitContainer ? 56 : (isMobile ? 60 : 80);
+  const yAxisWidth = 56;
   const yAxisTickStyle = {
     fontSize: tvAxisTickSize,
     fontWeight: tvAxisTickWeight,
     fill: '#15803d',
   };
   const yAxisLabelStyle = {
-    fontSize: fitContainer ? 18 : 15,
+    fontSize: 15,
     fontWeight: tvAxisTickWeight,
     fill: '#15803d',
+    textAnchor: 'middle' as const,
   };
+  /** TV: hide Y-axis ticks (12, 6, 28…) — values already on point labels; keep axis for scale only */
+  const yAxisProps = fitContainer
+    ? { hide: true, width: 0 }
+    : {
+        tick: yAxisTickStyle,
+        stroke: '#22c55e',
+        width: yAxisWidth,
+        tickMargin: 8,
+        label: { value: 'Pairs', angle: -90, position: 'insideLeft' as const, style: yAxisLabelStyle },
+      };
 
   const lineChartLegendPayload = [
-    { value: 'Hourly Production', type: 'line' as const, color: '#3b82f6' },
+    { value: fitContainer ? 'Hourly Production (pairs)' : 'Hourly Production', type: 'line' as const, color: '#3b82f6' },
     ...(lineData?.target
       ? [{ value: `Target: ${lineData.target}`, type: 'line' as const, color: '#f97316' }]
       : []),
@@ -283,6 +321,22 @@ export const HourlyOutputChart: React.FC<Props> = ({
       ? [{ value: `Avg: ${lineData.average}`, type: 'line' as const, color: '#22c55e' }]
       : []),
   ];
+
+  const tvLegendItems: ChartLegendItem[] =
+    viewMode === 'line' && lineData
+      ? [
+          { label: 'Hourly Production (pairs)', color: '#3b82f6' },
+          ...(lineData.target ? [{ label: `Target: ${lineData.target}`, color: '#f97316', dashed: true }] : []),
+          ...(lineData.average ? [{ label: `Avg: ${lineData.average}`, color: '#22c55e', dashed: true }] : []),
+        ]
+      : activeMachine
+        ? [
+            { label: `${activeMachine.machine_name} (pairs)`, color: '#3b82f6' },
+            ...(activeMachine.average
+              ? [{ label: `Avg: ${activeMachine.average}`, color: '#22c55e', dashed: true }]
+              : []),
+          ]
+        : [];
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
@@ -369,15 +423,23 @@ export const HourlyOutputChart: React.FC<Props> = ({
             {viewMode === 'line' ? (
               <LineChart data={chartDataLine} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={xAxisHeight} interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0} />
-                <YAxis tick={yAxisTickStyle} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: yAxisLabelStyle }} />
-                <Tooltip />
-                <Legend
-                  payload={lineChartLegendPayload}
-                  wrapperStyle={{ fontSize: fitContainer ? '16px' : '14px', fontWeight: 700, paddingTop: 4 }}
-                  iconSize={fitContainer ? 20 : 18}
+                <XAxis
+                  dataKey="hour"
+                  tick={<CustomTick />}
+                  stroke="#3b82f6"
+                  height={xAxisHeight}
+                  interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0}
+                  padding={fitContainer ? { left: 28, right: 20 } : undefined}
                 />
+                <YAxis {...yAxisProps} />
+                <Tooltip />
+                {!fitContainer && (
+                  <Legend
+                    payload={lineChartLegendPayload}
+                    wrapperStyle={{ fontSize: '14px', fontWeight: 700, paddingTop: 4 }}
+                    iconSize={18}
+                  />
+                )}
                 {lineData?.target ? (
                   <ReferenceLine y={lineData.target} stroke="#f97316" strokeWidth={3} ifOverflow="extendDomain" />
                 ) : null}
@@ -385,7 +447,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
                   <ReferenceLine y={lineData.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5" ifOverflow="extendDomain" />
                 ) : null}
                 <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={4}
-                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name="Hourly Production"
+                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name={fitContainer ? 'Hourly Production (pairs)' : 'Hourly Production'}
                   isAnimationActive={false}>
                   <LabelList dataKey="production" content={TvLineProductionLabel} />
                 </Line>
@@ -393,11 +455,19 @@ export const HourlyOutputChart: React.FC<Props> = ({
             ) : selectedMachine === 'all' ? (
               <LineChart data={chartDataMachineAll} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={xAxisHeight} interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0} />
-                <YAxis tick={yAxisTickStyle} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: yAxisLabelStyle }} />
+                <XAxis
+                  dataKey="hour"
+                  tick={<CustomTick />}
+                  stroke="#3b82f6"
+                  height={xAxisHeight}
+                  interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0}
+                  padding={fitContainer ? { left: 28, right: 20 } : undefined}
+                />
+                <YAxis {...yAxisProps} />
                 <Tooltip />
-                <Legend wrapperStyle={{ fontSize: fitContainer ? '16px' : '14px', fontWeight: 700 }} iconSize={fitContainer ? 20 : 16} />
+                {!fitContainer && (
+                  <Legend wrapperStyle={{ fontSize: '14px', fontWeight: 700 }} iconSize={16} />
+                )}
                 {machineData.map((m, i) => (
                   <Line key={m.machine_id} type="monotone" dataKey={m.machine_id}
                     stroke={COLORS[i % COLORS.length]} strokeWidth={3}
@@ -411,20 +481,28 @@ export const HourlyOutputChart: React.FC<Props> = ({
             ) : (
               <LineChart data={chartDataMachineSingle} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="hour" tick={<CustomTick />} stroke="#3b82f6" height={xAxisHeight} interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0} />
-                <YAxis tick={yAxisTickStyle} stroke="#22c55e"
-                  label={{ value: 'Pairs', angle: -90, position: 'insideLeft', style: yAxisLabelStyle }} />
-                <Tooltip />
-                <Legend
-                  payload={[
-                    { value: `${activeMachine?.machine_name ?? 'Machine'} Output`, type: 'line', color: '#3b82f6' },
-                    ...(activeMachine?.average
-                      ? [{ value: `Avg: ${activeMachine.average}`, type: 'line' as const, color: '#22c55e' }]
-                      : []),
-                  ]}
-                  wrapperStyle={{ fontSize: fitContainer ? '16px' : '14px', fontWeight: 700, paddingTop: 4 }}
-                  iconSize={fitContainer ? 20 : 18}
+                <XAxis
+                  dataKey="hour"
+                  tick={<CustomTick />}
+                  stroke="#3b82f6"
+                  height={xAxisHeight}
+                  interval={isMobile && !fitContainer ? 'preserveStartEnd' : 0}
+                  padding={fitContainer ? { left: 28, right: 20 } : undefined}
                 />
+                <YAxis {...yAxisProps} />
+                <Tooltip />
+                {!fitContainer && (
+                  <Legend
+                    payload={[
+                      { value: `${activeMachine?.machine_name ?? 'Machine'} Output`, type: 'line', color: '#3b82f6' },
+                      ...(activeMachine?.average
+                        ? [{ value: `Avg: ${activeMachine.average}`, type: 'line' as const, color: '#22c55e' }]
+                        : []),
+                    ]}
+                    wrapperStyle={{ fontSize: '14px', fontWeight: 700, paddingTop: 4 }}
+                    iconSize={18}
+                  />
+                )}
                 {activeMachine?.average ? (
                   <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="5 5" ifOverflow="extendDomain" />
                 ) : null}
@@ -437,6 +515,10 @@ export const HourlyOutputChart: React.FC<Props> = ({
             )}
           </ResponsiveContainer>
           </div>
+
+          {fitContainer && !noData && tvLegendItems.length > 0 && (
+            <TvChartLegend items={tvLegendItems} />
+          )}
 
           {/* Summary cards */}
           {viewMode === 'line' && lineData && !fitContainer && (
