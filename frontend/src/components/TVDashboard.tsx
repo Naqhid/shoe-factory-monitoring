@@ -84,8 +84,8 @@ export const TVDashboard: React.FC = () => {
             <div
                 key={`${kind}-${index}-${item.machine_centre_name}-${item.start_time || item.idle_start_time || ''}`}
                 className={[
-                    'w-full max-w-full self-stretch rounded-lg border-2 border-l-[6px] ring-2 shadow-lg flex flex-col min-h-0 overflow-hidden',
-                    soloOnSlide ? 'flex-1 justify-center px-3 py-3 sm:px-4 sm:py-4' : compactOnSlide ? 'flex-1 basis-0 min-h-0 px-2.5 py-2' : 'flex-1 px-2.5 py-2.5',
+                    'w-full max-w-full self-stretch rounded-lg border-2 border-l-[6px] ring-2 shadow-lg flex flex-col min-h-0',
+                    soloOnSlide ? 'flex-1 justify-center px-3 py-3 sm:px-4 sm:py-4' : compactOnSlide ? 'flex-1 min-h-0 px-2 py-1.5' : 'flex-1 px-2.5 py-2.5',
                     cardTheme.shell,
                     cardTheme.accent,
                     isLive
@@ -96,11 +96,11 @@ export const TVDashboard: React.FC = () => {
                 ].join(' ')}
             >
                 <div
-                    className={`flex flex-col items-center justify-center text-center w-full min-h-0 ${
-                        compactOnSlide ? 'gap-1 py-0.5' : soloOnSlide ? 'gap-2' : 'gap-1.5'
+                    className={`flex flex-col items-center justify-center text-center w-full min-h-0 flex-1 ${
+                        compactOnSlide ? 'gap-0.5 overflow-y-auto overscroll-contain' : soloOnSlide ? 'gap-2' : 'gap-1.5'
                     }`}
                 >
-                    <div className="flex flex-wrap items-center justify-center gap-1">
+                    <div className="flex flex-wrap items-center justify-center gap-1 shrink-0">
                         {isLive && (
                             <span
                                 className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-white ${cardTheme.live}`}
@@ -114,29 +114,33 @@ export const TVDashboard: React.FC = () => {
                         >
                             {badgeLabel}
                         </span>
+                        {!compactOnSlide && (
+                            <Icon className={`h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 ${cardTheme.icon}`} aria-hidden />
+                        )}
                     </div>
-                    <Icon
-                        className={`${compactOnSlide ? 'h-4 w-4' : 'h-5 w-5'} flex-shrink-0 ${cardTheme.icon}`}
-                        aria-hidden
-                    />
-                    <div className={`font-extrabold line-clamp-2 w-full ${cardTheme.title} ${titleSize}`}>
+                    <div
+                        className={`font-extrabold shrink-0 w-full ${cardTheme.title} ${titleSize} ${
+                            compactOnSlide ? 'line-clamp-1' : 'line-clamp-2'
+                        }`}
+                    >
                         {item.machine_centre_name}
                     </div>
+                    {detail ? (
+                        <div
+                            className={`font-bold shrink-0 w-full leading-snug ${cardTheme.detail} ${detailSize} line-clamp-3`}
+                            title={detail}
+                        >
+                            {detail}
+                        </div>
+                    ) : null}
                     {lineTimeLabel ? (
                         <div
-                            className={`w-full rounded-md px-2 py-1 font-extrabold tabular-nums ${cardTheme.timeChip} ${chipSize}`}
+                            className={`shrink-0 w-full rounded-md px-2 py-0.5 sm:py-1 font-extrabold tabular-nums ${cardTheme.timeChip} ${chipSize}`}
                         >
                             <span className="flex items-center justify-center gap-1">
                                 <Clock className={`${compactOnSlide ? 'h-2.5 w-2.5' : 'h-3 w-3'} shrink-0 opacity-80`} aria-hidden />
                                 <span className="break-words">{lineTimeLabel}</span>
                             </span>
-                        </div>
-                    ) : null}
-                    {detail ? (
-                        <div
-                            className={`font-bold w-full ${cardTheme.detail} ${detailSize} ${compactOnSlide ? 'line-clamp-1' : 'line-clamp-2'}`}
-                        >
-                            {detail}
                         </div>
                     ) : null}
                 </div>
@@ -164,8 +168,7 @@ export const TVDashboard: React.FC = () => {
 
     const DETAIL_CAROUSEL_SLIDES = 2;
     const DETAIL_CAROUSEL_MS = 30000;
-    const STOPPAGE_ITEMS_PER_SLIDE = 2;
-    const STOPPAGE_CAROUSEL_MS = 25000;
+    const STOPPAGE_CAROUSEL_MS = 15000;
 
     const bottleneckList = dashboardData?.lowerSection?.bottlenecks ?? [];
     const breakdownList = dashboardData?.lowerSection?.breakdowns ?? [];
@@ -181,18 +184,27 @@ export const TVDashboard: React.FC = () => {
         });
     }, [dashboardData]);
 
+    const stoppageItemsPerSlide = useMemo(() => {
+        if (mergedStoppageEvents.length === 0) return 2;
+        const maxDetailLen = Math.max(
+            0,
+            ...mergedStoppageEvents.map((e) => formatStoppageDetail(e.detail).length)
+        );
+        return maxDetailLen > 22 ? 1 : 2;
+    }, [mergedStoppageEvents]);
+
     const stoppageSlideCount = mergedStoppageEvents.length === 0
         ? 1
-        : Math.ceil(mergedStoppageEvents.length / STOPPAGE_ITEMS_PER_SLIDE);
+        : Math.ceil(mergedStoppageEvents.length / stoppageItemsPerSlide);
 
     const stoppageSlides = useMemo(() => {
         if (mergedStoppageEvents.length === 0) return [];
         const slides: typeof mergedStoppageEvents[] = [];
-        for (let i = 0; i < mergedStoppageEvents.length; i += STOPPAGE_ITEMS_PER_SLIDE) {
-            slides.push(mergedStoppageEvents.slice(i, i + STOPPAGE_ITEMS_PER_SLIDE));
+        for (let i = 0; i < mergedStoppageEvents.length; i += stoppageItemsPerSlide) {
+            slides.push(mergedStoppageEvents.slice(i, i + stoppageItemsPerSlide));
         }
         return slides;
-    }, [mergedStoppageEvents]);
+    }, [mergedStoppageEvents, stoppageItemsPerSlide]);
 
     useEffect(() => {
         const now = new Date();
@@ -822,7 +834,7 @@ export const TVDashboard: React.FC = () => {
                                                 renderStoppageCard(
                                                     item,
                                                     item.kind,
-                                                    slideIdx * STOPPAGE_ITEMS_PER_SLIDE + itemIdx,
+                                                    slideIdx * stoppageItemsPerSlide + itemIdx,
                                                     slide.length === 1,
                                                     slide.length > 1
                                                 )
