@@ -446,6 +446,10 @@ if (SESSION_CLEANUP_ENABLED) {
   logger.info('Mobile session history cleanup is disabled via MOBILE_SESSION_CLEANUP_ENABLED=false.');
 }
 
+// Daily WIP auto-close — sets closing_wip so next day opening carries forward
+const { startWipAutoCloseScheduler } = require('./services/wipAutoCloseService');
+startWipAutoCloseScheduler(logger);
+
 // Email alerts DISABLED - re-enable by uncommenting below code and setting EMAIL_USER/EMAIL_PASS in .env
 // Poll for un-emailed alerts every 5 minutes (catches DB-trigger-created alerts too)
 // const { sendAlertDigest } = require('./services/emailService');
