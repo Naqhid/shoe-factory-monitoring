@@ -160,7 +160,6 @@ const QRWaitScreen: React.FC<{
     qrCandidates: string[];
     onSessionActive: (empCode: string, sessionId?: string) => void;
 }> = ({ machineId, urlMachineId, qrCandidates, onSessionActive }) => {
-    const API_BASE = `${window.location.protocol}//${window.location.hostname}:3001`;
     const [machineName, setMachineName] = React.useState<string>('');
 
     React.useEffect(() => {
@@ -177,7 +176,7 @@ const QRWaitScreen: React.FC<{
             }
         };
         fetchMachineName();
-    }, [machineId, API_BASE]);
+    }, [machineId]);
 
     React.useEffect(() => {
         const interval = setInterval(async () => {

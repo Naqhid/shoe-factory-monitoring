@@ -101,17 +101,16 @@ exports.getDashboard = async (req, res) => {
             [today, workCentreId]
         );
 
-        // ── 2. Output (end-of-line) — UNCHANGED ──────────────────────────────
-        // For Line 2A (work_centre_id=5): use Machine 07 (Final Inspection) only.
-        // For all other lines: sum all machines.
+        // ── 2. Output (end-of-line) ───────────────────────────────────────────
+        // Line 3 (work_centre_id=5): EOL Final Inspection machine 07 (from production, then summary).
+        const finalOutput = await wipStateService.getEolOutput(Number(workCentreId), today);
+
         const [summaryData] = await pool.query(`
-            SELECT COALESCE(total_output_pairs, 0) as total_output
-                 , COALESCE(avg_efficiency_percent, 0) as eol_efficiency_percent
+            SELECT COALESCE(avg_efficiency_percent, 0) as eol_efficiency_percent
             FROM machine_centre_summary
             WHERE prod_date = ? AND work_centre_id = ? AND machine_id = '07'
             LIMIT 1
         `, [today, workCentreId]);
-        const finalOutput = summaryData[0]?.total_output || 0;
 
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
@@ -199,43 +198,66 @@ exports.getDashboard = async (req, res) => {
             ORDER BY hour
         `, [workCentreId, today]);
 
-        // ── 8. Bottlenecks ────────────────────────────────────────────────────
-        // NOTE: Bottleneck WIP is informational only — uses the same MES formula
-        // but simplified (no per-machine opening WIP tracking needed here).
-        const [bottlenecks] = await pool.query(`
+        // ── 8. Bottleneck & breakdown events (supervisor-logged + active machine stops) ──
+        const stoppageEventSelect = `
             SELECT
                 mc.name AS machine_centre_name,
                 wc.name AS work_centre_name,
-                0 AS efficiency,
-                0 AS output,
                 mb.start_time,
                 mb.finish_time,
+                mb.idle_start_time,
                 mb.stoppage_reason AS detail,
-                1 AS type
+                mb.button_status
+        `;
+
+        const [bottlenecks] = await pool.query(`
+            ${stoppageEventSelect}
             FROM machine_centre_production mb
             JOIN machine_centres mc
               ON mc.machine_id = mb.machine_id
               AND mc.work_centre_id = mb.work_centre_id
             JOIN work_centres wc ON wc.id = mb.work_centre_id
-            JOIN (
-                SELECT machine_id, work_centre_id, MAX(start_time) AS latest_start
-                FROM machine_centre_production
-                WHERE work_centre_id = ?
-                  AND DATE(prod_date) = ?
-                  AND button_status = 2
-                  AND stoppage_reason LIKE 'BOTTLENECK:%'
-                GROUP BY machine_id, work_centre_id
-            ) latest
-              ON latest.machine_id = mb.machine_id
-              AND latest.work_centre_id = mb.work_centre_id
-              AND mb.start_time = latest.latest_start
             WHERE mb.work_centre_id = ?
               AND DATE(mb.prod_date) = ?
-              AND mb.button_status = 2
-              AND mb.stoppage_reason LIKE 'BOTTLENECK:%'
-            ORDER BY mb.start_time ASC
-            LIMIT 3
-        `, [workCentreId, today, workCentreId, today]);
+              AND (
+                  (mb.button_status = 1
+                   AND mb.idle_start_time IS NOT NULL
+                   AND mb.idle_stop_time IS NULL
+                   AND mb.stoppage_reason LIKE 'BOTTLENECK:%')
+                  OR (mb.button_status = 2
+                      AND mb.stoppage_reason LIKE 'BOTTLENECK:%'
+                      AND LOWER(mb.stoppage_reason) NOT LIKE '%breakdown%')
+              )
+            ORDER BY COALESCE(mb.idle_start_time, mb.start_time) DESC
+        `, [workCentreId, today]);
+
+        const [breakdowns] = await pool.query(`
+            ${stoppageEventSelect}
+            FROM machine_centre_production mb
+            JOIN machine_centres mc
+              ON mc.machine_id = mb.machine_id
+              AND mc.work_centre_id = mb.work_centre_id
+            JOIN work_centres wc ON wc.id = mb.work_centre_id
+            WHERE mb.work_centre_id = ?
+              AND DATE(mb.prod_date) = ?
+              AND (
+                  (mb.button_status = 1
+                   AND mb.idle_start_time IS NOT NULL
+                   AND mb.idle_stop_time IS NULL
+                   AND (
+                       LOWER(mb.stoppage_reason) LIKE '%breakdown%'
+                       OR mb.stoppage_reason LIKE 'BREAKDOWN:%'
+                   ))
+                  OR (mb.button_status = 2
+                      AND (
+                          mb.stoppage_reason LIKE 'BREAKDOWN:%'
+                          OR LOWER(mb.stoppage_reason) LIKE '%machine breakdown%'
+                          OR (mb.stoppage_reason LIKE 'BOTTLENECK:%'
+                              AND LOWER(mb.stoppage_reason) LIKE '%breakdown%')
+                      ))
+              )
+            ORDER BY COALESCE(mb.idle_start_time, mb.start_time) DESC
+        `, [workCentreId, today]);
 
         // ── 9. Line Performance with MES WIP ─────────────────────────────────
         // Fetch raw line data first, then enrich with MES WIP per line.
@@ -348,6 +370,7 @@ exports.getDashboard = async (req, res) => {
                 lowerSection: {
                     hourlyData: hourlyData,
                     bottlenecks: bottlenecks,
+                    breakdowns: breakdowns,
                     linePerformance,
                     workCentreName: wcData[0]?.name || 'N/A'
                 }

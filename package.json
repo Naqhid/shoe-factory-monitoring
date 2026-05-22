@@ -1,6 +1,12 @@
 {
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "build": "npm run build --prefix frontend",
+    "start": "npm start --prefix backend",
+    "start:prod": "npm run build --prefix frontend && npm start --prefix backend",
+    "dev:backend": "npm start --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev": "concurrently -n api,web \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:legacy": "vite --host 0.0.0.0",
     "tunnel:login": "cloudflared\\cloudflared.exe tunnel login",
     "tunnel:create": "cloudflared\\cloudflared.exe tunnel create shoe-factory",
     "tunnel:route": "cloudflared\\cloudflared.exe tunnel route dns shoe-factory shoe-factory.yourdomain.com",

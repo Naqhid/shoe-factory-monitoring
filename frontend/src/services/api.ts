@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { MachineStatus, RunIdleData, HourlyData, OverallEfficiency, ApiResponse } from '../types';
 
-const defaultApiBaseUrl = `${window.location.protocol}//${window.location.hostname}:3001`;
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl;
+/** Same host/port as the page (production: one server). Override with VITE_API_BASE_URL for split dev servers. */
+const defaultApiBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE_URL =
+  configuredApiBase && String(configuredApiBase).trim().length > 0
+    ? String(configuredApiBase).replace(/\/$/, '')
+    : defaultApiBaseUrl;
 const API_BASE = `${API_BASE_URL}/api`;
 
 type RefreshOutcome =
