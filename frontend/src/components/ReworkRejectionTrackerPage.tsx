@@ -4,7 +4,6 @@ import { Save, Calendar, Building, Cpu, Loader2, Edit, Trash2, X, Check } from '
 import toast from 'react-hot-toast';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
-import { StoppageEntryTab } from './StoppageEntryTab';
 
 interface ReworkData {
   emp_id: string;
@@ -30,6 +29,21 @@ interface SavedRecord {
   reason: string;
   saved_at: string;
   production_date: string;
+}
+
+interface BottleneckEntry {
+  id: number;
+  prod_date: string;
+  work_centre_id: number;
+  work_centre_name?: string;
+  machine_id: string;
+  machine_name?: string;
+  emp_id: string;
+  employee_name?: string;
+  start_time: string;
+  finish_time: string;
+  stoppage_reason?: string;
+  created_at: string;
 }
 
 interface WorkCentre {
@@ -72,15 +86,23 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRow, setEditRow] = useState<Partial<SavedRecord>>({});
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'rework_rejection' | 'bottleneck' | 'breakdown'>('rework_rejection');
+  const [activeTab, setActiveTab] = useState<'rework_rejection' | 'bottleneck'>('rework_rejection');
+  const [bottleneckEntries, setBottleneckEntries] = useState<BottleneckEntry[]>([]);
+  const [bottleneckLoading, setBottleneckLoading] = useState(false);
+  const [bottleneckModalOpen, setBottleneckModalOpen] = useState(false);
+  const [bottleneckEditId, setBottleneckEditId] = useState<number | null>(null);
+  const [bottleneckForm, setBottleneckForm] = useState({
+    machineId: '',
+    empId: '',
+    startTime: '08:00',
+    finishTime: '08:15',
+    reason: '',
+  });
+  const [bottleneckAuditReason, setBottleneckAuditReason] = useState('');
+  const [bottleneckSaving, setBottleneckSaving] = useState(false);
+  const [bottleneckDeleteId, setBottleneckDeleteId] = useState<number | null>(null);
+  const [bottleneckDeleteReason, setBottleneckDeleteReason] = useState('');
   const navigate = useNavigate();
-
-  const effectiveWorkCentreId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
-  const workCentreDisplayName = effectiveWorkCentreId
-    ? isSupervisor
-      ? String(userInfo?.work_centre_name || supervisorWorkCentreId)
-      : workCentres.find((wc) => String(wc.id) === effectiveWorkCentreId)?.name || 'selected work centre'
-    : '';
 
   const reasonCategories = [
     { value: '', label: 'Select Category' },
@@ -123,6 +145,12 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   }, [selectedMachineCentre, selectedDate]);
 
   useEffect(() => {
+    if (activeTab === 'bottleneck' && selectedWorkCentre && selectedDate) {
+      fetchBottleneckEntries();
+    }
+  }, [activeTab, selectedWorkCentre, selectedDate, selectedMachineCentre]);
+
+  useEffect(() => {
     const fetchMachineCentres = async () => {
       try {
         const response = await apiFetch(`${API_BASE_URL}/api/masters/machine_centres`);
@@ -160,6 +188,36 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
     }
   };
 
+  const fetchBottleneckEntries = async () => {
+    const wcId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
+    if (!wcId || !selectedDate) return;
+    setBottleneckLoading(true);
+    try {
+      const query = new URLSearchParams({
+        date: selectedDate,
+        work_centre_id: String(wcId),
+        type: 'bottleneck',
+        limit: '200',
+      });
+      if (selectedMachineCentre) {
+        const machine = machineCentres.find((mc) => mc.name === selectedMachineCentre);
+        if (machine?.machine_id) query.set('machine_id', machine.machine_id);
+      }
+      const response = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry?${query.toString()}`);
+      const result = await response.json();
+      if (result.success) {
+        setBottleneckEntries(result.data || []);
+      } else {
+        toast.error(result.message || 'Failed to load bottleneck entries');
+      }
+    } catch (error) {
+      console.error('Error fetching bottleneck entries:', error);
+      toast.error('Failed to load bottleneck entries');
+    } finally {
+      setBottleneckLoading(false);
+    }
+  };
+
   const fetchProductionData = async () => {
     if (!selectedDate || !selectedWorkCentre) {
       toast.error('Please select date and work centre');
@@ -193,6 +251,145 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
       toast.error('Failed to load production data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const parseTimeValue = (value?: string) => {
+    if (!value) return '';
+    return String(value).replace(' ', 'T').split('T')[1]?.slice(0, 5) || '';
+  };
+
+  const resetBottleneckForm = () => {
+    setBottleneckEditId(null);
+    setBottleneckForm({ machineId: '', empId: '', startTime: '08:00', finishTime: '08:15', reason: '' });
+    setBottleneckAuditReason('');
+  };
+
+  const openBottleneckModal = (entry?: BottleneckEntry) => {
+    if (entry) {
+      setBottleneckEditId(entry.id);
+      setBottleneckForm({
+        machineId: entry.machine_id,
+        empId: entry.emp_id,
+        startTime: parseTimeValue(entry.start_time),
+        finishTime: parseTimeValue(entry.finish_time),
+        reason: String(entry.stoppage_reason || '')
+          .replace(/^BOTTLENECK:/i, '')
+          .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
+          .trim(),
+      });
+      setBottleneckAuditReason('');
+    } else {
+      resetBottleneckForm();
+    }
+    setBottleneckModalOpen(true);
+  };
+
+  const saveBottleneckEntry = async () => {
+    const wcId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
+    if (!wcId || !selectedDate) {
+      toast.error('Please select date and work centre');
+      return;
+    }
+    const { machineId, empId, startTime, finishTime, reason } = bottleneckForm;
+    if (!machineId) {
+      toast.error('Please select a machine');
+      return;
+    }
+    if (!empId.trim()) {
+      toast.error('Please enter the operator code');
+      return;
+    }
+    if (!startTime || !finishTime) {
+      toast.error('Please select start and end times');
+      return;
+    }
+    if (finishTime <= startTime) {
+      toast.error('Finish time must be after start time');
+      return;
+    }
+    if (!reason.trim()) {
+      toast.error('Please enter M4 analysis details');
+      return;
+    }
+
+    const payload: any = {
+      prod_date: selectedDate,
+      work_centre_id: Number(wcId),
+      machine_id: machineId,
+      emp_id: empId.trim(),
+      start_time: `${selectedDate}T${startTime}:00`,
+      finish_time: `${selectedDate}T${finishTime}:00`,
+      target_mins: 0,
+      output_pairs: 0,
+      stoppage_reason: reason.trim(),
+      entry_type: 'bottleneck',
+      approved_by: userInfo?.username || userInfo?.name || userInfo?.email || userInfo?.id || null,
+    };
+    if (bottleneckEditId) {
+      if (!bottleneckAuditReason.trim()) {
+        toast.error('Please enter an audit reason for edits');
+        return;
+      }
+      payload.audit_reason = bottleneckAuditReason.trim();
+    }
+
+    setBottleneckSaving(true);
+    try {
+      const url = bottleneckEditId
+        ? `${API_BASE_URL}/api/mobile-production/manual-entry/${bottleneckEditId}`
+        : `${API_BASE_URL}/api/mobile-production/manual-entry`;
+      const response = await apiFetch(url, {
+        method: bottleneckEditId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!result.success) {
+        toast.error(result.message || 'Failed to save bottleneck entry');
+        return;
+      }
+      toast.success(bottleneckEditId ? 'Bottleneck entry updated' : 'Bottleneck entry created');
+      setBottleneckModalOpen(false);
+      resetBottleneckForm();
+      await fetchBottleneckEntries();
+    } catch (error) {
+      console.error('Error saving bottleneck entry:', error);
+      toast.error('Failed to save bottleneck entry');
+    } finally {
+      setBottleneckSaving(false);
+    }
+  };
+
+  const handleEditBottleneck = (entry: BottleneckEntry) => {
+    openBottleneckModal(entry);
+  };
+
+  const handleDeleteBottleneck = async (entry: BottleneckEntry) => {
+    const reason = window.prompt('Enter delete reason for this bottleneck entry');
+    if (!reason || !reason.trim()) {
+      toast.error('Delete reason is required');
+      return;
+    }
+    setBottleneckSaving(true);
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/${entry.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audit_reason: reason.trim() }),
+      });
+      const result = await response.json();
+      if (!result.success) {
+        toast.error(result.message || 'Failed to delete bottleneck entry');
+        return;
+      }
+      toast.success('Bottleneck entry deleted');
+      await fetchBottleneckEntries();
+    } catch (error) {
+      console.error('Error deleting bottleneck entry:', error);
+      toast.error('Failed to delete bottleneck entry');
+    } finally {
+      setBottleneckSaving(false);
     }
   };
 
@@ -340,13 +537,6 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
             className={`px-4 py-2 rounded-md text-sm font-semibold ${activeTab === 'bottleneck' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
           >
             Bottleneck
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('breakdown')}
-            className={`px-4 py-2 rounded-md text-sm font-semibold ${activeTab === 'breakdown' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-          >
-            Breakdown
           </button>
         </div>
       </div>
@@ -510,33 +700,93 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
       )}
 
       {activeTab === 'bottleneck' && (
-        <StoppageEntryTab
-          entryKind="bottleneck"
-          selectedDate={selectedDate}
-          selectedWorkCentre={selectedWorkCentre}
-          selectedMachineCentre={selectedMachineCentre}
-          machineCentres={machineCentres}
-          workCentres={workCentres}
-          isSupervisor={isSupervisor}
-          supervisorWorkCentreId={supervisorWorkCentreId}
-          userInfo={userInfo}
-          workCentreDisplayName={workCentreDisplayName}
-        />
-      )}
+        <>
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Bottleneck</h2>
+              <p className="text-gray-600">Add, edit, and remove bottleneck events for the selected work centre and date.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openBottleneckModal()}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+            >
+              Add Bottleneck Entry
+            </button>
+          </div>
 
-      {activeTab === 'breakdown' && (
-        <StoppageEntryTab
-          entryKind="breakdown"
-          selectedDate={selectedDate}
-          selectedWorkCentre={selectedWorkCentre}
-          selectedMachineCentre={selectedMachineCentre}
-          machineCentres={machineCentres}
-          workCentres={workCentres}
-          isSupervisor={isSupervisor}
-          supervisorWorkCentreId={supervisorWorkCentreId}
-          userInfo={userInfo}
-          workCentreDisplayName={workCentreDisplayName}
-        />
+          <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+            <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Bottleneck Entries</h3>
+                <p className="text-sm text-gray-600">Showing entries for {selectedWorkCentre ? (isSupervisor ? userInfo?.work_centre_name : workCentres.find((wc) => String(wc.id) === selectedWorkCentre)?.name || 'selected work centre') : 'no work centre selected'} on {selectedDate}</p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchBottleneckEntries}
+                className="bg-gray-100 text-gray-700 px-3 py-2 rounded-md hover:bg-gray-200"
+              >
+                Refresh
+              </button>
+            </div>
+            {bottleneckLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-3 text-gray-600">Loading bottleneck entries...</span>
+              </div>
+            ) : bottleneckEntries.length === 0 ? (
+              <div className="text-center py-10 text-gray-500">No bottleneck entries found for this date and work centre</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Machine</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Operator</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Start</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Finish</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">M4 Analysis</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {bottleneckEntries.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">{new Date(entry.prod_date).toLocaleDateString('en-GB')}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{entry.machine_id} {entry.machine_name ? `- ${entry.machine_name}` : ''}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{entry.emp_id}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{parseTimeValue(entry.start_time)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{parseTimeValue(entry.finish_time)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{String(entry.stoppage_reason || '').replace(/^BOTTLENECK:/i, '').replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')}</td>
+                        <td className="px-4 py-3 text-sm text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditBottleneck(entry)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Edit"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteBottleneck(entry)}
+                              className="text-red-600 hover:text-red-800"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {activeTab === 'rework_rejection' && (
@@ -665,6 +915,115 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
               </div>
             )}
           </div>
+      )}
+      {bottleneckModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{bottleneckEditId ? 'Edit Bottleneck Entry' : 'New Bottleneck Entry'}</h2>
+                <p className="text-sm text-gray-600">Save a bottleneck event with start/end timing and M4 analysis.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setBottleneckModalOpen(false);
+                  resetBottleneckForm();
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Machine Centre *</label>
+                <select
+                  value={bottleneckForm.machineId}
+                  onChange={(e) => setBottleneckForm((prev) => ({ ...prev, machineId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Machine</option>
+                  {machineCentres.map((mc) => (
+                    <option key={mc.id} value={mc.machine_id}>{mc.machine_id} - {mc.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Operator Code *</label>
+                <input
+                  type="text"
+                  value={bottleneckForm.empId}
+                  onChange={(e) => setBottleneckForm((prev) => ({ ...prev, empId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter operator code"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
+                <input
+                  type="time"
+                  value={bottleneckForm.startTime}
+                  onChange={(e) => setBottleneckForm((prev) => ({ ...prev, startTime: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Finish Time *</label>
+                <input
+                  type="time"
+                  value={bottleneckForm.finishTime}
+                  onChange={(e) => setBottleneckForm((prev) => ({ ...prev, finishTime: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">M4 Analysis *</label>
+                <textarea
+                  rows={4}
+                  value={bottleneckForm.reason}
+                  onChange={(e) => setBottleneckForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Describe the bottleneck event"
+                />
+              </div>
+              {bottleneckEditId && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Edit Reason *</label>
+                  <input
+                    type="text"
+                    value={bottleneckAuditReason}
+                    onChange={(e) => setBottleneckAuditReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Why are you editing this entry?"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setBottleneckModalOpen(false);
+                  resetBottleneckForm();
+                }}
+                className="px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveBottleneckEntry}
+                disabled={bottleneckSaving}
+                className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bottleneckSaving ? 'Saving...' : bottleneckEditId ? 'Update Entry' : 'Create Entry'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

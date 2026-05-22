@@ -5,8 +5,6 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "build:ui": "npm run build --prefix ../frontend",
-    "start:prod": "npm run build:ui && node src/app.js",
     "dev": "nodemon src/app.js",
     "setup-db": "node setup-db.js",
     "restore-db": "node scripts/restore-florence-from-env.js",

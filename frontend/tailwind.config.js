@@ -34,23 +34,12 @@ export default {
           '0%, 100%': { opacity: '0.08', transform: 'translate(0, 0) scale(1)' },
           '50%': { opacity: '0.14', transform: 'translate(8px, -4px) scale(1.05)' },
         },
-        /** TV sidebar: draw attention to active bottleneck/breakdown cards. */
-        'tv-stoppage-glow': {
-          '0%, 100%': { boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(220, 38, 38, 0.45)' },
-          '50%': { boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2), 0 0 0 4px rgba(220, 38, 38, 0.4)' },
-        },
-        'tv-stoppage-glow-bottleneck': {
-          '0%, 100%': { boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(234, 88, 12, 0.45)' },
-          '50%': { boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2), 0 0 0 4px rgba(234, 88, 12, 0.4)' },
-        },
       },
       animation: {
         'cycle-active-blink': 'cycle-active-blink 1.2s ease-in-out infinite',
         'tv-section-in': 'tv-section-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) both',
         'tv-breathe': 'tv-breathe 3.5s ease-in-out infinite',
         'tv-shimmer': 'tv-shimmer 8s ease-in-out infinite',
-        'tv-stoppage-glow': 'tv-stoppage-glow 2s ease-in-out infinite',
-        'tv-stoppage-glow-bottleneck': 'tv-stoppage-glow-bottleneck 2s ease-in-out infinite',
       },
     },
   },
