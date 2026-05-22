@@ -101,17 +101,16 @@ exports.getDashboard = async (req, res) => {
             [today, workCentreId]
         );
 
-        // ── 2. Output (end-of-line) — UNCHANGED ──────────────────────────────
-        // For Line 2A (work_centre_id=5): use Machine 07 (Final Inspection) only.
-        // For all other lines: sum all machines.
+        // ── 2. Output (end-of-line) ───────────────────────────────────────────
+        // Line 3 (work_centre_id=5): EOL Final Inspection machine 07 (from production, then summary).
+        const finalOutput = await wipStateService.getEolOutput(Number(workCentreId), today);
+
         const [summaryData] = await pool.query(`
-            SELECT COALESCE(total_output_pairs, 0) as total_output
-                 , COALESCE(avg_efficiency_percent, 0) as eol_efficiency_percent
+            SELECT COALESCE(avg_efficiency_percent, 0) as eol_efficiency_percent
             FROM machine_centre_summary
             WHERE prod_date = ? AND work_centre_id = ? AND machine_id = '07'
             LIMIT 1
         `, [today, workCentreId]);
-        const finalOutput = summaryData[0]?.total_output || 0;
 
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 

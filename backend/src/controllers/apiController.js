@@ -1,6 +1,50 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 
+/** Heel Grip = line input; EOL Final Inspection = line output (Line 3). */
+const HEEL_GRIP_MACHINE_ID = '03';
+const EOL_MACHINE_ID = '07';
+
+const SQL_LINE_INPUT_JOIN = `
+  LEFT JOIN (
+    SELECT work_centre_id, DATE(prod_date) AS prod_date, SUM(output_pairs) AS total_input
+    FROM machine_centre_production
+    WHERE machine_id = '${HEEL_GRIP_MACHINE_ID}' AND button_status = 2
+    GROUP BY work_centre_id, DATE(prod_date)
+  ) line_input ON line_input.work_centre_id = %WC% AND line_input.prod_date = %DATE%`;
+
+const SQL_LINE_EOL_JOIN = `
+  LEFT JOIN (
+    SELECT work_centre_id, DATE(prod_date) AS prod_date, SUM(output_pairs) AS line_eol_output
+    FROM machine_centre_production
+    WHERE machine_id = '${EOL_MACHINE_ID}' AND button_status = 2
+    GROUP BY work_centre_id, DATE(prod_date)
+  ) line_eol ON line_eol.work_centre_id = %WC% AND line_eol.prod_date = %DATE%`;
+
+/** Per-machine daily totals from production (summary table is often stale/empty). */
+const SQL_MACHINE_EFFICIENCY_FROM = `
+  FROM (
+    SELECT
+      DATE(prod_date) AS prod_date,
+      work_centre_id,
+      machine_id,
+      SUM(output_pairs) AS total_output_pairs,
+      SUM(target_mins) AS total_target_mins,
+      SUM(COALESCE(TIMESTAMPDIFF(MINUTE, start_time, finish_time), 0)) AS total_actual_mins,
+      SUM(COALESCE(idle_mins, 0)) AS total_idle_mins,
+      CASE
+        WHEN (SUM(COALESCE(TIMESTAMPDIFF(MINUTE, start_time, finish_time), 0)) + SUM(COALESCE(idle_mins, 0))) > 0
+        THEN LEAST(
+          (SUM(target_mins) / (SUM(COALESCE(TIMESTAMPDIFF(MINUTE, start_time, finish_time), 0)) + SUM(COALESCE(idle_mins, 0)))) * 100,
+          9999.99
+        )
+        ELSE 0
+      END AS avg_efficiency_percent
+    FROM machine_centre_production
+    WHERE button_status = 2 AND DATE(prod_date) BETWEEN ? AND ?
+    GROUP BY DATE(prod_date), work_centre_id, machine_id
+  ) mcs`;
+
 // Shared pagination helper — wraps any query with COUNT + LIMIT/OFFSET
 const paginate = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -33,14 +77,19 @@ class ApiController {
         LEFT JOIN colors col ON pp.color_id = col.id
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN groups_master g ON pp.group_id = g.id
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${where}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, pp.total_target_per_day, c.name, s.name, col.name, l.name, g.name`;
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [data] = await db.query(`
         SELECT DATE(mcp.prod_date) as date, wc.name as line, c.name as customer, s.name as article_no,
           col.name as color, l.name as leather, g.name as \`group\`,
-          pp.total_target_per_day as total_planned_qty, SUM(mcp.output_pairs) as total_output,
+          pp.total_target_per_day as total_planned_qty,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          SUM(mcp.output_pairs) as total_output,
+          ROUND((SUM(mcp.output_pairs) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
           ROUND(AVG(mcp.output_pairs),1) as avg_hourly_output,
           SUM(CASE WHEN HOUR(mcp.start_time)=9 THEN mcp.output_pairs ELSE 0 END) as \`9_10\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=10 THEN mcp.output_pairs ELSE 0 END) as \`10_11\`,
@@ -67,33 +116,37 @@ class ApiController {
 
       const { page: p, limit: l, offset } = paginate(page, limit);
       logger.info(`Line efficiency search: "${search}", workCentreId: ${workCentreId}, params: ${JSON.stringify(req.query)}`);
-      let where = 'WHERE DATE(mcs.prod_date) BETWEEN ? AND ?';
+      let where = 'WHERE 1=1';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcs.work_centre_id = ?'; params.push(workCentreId); }
       if (search) { where += ' AND (wc.name LIKE ? OR mc.name LIKE ? OR mc.machine_name LIKE ? OR c.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
 
       const baseQuery = `
-        FROM machine_centre_summary mcs
+        ${SQL_MACHINE_EFFICIENCY_FROM}
         LEFT JOIN work_centres wc ON mcs.work_centre_id = wc.id
         LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
-        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(mcs.prod_date) = pp.plan_date
+        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND mcs.prod_date = pp.plan_date AND pp.deleted_at IS NULL
         LEFT JOIN customers c ON pp.customer_id = c.id
         LEFT JOIN styles s ON pp.style_id = s.id
         LEFT JOIN colors col ON pp.color_id = col.id
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN groups_master g ON pp.group_id = g.id
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'mcs.prod_date')}
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [data] = await db.query(`
-        SELECT DATE(mcs.prod_date) as date, wc.name as line, mc.name as process,
+        SELECT mcs.prod_date as date, wc.name as line, COALESCE(mc.machine_name, mc.name) as process,
           c.name as customer, s.name as article_no, col.name as color, l.name as leather, g.name as \`group\`,
-          pp.total_target_per_day as total_planned_qty, mcs.total_output_pairs as total_output,
-          ROUND((mcs.total_output_pairs/NULLIF(pp.total_target_per_day,0))*100,2) as output_percent,
+          pp.total_target_per_day as total_planned_qty,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          mcs.total_output_pairs as total_output,
+          ROUND((mcs.total_output_pairs/NULLIF(pp.total_target_per_day,0))*100,1) as output_percent,
           mcs.total_target_mins as total_standard_mins_value, mcs.total_actual_mins as total_produced_mins_value,
           ROUND(pp.total_target_per_day*(mcs.total_target_mins/(8*60)),0) as targeted_output_smv,
-          mcs.avg_efficiency_percent as efficiency_percent
-        ${baseQuery} ORDER BY date, wc.name, mc.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+          ROUND(mcs.avg_efficiency_percent, 1) as efficiency_percent
+        ${baseQuery} ORDER BY date, wc.name, process LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -128,13 +181,21 @@ class ApiController {
           WHERE DATE_ADD(?, INTERVAL seq DAY) <= ?
         ) dates
         LEFT JOIN mobile_sessions ms ON ms.emp_id = e.id AND DATE(ms.activated_at) = dates.d AND ms.status = 'active'
+        LEFT JOIN production_plan pp ON pp.work_centre_id = e.work_centre_id AND pp.plan_date = dates.d
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'e.work_centre_id').replace(/%DATE%/g, 'dates.d')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'e.work_centre_id').replace(/%DATE%/g, 'dates.d')}
         WHERE e.work_centre_id IS NOT NULL ${wcFilter}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [data] = await db.query(`
         SELECT wc.name as line, e.name as emp_name, e.code as emp_code, dates.d as date,
           CASE WHEN ms.emp_id IS NOT NULL THEN 'Present' ELSE 'Absent' END as status,
-          ms.activated_at as login_time
+          ms.activated_at as login_time,
+          COALESCE(pp.total_target_per_day, 0) as target,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent
         ${baseQuery} ORDER BY dates.d, wc.name, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
@@ -155,11 +216,23 @@ class ApiController {
       if (workCentreId) { where += ' AND rr.work_centre_id = ?'; params.push(workCentreId); }
       if (search) { where += ' AND (wc.name LIKE ? OR rr.machine_centre_name LIKE ? OR rr.reason LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
 
-      const baseQuery = `FROM rework_rejection rr LEFT JOIN work_centres wc ON rr.work_centre_id = wc.id ${where}`;
+      const baseQuery = `
+        FROM rework_rejection rr
+        LEFT JOIN work_centres wc ON rr.work_centre_id = wc.id
+        LEFT JOIN production_plan pp ON pp.work_centre_id = rr.work_centre_id AND pp.plan_date = DATE(rr.production_date)
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'rr.work_centre_id').replace(/%DATE%/g, 'DATE(rr.production_date)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'rr.work_centre_id').replace(/%DATE%/g, 'DATE(rr.production_date)')}
+        ${where}`;
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [data] = await db.query(`
         SELECT DATE(rr.production_date) as date, wc.name as line, rr.machine_centre_name as machine,
-          rr.total_output_pairs as output, rr.bins_completed, rr.rework_qty, rr.rejection_qty,
+          COALESCE(pp.total_target_per_day, 0) as target,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          rr.total_output_pairs as output,
+          COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
+          rr.bins_completed, rr.rework_qty, rr.rejection_qty,
           ROUND((rr.rework_qty/NULLIF(rr.total_output_pairs,0))*100,2) as rework_percent,
           ROUND((rr.rejection_qty/NULLIF(rr.total_output_pairs,0))*100,2) as rejection_percent,
           rr.reason_category, rr.reason
@@ -187,13 +260,22 @@ class ApiController {
         FROM machine_centre_summary mcs
         LEFT JOIN work_centres wc ON mcs.work_centre_id = wc.id
         LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
+        LEFT JOIN production_plan pp ON pp.work_centre_id = mcs.work_centre_id AND DATE(mcs.prod_date) = pp.plan_date
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [data] = await db.query(`
         SELECT DATE(mcs.prod_date) as date, wc.name as line, mc.machine_id,
           COALESCE(mc.machine_name, mc.name) as machine_name,
-          mcs.total_output_pairs as output, mcs.total_target_mins as target_mins,
+          COALESCE(pp.total_target_per_day, 0) as target,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          mcs.total_output_pairs as output,
+          COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
+          mcs.total_target_mins as target_mins,
           mcs.total_actual_mins as actual_mins, mcs.total_idle_mins as idle_mins,
           ROUND(mcs.avg_efficiency_percent,1) as efficiency_percent
         ${baseQuery} ORDER BY date, wc.name, mc.machine_id LIMIT ? OFFSET ?`, [...params, l, offset]);
@@ -221,17 +303,25 @@ class ApiController {
         JOIN employees e ON ms.emp_id = e.id
         JOIN work_centres wc ON ms.work_centre_id = wc.id
         LEFT JOIN machine_centres mc ON ms.machine_id = mc.machine_id
+        LEFT JOIN production_plan pp ON pp.work_centre_id = ms.work_centre_id AND pp.plan_date = DATE(ms.activated_at)
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'ms.work_centre_id').replace(/%DATE%/g, 'DATE(ms.activated_at)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'ms.work_centre_id').replace(/%DATE%/g, 'DATE(ms.activated_at)')}
         LEFT JOIN machine_centre_production mcp ON mcp.machine_id = ms.machine_id
           AND mcp.work_centre_id = ms.work_centre_id
           AND DATE(mcp.prod_date) = DATE(ms.activated_at)
         ${where}
-        GROUP BY DATE(mcp.prod_date), ms.work_centre_id, ms.emp_id, ms.machine_id`;
+        GROUP BY DATE(mcp.prod_date), ms.work_centre_id, ms.emp_id, ms.machine_id, pp.total_target_per_day, line_input.total_input, line_eol.line_eol_output`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [data] = await db.query(`
         SELECT DATE(mcp.prod_date) as date, wc.name as line, e.code as emp_code, e.name as emp_name,
           ms.machine_id, COALESCE(mc.machine_name, mc.name) as machine_name,
-          SUM(mcp.output_pairs) as total_output
+          COALESCE(pp.total_target_per_day, 0) as target,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          SUM(mcp.output_pairs) as total_output,
+          COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent
         ${baseQuery} ORDER BY date, wc.name, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
@@ -258,14 +348,20 @@ class ApiController {
         JOIN work_centres wc ON mcs.work_centre_id = wc.id
         LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
         LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(mcs.prod_date) = DATE(pp.plan_date)
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [data] = await db.query(`
         SELECT DATE(mcs.prod_date) as date, wc.name as line, e.code as emp_code, e.name as emp_name,
           mcs.machine_id, COALESCE(mc.machine_name, mc.name) as machine_name,
-          mcs.total_output_pairs as output, pp.total_target_per_day as target,
-          ROUND((mcs.total_output_pairs/NULLIF(pp.total_target_per_day,0))*100,1) as output_percent,
+          COALESCE(pp.total_target_per_day, 0) as target,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          mcs.total_output_pairs as output,
+          COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
           mcs.total_target_mins as target_mins, mcs.total_actual_mins as actual_mins,
           mcs.total_idle_mins as idle_mins, ROUND(mcs.avg_efficiency_percent,1) as efficiency_percent,
           CASE WHEN mcs.avg_efficiency_percent>=90 THEN 'Excellent'
@@ -301,16 +397,25 @@ class ApiController {
       if (wcId) { where += ' AND mcp.work_centre_id = ?'; params.push(wcId); }
       const [rows] = await db.query(`
         SELECT
+          DATE(mcp.prod_date) AS date,
           mcp.id, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name AS employee_name,
           wc.name AS work_centre_name,
           mcp.idle_start_time, mcp.idle_stop_time,
           TIMESTAMPDIFF(MINUTE, mcp.idle_start_time, COALESCE(mcp.idle_stop_time, NOW())) AS idle_mins,
           COALESCE(mcp.stoppage_reason, 'Not specified') AS reason,
-          mcp.button_status
+          mcp.button_status,
+          COALESCE(pp.total_target_per_day, 0) AS target,
+          COALESCE(line_input.total_input, 0) AS total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS input_percent,
+          COALESCE(line_eol.line_eol_output, 0) AS line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS output_percent
         FROM machine_centre_production mcp
         LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
         LEFT JOIN employees e ON e.code = mcp.emp_id
         LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+        LEFT JOIN production_plan pp ON pp.work_centre_id = mcp.work_centre_id AND pp.plan_date = DATE(mcp.prod_date)
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${where}
         ORDER BY mcp.idle_start_time DESC
       `, params);
@@ -338,20 +443,30 @@ class ApiController {
       if (wcId) params.push(wcId);
       const [rows] = await db.query(`
         SELECT
+          DATE(ms.activated_at) AS date,
           ms.emp_code, e.name AS employee_name,
           wc.name AS work_centre_name, ms.work_centre_id,
           ms.activated_at AS session_start,
           COALESCE(SUM(mcp.output_pairs), 0) AS total_output,
           COUNT(CASE WHEN mcp.button_status = 2 THEN 1 END) AS cycles_completed,
-          COALESCE(SUM(mcp.actual_time), 0) AS active_mins
+          COALESCE(SUM(mcp.actual_time), 0) AS active_mins,
+          COALESCE(pp.total_target_per_day, 0) AS target,
+          COALESCE(line_input.total_input, 0) AS total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS input_percent,
+          COALESCE(line_eol.line_eol_output, 0) AS line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS output_percent
         FROM mobile_sessions ms
         LEFT JOIN employees e ON e.code = ms.emp_code
         LEFT JOIN work_centres wc ON wc.id = ms.work_centre_id
+        LEFT JOIN production_plan pp ON pp.work_centre_id = ms.work_centre_id AND pp.plan_date = DATE(ms.activated_at)
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'ms.work_centre_id').replace(/%DATE%/g, 'DATE(ms.activated_at)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'ms.work_centre_id').replace(/%DATE%/g, 'DATE(ms.activated_at)')}
         LEFT JOIN machine_centre_production mcp
           ON mcp.emp_id = ms.emp_code
           AND DATE(mcp.prod_date) BETWEEN ? AND ?
         WHERE DATE(ms.activated_at) BETWEEN ? AND ? ${wcWhere}
-        GROUP BY ms.session_id, ms.emp_code, e.name, wc.name, ms.work_centre_id, ms.activated_at
+        GROUP BY ms.session_id, ms.emp_code, e.name, wc.name, ms.work_centre_id, ms.activated_at,
+          pp.total_target_per_day, line_input.total_input, line_eol.line_eol_output
         ORDER BY total_output ASC
       `, params);
       const zeroOutput = rows.filter(r => Number(r.total_output) === 0);
@@ -382,6 +497,11 @@ class ApiController {
           COUNT(CASE WHEN mcp.button_status = 2 THEN 1 END) AS cycles,
           COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.output_pairs END), 0) AS total_output,
           COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.target_mins END), 0) AS total_target_mins,
+          COALESCE(pp.total_target_per_day, 0) AS target,
+          COALESCE(line_input.total_input, 0) AS total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS input_percent,
+          COALESCE(line_eol.line_eol_output, 0) AS line_eol_output,
+          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS output_percent,
           COALESCE(SUM(
             CASE WHEN mcp.button_status = 2 THEN
               GREATEST(0, TIMESTAMPDIFF(MINUTE,
@@ -400,8 +520,12 @@ class ApiController {
         LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
         LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
         LEFT JOIN employees e ON e.code = mcp.emp_id
+        LEFT JOIN production_plan pp ON pp.work_centre_id = mcp.work_centre_id AND pp.plan_date = DATE(mcp.prod_date)
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         WHERE DATE(mcp.prod_date) BETWEEN ? AND ? ${wcWhere}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name,
+          pp.total_target_per_day, line_input.total_input, line_eol.line_eol_output
         ORDER BY date, wc.name, mcp.machine_id
       `, params);
 
