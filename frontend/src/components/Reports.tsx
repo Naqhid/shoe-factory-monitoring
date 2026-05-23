@@ -48,21 +48,13 @@ const fmtTime = (d: string) => {
 };
 const r = (val: any) => Math.round(val ?? 0);
 
-const effBadge = (val: number) => (
-  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${val >= 90 ? 'bg-green-100 text-green-700' : val >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-    {val}%
-  </span>
-);
-
 const HEADER_MAP: Record<string, string> = {
   date: 'Date', line: 'Line', customer: 'Customer', article_no: 'Article No',
   color: 'Color', leather: 'Leather', group: 'Group', total_planned_qty: 'Total Planned',
   total_output: 'Total Output', avg_hourly_output: 'Avg Hourly Output',
   '9_10': '9-10', '10_11': '10-11', '11_12': '11-12', '12_1': '12-1',
   '2_3': '2-3', '3_4': '3-4', '4_5': '4-5', '5_6': '5-6', '6_7': '6-7',
-  process: 'Process/Machine',
-  total_input: 'Input', input_percent: 'Input %', output_percent: 'Output %',
-  line_eol_output: 'EOL Output',
+  process: 'Process/Machine', output_percent: 'Output %',
   total_standard_mins_value: 'Std Mins', total_produced_mins_value: 'Actual Mins',
   targeted_output_smv: 'Target @ SMV', efficiency_percent: 'Efficiency %',
   emp_id: 'Emp ID', emp_name: 'Employee Name', emp_code: 'Emp Code', status: 'Status', login_time: 'Login Time',
@@ -75,16 +67,6 @@ const HEADER_MAP: Record<string, string> = {
 };
 
 const FILTER_STORAGE_KEY = 'reports_filters_v1';
-
-/** Shown only on Hourly Production report (table + export). */
-const HOURLY_ONLY_FIELDS = ['total_input', 'input_percent'] as const;
-
-const stripHourlyOnlyFields = (row: Record<string, unknown>, report: ReportType) => {
-  if (report === 'hourly-production') return row;
-  const out = { ...row };
-  for (const key of HOURLY_ONLY_FIELDS) delete out[key];
-  return out;
-};
 
 type DatePreset = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'custom';
 
@@ -407,16 +389,13 @@ export const Reports: React.FC = () => {
         toast.error('No data to export');
         return;
       }
-      const headers = Object.keys(stripHourlyOnlyFields(rows[0], reportType));
+      const headers = Object.keys(rows[0]);
     const csvRows = [
       headers.map(h => `"${HEADER_MAP[h] || h}"`).join(','),
-      ...rows.map(row => {
-        const filtered = stripHourlyOnlyFields(row, reportType);
-        return headers.map(h => {
-          const v = filtered[h] === null || filtered[h] === undefined ? '' : String(filtered[h]);
-          return `"${v.replace(/"/g, '""')}"`;
-        }).join(',');
-      })
+      ...rows.map(row => headers.map(h => {
+        const v = row[h] === null || row[h] === undefined ? '' : String(row[h]);
+        return `"${v.replace(/"/g, '""')}"`;
+      }).join(','))
     ];
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -440,12 +419,11 @@ export const Reports: React.FC = () => {
         toast.error('No data to export');
         return;
       }
-      const headers = Object.keys(stripHourlyOnlyFields(exportRows[0], reportType));
+      const headers = Object.keys(exportRows[0]);
       const rows = exportRows.map((row) => {
-      const filtered = stripHourlyOnlyFields(row, reportType);
       const mapped: Record<string, any> = {};
       headers.forEach((h) => {
-        mapped[HEADER_MAP[h] || h] = filtered[h];
+        mapped[HEADER_MAP[h] || h] = row[h];
       });
       return mapped;
     });
@@ -469,13 +447,10 @@ export const Reports: React.FC = () => {
         toast.error('No data to export');
         return;
       }
-      const headers = Object.keys(stripHourlyOnlyFields(exportRows[0], reportType));
+      const headers = Object.keys(exportRows[0]);
     const title = `${activeOption.label} (${fmtDate(fromDate)} - ${fmtDate(toDate)})`;
     const tableHead = headers.map(h => `<th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">${HEADER_MAP[h] || h}</th>`).join('');
-    const tableRows = exportRows.map((row) => {
-      const filtered = stripHourlyOnlyFields(row, reportType);
-      return `<tr>${headers.map(h => `<td style="border:1px solid #ddd;padding:6px;font-size:10px;">${String(filtered[h] ?? '')}</td>`).join('')}</tr>`;
-    }).join('');
+    const tableRows = exportRows.map((row) => `<tr>${headers.map(h => `<td style="border:1px solid #ddd;padding:6px;font-size:10px;">${String(row[h] ?? '')}</td>`).join('')}</tr>`).join('');
 
     const html = `
       <html>
@@ -605,13 +580,13 @@ export const Reports: React.FC = () => {
   const renderMobileCards = () => {
     if (!data || data.length === 0) return null;
     const columnsByType: Partial<Record<ReportType, string[]>> = {
-      'hourly-production': ['date', 'line', 'customer', 'total_planned_qty', 'total_input', 'input_percent', 'total_output', 'output_percent'],
-      'line-efficiency': ['date', 'line', 'process', 'total_planned_qty', 'total_output', 'output_percent', 'efficiency_percent'],
-      'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'target', 'output_percent'],
-      'rework-rejection': ['date', 'line', 'machine', 'target', 'output', 'output_percent', 'rework_qty', 'rejection_qty'],
-      'machine-output': ['date', 'line', 'machine_id', 'target', 'output', 'output_percent', 'efficiency_percent'],
-      'employee-output': ['date', 'line', 'emp_code', 'target', 'total_output', 'output_percent'],
-      'employee-performance': ['date', 'line', 'emp_code', 'target', 'output', 'output_percent', 'efficiency_percent'],
+      'hourly-production': ['date', 'line', 'customer', 'article_no', 'total_planned_qty', 'total_output', 'avg_hourly_output'],
+      'line-efficiency': ['date', 'line', 'process', 'total_output', 'output_percent', 'efficiency_percent'],
+      'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'login_time'],
+      'rework-rejection': ['date', 'line', 'machine', 'output', 'rework_qty', 'rejection_qty', 'reason'],
+      'machine-output': ['date', 'line', 'machine_id', 'machine_name', 'output', 'efficiency_percent'],
+      'employee-output': ['date', 'line', 'emp_code', 'emp_name', 'machine_id', 'total_output'],
+      'employee-performance': ['date', 'line', 'emp_code', 'emp_name', 'machine_id', 'output', 'efficiency_percent', 'performance_grade'],
     };
     const keys = columnsByType[reportType] || [];
     return (
@@ -622,7 +597,6 @@ export const Reports: React.FC = () => {
               let value: any = row[key];
               if (key === 'date') value = fmtDate(value);
               if (key === 'login_time') value = fmtTime(value);
-              if (key === 'input_percent' || key === 'output_percent') value = `${r(value)}%`;
               if (value === null || value === undefined || value === '') value = '—';
               return (
                 <div key={key} className="flex items-start justify-between gap-3 py-1.5 border-b border-gray-100 last:border-b-0">
@@ -641,36 +615,30 @@ export const Reports: React.FC = () => {
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50"><tr>
-          <th className="text-left p-2 border-b">Date</th>
           <th className="text-left p-2 border-b">Machine</th>
           <th className="text-left p-2 border-b">Employee</th>
           <th className="text-left p-2 border-b">Line</th>
-          <th className="text-center p-2 border-b">Target</th>
-          <th className="text-center p-2 border-b">Output %</th>
           <th className="text-left p-2 border-b">Idle Start</th>
           <th className="text-left p-2 border-b">Idle End</th>
           <th className="text-left p-2 border-b">Duration</th>
           <th className="text-left p-2 border-b">Reason</th>
         </tr></thead>
         <tbody>
-          {data!.map((row: any, i: number) => (
+          {data!.map((r: any, i: number) => (
             <tr key={i} className="border-b hover:bg-gray-50">
-              <td className="p-2">{row.date ? fmtDate(row.date) : '—'}</td>
-              <td className="p-2">{row.machine_id}{row.machine_name ? ` - ${row.machine_name}` : ''}</td>
-              <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
-              <td className="p-2">{row.work_centre_name}</td>
-              <td className="p-2 text-center">{r(row.target)}</td>
-              <td className="p-2 text-center">{effBadge(r(row.output_percent))}</td>
-              <td className="p-2">{row.idle_start_time ? new Date(row.idle_start_time).toLocaleString('en-IN', {hour12:false,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
-              <td className="p-2">{row.idle_stop_time ? new Date(row.idle_stop_time).toLocaleString('en-IN', {hour12:false,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : <span className="text-orange-500 text-xs">Still idle</span>}</td>
-              <td className="p-2 font-medium">{row.idle_mins != null ? `${row.idle_mins}m` : '-'}</td>
+              <td className="p-2">{r.machine_id}{r.machine_name ? ` - ${r.machine_name}` : ''}</td>
+              <td className="p-2">{r.emp_id}{r.employee_name ? ` - ${r.employee_name}` : ''}</td>
+              <td className="p-2">{r.work_centre_name}</td>
+              <td className="p-2">{r.idle_start_time ? new Date(r.idle_start_time).toLocaleString('en-IN', {hour12:false,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+              <td className="p-2">{r.idle_stop_time ? new Date(r.idle_stop_time).toLocaleString('en-IN', {hour12:false,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : <span className="text-orange-500 text-xs">Still idle</span>}</td>
+              <td className="p-2 font-medium">{r.idle_mins != null ? `${r.idle_mins}m` : '-'}</td>
               <td className="p-2">
                 <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  row.reason === 'Machine Breakdown' ? 'bg-red-100 text-red-700' :
-                  row.reason === 'Material Shortage' ? 'bg-yellow-100 text-yellow-700' :
-                  row.reason === 'Power Cut' ? 'bg-orange-100 text-orange-700' :
+                  r.reason === 'Machine Breakdown' ? 'bg-red-100 text-red-700' :
+                  r.reason === 'Material Shortage' ? 'bg-yellow-100 text-yellow-700' :
+                  r.reason === 'Power Cut' ? 'bg-orange-100 text-orange-700' :
                   'bg-gray-100 text-gray-700'
-                }`}>{row.reason}</span>
+                }`}>{r.reason}</span>
               </td>
             </tr>
           ))}
@@ -683,11 +651,8 @@ export const Reports: React.FC = () => {
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50"><tr>
-          <th className="text-left p-2 border-b">Date</th>
           <th className="text-left p-2 border-b">Employee</th>
           <th className="text-left p-2 border-b">Line</th>
-          <th className="text-center p-2 border-b">Target</th>
-          <th className="text-center p-2 border-b">Output %</th>
           <th className="text-left p-2 border-b">Session Start</th>
           <th className="text-left p-2 border-b">Session End</th>
           <th className="text-left p-2 border-b">Session Mins</th>
@@ -697,21 +662,18 @@ export const Reports: React.FC = () => {
           <th className="text-left p-2 border-b">Status</th>
         </tr></thead>
         <tbody>
-          {data!.map((row: any, i: number) => {
-            const isZero = Number(row.total_output) === 0;
+          {data!.map((r: any, i: number) => {
+            const isZero = Number(r.total_output) === 0;
             return (
               <tr key={i} className={`border-b ${isZero ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
-                <td className="p-2">{row.date ? fmtDate(row.date) : '—'}</td>
-                <td className="p-2">{row.emp_code}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
-                <td className="p-2">{row.work_centre_name}</td>
-                <td className="p-2 text-center">{r(row.target)}</td>
-                <td className="p-2 text-center">{effBadge(r(row.output_percent))}</td>
-                <td className="p-2">{row.session_start ? new Date(row.session_start).toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'}) : '-'}</td>
-                <td className="p-2">{row.session_end ? new Date(row.session_end).toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'}) : <span className="text-green-600 text-xs">Active</span>}</td>
-                <td className="p-2">{row.session_mins}m</td>
-                <td className="p-2">{row.cycles_completed}</td>
-                <td className="p-2">{row.active_mins}m</td>
-                <td className="p-2 font-semibold">{row.total_output}</td>
+                <td className="p-2">{r.emp_code}{r.employee_name ? ` - ${r.employee_name}` : ''}</td>
+                <td className="p-2">{r.work_centre_name}</td>
+                <td className="p-2">{r.session_start ? new Date(r.session_start).toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+                <td className="p-2">{r.session_end ? new Date(r.session_end).toLocaleTimeString('en-IN',{hour12:false,hour:'2-digit',minute:'2-digit'}) : <span className="text-green-600 text-xs">Active</span>}</td>
+                <td className="p-2">{r.session_mins}m</td>
+                <td className="p-2">{r.cycles_completed}</td>
+                <td className="p-2">{r.active_mins}m</td>
+                <td className="p-2 font-semibold">{r.total_output}</td>
                 <td className="p-2">{isZero ? <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">⚠ Zero Output</span> : <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">OK</span>}</td>
               </tr>
             );
@@ -725,12 +687,9 @@ export const Reports: React.FC = () => {
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50"><tr>
-          <th className="text-left p-2 border-b">Date</th>
           <th className="text-left p-2 border-b">Machine</th>
           <th className="text-left p-2 border-b">Employee</th>
           <th className="text-left p-2 border-b">Line</th>
-          <th className="text-center p-2 border-b">Target</th>
-          <th className="text-center p-2 border-b">Output %</th>
           <th className="text-left p-2 border-b">Cycles</th>
           <th className="text-left p-2 border-b">Output</th>
           <th className="text-left p-2 border-b">Active Mins</th>
@@ -739,36 +698,33 @@ export const Reports: React.FC = () => {
           <th className="text-left p-2 border-b">Shift Efficiency</th>
         </tr></thead>
         <tbody>
-          {data!.map((row: any, i: number) => (
+          {data!.map((r: any, i: number) => (
             <tr key={i} className="border-b hover:bg-gray-50">
-              <td className="p-2">{row.date ? fmtDate(row.date) : '—'}</td>
-              <td className="p-2">{row.machine_id}{row.machine_name ? ` - ${row.machine_name}` : ''}</td>
-              <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
-              <td className="p-2">{row.work_centre_name}</td>
-              <td className="p-2 text-center">{r(row.target)}</td>
-              <td className="p-2 text-center">{effBadge(r(row.output_percent))}</td>
-              <td className="p-2">{row.cycles}</td>
-              <td className="p-2 font-semibold">{row.total_output}</td>
-              <td className="p-2">{row.shift_actual_mins}m</td>
-              <td className="p-2 text-orange-600">{row.shift_idle_mins}m</td>
+              <td className="p-2">{r.machine_id}{r.machine_name ? ` - ${r.machine_name}` : ''}</td>
+              <td className="p-2">{r.emp_id}{r.employee_name ? ` - ${r.employee_name}` : ''}</td>
+              <td className="p-2">{r.work_centre_name}</td>
+              <td className="p-2">{r.cycles}</td>
+              <td className="p-2 font-semibold">{r.total_output}</td>
+              <td className="p-2">{r.shift_actual_mins}m</td>
+              <td className="p-2 text-orange-600">{r.shift_idle_mins}m</td>
               <td className="p-2">
                 <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  row.shift_utilisation_pct >= 70 ? 'bg-green-100 text-green-700' :
-                  row.shift_utilisation_pct >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                }`}>{row.shift_utilisation_pct}%</span>
+                  r.shift_utilisation_pct >= 70 ? 'bg-green-100 text-green-700' :
+                  r.shift_utilisation_pct >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                }`}>{r.shift_utilisation_pct}%</span>
               </td>
               <td className="p-2">
                 <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  row.shift_efficiency_pct >= 90 ? 'bg-green-100 text-green-700' :
-                  row.shift_efficiency_pct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                }`}>{row.shift_efficiency_pct}%</span>
+                  r.shift_efficiency_pct >= 90 ? 'bg-green-100 text-green-700' :
+                  r.shift_efficiency_pct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                }`}>{r.shift_efficiency_pct}%</span>
               </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="bg-gray-50 font-semibold">
-            <td className="p-2 border-t" colSpan={5}>Total (Shift: 09:00–17:30 = 510 mins)</td>
+            <td className="p-2 border-t" colSpan={3}>Total (Shift: 09:00–17:30 = 510 mins)</td>
             <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.cycles||0),0)}</td>
             <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.total_output||0),0)}</td>
             <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.shift_actual_mins||0),0)}m</td>
@@ -802,15 +758,20 @@ export const Reports: React.FC = () => {
     }
   };
 
+  const effBadge = (val: number) => (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${val >= 90 ? 'bg-green-100 text-green-700' : val >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+      {val}%
+    </span>
+  );
+
   const renderHourly = () => {
     const totalOutput = data!.reduce((s, row) => s + r(row.total_output), 0);
     const totalPlanned = data!.reduce((s, row) => s + r(row.total_planned_qty), 0);
-    const totalInput = data!.reduce((s, row) => s + r(row.total_input), 0);
     return (
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Customer','Article No','Color','Leather','Group','Planned','Input','Input %','Output','Output %','WIP','Avg/Hr','9-10','10-11','11-12','12-1','2-3','3-4','4-5','5-6','6-7'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Customer','Article No','Color','Leather','Group','Planned','Output','WIP','Avg/Hr','9-10','10-11','11-12','12-1','2-3','3-4','4-5','5-6','6-7'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => {
@@ -821,10 +782,7 @@ export const Reports: React.FC = () => {
                   <Td><span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold">{row.line}</span></Td>
                   <Td>{row.customer}</Td><Td>{row.article_no}</Td><Td>{row.color}</Td><Td>{row.leather}</Td><Td>{row.group}</Td>
                   <Td center><span className="font-semibold text-gray-700">{r(row.total_planned_qty)}</span></Td>
-                  <Td center><span className="font-semibold text-blue-700">{r(row.total_input)}</span></Td>
-                  <Td center>{effBadge(r(row.input_percent))}</Td>
                   <Td center><span className="font-bold text-green-600">{r(row.total_output)}</span></Td>
-                  <Td center>{effBadge(r(row.output_percent))}</Td>
                   <Td center><span className={`font-semibold ${wip > 0 ? 'text-red-500' : 'text-gray-400'}`}>{wip}</span></Td>
                   <Td center>{r(row.avg_hourly_output)}</Td>
                   {['9_10','10_11','11_12','12_1','2_3','3_4','4_5','5_6','6_7'].map(k => (
@@ -838,14 +796,7 @@ export const Reports: React.FC = () => {
             <tr className="bg-blue-600 text-white">
               <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">TOTAL — {data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalPlanned}</td>
-              <td className="px-3 py-2.5 text-sm font-bold text-center">{totalInput}</td>
-              <td className="px-3 py-2.5 text-sm font-bold text-center">
-                {totalPlanned > 0 ? effBadge(Math.round((totalInput / totalPlanned) * 100)) : '—'}
-              </td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput}</td>
-              <td className="px-3 py-2.5 text-sm font-bold text-center">
-                {totalPlanned > 0 ? effBadge(Math.round((totalOutput / totalPlanned) * 100)) : '—'}
-              </td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalPlanned - totalOutput}</td>
               <td colSpan={9}></td>
             </tr>
@@ -872,7 +823,7 @@ export const Reports: React.FC = () => {
                 <Td>{row.customer}</Td><Td>{row.article_no}</Td><Td>{row.color}</Td><Td>{row.leather}</Td><Td>{row.group}</Td>
                 <Td center>{r(row.total_planned_qty)}</Td>
                 <Td center><span className="font-bold text-green-600">{r(row.total_output)}</span></Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
+                <Td center>{r(row.output_percent)}%</Td>
                 <Td center>{r(row.total_standard_mins_value)}</Td>
                 <Td center>{r(row.total_produced_mins_value)}</Td>
                 <Td center>{r(row.targeted_output_smv)}</Td>
@@ -898,7 +849,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Emp Code','Employee Name','Status','Target','Output %','Login Time'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Emp Code','Employee Name','Status','Login Time'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (
@@ -913,8 +864,6 @@ export const Reports: React.FC = () => {
                     {row.status}
                   </span>
                 </Td>
-                <Td center>{r(row.target)}</Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
                 <Td center><span className="font-mono text-sm">{fmtTime(row.login_time)}</span></Td>
               </tr>
             ))}
@@ -925,7 +874,7 @@ export const Reports: React.FC = () => {
               <td className="px-3 py-2.5 text-sm text-center font-bold">
                 ✓ {present} Present &nbsp;|&nbsp; ✗ {absent} Absent
               </td>
-              <td colSpan={2}></td>
+              <td></td>
             </tr>
           </tfoot>
         </table>
@@ -940,7 +889,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Machine','Target','Output','Output %','Bins','Rework','Rejection','Rework %','Rejection %','Category','Reason'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Machine','Output','Bins','Rework','Rejection','Rework %','Rejection %','Category','Reason'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (
@@ -948,9 +897,7 @@ export const Reports: React.FC = () => {
                 <Td><span className="font-medium text-gray-600">{fmtDate(row.date)}</span></Td>
                 <Td><span className="px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded text-xs font-semibold">{row.line}</span></Td>
                 <Td>{row.machine}</Td>
-                <Td center>{r(row.target)}</Td>
                 <Td center><span className="font-semibold">{r(row.output)}</span></Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
                 <Td center>{r(row.bins_completed)}</Td>
                 <Td center><span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs font-bold">{r(row.rework_qty)}</span></Td>
                 <Td center><span className="inline-flex items-center px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-bold">{r(row.rejection_qty)}</span></Td>
@@ -963,7 +910,7 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-yellow-500 text-white">
-              <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+              <td colSpan={5} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRework} rework</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRejection} rejection</td>
               <td colSpan={4}></td>
@@ -981,7 +928,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Machine ID','Machine Name','Target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency %'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Machine ID','Machine Name','Output','Target Mins','Actual Mins','Idle Mins','Efficiency %'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (
@@ -990,9 +937,7 @@ export const Reports: React.FC = () => {
                 <Td><span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-semibold">{row.line}</span></Td>
                 <Td center><span className="font-mono font-bold text-gray-600">{row.machine_id}</span></Td>
                 <Td><span className="font-medium">{row.machine_name}</span></Td>
-                <Td center>{r(row.target)}</Td>
                 <Td center><span className="font-bold text-green-600">{r(row.output)}</span></Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
                 <Td center>{r(row.target_mins)}</Td>
                 <Td center>{r(row.actual_mins)}</Td>
                 <Td center><span className={r(row.idle_mins) > 0 ? 'text-orange-500 font-semibold' : 'text-gray-400'}>{r(row.idle_mins)}</span></Td>
@@ -1002,7 +947,7 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-indigo-600 text-white">
-              <td colSpan={6} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+              <td colSpan={4} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput} total output</td>
               <td colSpan={3}></td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{avgEff}% avg eff.</td>
@@ -1019,7 +964,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Emp Code','Employee Name','Machine ID','Machine Name','Target','Total Output','Output %'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Emp Code','Employee Name','Machine ID','Machine Name','Total Output'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (
@@ -1030,19 +975,16 @@ export const Reports: React.FC = () => {
                 <Td><span className="font-medium">{row.emp_name}</span></Td>
                 <Td center><span className="font-mono font-bold text-gray-500">{row.machine_id}</span></Td>
                 <Td>{row.machine_name}</Td>
-                <Td center>{r(row.target)}</Td>
                 <Td center>
                   <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-green-100 text-green-700 font-bold text-sm">{r(row.total_output)}</span>
                 </Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="bg-teal-600 text-white">
-              <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+              <td colSpan={6} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput} total pairs</td>
-              <td></td>
             </tr>
           </tfoot>
         </table>
@@ -1063,7 +1005,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Emp Code','Employee','Machine ID','Machine','Target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency %','Grade'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Emp Code','Employee','Machine ID','Machine','Output','Target','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency %','Grade'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (
@@ -1074,9 +1016,9 @@ export const Reports: React.FC = () => {
                 <Td><span className="font-medium">{row.emp_name}</span></Td>
                 <Td center><span className="font-mono font-bold text-gray-500">{row.machine_id}</span></Td>
                 <Td>{row.machine_name}</Td>
-                <Td center>{r(row.target)}</Td>
                 <Td center><span className="font-bold text-green-600">{r(row.output)}</span></Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
+                <Td center>{r(row.target)}</Td>
+                <Td center>{row.output_percent ?? 0}%</Td>
                 <Td center>{r(row.target_mins)}</Td>
                 <Td center>{r(row.actual_mins)}</Td>
                 <Td center><span className={r(row.idle_mins) > 0 ? 'text-orange-500 font-semibold' : 'text-gray-400'}>{r(row.idle_mins)}</span></Td>
@@ -1091,10 +1033,9 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-rose-600 text-white">
-              <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+              <td colSpan={6} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput}</td>
-              <td></td>
-              <td colSpan={3}></td>
+              <td colSpan={5}></td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{avgEff}% avg</td>
               <td></td>
             </tr>

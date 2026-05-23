@@ -728,33 +728,6 @@ app.get('/health', healthController.basic.bind(healthController));
 app.get('/health/detailed', authenticate, requireMonitoringAccess, healthController.detailed.bind(healthController));
 app.get('/health/metrics', authenticate, requireMonitoringAccess, healthController.metrics.bind(healthController));
 
-// Production UI: serve Vite build from one process (set FRONTEND_DIST or build frontend/dist)
-const FRONTEND_DIST = process.env.FRONTEND_DIST
-  ? getAbsolutePath(process.env.FRONTEND_DIST)
-  : path.resolve(__dirname, '../../frontend/dist');
-
-if (fs.existsSync(FRONTEND_DIST)) {
-  app.use(express.static(FRONTEND_DIST, { index: false, maxAge: '1d' }));
-  app.get('*', (req, res, next) => {
-    if (
-      req.method !== 'GET' ||
-      req.path.startsWith('/api') ||
-      req.path === '/health' ||
-      req.path.startsWith('/health/')
-    ) {
-      return next();
-    }
-    res.sendFile(path.join(FRONTEND_DIST, 'index.html'), (err) => {
-      if (err) next(err);
-    });
-  });
-  logger.info(`Serving frontend from ${FRONTEND_DIST}`);
-} else {
-  logger.warn(
-    `Frontend build not found at ${FRONTEND_DIST}. Run "npm run build" in frontend, or set FRONTEND_DIST.`
-  );
-}
-
 app.use(errorHandler);
 
 const useHttps = false;

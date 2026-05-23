@@ -171,14 +171,15 @@ Shown as remaining quantity:
 
 `wip = max(0, target - output)`
 
-## 5.5 Bottleneck & Breakdown (TV)
+## 5.5 Bottleneck Machines (Top 3)
 
-TV shows supervisor-logged events for the selected line today:
+Current TV logic includes machine as bottleneck if any is true:
 
-- **Bottleneck**: `BOTTLENECK:` entries (excluding machine-breakdown reasons)
-- **Breakdown**: active machine stops with breakdown reason, `BREAKDOWN:` entries, or bottleneck entries tagged as machine breakdown
+- no summary row for today
+- output is zero
+- efficiency < 70%
 
-All matching events for the day are listed (not limited to top 3).
+Then sorted by lowest efficiency and limited to top 3.
 
 ## 5.6 Alert SLA Labels
 

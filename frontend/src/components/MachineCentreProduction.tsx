@@ -5,9 +5,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Clock, User, Factory, Cpu, Calendar } from 'lucide-react';
 
-import { API_BASE_URL } from '../services/api';
-
-const API_BASE = `${API_BASE_URL}/api`;
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:3001/api`;
 
 interface ProductionStatus {
   id: number;
