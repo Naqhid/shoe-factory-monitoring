@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Smile, TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen } from 'lucide-react';
+import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
+import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
 
 export const TVDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -14,21 +15,137 @@ export const TVDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(new Date());
 
-    const formatTimeRange = (start?: string | null, finish?: string | null) => {
-        if (!start || !finish) return '';
-        const startDate = new Date(start);
-        const finishDate = new Date(finish);
-        if (Number.isNaN(startDate.getTime()) || Number.isNaN(finishDate.getTime())) return '';
-        const pad = (n: number) => String(n).padStart(2, '0');
-        return `${pad(startDate.getHours())}:${pad(startDate.getMinutes())} to ${pad(finishDate.getHours())}:${pad(finishDate.getMinutes())}`;
-    };
-
-    const formatBottleneckDetail = (detail?: string | null) => {
+    const formatStoppageDetail = (detail?: string | null) => {
         if (!detail) return '';
         return String(detail)
             .replace(/^BOTTLENECK:/i, '')
+            .replace(/^BREAKDOWN:/i, '')
             .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
             .trim();
+    };
+
+    const getStoppageSortTime = (item: { idle_start_time?: string | null; start_time?: string | null }) => {
+        const raw = item.idle_start_time || item.start_time;
+        if (!raw) return 0;
+        const t = new Date(raw).getTime();
+        return Number.isNaN(t) ? 0 : t;
+    };
+
+    const isStoppageLive = (item: { button_status?: number; finish_time?: string | null }) =>
+        Number(item.button_status) === 1 || !item.finish_time;
+
+    const renderStoppageCard = (
+        item: any,
+        kind: 'bottleneck' | 'breakdown',
+        index: number,
+        soloOnSlide = false,
+        compactOnSlide = false
+    ) => {
+        const isBreakdown = kind === 'breakdown';
+        const isLive = Number(item.button_status) === 1;
+        const badgeLabel = isBreakdown ? 'BREAKDOWN' : 'BOTTLENECK';
+        const detail = formatStoppageDetail(item.detail);
+        const Icon = isBreakdown ? Wrench : AlertTriangle;
+
+        const timeLabel =
+            isLive && item.idle_start_time
+                ? formatSinceTimeHHMM(item.idle_start_time)
+                : formatTimeRangeHHMM(item.start_time, item.finish_time);
+
+        const lineTimeLabel = [item.work_centre_name, timeLabel].filter(Boolean).join(' • ');
+
+        const cardTheme = isBreakdown
+            ? {
+                shell: 'bg-gradient-to-br from-red-800 via-red-700 to-red-600 border-red-900 ring-red-500/50 shadow-red-950/50',
+                accent: 'border-l-red-950',
+                title: 'text-white',
+                timeChip: 'bg-yellow-300 text-red-950 ring-2 ring-yellow-100 shadow-md',
+                detail: 'text-white/95',
+                badge: 'bg-red-950 text-white ring-red-400/60',
+                icon: 'text-white/90',
+                live: 'bg-red-950 ring-red-400/40',
+            }
+            : {
+                shell: 'bg-gradient-to-br from-orange-600 via-red-600 to-red-700 border-orange-700 ring-orange-400/50 shadow-orange-900/40',
+                accent: 'border-l-orange-400',
+                title: 'text-white',
+                timeChip: 'bg-white text-red-800 ring-2 ring-white/90 shadow-md',
+                detail: 'text-white/95',
+                badge: 'bg-white/95 text-red-700 ring-2 ring-white/80 shadow-sm',
+                icon: 'text-orange-100',
+                live: 'bg-orange-800 ring-orange-200/50',
+            };
+
+        const titleSize = soloOnSlide ? 'text-sm sm:text-base' : compactOnSlide ? 'text-xs leading-tight' : 'text-xs sm:text-sm';
+        const chipSize = soloOnSlide ? 'text-xs sm:text-sm' : compactOnSlide ? 'text-[10px] sm:text-xs leading-snug' : 'text-[10px] sm:text-[11px]';
+        const detailSize = soloOnSlide ? 'text-xs sm:text-sm' : compactOnSlide ? 'text-[10px] sm:text-xs leading-tight' : 'text-[10px] sm:text-[11px]';
+
+        return (
+            <div
+                key={`${kind}-${index}-${item.machine_centre_name}-${item.start_time || item.idle_start_time || ''}`}
+                className={[
+                    'w-full max-w-full self-stretch rounded-lg border-2 border-l-[6px] ring-2 shadow-lg flex flex-col min-h-0',
+                    soloOnSlide ? 'flex-1 justify-center px-3 py-3 sm:px-4 sm:py-4' : compactOnSlide ? 'flex-1 min-h-0 px-2 py-1.5' : 'flex-1 px-2.5 py-2.5',
+                    cardTheme.shell,
+                    cardTheme.accent,
+                    isLive
+                        ? isBreakdown
+                            ? 'motion-safe:animate-tv-stoppage-glow motion-reduce:animate-none'
+                            : 'motion-safe:animate-tv-stoppage-glow-bottleneck motion-reduce:animate-none'
+                        : '',
+                ].join(' ')}
+            >
+                <div
+                    className={`flex flex-col items-center justify-center text-center w-full min-h-0 flex-1 ${
+                        compactOnSlide ? 'gap-0.5 overflow-y-auto overscroll-contain' : soloOnSlide ? 'gap-2' : 'gap-1.5'
+                    }`}
+                >
+                    <div className="flex flex-wrap items-center justify-center gap-1 shrink-0">
+                        {isLive && (
+                            <span
+                                className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-white ${cardTheme.live}`}
+                            >
+                                <span className="h-1.5 w-1.5 rounded-full bg-white motion-safe:animate-pulse motion-reduce:animate-none" />
+                                Live
+                            </span>
+                        )}
+                        <span
+                            className={`${compactOnSlide ? 'text-[8px] px-1.5 py-0.5' : 'text-[9px] sm:text-[10px] px-2 py-1'} font-extrabold uppercase tracking-wide rounded-md shadow-md ring-1 ${cardTheme.badge}`}
+                        >
+                            {badgeLabel}
+                        </span>
+                        {!compactOnSlide && (
+                            <Icon className={`h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 ${cardTheme.icon}`} aria-hidden />
+                        )}
+                    </div>
+                    <div
+                        className={`font-extrabold shrink-0 w-full ${cardTheme.title} ${titleSize} ${
+                            compactOnSlide ? 'line-clamp-1' : 'line-clamp-2'
+                        }`}
+                    >
+                        {item.machine_centre_name}
+                    </div>
+                    {detail ? (
+                        <div
+                            className={`font-bold shrink-0 w-full leading-snug ${cardTheme.detail} ${detailSize} line-clamp-3`}
+                            title={detail}
+                        >
+                            {detail}
+                        </div>
+                    ) : null}
+                    {lineTimeLabel ? (
+                        <div
+                            className={`shrink-0 w-full rounded-md px-2 py-0.5 sm:py-1 font-extrabold tabular-nums ${cardTheme.timeChip} ${chipSize}`}
+                        >
+                            <span className="flex items-center justify-center gap-1">
+                                <Clock className={`${compactOnSlide ? 'h-2.5 w-2.5' : 'h-3 w-3'} shrink-0 opacity-80`} aria-hidden />
+                                <span className="break-words">{lineTimeLabel}</span>
+                            </span>
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+        );
     };
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
@@ -46,9 +163,48 @@ export const TVDashboard: React.FC = () => {
     const [showStatusBar, setShowStatusBar] = useState(false);
     const [detailCarouselIndex, setDetailCarouselIndex] = useState(0);
     const [detailCarouselProgress, setDetailCarouselProgress] = useState(0);
+    const [stoppageCarouselIndex, setStoppageCarouselIndex] = useState(0);
+    const [stoppageCarouselProgress, setStoppageCarouselProgress] = useState(0);
 
     const DETAIL_CAROUSEL_SLIDES = 2;
     const DETAIL_CAROUSEL_MS = 30000;
+    const STOPPAGE_CAROUSEL_MS = 15000;
+
+    const bottleneckList = dashboardData?.lowerSection?.bottlenecks ?? [];
+    const breakdownList = dashboardData?.lowerSection?.breakdowns ?? [];
+
+    const mergedStoppageEvents = useMemo(() => {
+        const bn = bottleneckList.map((item: any) => ({ ...item, kind: 'bottleneck' as const }));
+        const bd = breakdownList.map((item: any) => ({ ...item, kind: 'breakdown' as const }));
+        return [...bn, ...bd].sort((a, b) => {
+            const aLive = isStoppageLive(a);
+            const bLive = isStoppageLive(b);
+            if (aLive !== bLive) return aLive ? -1 : 1;
+            return getStoppageSortTime(b) - getStoppageSortTime(a);
+        });
+    }, [dashboardData]);
+
+    const stoppageItemsPerSlide = useMemo(() => {
+        if (mergedStoppageEvents.length === 0) return 2;
+        const maxDetailLen = Math.max(
+            0,
+            ...mergedStoppageEvents.map((e) => formatStoppageDetail(e.detail).length)
+        );
+        return maxDetailLen > 22 ? 1 : 2;
+    }, [mergedStoppageEvents]);
+
+    const stoppageSlideCount = mergedStoppageEvents.length === 0
+        ? 1
+        : Math.ceil(mergedStoppageEvents.length / stoppageItemsPerSlide);
+
+    const stoppageSlides = useMemo(() => {
+        if (mergedStoppageEvents.length === 0) return [];
+        const slides: typeof mergedStoppageEvents[] = [];
+        for (let i = 0; i < mergedStoppageEvents.length; i += stoppageItemsPerSlide) {
+            slides.push(mergedStoppageEvents.slice(i, i + stoppageItemsPerSlide));
+        }
+        return slides;
+    }, [mergedStoppageEvents, stoppageItemsPerSlide]);
 
     useEffect(() => {
         const now = new Date();
@@ -204,7 +360,18 @@ export const TVDashboard: React.FC = () => {
     useEffect(() => {
         setDetailCarouselIndex(0);
         setDetailCarouselProgress(0);
+        setStoppageCarouselIndex(0);
+        setStoppageCarouselProgress(0);
     }, [currentIndex]);
+
+    useEffect(() => {
+        setStoppageCarouselIndex(0);
+        setStoppageCarouselProgress(0);
+    }, [stoppageSlideCount]);
+
+    useEffect(() => {
+        setStoppageCarouselIndex((prev) => (prev >= stoppageSlideCount ? 0 : prev));
+    }, [stoppageSlideCount]);
 
     useEffect(() => {
         setDetailCarouselProgress(0);
@@ -223,6 +390,29 @@ export const TVDashboard: React.FC = () => {
         }, tickMs);
         return () => clearInterval(interval);
     }, [detailCarouselIndex, currentIndex]);
+
+    useEffect(() => {
+        if (stoppageSlideCount <= 1 || mergedStoppageEvents.length === 0) return;
+
+        const rotateInterval = setInterval(() => {
+            setStoppageCarouselIndex((prev) => (prev + 1) % stoppageSlideCount);
+            setStoppageCarouselProgress(0);
+        }, STOPPAGE_CAROUSEL_MS);
+
+        return () => clearInterval(rotateInterval);
+    }, [currentIndex, stoppageSlideCount]);
+
+    useEffect(() => {
+        if (stoppageSlideCount <= 1 || mergedStoppageEvents.length === 0) return;
+
+        const tickMs = 100;
+        const increment = (tickMs / STOPPAGE_CAROUSEL_MS) * 100;
+        const interval = setInterval(() => {
+            setStoppageCarouselProgress((prev) => Math.min(prev + increment, 100));
+        }, tickMs);
+
+        return () => clearInterval(interval);
+    }, [stoppageCarouselIndex, currentIndex, stoppageSlideCount]);
 
     const secondsSinceLastSuccess = lastUpdatedAt ? Math.floor((currentTime.getTime() - lastUpdatedAt.getTime()) / 1000) : null;
     const isCriticalStaleNow = secondsSinceLastSuccess !== null && secondsSinceLastSuccess > 120;
@@ -606,46 +796,87 @@ export const TVDashboard: React.FC = () => {
             </div>
 
             <div className="col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
-                <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg p-2 sm:p-3 border border-gray-100 ring-1 ring-slate-200/60">
-                    <h3 className="font-bold text-red-600 mb-1.5 flex items-center gap-1.5 flex-shrink-0" style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}>
-                        <TrendingUp className="h-3.5 w-3.5 text-red-600 motion-safe:animate-pulse motion-reduce:animate-none" />
-                        Top 3 Bottleneck Machines
-                        {/* {reworkAgeSec !== null && reworkAgeSec > 30 && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 ml-1">Rework stale</span>
-                        )} */}
-                    </h3>
-                    {lowerSection.bottlenecks.length > 0 ? (
-                        <div className="flex-1 min-h-0 flex flex-col justify-start gap-2">
-                            {lowerSection.bottlenecks.map((item: any, index: number) => (
-                                <div
-                                    key={index}
-                                    className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 rounded-md px-2 py-1.5 shadow-sm motion-safe:opacity-0 motion-safe:animate-tv-section-in max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100"
-                                    style={{ animationDelay: `${180 + index * 90}ms` }}
-                                >
-                                    <div className="flex justify-between items-center gap-1.5">
-                                        <div className="flex-1 min-w-0 leading-tight">
-                                            <div className="text-gray-800 font-bold text-[11px] sm:text-xs truncate">{item.machine_centre_name}</div>
-                                            <div className="text-gray-600 text-[10px] truncate">
-                                                {item.work_centre_name ? `${item.work_centre_name} • ` : ''}
-                                                {formatTimeRange(item.start_time, item.finish_time)}
-                                                {item.detail ? ` • ${formatBottleneckDetail(item.detail)}` : ''}
-                                            </div>
-                                        </div>
-                                        <div className="text-red-600 text-sm font-bold flex-shrink-0 bg-white px-1.5 py-0.5 rounded shadow-sm tabular-nums">
-                                            BOTTLENECK
-                                        </div>
-                                    </div>
+                <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-white ring-1 ring-slate-200/60 overflow-hidden">
+                    <div className="flex-shrink-0 mb-1.5">
+                        <h3 className="font-bold text-red-600 flex items-center gap-1.5 leading-tight text-sm sm:text-base">
+                            <TrendingUp className="h-3.5 w-3.5 text-red-600 motion-safe:animate-pulse motion-reduce:animate-none flex-shrink-0" />
+                            <span>Bottleneck &amp; Breakdown</span>
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                            <span className="inline-flex items-center rounded-md bg-orange-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold text-orange-900 ring-1 ring-orange-300 tabular-nums">
+                                Bottleneck {bottleneckList.length}
+                            </span>
+                            <span className="inline-flex items-center rounded-md bg-red-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold text-red-900 ring-1 ring-red-300 tabular-nums">
+                                Breakdown {breakdownList.length}
+                            </span>
+                            <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold text-gray-700 ring-1 ring-gray-200 tabular-nums">
+                                Total {mergedStoppageEvents.length}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                        <div className="relative flex-1 min-h-0 w-full overflow-hidden">
+                            {mergedStoppageEvents.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-center px-2">
+                                    <p className="text-[10px] sm:text-xs text-gray-400">No bottlenecks or breakdowns today</p>
                                 </div>
-                            ))}
+                            ) : (
+                                <div
+                                    className="flex h-full w-full transition-transform duration-500 ease-in-out motion-reduce:transition-none"
+                                    style={{ transform: `translateX(-${stoppageCarouselIndex * 100}%)` }}
+                                >
+                                    {stoppageSlides.map((slide, slideIdx) => (
+                                        <div
+                                            key={`stoppage-slide-${slideIdx}`}
+                                            className="flex-[0_0_100%] w-full h-full min-h-0 flex flex-col gap-1.5 overflow-hidden"
+                                        >
+                                            {slide.map((item, itemIdx) =>
+                                                renderStoppageCard(
+                                                    item,
+                                                    item.kind,
+                                                    slideIdx * stoppageItemsPerSlide + itemIdx,
+                                                    slide.length === 1,
+                                                    slide.length > 1
+                                                )
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <div className="py-2 flex items-center justify-center text-gray-400">
-                            <div className="text-center px-2 motion-safe:animate-tv-section-in motion-reduce:animate-none">
-                                <Smile className="h-6 w-6 mx-auto mb-0.5 text-green-400 motion-safe:animate-tv-breathe motion-reduce:animate-none" />
-                                <div className="text-[10px] sm:text-xs text-gray-500">No Bottlenecks - All machines performing well!</div>
+                        {mergedStoppageEvents.length > 0 && stoppageSlideCount > 1 && (
+                            <div className="flex-shrink-0 pt-1 pb-0.5 border-t border-gray-100 mt-1">
+                                <div className="flex items-center justify-center gap-1.5 mb-1" role="tablist" aria-label="Stoppage events">
+                                    {stoppageSlides.map((_, i) => (
+                                        <button
+                                            key={`stoppage-dot-${i}`}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={stoppageCarouselIndex === i}
+                                            aria-label={`Stoppage page ${i + 1}`}
+                                            onClick={() => {
+                                                setStoppageCarouselIndex(i);
+                                                setStoppageCarouselProgress(0);
+                                            }}
+                                            className={`h-1.5 rounded-full transition-all duration-300 ${
+                                                stoppageCarouselIndex === i ? 'w-5 bg-red-500' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
+                                            }`}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="w-full rounded-full h-1 bg-gray-200 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-red-500 transition-[width] duration-100 motion-reduce:transition-none"
+                                        style={{ width: `${stoppageCarouselProgress}%` }}
+                                    />
+                                </div>
+                                <p className="text-[9px] sm:text-[10px] text-red-500 font-semibold text-center mt-0.5 tabular-nums">
+                                    {stoppageCarouselIndex + 1}/{stoppageSlideCount} · Auto-switch in{' '}
+                                    {Math.max(0, Math.ceil((STOPPAGE_CAROUSEL_MS / 1000) * (1 - stoppageCarouselProgress / 100)))}s
+                                </p>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
             </div>
