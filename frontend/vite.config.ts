@@ -10,6 +10,15 @@ const certFile = path.join(certPath, 'cert.pem')
 
 const useHttps = fs.existsSync(keyFile) && fs.existsSync(certFile)
 
+/** Optional split-dev proxy — set VITE_DEV_API_PROXY in .env.local (not committed). */
+const devApiProxyTarget = process.env.VITE_DEV_API_PROXY?.trim()
+const devApiProxy = devApiProxyTarget
+  ? {
+      '/api': { target: devApiProxyTarget, changeOrigin: true },
+      '/health': { target: devApiProxyTarget, changeOrigin: true },
+    }
+  : undefined
+
 export default defineConfig({
   plugins: [
     react(),
@@ -84,6 +93,7 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     https: false,
+    ...(devApiProxy ? { proxy: devApiProxy } : {}),
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'react-query'],
