@@ -10,16 +10,14 @@ const certFile = path.join(certPath, 'cert.pem')
 
 const useHttps = fs.existsSync(keyFile) && fs.existsSync(certFile)
 
-const devApiProxy = () => ({
-  '/api': {
-    target: process.env.VITE_DEV_API_PROXY || 'http://127.0.0.1:3101',
-    changeOrigin: true,
-  },
-  '/health': {
-    target: process.env.VITE_DEV_API_PROXY || 'http://127.0.0.1:3101',
-    changeOrigin: true,
-  },
-})
+/** Optional split-dev proxy — set VITE_DEV_API_PROXY in .env.local (not committed). */
+const devApiProxyTarget = process.env.VITE_DEV_API_PROXY?.trim()
+const devApiProxy = devApiProxyTarget
+  ? {
+      '/api': { target: devApiProxyTarget, changeOrigin: true },
+      '/health': { target: devApiProxyTarget, changeOrigin: true },
+    }
+  : undefined
 
 export default defineConfig({
   plugins: [
@@ -92,15 +90,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3002,
+    port: 3000,
     host: '0.0.0.0',
     https: false,
-    proxy: devApiProxy(),
-  },
-  preview: {
-    port: 3002,
-    host: '0.0.0.0',
-    proxy: devApiProxy(),
+    ...(devApiProxy ? { proxy: devApiProxy } : {}),
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'react-query'],

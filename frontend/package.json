@@ -7,9 +7,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
-    "build:prod": "tsc && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 3002",
-    "serve:prod": "npm run build && vite preview --host 0.0.0.0 --port 3002",
+    "preview": "vite preview",
     "generate-cert": "node generate-cert.js"
   },
   "dependencies": {

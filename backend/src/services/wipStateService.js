@@ -10,10 +10,11 @@
  *   - Input       : Cumulative production from Heel Grip Machine (machine_id = '03') today.
  *   - Output      : End-of-line completed production (existing logic, unchanged).
  *
- * PERSISTENCE:
- *   State is stored in the `wip_daily_state` table (one row per work_centre per day).
- *   At end of day, closing_wip = current_wip.
- *   Next morning, opening_wip = previous day's closing_wip.
+ * PERSISTENCE (DB only — no code fallbacks or hardcoded opening WIP):
+ *   All values live in `wip_daily_state` (one row per work_centre per day).
+ *   Dashboard reads/updates an existing row only.
+ *   At end of day, closeDay sets closing_wip and inserts the next day's row
+ *   (opening_wip = closing_wip). Seed the first row via SQL if needed.
  *
  * SAFETY:
  *   - WIP is floored at 0 (never negative).
@@ -34,13 +35,6 @@ const LINE_3_WORK_CENTRE_ID = 5;
 
 /** End-of-line machine for Line 3 WIP output (matches TV dashboard). */
 const EOL_MACHINE_ID = '07';
-
-/**
- * Initial opening WIP for Line 3 on the first day this feature is deployed.
- * After the first day, opening WIP is always derived from the previous day's
- * closing WIP automatically.
- */
-const INITIAL_OPENING_WIP = 130;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,6 +67,17 @@ function toDateKey(value) {
         return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
     }
     return String(value).slice(0, 10);
+}
+
+/**
+ * @param {string} dateKey  YYYY-MM-DD
+ * @param {number} days
+ * @returns {string}
+ */
+function addDaysToDateKey(dateKey, days) {
+    const d = new Date(`${dateKey}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    return toDateKey(d);
 }
 
 /**
@@ -209,66 +214,50 @@ async function getTodayInput(workCentreId, date) {
 }
 
 /**
- * Retrieves (or initialises) the WIP state row for a given work centre and date.
- *
- * Initialisation logic:
- *   1. If a row already exists for today → return it as-is.
- *   2. If a previous day's row exists → opening_wip from carry-forward (live current_wip if not closed).
- *   3. Bootstrap (first-ever run): seed current_wip = INITIAL_OPENING_WIP.
- *      opening_wip is back-calculated so the formula resolves correctly even
- *      when today already has production recorded:
- *        opening_wip = INITIAL_OPENING_WIP - todayInput + todayOutput
- *      This ensures: opening_wip + todayInput - todayOutput = INITIAL_OPENING_WIP
+ * Reads the WIP state row for a work centre and date. Does not insert or guess values.
  *
  * @param {number} workCentreId
  * @param {string} date  YYYY-MM-DD
- * @returns {Promise<{opening_wip: number, today_input: number, current_wip: number, closing_wip: number, is_closed: number}>}
+ * @returns {Promise<{opening_wip: number, today_input: number, current_wip: number, closing_wip: number, is_closed: number}|null>}
  */
-async function getOrInitWipState(workCentreId, date) {
-    // 1. Try to fetch existing row for today
-    const [existing] = await pool.query(
+async function fetchWipStateRow(workCentreId, date) {
+    const [rows] = await pool.query(
         `SELECT opening_wip, today_input, current_wip, closing_wip, is_closed
          FROM wip_daily_state
          WHERE work_centre_id = ? AND state_date = ?`,
         [workCentreId, date]
     );
 
+    return rows.length > 0 ? rows[0] : null;
+}
+
+/**
+ * After closeDay, inserts the next calendar day's row when missing.
+ * opening_wip / current_wip come from today's closing_wip only.
+ *
+ * @param {number} workCentreId
+ * @param {string} closedDateKey  YYYY-MM-DD
+ * @param {number} closingWip
+ */
+async function openNextDayRowFromClose(workCentreId, closedDateKey, closingWip) {
+    const nextDate = addDaysToDateKey(closedDateKey, 1);
+    const [existing] = await pool.query(
+        `SELECT id FROM wip_daily_state
+         WHERE work_centre_id = ? AND state_date = ?`,
+        [workCentreId, nextDate]
+    );
+
     if (existing.length > 0) {
-        return existing[0];
+        return;
     }
 
-    // 2. No row for today — carry forward from previous day or bootstrap
-    const carryForward = await resolveCarryForwardOpening(workCentreId, date);
-
-    let openingWip;
-
-    if (carryForward !== null) {
-        openingWip = carryForward;
-    } else {
-        // Bootstrap: first time this feature runs.
-        const todayInput = await getTodayInput(workCentreId, date);
-        const todayOutput = await getEolOutput(workCentreId, date);
-        openingWip = Math.max(0, INITIAL_OPENING_WIP - todayInput + todayOutput);
-    }
-
-    // 3. Insert the new day's row
+    const opening = clampWip(closingWip);
     await pool.query(
         `INSERT INTO wip_daily_state
              (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed)
-         VALUES (?, ?, ?, 0, ?, 0, 0)
-         ON DUPLICATE KEY UPDATE
-             opening_wip = VALUES(opening_wip),
-             current_wip = VALUES(current_wip)`,
-        [workCentreId, date, openingWip, openingWip]
+         VALUES (?, ?, ?, 0, ?, 0, 0)`,
+        [workCentreId, nextDate, opening, opening]
     );
-
-    return {
-        opening_wip: openingWip,
-        today_input: 0,
-        current_wip: openingWip,
-        closing_wip: 0,
-        is_closed: 0,
-    };
 }
 
 /**
@@ -282,32 +271,22 @@ async function getOrInitWipState(workCentreId, date) {
  * @returns {Promise<{openingWip: number, todayInput: number, currentWip: number, closingWip: number}>}
  */
 async function computeAndPersistWip(workCentreId, date, todayOutput) {
-    // Ensure the state row exists (or is initialised)
-    const state = await getOrInitWipState(workCentreId, date);
+    const state = await fetchWipStateRow(workCentreId, date);
+    const todayInput = await getTodayInput(workCentreId, date);
+    const roundedOutput = Math.round(todayOutput);
 
-    let openingWip = Math.round(Number(state.opening_wip || 0));
-
-    // Repair rows created with opening 0 when yesterday still had live WIP (or a bad close)
-    if (!state.is_closed) {
-        const carryForward = await resolveCarryForwardOpening(workCentreId, date);
-        if (carryForward !== null && carryForward > openingWip) {
-            openingWip = carryForward;
-            await pool.query(
-                `UPDATE wip_daily_state
-                 SET opening_wip = ?
-                 WHERE work_centre_id = ? AND state_date = ?`,
-                [openingWip, workCentreId, date]
-            );
-        }
+    if (!state) {
+        return {
+            openingWip: 0,
+            todayInput,
+            currentWip: 0,
+            closingWip: 0,
+        };
     }
 
-    // Fetch live input from Heel Grip Machine
-    const todayInput = await getTodayInput(workCentreId, date);
+    const openingWip = Math.round(Number(state.opening_wip || 0));
+    const currentWip = clampWip(openingWip + todayInput - roundedOutput);
 
-    // MES WIP formula — floor at 0 to prevent negative WIP
-    const currentWip = clampWip(openingWip + todayInput - Math.round(todayOutput));
-
-    // Persist the updated live state
     await pool.query(
         `UPDATE wip_daily_state
          SET today_input = ?,
@@ -352,6 +331,8 @@ async function closeDay(workCentreId, date) {
         [closingWip, workCentreId, date]
     );
 
+    await openNextDayRowFromClose(workCentreId, date, closingWip);
+
     return { closingWip };
 }
 
@@ -364,7 +345,17 @@ async function closeDay(workCentreId, date) {
  * @returns {Promise<{openingWip: number, todayInput: number, currentWip: number, closingWip: number, isClosed: boolean}>}
  */
 async function getWipState(workCentreId, date) {
-    const state = await getOrInitWipState(workCentreId, date);
+    const state = await fetchWipStateRow(workCentreId, date);
+    if (!state) {
+        return {
+            openingWip: 0,
+            todayInput: 0,
+            currentWip: 0,
+            closingWip: 0,
+            isClosed: false,
+        };
+    }
+
     return {
         openingWip: Math.round(state.opening_wip),
         todayInput: Math.round(state.today_input),
@@ -378,12 +369,12 @@ module.exports = {
     HEEL_GRIP_MACHINE_ID,
     LINE_3_WORK_CENTRE_ID,
     EOL_MACHINE_ID,
-    INITIAL_OPENING_WIP,
     getTodayInput,
     getEolOutputFromProduction,
     getEolOutput,
     resolveCarryForwardOpening,
-    getOrInitWipState,
+    fetchWipStateRow,
+    openNextDayRowFromClose,
     computeAndPersistWip,
     closeDay,
     getWipState,

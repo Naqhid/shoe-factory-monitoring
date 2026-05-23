@@ -8,10 +8,10 @@
  *
  *   - Input  : Production from Heel Grip Machine (machine_id = '03') — line entry point.
  *   - Output : End-of-line completed production (existing logic, unchanged).
- *   - Opening WIP : Previous day's closing WIP, carried forward automatically.
+ *   - Opening WIP : From wip_daily_state only (seed SQL or prior closeDay carry-forward).
  *
  * Line 3 is the primary line using this WIP formula.
- * All other lines also use the same formula (opening WIP defaults to 0 until seeded).
+ * Requires a wip_daily_state row for the date; no code fallback values.
  */
 
 'use strict';

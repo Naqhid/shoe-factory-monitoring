@@ -16,11 +16,13 @@ For Mobile Production reliability checks, use: [Mobile Production Stability Chec
 
 ## 2) Golden Rules (No Production Impact)
 
-1. Never run experimental backend on production port (`3001`) if production is active.
-2. Run feature backend on a separate port (example: `3101`).
-3. Run feature frontend on a separate port (example: `3004` or `3100`).
+1. Never run experimental backend on production port (`3000`) if production is active.
+2. Run feature backend on **`3101`** (CLI `PORT=3101`, not in repo config).
+3. Run feature frontend on **`3002`** via CLI `--port 3002` (not in repo config).
 4. Keep local override values in local-only env files (`.env.local`), not committed secrets.
 5. Do not push directly to `develop`.
+
+> **Develop / production defaults:** Vite dev **3000**, backend **`PORT` from `backend/.env`** (often **3000** for single-server prod). Feature ports are CLI + `.env.local` only — nothing hardcoded in `vite.config.ts` or `package.json`.
 
 ---
 
@@ -43,10 +45,10 @@ This ensures your branch starts from the latest live baseline.
 ### 🔒 Do Not Forget (Feature Ports)
 
 - **Feature backend port:** `3101`
-- **Feature frontend port:** `3004`
-- **Live production backend port:** `3001` (do not use for feature testing)
+- **Feature frontend port:** `3002`
+- **Live production (`develop`):** `3000` — do not use for feature testing
 
-Use these exact commands each time:
+Use these exact commands each time (ports on CLI only — **not** committed in `vite.config.ts` / `package.json`):
 
 ```bash
 # Terminal 1 (backend)
@@ -58,6 +60,14 @@ cd frontend
 npm run dev -- --port 3002 --host 0.0.0.0
 ```
 
+Optional `frontend/.env.local` for split dev (proxy or direct API):
+
+```env
+VITE_DEV_API_PROXY=http://127.0.0.1:3101
+# or
+VITE_API_BASE_URL=http://localhost:3101
+```
+
 Optional quick checks:
 
 ```bash
@@ -65,7 +75,7 @@ Optional quick checks:
 curl http://localhost:3101/health
 
 # Frontend
-start http://localhost:3004
+start http://localhost:3002
 ```
 
 ### Backend (feature)
@@ -81,8 +91,31 @@ PORT=3101 npm start
 From `frontend/`:
 
 ```bash
-npm run dev -- --port 3004 --host 0.0.0.0
+npm run dev -- --port 3002 --host 0.0.0.0
 ```
+
+### Serve built `dist/` only (preview, not dev)
+
+Use this to test the production build locally (static files from `dist/`), instead of `npm run dev`:
+
+```bash
+cd frontend
+npm run build
+npm run preview -- --port 3002 --host 0.0.0.0
+```
+
+Or with `serve` (static `dist/` only):
+
+```bash
+cd frontend
+npm run build
+npx serve dist -l 3002
+```
+
+Open `http://localhost:3002` (or your machine IP on port 3002).
+
+- Still run the **feature backend** separately on `3101` (Terminal 1 above).
+- Set `frontend/.env.local` with `VITE_API_BASE_URL=http://localhost:3101` before `npm run build` if the UI must call the feature API (see below).
 
 ### API target isolation in frontend
 
@@ -190,7 +223,7 @@ git push origin develop
 
 ## 11) Common Mistakes to Avoid
 
-- Running feature backend on `3001` while production service is running.
+- Running feature backend on `3000` while production service is running.
 - Testing feature UI against live backend unintentionally.
 - Merging without syncing latest `develop` first.
 - Committing local machine-specific env/secrets.
@@ -206,8 +239,12 @@ git checkout develop && git pull origin develop && git checkout -b feature/<name
 # Feature backend isolated
 cd backend && PORT=3101 npm start
 
-# Feature frontend isolated
-cd frontend && npm run dev -- --port 3004 --host 0.0.0.0
+# Feature frontend isolated (dev)
+cd frontend && npm run dev -- --port 3002 --host 0.0.0.0
+
+# Feature frontend — serve dist/ only (after build)
+cd frontend && npm run build && npm run preview -- --port 3002 --host 0.0.0.0
+# Or: cd frontend && npm run build && npx serve dist -l 3002
 
 # Push feature branch
 git add . && git commit -m "feat: ..." && git push origin feature/<name>

@@ -23,9 +23,8 @@ CREATE TABLE IF NOT EXISTS wip_daily_state (
     CONSTRAINT fk_wip_work_centre FOREIGN KEY (work_centre_id) REFERENCES work_centres(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Seed initial opening WIP for Line 3 (work_centre_id = 3) as per business requirement
--- Opening WIP starts at 130 on the first day this feature goes live.
--- Adjust the date and work_centre_id to match your production environment.
--- INSERT INTO wip_daily_state (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip)
--- VALUES (3, CURDATE(), 130, 0, 130, 0)
--- ON DUPLICATE KEY UPDATE opening_wip = VALUES(opening_wip);
+-- Seed starting inventory when enabling WIP (one row per line; adjust ids/date):
+-- Line 3 = work_centre_id 5 in production DB.
+-- INSERT INTO wip_daily_state (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed)
+-- VALUES (5, CURDATE(), 130, 0, 130, 0, 0)
+-- ON DUPLICATE KEY UPDATE opening_wip = VALUES(opening_wip), current_wip = VALUES(current_wip);
