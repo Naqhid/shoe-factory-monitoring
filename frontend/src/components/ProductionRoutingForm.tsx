@@ -227,16 +227,17 @@ export const ProductionRoutingForm: React.FC = () => {
   const calculateLineValues = (line: RoutingLine) => {
     const observedTime = parseFloat(line.observed_time) || 0;
     const ratingFactor = parseFloat(line.rating_factor) || 0;
-    const targetPerDay = parseFloat(headerData.target_per_day) || 0;
 
     const normalTimeSecs = (observedTime * ratingFactor) / 100;
     const stdTimeSecs = normalTimeSecs * 1.15;
-    const mins12Prs = Math.round(((stdTimeSecs * 12) / 60) * 10) / 10;
-    const pairsPerHr = stdTimeSecs > 0 ? Math.round(targetPerDay / stdTimeSecs) : 0;
+    // Minutes for 6 pairs at observed sec/pair (e.g. 72s × 6 ÷ 60 = 7.2 min)
+    const mins6Prs = Math.round(((observedTime * 6) / 60) * 10) / 10;
+    // Pairs/hr from cycle time (e.g. 3600 ÷ 72 = 50 pairs/hr)
+    const pairsPerHr = observedTime > 0 ? Math.round(3600 / observedTime) : 0;
     const pairsPerDay = pairsPerHr * 8;
     const manpower = line.manpower ? (Math.round(parseFloat(line.manpower) * 10) / 10) : 0;
 
-    return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_12_prs_box: mins12Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
+    return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_6_prs_box: mins6Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
   };
 
   const addLine = () => setLines([...lines, { machine_centre_id: '', machine_name: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
@@ -834,7 +835,7 @@ export const ProductionRoutingForm: React.FC = () => {
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Normal Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Std Time</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Mins 12 prs</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Mins 6 prs</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/hr</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/day</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Manpower</th>
@@ -866,7 +867,7 @@ export const ProductionRoutingForm: React.FC = () => {
                             </td>
                             <td className="px-2 py-2 text-gray-700">{calc.normal_time_secs_pr}</td>
                             <td className="px-2 py-2 text-gray-700">{calc.std_time_secs_pr}</td>
-                            <td className="px-2 py-2 text-gray-700">{calc.mins_12_prs_box.toFixed(1)}</td>
+                            <td className="px-2 py-2 text-gray-700">{calc.mins_6_prs_box.toFixed(1)}</td>
                             <td className="px-2 py-2 text-gray-700">{calc.pairs_per_hr}</td>
                             <td className="px-2 py-2 text-gray-700">{calc.pairs_per_day}</td>
                             <td className="px-2 py-2">

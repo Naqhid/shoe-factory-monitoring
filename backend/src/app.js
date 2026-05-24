@@ -127,6 +127,40 @@ const initDb = async () => {
         throw planAlterError;
       }
     }
+    // Routing: mins per 6 pairs = observed sec/pair × 6 ÷ 60 (e.g. 72 → 7.2 min)
+    try {
+      const [routingCols] = await db.execute(`
+        SELECT COLUMN_NAME, GENERATION_EXPRESSION
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'production_routing_lines'
+          AND COLUMN_NAME IN ('mins_12_prs_box', 'mins_6_prs_box')
+      `);
+      const routingColNames = new Set(routingCols.map((c) => c.COLUMN_NAME));
+      const mins6Row = routingCols.find((c) => c.COLUMN_NAME === 'mins_6_prs_box');
+      const mins6UsesStdFormula = mins6Row?.GENERATION_EXPRESSION
+        && String(mins6Row.GENERATION_EXPRESSION).includes('1.15');
+
+      if (routingColNames.has('mins_12_prs_box')) {
+        await db.execute('ALTER TABLE production_routing_lines DROP COLUMN mins_12_prs_box');
+        logger.info('Dropped mins_12_prs_box from production_routing_lines');
+      }
+      if (!routingColNames.has('mins_6_prs_box') || mins6UsesStdFormula) {
+        if (routingColNames.has('mins_6_prs_box')) {
+          await db.execute('ALTER TABLE production_routing_lines DROP COLUMN mins_6_prs_box');
+          logger.info('Recreating mins_6_prs_box with observed-time formula');
+        }
+        await db.execute(`
+          ALTER TABLE production_routing_lines
+          ADD COLUMN mins_6_prs_box decimal(10,4) GENERATED ALWAYS AS (
+            ((\`observed_time\` * 6) / 60)
+          ) STORED
+        `);
+        logger.info('Added mins_6_prs_box to production_routing_lines');
+      }
+    } catch (routingMinsAlterError) {
+      logger.error('Failed to migrate production_routing_lines mins column:', routingMinsAlterError.message);
+    }
     await db.execute(`
       CREATE TABLE IF NOT EXISTS tracker_alert_actions (
         issue_key VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -544,6 +578,8 @@ app.get('/api/reports/employee-performance', authenticate, requireLogsAccess, va
 app.get('/api/reports/downtime', authenticate, requireLogsAccess, apiController.getDowntimeReport.bind(apiController));
 app.get('/api/reports/attendance-production', authenticate, requireLogsAccess, apiController.getAttendanceProductionReport.bind(apiController));
 app.get('/api/reports/shift-summary', authenticate, requireLogsAccess, apiController.getShiftSummaryReport.bind(apiController));
+app.get('/api/reports/bottleneck', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getBottleneckReport.bind(apiController));
+app.get('/api/reports/breakdown', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getBreakdownReport.bind(apiController));
 
 // Master routes — table whitelist on all master endpoints
 app.get('/api/masters/:table', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.pagination, masterController.getAll.bind(masterController));
