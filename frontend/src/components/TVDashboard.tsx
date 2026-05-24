@@ -318,7 +318,7 @@ export const TVDashboard: React.FC = () => {
     }));
 
     return (
-        <div className="h-full min-h-0 flex flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-2 sm:p-3 max-w-[min(122rem,96vw)] mx-auto">
+        <div className="h-full min-h-0 flex flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 w-full px-2 sm:px-3">
             <div key={String(currentWorkCentreId ?? currentIndex)} className="flex-shrink-0 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-xl sm:rounded-2xl shadow-xl p-2 sm:p-3 mb-2 relative overflow-hidden ring-1 ring-white/10 motion-safe:animate-tv-section-in max-sm:motion-safe:animate-none motion-reduce:animate-none">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute top-0 left-0 w-72 h-72 sm:w-96 sm:h-96 max-sm:w-44 max-sm:h-44 bg-white rounded-full blur-3xl opacity-[0.12] max-sm:opacity-[0.05] max-sm:blur-2xl motion-safe:animate-tv-shimmer max-sm:motion-safe:animate-none motion-reduce:opacity-10" />

@@ -93,7 +93,7 @@ function App() {
   const isMobileQRScanner = pathParts[0] === 'mobile' && pathParts.length === 2 && !isLineRoute;
   const hideTopHeader = isMobileProduction || isMobileQRScanner || activeMenu === 'production_tracker' || activeMenu === 'overview';
   const fitViewport = activeMenu === 'overview';
-  const hideSidebarToggleButton = activeMenu === 'production_tracker';
+  const hideSidebarToggleButton = activeMenu === 'production_tracker' || activeMenu === 'overview';
   const hideAlertBell = isMobileProduction || isMobileQRScanner;
   const hideLogout = false; // Show logout for all users including Machine Centre Users
 
