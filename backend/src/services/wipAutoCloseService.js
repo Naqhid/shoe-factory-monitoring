@@ -23,13 +23,7 @@ const getLocalDateKey = (date = new Date()) => {
 };
 
 async function getTodayOutput(workCentreId, date) {
-    const [rows] = await pool.query(
-        `SELECT COALESCE(SUM(total_output_pairs), 0) AS total_output
-         FROM machine_centre_summary
-         WHERE DATE(prod_date) = ? AND work_centre_id = ?`,
-        [date, workCentreId]
-    );
-    return Math.round(Number(rows[0]?.total_output || 0));
+    return wipStateService.getEolOutput(workCentreId, date);
 }
 
 /**

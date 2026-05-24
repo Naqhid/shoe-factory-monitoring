@@ -49,6 +49,36 @@ const resolveTargetsFromPlan = async (conn, { machineId, workCentreId, prodDate 
 const MACHINE_CYCLE_OVERLAP_MSG =
   'This time overlaps another finished cycle on the same machine. The next cycle can only start after the previous one ends.';
 
+const STOPPAGE_PREFIX_BY_TYPE = {
+  bottleneck: 'BOTTLENECK',
+  breakdown: 'BREAKDOWN',
+};
+
+function resolveStoppageEntryMeta(entryTypeRaw, existingStoppageReason = '') {
+  const normalized = String(entryTypeRaw || '').toLowerCase();
+  if (normalized === 'breakdown') {
+    return { prefix: STOPPAGE_PREFIX_BY_TYPE.breakdown, isStoppageEvent: true, kind: 'breakdown' };
+  }
+  if (normalized === 'bottleneck') {
+    return { prefix: STOPPAGE_PREFIX_BY_TYPE.bottleneck, isStoppageEvent: true, kind: 'bottleneck' };
+  }
+  const existing = String(existingStoppageReason || '');
+  if (existing.startsWith('BREAKDOWN:')) {
+    return { prefix: STOPPAGE_PREFIX_BY_TYPE.breakdown, isStoppageEvent: true, kind: 'breakdown' };
+  }
+  if (existing.startsWith('BOTTLENECK:')) {
+    return { prefix: STOPPAGE_PREFIX_BY_TYPE.bottleneck, isStoppageEvent: true, kind: 'bottleneck' };
+  }
+  return { prefix: 'MANUAL', isStoppageEvent: false, kind: 'manual' };
+}
+
+function buildStoppageReason(prefix, reason, approverIdentity) {
+  return `${prefix}:${String(reason || '').trim()} [Approved By: ${approverIdentity}]`;
+}
+
+const STOPPAGE_ENTRY_SQL_FILTER =
+  "(stoppage_reason LIKE 'MANUAL:%' OR stoppage_reason LIKE 'BOTTLENECK:%' OR stoppage_reason LIKE 'BREAKDOWN:%')";
+
 /** Any finished row on this machine whose [start_time, finish_time] overlaps the given window. */
 const findOverlappingFinishedCycleOnMachine = async (connOrPool, { machineId, startTime, finishTime, excludeId = null }) => {
   let query = `
@@ -113,11 +143,23 @@ const formatLocalDateTime = (date) => {
 
 const toMySqlDateTimeOrNull = (value) => {
   if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // Preserve wall-clock from client payloads like 2026-05-21T12:28:00 (no timezone shift).
+  if (!hasTimezoneInDateTime(raw)) {
+    const wall = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/);
+    if (wall) {
+      const sec = wall[3] || '00';
+      return `${wall[1]} ${wall[2]}:${sec}`;
+    }
+  }
+
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
     return formatLocalDateTime(value);
   }
-  const dt = new Date(value);
+  const dt = new Date(raw);
   if (Number.isNaN(dt.getTime())) return null;
   return formatLocalDateTime(dt);
 };
@@ -456,13 +498,22 @@ exports.createManualEntry = async (req, res, next) => {
       entry_type
     } = req.body;
 
-    const entryType = String(entry_type || 'manual').toLowerCase();
-    const isBottleneckEntry = entryType === 'bottleneck';
+    const entryMeta = resolveStoppageEntryMeta(entry_type);
+    const isStoppageEvent = entryMeta.isStoppageEvent;
 
-    if (!work_centre_id || !machine_id || !emp_id || !start_time || !finish_time) {
+    const finishProvided =
+      finish_time !== undefined && finish_time !== null && String(finish_time).trim() !== '';
+
+    if (!work_centre_id || !machine_id || !emp_id || !start_time) {
       return res.status(400).json({
         success: false,
-        message: 'work_centre_id, machine_id, emp_id, start_time and finish_time are required'
+        message: 'work_centre_id, machine_id, emp_id and start_time are required'
+      });
+    }
+    if (!isStoppageEvent && !finishProvided) {
+      return res.status(400).json({
+        success: false,
+        message: 'finish_time is required for manual production entries'
       });
     }
     if (output_pairs === undefined || output_pairs === null || Number.isNaN(Number(output_pairs))) {
@@ -471,22 +522,30 @@ exports.createManualEntry = async (req, res, next) => {
         message: 'output_pairs is required and must be a number'
       });
     }
-    const manualOutputPairs = isBottleneckEntry ? 0 : Math.max(0, Math.round(Number(output_pairs)));
+    const manualOutputPairs = isStoppageEvent ? 0 : Math.max(0, Math.round(Number(output_pairs)));
 
     const start = new Date(start_time);
-    const finish = new Date(finish_time);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime())) {
-      return res.status(400).json({ success: false, message: 'Invalid start_time or finish_time' });
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid start_time' });
     }
-    if (finish <= start) {
-      return res.status(400).json({ success: false, message: 'finish_time must be later than start_time' });
+
+    const isOngoingStoppage = isStoppageEvent && !finishProvided;
+    let finish = null;
+    if (finishProvided) {
+      finish = new Date(finish_time);
+      if (Number.isNaN(finish.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid finish_time' });
+      }
+      if (finish <= start) {
+        return res.status(400).json({ success: false, message: 'finish_time must be later than start_time' });
+      }
     }
 
     const startDate = start_time.split('T')[0];
-    const finishDate = finish_time.split('T')[0];
+    const finishDate = finishProvided ? finish_time.split('T')[0] : startDate;
     const prodDate = (prod_date || startDate).split('T')[0];
 
-    if (startDate !== finishDate) {
+    if (finishProvided && startDate !== finishDate) {
       return res.status(400).json({
         success: false,
         message: 'Start and end time must be on the same date for manual entry'
@@ -516,14 +575,14 @@ exports.createManualEntry = async (req, res, next) => {
     }
 
     const normalizedStartTime = toMySqlDateTimeOrNull(start_time);
-    const normalizedFinishTime = toMySqlDateTimeOrNull(finish_time);
+    const normalizedFinishTime = finishProvided ? toMySqlDateTimeOrNull(finish_time) : null;
 
     const activeOverlap = await findOverlappingActiveCycleForMachineEmployee(db, {
       prodDate,
       machineId: machine_id,
       empId: emp_id,
       startTime: normalizedStartTime,
-      finishTime: normalizedFinishTime,
+      finishTime: normalizedFinishTime || '9999-12-31 23:59:59',
     });
     if (activeOverlap) {
       return res.status(409).json({
@@ -553,19 +612,42 @@ exports.createManualEntry = async (req, res, next) => {
         prodDate,
       });
 
-      const overlapping = await findOverlappingFinishedCycleOnMachine(conn, {
-        machineId: machine_id,
-        startTime: start_time,
-        finishTime: finish_time,
-      });
-      if (overlapping) {
-        throw Object.assign(new Error(`${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`), {
-          statusCode: 409,
-          exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`,
+      if (finishProvided) {
+        const overlapping = await findOverlappingFinishedCycleOnMachine(conn, {
+          machineId: machine_id,
+          startTime: start_time,
+          finishTime: finish_time,
         });
+        if (overlapping) {
+          throw Object.assign(new Error(`${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`), {
+            statusCode: 409,
+            exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`,
+          });
+        }
+      } else if (isOngoingStoppage) {
+        const [openRows] = await conn.execute(
+          `SELECT id
+           FROM machine_centre_production
+           WHERE work_centre_id = ?
+             AND machine_id = ?
+             AND button_status = 1
+             AND stoppage_reason LIKE ?
+             AND idle_stop_time IS NULL
+           LIMIT 1`,
+          [work_centre_id, machine_id, `${entryMeta.prefix}:%`]
+        );
+        if (openRows.length > 0) {
+          throw Object.assign(
+            new Error(`An open ${entryMeta.kind} is already recorded for this machine (record #${openRows[0].id}). Close it before starting another.`),
+            {
+              statusCode: 409,
+              exposeMessage: `An open ${entryMeta.kind} is already recorded for this machine (record #${openRows[0].id}). Close it before starting another.`,
+            }
+          );
+        }
       }
 
-      if (!isBottleneckEntry) {
+      if (!isStoppageEvent) {
         const [duplicateRows] = await conn.execute(
           `SELECT id
            FROM machine_centre_production
@@ -587,7 +669,7 @@ exports.createManualEntry = async (req, res, next) => {
             exposeMessage: `Duplicate manual entry for this machine/employee/time slot (record #${duplicateRows[0].id})`,
           });
         }
-      } else {
+      } else if (finishProvided) {
         const [duplicateRows] = await conn.execute(
           `SELECT id
            FROM machine_centre_production
@@ -596,20 +678,30 @@ exports.createManualEntry = async (req, res, next) => {
              AND emp_id = ?
              AND button_status = 2
              AND stoppage_reason IS NOT NULL
-             AND stoppage_reason LIKE 'BOTTLENECK:%'
+             AND stoppage_reason LIKE ?
              AND start_time = ?
              AND finish_time = ?
            ORDER BY id DESC
            LIMIT 1`,
-          [work_centre_id, machine_id, emp_id, normalizedStartTime, normalizedFinishTime]
+          [work_centre_id, machine_id, emp_id, `${entryMeta.prefix}:%`, normalizedStartTime, normalizedFinishTime]
         );
         if (duplicateRows.length > 0) {
-          throw Object.assign(new Error(`Duplicate bottleneck entry for this machine/employee/time slot (record #${duplicateRows[0].id})`), {
-            statusCode: 409,
-            exposeMessage: `Duplicate bottleneck entry for this machine/employee/time slot (record #${duplicateRows[0].id})`,
-          });
+          throw Object.assign(
+            new Error(`Duplicate ${entryMeta.kind} entry for this machine/employee/time slot (record #${duplicateRows[0].id})`),
+            {
+              statusCode: 409,
+              exposeMessage: `Duplicate ${entryMeta.kind} entry for this machine/employee/time slot (record #${duplicateRows[0].id})`,
+            }
+          );
         }
       }
+
+      const stoppageReasonValue = isStoppageEvent
+        ? buildStoppageReason(entryMeta.prefix, stoppage_reason, approverIdentity)
+        : `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`;
+      const buttonStatus = isOngoingStoppage ? 1 : 2;
+      const idleStartTime = isOngoingStoppage ? normalizedStartTime : null;
+      const idleStopTime = null;
 
       const afterData = {
         prod_date: prodDate,
@@ -617,29 +709,31 @@ exports.createManualEntry = async (req, res, next) => {
         machine_id,
         emp_id,
         start_time,
-        finish_time,
-        target_mins: isBottleneckEntry ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
+        finish_time: finishProvided ? finish_time : null,
+        target_mins: isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
-        stoppage_reason: isBottleneckEntry
-          ? `BOTTLENECK:${(stoppage_reason || '').trim()} [Approved By: ${approverIdentity}]`
-          : `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
+        stoppage_reason: stoppageReasonValue,
+        button_status: buttonStatus,
       };
 
       const [insertResult] = await conn.execute(
         `INSERT INTO machine_centre_production
          (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
           start_time, finish_time, idle_start_time, idle_stop_time, stoppage_reason, button_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 2)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           prodDate,
           work_centre_id,
           machine_id,
           emp_id,
           manualOutputPairs,
-          enforcedTargets.targetMins * (manualOutputPairs / 12),
+          isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
           normalizedStartTime,
           normalizedFinishTime,
-          afterData.stoppage_reason
+          idleStartTime,
+          idleStopTime,
+          stoppageReasonValue,
+          buttonStatus,
         ]
       );
       insertedId = insertResult.insertId;
@@ -662,7 +756,9 @@ exports.createManualEntry = async (req, res, next) => {
 
     return res.status(201).json({
       success: true,
-      message: isBottleneckEntry ? 'Bottleneck entry saved successfully' : 'Manual production entry saved successfully',
+      message: isStoppageEvent
+        ? `${entryMeta.kind === 'breakdown' ? 'Breakdown' : 'Bottleneck'} entry saved successfully`
+        : 'Manual production entry saved successfully',
       data: { id: insertedId, target_mins: enforcedTargets.targetMins, output_pairs: manualOutputPairs, ...summaryData }
     });
   } catch (error) {
@@ -697,14 +793,19 @@ exports.getManualEntries = async (req, res, next) => {
     };
     const sortBy = sortByMap[sortByRaw] || sortByMap.created_at;
 
-    let where = 'WHERE mcp.button_status = 2 AND mcp.stoppage_reason IS NOT NULL';
+    let where = 'WHERE mcp.stoppage_reason IS NOT NULL';
     const params = [];
     if (type === 'manual') {
-      where += ' AND mcp.stoppage_reason LIKE ?';
+      where += ' AND mcp.button_status = 2 AND mcp.stoppage_reason LIKE ?';
       params.push('MANUAL:%');
     } else if (type === 'bottleneck') {
-      where += ' AND mcp.stoppage_reason LIKE ?';
+      where += ' AND mcp.button_status IN (1, 2) AND mcp.stoppage_reason LIKE ?';
       params.push('BOTTLENECK:%');
+    } else if (type === 'breakdown') {
+      where += ' AND mcp.button_status IN (1, 2) AND mcp.stoppage_reason LIKE ?';
+      params.push('BREAKDOWN:%');
+    } else {
+      where += ' AND mcp.button_status = 2';
     }
     if (date) {
       where += ' AND DATE(mcp.prod_date) = ?';
@@ -778,6 +879,9 @@ exports.getManualEntries = async (req, res, next) => {
         mcp.output_pairs,
         mcp.start_time,
         mcp.finish_time,
+        mcp.idle_start_time,
+        mcp.idle_stop_time,
+        mcp.button_status,
         mcp.stoppage_reason,
         mcp.created_at,
         mcp.updated_at
@@ -823,19 +927,27 @@ exports.updateManualEntry = async (req, res, next) => {
       output_pairs,
       stoppage_reason,
       approved_by,
-      audit_reason
+      audit_reason,
+      entry_type
     } = req.body;
 
     const [existingRows] = await db.query(
-      `SELECT * FROM machine_centre_production WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND (stoppage_reason LIKE 'MANUAL:%' OR stoppage_reason LIKE 'BOTTLENECK:%')`,
+      `SELECT * FROM machine_centre_production WHERE id = ? AND button_status IN (1, 2) AND stoppage_reason IS NOT NULL AND ${STOPPAGE_ENTRY_SQL_FILTER}`,
       [id]
     );
     if (existingRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Manual entry not found' });
     }
 
-    if (!prod_date || !work_centre_id || !machine_id || !emp_id || !start_time || !finish_time) {
+    const entryMeta = resolveStoppageEntryMeta(entry_type, existingRows[0].stoppage_reason);
+    const finishProvided =
+      finish_time !== undefined && finish_time !== null && String(finish_time).trim() !== '';
+
+    if (!prod_date || !work_centre_id || !machine_id || !emp_id || !start_time) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+    if (!entryMeta.isStoppageEvent && !finishProvided) {
+      return res.status(400).json({ success: false, message: 'finish_time is required for manual production entries' });
     }
     if (output_pairs === undefined || output_pairs === null || Number.isNaN(Number(output_pairs))) {
       return res.status(400).json({ success: false, message: 'output_pairs is required and must be a number' });
@@ -843,7 +955,9 @@ exports.updateManualEntry = async (req, res, next) => {
     if (!audit_reason || !String(audit_reason).trim()) {
       return res.status(400).json({ success: false, message: 'audit_reason is required for manual entry updates' });
     }
-    const manualOutputPairs = Math.max(0, Math.round(Number(output_pairs)));
+    const manualOutputPairs = entryMeta.isStoppageEvent
+      ? 0
+      : Math.max(0, Math.round(Number(output_pairs)));
     const approverIdentity = String(
       approved_by ||
       req?.user?.username ||
@@ -854,16 +968,29 @@ exports.updateManualEntry = async (req, res, next) => {
     ).trim();
 
     const start = new Date(start_time);
-    const finish = new Date(finish_time);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime()) || finish <= start) {
-      return res.status(400).json({ success: false, message: 'Invalid start/end time' });
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid start_time' });
+    }
+    let finish = null;
+    if (finishProvided) {
+      finish = new Date(finish_time);
+      if (Number.isNaN(finish.getTime()) || finish <= start) {
+        return res.status(400).json({ success: false, message: 'Invalid start/end time' });
+      }
     }
     const startDate = start_time.split('T')[0];
-    const finishDate = finish_time.split('T')[0];
+    const finishDate = finishProvided ? finish_time.split('T')[0] : startDate;
     const prodDate = prod_date.split('T')[0];
-    if (startDate !== finishDate || prodDate !== startDate) {
+    if ((finishProvided && startDate !== finishDate) || prodDate !== startDate) {
       return res.status(400).json({ success: false, message: 'prod_date must match start/end date' });
     }
+    const normalizedStartTime = toMySqlDateTimeOrNull(start_time);
+    const normalizedFinishTime = finishProvided ? toMySqlDateTimeOrNull(finish_time) : null;
+    const isClosingStoppage = entryMeta.isStoppageEvent && finishProvided;
+    const isOngoingStoppage = entryMeta.isStoppageEvent && !finishProvided;
+    const buttonStatus = isOngoingStoppage ? 1 : 2;
+    const idleStartTime = isOngoingStoppage ? normalizedStartTime : (isClosingStoppage ? (existingRows[0].idle_start_time || normalizedStartTime) : null);
+    const idleStopTime = isClosingStoppage ? normalizedFinishTime : null;
 
     const [machineRows] = await db.query(
       'SELECT machine_id FROM machine_centres WHERE (machine_id = ? OR code = ?) AND work_centre_id = ? LIMIT 1',
@@ -890,20 +1017,21 @@ exports.updateManualEntry = async (req, res, next) => {
         prodDate,
       });
 
-      const overlapping = await findOverlappingFinishedCycleOnMachine(conn, {
-        machineId: machine_id,
-        startTime: start_time,
-        finishTime: finish_time,
-        excludeId: id,
-      });
-      if (overlapping) {
-        throw Object.assign(new Error(`${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`), {
-          statusCode: 409,
-          exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`,
+      if (finishProvided) {
+        const overlapping = await findOverlappingFinishedCycleOnMachine(conn, {
+          machineId: machine_id,
+          startTime: start_time,
+          finishTime: finish_time,
+          excludeId: id,
         });
+        if (overlapping) {
+          throw Object.assign(new Error(`${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`), {
+            statusCode: 409,
+            exposeMessage: `${MACHINE_CYCLE_OVERLAP_MSG} (record #${overlapping.id})`,
+          });
+        }
       }
 
-      const isBottleneckEntry = entry_type === 'bottleneck' || String(existingRows[0].stoppage_reason || '').startsWith('BOTTLENECK:');
       const afterData = {
         id: Number(id),
         prod_date: prodDate,
@@ -911,20 +1039,22 @@ exports.updateManualEntry = async (req, res, next) => {
         machine_id,
         emp_id,
         start_time,
-        finish_time,
-        target_mins: enforcedTargets.targetMins * (manualOutputPairs / 12),
+        finish_time: finishProvided ? finish_time : null,
+        target_mins: entryMeta.isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
         output_pairs: manualOutputPairs,
-        stoppage_reason: isBottleneckEntry
-          ? `BOTTLENECK:${(stoppage_reason || '').trim()} [Approved By: ${approverIdentity}]`
+        stoppage_reason: entryMeta.isStoppageEvent
+          ? buildStoppageReason(entryMeta.prefix, stoppage_reason, approverIdentity)
           : `MANUAL:${(stoppage_reason || '').trim() || 'Manual entry'} [Approved By: ${approverIdentity}]`,
+        button_status: buttonStatus,
       };
 
-      const scaledTargetMins = enforcedTargets.targetMins * (manualOutputPairs / 12);
+      const scaledTargetMins = entryMeta.isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12);
 
       await conn.execute(
         `UPDATE machine_centre_production
          SET prod_date = ?, work_centre_id = ?, machine_id = ?, emp_id = ?, target_mins = ?, output_pairs = ?,
-             start_time = ?, finish_time = ?, stoppage_reason = ?, button_status = 2
+             start_time = ?, finish_time = ?, idle_start_time = ?, idle_stop_time = ?,
+             stoppage_reason = ?, button_status = ?
          WHERE id = ?`,
         [
           prodDate,
@@ -933,9 +1063,12 @@ exports.updateManualEntry = async (req, res, next) => {
           emp_id,
           scaledTargetMins,
           manualOutputPairs,
-          start_time,
-          finish_time,
+          normalizedStartTime,
+          normalizedFinishTime,
+          idleStartTime,
+          idleStopTime,
           afterData.stoppage_reason,
+          buttonStatus,
           id,
         ]
       );
@@ -981,7 +1114,7 @@ exports.deleteManualEntry = async (req, res, next) => {
     const [existingRows] = await db.query(
       `SELECT id, prod_date, work_centre_id, machine_id, emp_id
        FROM machine_centre_production
-       WHERE id = ? AND button_status = 2 AND stoppage_reason IS NOT NULL AND (stoppage_reason LIKE 'MANUAL:%' OR stoppage_reason LIKE 'BOTTLENECK:%')`,
+       WHERE id = ? AND button_status IN (1, 2) AND stoppage_reason IS NOT NULL AND ${STOPPAGE_ENTRY_SQL_FILTER}`,
       [id]
     );
     if (existingRows.length === 0) {
