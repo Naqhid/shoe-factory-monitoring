@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
 
 /** Heel Grip = line input; EOL Final Inspection = line output (Line 3). */
 const HEEL_GRIP_MACHINE_ID = '03';
@@ -50,6 +51,43 @@ const paginate = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
   const l = Math.min(500, Math.max(1, parseInt(limit) || 50));
   return { page: p, limit: l, offset: (p - 1) * l };
+};
+
+const stripStoppageDetail = (detail) => {
+  if (!detail) return '';
+  return String(detail)
+    .replace(/^BOTTLENECK:/i, '')
+    .replace(/^BREAKDOWN:/i, '')
+    .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
+    .trim();
+};
+
+const STOPPAGE_REPORT_WHERE = {
+  bottleneck: `AND (
+    (mcp.button_status = 1
+     AND mcp.idle_start_time IS NOT NULL
+     AND mcp.idle_stop_time IS NULL
+     AND mcp.stoppage_reason LIKE 'BOTTLENECK:%')
+    OR (mcp.button_status = 2
+        AND mcp.stoppage_reason LIKE 'BOTTLENECK:%'
+        AND LOWER(mcp.stoppage_reason) NOT LIKE '%breakdown%')
+  )`,
+  breakdown: `AND (
+    (mcp.button_status = 1
+     AND mcp.idle_start_time IS NOT NULL
+     AND mcp.idle_stop_time IS NULL
+     AND (
+       LOWER(mcp.stoppage_reason) LIKE '%breakdown%'
+       OR mcp.stoppage_reason LIKE 'BREAKDOWN:%'
+     ))
+    OR (mcp.button_status = 2
+        AND (
+          mcp.stoppage_reason LIKE 'BREAKDOWN:%'
+          OR LOWER(mcp.stoppage_reason) LIKE '%machine breakdown%'
+          OR (mcp.stoppage_reason LIKE 'BOTTLENECK:%'
+              AND LOWER(mcp.stoppage_reason) LIKE '%breakdown%')
+        ))
+  )`,
 };
 
 class ApiController {
@@ -474,13 +512,15 @@ class ApiController {
     } catch (e) { next(e); }
   }
 
-  // #2 Shift summary — shift-aware efficiency (09:00-17:30 = 510 mins)
+  // #2 Shift summary — shift-aware efficiency (09:00-17:30 = 510 mins, 30 min lunch excluded)
   async getShiftSummaryReport(req, res, next) {
     try {
       const { fromDate, toDate, date, work_centre_id, workCentreId } = req.query;
       const from = fromDate || date || new Date().toISOString().slice(0, 10);
       const to = toDate || from;
       const SHIFT_MINS = 510;
+      const LUNCH_MINS = 30;
+      const SHIFT_WORKING_MINS = SHIFT_MINS - LUNCH_MINS;
       const wcId = work_centre_id || workCentreId || null;
       let wcWhere = wcId ? 'AND mcp.work_centre_id = ?' : '';
 
@@ -497,47 +537,197 @@ class ApiController {
           COUNT(CASE WHEN mcp.button_status = 2 THEN 1 END) AS cycles,
           COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.output_pairs END), 0) AS total_output,
           COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.target_mins END), 0) AS total_target_mins,
-          COALESCE(pp.total_target_per_day, 0) AS target,
-          COALESCE(line_input.total_input, 0) AS total_input,
-          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS input_percent,
-          COALESCE(line_eol.line_eol_output, 0) AS line_eol_output,
-          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) AS output_percent,
+          COALESCE(MAX(pp.total_target_per_day), 0) AS target,
+          COALESCE(MAX(line_input.total_input), 0) AS total_input,
+          ROUND((COALESCE(MAX(line_input.total_input), 0) / NULLIF(MAX(pp.total_target_per_day), 0)) * 100, 1) AS input_percent,
+          COALESCE(MAX(line_eol.line_eol_output), 0) AS line_eol_output,
+          ROUND((COALESCE(MAX(line_eol.line_eol_output), 0) / NULLIF(MAX(pp.total_target_per_day), 0)) * 100, 1) AS output_percent,
           COALESCE(SUM(
             CASE WHEN mcp.button_status = 2 THEN
               GREATEST(0, TIMESTAMPDIFF(MINUTE,
                 GREATEST(mcp.start_time, CONCAT(DATE(mcp.prod_date), ' 09:00:00')),
                 LEAST(mcp.finish_time, CONCAT(DATE(mcp.prod_date), ' 17:30:00'))))
             END
-          ), 0) AS shift_actual_mins,
-          COALESCE(SUM(CASE WHEN mcp.idle_start_time IS NOT NULL THEN
-            GREATEST(0, TIMESTAMPDIFF(MINUTE,
-              GREATEST(mcp.idle_start_time, CONCAT(DATE(mcp.prod_date), ' 09:00:00')),
-              LEAST(COALESCE(mcp.idle_stop_time, CONCAT(DATE(mcp.prod_date), ' 17:30:00')),
-                    CONCAT(DATE(mcp.prod_date), ' 17:30:00'))))
-            END
-          ), 0) AS shift_idle_mins
+          ), 0) AS shift_actual_mins
         FROM machine_centre_production mcp
         LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
         LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
         LEFT JOIN employees e ON e.code = mcp.emp_id
-        LEFT JOIN production_plan pp ON pp.work_centre_id = mcp.work_centre_id AND pp.plan_date = DATE(mcp.prod_date)
+        LEFT JOIN production_plan pp ON pp.work_centre_id = mcp.work_centre_id AND pp.plan_date = DATE(mcp.prod_date) AND pp.deleted_at IS NULL
         ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         WHERE DATE(mcp.prod_date) BETWEEN ? AND ? ${wcWhere}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name,
-          pp.total_target_per_day, line_input.total_input, line_eol.line_eol_output
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name
         ORDER BY date, wc.name, mcp.machine_id
       `, params);
 
+      const routingMinsCol = await getRoutingMinsColumnName();
+      const pairsPerBin = await getPairsPerRoutingBin();
+
+      const routingParams = [from, to];
+      if (wcId) routingParams.push(wcId);
+      const [routingRows] = await db.query(`
+        SELECT
+          pp_r.work_centre_id,
+          pp_r.plan_date,
+          prl.machine_centre_id AS machine_id,
+          prl.${routingMinsCol} AS routing_mins_per_bin
+        FROM production_plan pp_r
+        JOIN production_routing_header prh
+          ON prh.style_id = pp_r.style_id AND prh.deleted_at IS NULL
+        JOIN production_routing_lines prl
+          ON prl.routing_header_id = prh.id
+        WHERE pp_r.deleted_at IS NULL
+          AND pp_r.plan_date BETWEEN ? AND ?
+          ${wcId ? 'AND pp_r.work_centre_id = ?' : ''}
+        ORDER BY
+          pp_r.work_centre_id,
+          pp_r.plan_date,
+          prl.machine_centre_id,
+          CASE WHEN prh.created_on <= pp_r.plan_date THEN 0 ELSE 1 END ASC,
+          ABS(DATEDIFF(prh.created_on, pp_r.plan_date)) ASC,
+          prh.id DESC
+      `, routingParams);
+
+      const routingKey = (workCentreId, planDate, machineId) => {
+        const d = planDate instanceof Date
+          ? planDate.toISOString().slice(0, 10)
+          : String(planDate).slice(0, 10);
+        return `${workCentreId}|${d}|${machineId}`;
+      };
+      const routingMap = new Map();
+      for (const row of routingRows) {
+        const key = routingKey(row.work_centre_id, row.plan_date, row.machine_id);
+        if (!routingMap.has(key)) {
+          routingMap.set(key, Number(row.routing_mins_per_bin) || 0);
+        }
+      }
+
       const result = rows.map(r => {
         const actualMins = Math.max(0, Number(r.shift_actual_mins));
-        const targetMins = Number(r.total_target_mins);
-        const shiftEff = actualMins > 0 ? Math.round((targetMins / actualMins) * 100) : 0;
-        const utilisation = Math.round((actualMins / SHIFT_MINS) * 100);
-        return { ...r, shift_efficiency_pct: shiftEff, shift_utilisation_pct: utilisation, shift_mins: SHIFT_MINS };
+        const utilisation = Math.round((actualMins / SHIFT_WORKING_MINS) * 100);
+        const output = Number(r.total_output) || 0;
+        const boxes = output > 0 ? Math.round(output / 6) : 0;
+        const routingMinsPerBox = routingMap.get(routingKey(r.work_centre_id, r.date, r.machine_id)) || 0;
+        const shiftTargetOutput = routingMinsPerBox > 0
+          ? Math.round((SHIFT_WORKING_MINS / routingMinsPerBox) * pairsPerBin)
+          : 0;
+        const shiftEff = shiftTargetOutput > 0
+          ? Math.round((output / shiftTargetOutput) * 100)
+          : 0;
+        return {
+          ...r,
+          boxes,
+          routing_mins_per_box: routingMinsPerBox,
+          shift_target_output: shiftTargetOutput,
+          shift_working_mins: SHIFT_WORKING_MINS,
+          shift_efficiency_pct: shiftEff,
+          shift_utilisation_pct: utilisation,
+          shift_mins: SHIFT_MINS,
+        };
       });
-      res.json({ success: true, fromDate: from, toDate: to, shift_start: '09:00', shift_end: '17:30', shift_mins: SHIFT_MINS, data: result });
+      res.json({
+        success: true,
+        fromDate: from,
+        toDate: to,
+        shift_start: '09:00',
+        shift_end: '17:30',
+        shift_mins: SHIFT_MINS,
+        lunch_mins: LUNCH_MINS,
+        shift_working_mins: SHIFT_WORKING_MINS,
+        data: result,
+      });
     } catch (e) { next(e); }
+  }
+
+  async getStoppageEventReport(req, res, next, kind) {
+    try {
+      const { fromDate, toDate, workCentreId, search, page, limit } = req.query;
+      if (!fromDate || !toDate) {
+        return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
+      }
+      const kindWhere = STOPPAGE_REPORT_WHERE[kind];
+      if (!kindWhere) {
+        return res.status(400).json({ success: false, error: 'Invalid stoppage report type' });
+      }
+
+      const { page: p, limit: l, offset } = paginate(page, limit);
+      let where = `WHERE DATE(mcp.prod_date) BETWEEN ? AND ? ${kindWhere}`;
+      const params = [fromDate, toDate];
+      if (workCentreId) {
+        where += ' AND mcp.work_centre_id = ?';
+        params.push(workCentreId);
+      }
+      if (search && String(search).trim()) {
+        const q = `%${String(search).trim()}%`;
+        where += ` AND (
+          mcp.machine_id LIKE ?
+          OR COALESCE(mc.machine_name, mc.name, '') LIKE ?
+          OR mcp.emp_id LIKE ?
+          OR COALESCE(e.name, '') LIKE ?
+          OR COALESCE(wc.name, '') LIKE ?
+          OR COALESCE(mcp.stoppage_reason, '') LIKE ?
+        )`;
+        params.push(q, q, q, q, q, q);
+      }
+
+      const fromClause = `
+        FROM machine_centre_production mcp
+        LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+        LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+        LEFT JOIN employees e ON e.code = mcp.emp_id
+        ${where}`;
+
+      const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total ${fromClause}`, params);
+      const [rows] = await db.query(`
+        SELECT
+          mcp.id,
+          DATE(mcp.prod_date) AS date,
+          wc.name AS line,
+          mcp.machine_id,
+          COALESCE(mc.machine_name, mc.name) AS machine_name,
+          mcp.emp_id,
+          e.name AS emp_name,
+          mcp.start_time,
+          mcp.finish_time,
+          mcp.idle_start_time,
+          mcp.idle_stop_time,
+          mcp.button_status,
+          mcp.stoppage_reason AS raw_detail,
+          TIMESTAMPDIFF(
+            MINUTE,
+            COALESCE(mcp.start_time, mcp.idle_start_time),
+            COALESCE(mcp.finish_time, NOW())
+          ) AS duration_mins
+        ${fromClause}
+        ORDER BY COALESCE(mcp.idle_start_time, mcp.start_time) DESC, mcp.id DESC
+        LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const data = rows.map((row) => {
+        const inProgress = Number(row.button_status) === 1 || !row.finish_time;
+        return {
+          ...row,
+          status: inProgress ? 'In progress' : 'Resolved',
+          detail: stripStoppageDetail(row.raw_detail),
+        };
+      });
+
+      res.json({
+        success: true,
+        data,
+        pagination: { total, page: p, limit: l, totalPages: Math.max(1, Math.ceil(total / l)) },
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+
+  async getBottleneckReport(req, res, next) {
+    return this.getStoppageEventReport(req, res, next, 'bottleneck');
+  }
+
+  async getBreakdownReport(req, res, next) {
+    return this.getStoppageEventReport(req, res, next, 'breakdown');
   }
 }
 

@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const { getRoutingMinsSqlExpr, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
 
 // Start production
 exports.startProduction = async (req, res) => {
@@ -109,7 +110,7 @@ exports.finishProduction = async (req, res) => {
          SUM(target_pairs),
          SUM(target_mins),
          SUM(actual_time),
-         CASE WHEN SUM(output_pairs) > 0 THEN SUM(actual_time) / (SUM(output_pairs) / 12) ELSE 0 END,
+         CASE WHEN SUM(output_pairs) > 0 THEN SUM(actual_time) / (SUM(output_pairs) / 6) ELSE 0 END,
          CASE WHEN SUM(target_mins) > 0 THEN (SUM(actual_time) / SUM(target_mins)) * 100 ELSE 0 END
        FROM machine_centre_app
        WHERE id = ?
@@ -187,14 +188,16 @@ exports.updateActualTime = async (req, res) => {
 exports.getProductionPlan = async (req, res) => {
   try {
     const { workCentreId, machineId } = req.params;
-    
+    const routingMinsExpr = await getRoutingMinsSqlExpr('prl');
+    const pairsPerBin = await getPairsPerRoutingBin();
+
     const [rows] = await db.execute(
       `SELECT 
          pp.*,
          prh.target_per_day as pairs_per_day,
          prh.target_per_hour,
-         prl.mins_12_prs_box as target_mins_12,
-         (prl.mins_12_prs_box / 12) as smv,
+         ${routingMinsExpr} as target_mins_per_bin,
+         (${routingMinsExpr} / ${pairsPerBin}) as smv,
          c.name as customer_name,
          s.name as style_name,
          col.name as color_name

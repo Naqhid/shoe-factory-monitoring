@@ -1,12 +1,12 @@
 import React from 'react';
-import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, Cpu, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy } from 'lucide-react';
+import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, Cpu, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy, Wrench } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import * as XLSX from 'xlsx';
 
-type ReportType = 'hourly-production' | 'line-efficiency' | 'attendance' | 'rework-rejection' | 'machine-output' | 'employee-output' | 'employee-performance' | 'downtime' | 'attendance-production' | 'shift-summary';
+type ReportType = 'hourly-production' | 'line-efficiency' | 'attendance' | 'rework-rejection' | 'machine-output' | 'employee-output' | 'employee-performance' | 'downtime' | 'attendance-production' | 'shift-summary' | 'bottleneck' | 'breakdown';
 
 const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode; color: string }[] = [
   { value: 'hourly-production',    label: 'Hourly Production',         icon: <Clock className="h-5 w-5" />,       color: 'blue' },
@@ -19,6 +19,8 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
   { value: 'downtime',             label: 'Downtime Analysis',         icon: <AlertTriangle className="h-5 w-5" />, color: 'orange' },
   { value: 'attendance-production',label: 'Attendance vs Output',      icon: <Users className="h-5 w-5" />,       color: 'cyan' },
   { value: 'shift-summary',        label: 'Shift Summary',             icon: <BarChart2 className="h-5 w-5" />,   color: 'slate' },
+  { value: 'bottleneck',           label: 'Bottleneck Report',         icon: <AlertTriangle className="h-5 w-5" />, color: 'red' },
+  { value: 'breakdown',            label: 'Breakdown Report',          icon: <Wrench className="h-5 w-5" />,        color: 'amber' },
 ];
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; activeBg: string; activeText: string }> = {
@@ -32,6 +34,8 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; acti
   orange: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200', activeBg: 'bg-orange-600', activeText: 'text-white' },
   cyan:   { bg: 'bg-cyan-50',   text: 'text-cyan-600',   border: 'border-cyan-200',   activeBg: 'bg-cyan-600',   activeText: 'text-white' },
   slate:  { bg: 'bg-slate-50',  text: 'text-slate-600',  border: 'border-slate-200',  activeBg: 'bg-slate-600',  activeText: 'text-white' },
+  red:    { bg: 'bg-red-50',    text: 'text-red-600',    border: 'border-red-200',    activeBg: 'bg-red-600',    activeText: 'text-white' },
+  amber:  { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  activeBg: 'bg-amber-600',  activeText: 'text-white' },
 };
 
 const fmtDate = (d: string) => {
@@ -71,7 +75,42 @@ const HEADER_MAP: Record<string, string> = {
   reason_category: 'Category', reason: 'Reason',
   machine_id: 'Machine ID', machine_name: 'Machine Name', target_mins: 'Target Mins',
   actual_mins: 'Actual Mins', idle_mins: 'Idle Mins', total_output_pairs: 'Output Pairs',
-  target: 'Target', performance_grade: 'Grade',
+  target: 'Target', performance_grade: 'Grade', boxes: 'Box', cycles: 'Cycles', total_output: 'Output',
+  routing_mins_per_box: 'Routing Mins/6 prs', shift_target_output: 'Shift Target (pairs)', shift_efficiency_pct: 'Shift Efficiency %',
+  line_plan_target: 'Line Plan Target', line_output_percent: 'Line Output %',
+  line: 'Line', machine_name: 'Machine Name', emp_name: 'Employee Name',
+  start_time: 'Start', finish_time: 'Finish', duration_mins: 'Duration (mins)',
+  status: 'Status', m4_category: 'M4 Category', m4_reason: 'Reason', m4_notes: 'Notes', detail: 'Detail',
+};
+
+const parseM4FromDetail = (detail?: string | null) => {
+  const text = (detail || '').trim();
+  if (!text) return { m4_category: '', m4_reason: '', m4_notes: '' };
+  const categories = ['MAN', 'MACHINE', 'MATERIAL', 'METHOD'];
+  for (const category of categories) {
+    const match = text.match(new RegExp(`^${category}\\s*[-–—:]\\s*(.+)$`, 'i'));
+    if (!match) continue;
+    const rest = match[1].trim();
+    const dashSplit = rest.split(/\s*[-–—]\s*/);
+    if (dashSplit.length >= 2) {
+      return { m4_category: category, m4_reason: dashSplit[0].trim(), m4_notes: dashSplit.slice(1).join(' — ').trim() };
+    }
+    return { m4_category: category, m4_reason: rest, m4_notes: '' };
+  }
+  return { m4_category: '', m4_reason: '', m4_notes: text };
+};
+
+const enrichStoppageRow = (row: Record<string, unknown>) => {
+  const parsed = parseM4FromDetail(String(row.detail || ''));
+  return { ...row, ...parsed };
+};
+
+const normalizeReportRows = (rows: any[] | null | undefined, type: ReportType) => {
+  if (!rows) return [];
+  if (type === 'bottleneck' || type === 'breakdown') {
+    return rows.map((row) => enrichStoppageRow(row));
+  }
+  return rows;
 };
 
 const FILTER_STORAGE_KEY = 'reports_filters_v1';
@@ -79,10 +118,19 @@ const FILTER_STORAGE_KEY = 'reports_filters_v1';
 /** Shown only on Hourly Production report (table + export). */
 const HOURLY_ONLY_FIELDS = ['total_input', 'input_percent'] as const;
 
-const stripHourlyOnlyFields = (row: Record<string, unknown>, report: ReportType) => {
-  if (report === 'hourly-production') return row;
+const EXPORT_OMIT_BY_REPORT: Partial<Record<ReportType, readonly string[]>> = {
+  'shift-summary': ['shift_idle_mins'],
+};
+
+const stripExportFields = (row: Record<string, unknown>, report: ReportType) => {
   const out = { ...row };
-  for (const key of HOURLY_ONLY_FIELDS) delete out[key];
+  if (report !== 'hourly-production') {
+    for (const key of HOURLY_ONLY_FIELDS) delete out[key];
+  }
+  const omit = EXPORT_OMIT_BY_REPORT[report];
+  if (omit) {
+    for (const key of omit) delete out[key];
+  }
   return out;
 };
 
@@ -328,7 +376,7 @@ export const Reports: React.FC = () => {
       const response = await apiFetch(`${API_BASE}/api/reports/${reportType}?${params}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.error);
-      setData(result.data);
+      setData(normalizeReportRows(result.data, reportType));
       setLastReportGeneratedAt(new Date());
       generatedFilterSnapshotRef.current = JSON.stringify({
         fromDate,
@@ -363,7 +411,7 @@ export const Reports: React.FC = () => {
       .then(r => r.json())
       .then(result => {
         if (!result.success) throw new Error(result.error);
-        setData(result.data);
+        setData(normalizeReportRows(result.data, reportType));
         setLastReportGeneratedAt(new Date());
         generatedFilterSnapshotRef.current = JSON.stringify({
           fromDate,
@@ -396,7 +444,10 @@ export const Reports: React.FC = () => {
       if (!json.success) throw new Error(json.error || `Failed on export page ${p}`);
       allRows = allRows.concat(json.data || []);
     }
-    return { rows: allRows, total: first.pagination?.total || allRows.length };
+    return {
+      rows: normalizeReportRows(allRows, reportType),
+      total: first.pagination?.total || allRows.length,
+    };
   };
 
   const exportCSV = async () => {
@@ -407,11 +458,11 @@ export const Reports: React.FC = () => {
         toast.error('No data to export');
         return;
       }
-      const headers = Object.keys(stripHourlyOnlyFields(rows[0], reportType));
+      const headers = Object.keys(stripExportFields(rows[0], reportType));
     const csvRows = [
       headers.map(h => `"${HEADER_MAP[h] || h}"`).join(','),
       ...rows.map(row => {
-        const filtered = stripHourlyOnlyFields(row, reportType);
+        const filtered = stripExportFields(row, reportType);
         return headers.map(h => {
           const v = filtered[h] === null || filtered[h] === undefined ? '' : String(filtered[h]);
           return `"${v.replace(/"/g, '""')}"`;
@@ -440,9 +491,9 @@ export const Reports: React.FC = () => {
         toast.error('No data to export');
         return;
       }
-      const headers = Object.keys(stripHourlyOnlyFields(exportRows[0], reportType));
+      const headers = Object.keys(stripExportFields(exportRows[0], reportType));
       const rows = exportRows.map((row) => {
-      const filtered = stripHourlyOnlyFields(row, reportType);
+      const filtered = stripExportFields(row, reportType);
       const mapped: Record<string, any> = {};
       headers.forEach((h) => {
         mapped[HEADER_MAP[h] || h] = filtered[h];
@@ -469,11 +520,11 @@ export const Reports: React.FC = () => {
         toast.error('No data to export');
         return;
       }
-      const headers = Object.keys(stripHourlyOnlyFields(exportRows[0], reportType));
+      const headers = Object.keys(stripExportFields(exportRows[0], reportType));
     const title = `${activeOption.label} (${fmtDate(fromDate)} - ${fmtDate(toDate)})`;
     const tableHead = headers.map(h => `<th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">${HEADER_MAP[h] || h}</th>`).join('');
     const tableRows = exportRows.map((row) => {
-      const filtered = stripHourlyOnlyFields(row, reportType);
+      const filtered = stripExportFields(row, reportType);
       return `<tr>${headers.map(h => `<td style="border:1px solid #ddd;padding:6px;font-size:10px;">${String(filtered[h] ?? '')}</td>`).join('')}</tr>`;
     }).join('');
 
@@ -612,6 +663,8 @@ export const Reports: React.FC = () => {
       'machine-output': ['date', 'line', 'machine_id', 'target', 'output', 'output_percent', 'efficiency_percent'],
       'employee-output': ['date', 'line', 'emp_code', 'target', 'total_output', 'output_percent'],
       'employee-performance': ['date', 'line', 'emp_code', 'target', 'output', 'output_percent', 'efficiency_percent'],
+      bottleneck: ['date', 'line', 'machine_id', 'emp_id', 'status', 'duration_mins', 'm4_category', 'm4_reason'],
+      breakdown: ['date', 'line', 'machine_id', 'emp_id', 'status', 'duration_mins', 'm4_category', 'm4_reason'],
     };
     const keys = columnsByType[reportType] || [];
     return (
@@ -633,6 +686,94 @@ export const Reports: React.FC = () => {
             })}
           </div>
         ))}
+      </div>
+    );
+  };
+
+  const renderStoppageReport = (accent: 'red' | 'amber') => {
+    const rows = data!;
+    const totalMins = rows.reduce((s, row) => s + Number(row.duration_mins || 0), 0);
+    const inProgress = rows.filter((row) => row.status === 'In progress').length;
+    const statusClass =
+      accent === 'red'
+        ? { active: 'bg-red-100 text-red-700', resolved: 'bg-gray-100 text-gray-700' }
+        : { active: 'bg-amber-100 text-amber-800', resolved: 'bg-gray-100 text-gray-700' };
+    const m4Class: Record<string, string> = {
+      MAN: 'bg-blue-100 text-blue-800',
+      MACHINE: 'bg-violet-100 text-violet-800',
+      MATERIAL: 'bg-emerald-100 text-emerald-800',
+      METHOD: 'bg-indigo-100 text-indigo-800',
+    };
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left p-2 border-b">Date</th>
+              <th className="text-left p-2 border-b">Line</th>
+              <th className="text-left p-2 border-b">Machine</th>
+              <th className="text-left p-2 border-b">Operator</th>
+              <th className="text-left p-2 border-b">Start</th>
+              <th className="text-left p-2 border-b">Finish</th>
+              <th className="text-center p-2 border-b">Duration</th>
+              <th className="text-left p-2 border-b">Status</th>
+              <th className="text-left p-2 border-b">M4 Category</th>
+              <th className="text-left p-2 border-b">Reason</th>
+              <th className="text-left p-2 border-b">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row: any, i: number) => (
+              <tr key={row.id ?? i} className="border-b hover:bg-gray-50">
+                <td className="p-2">{row.date ? fmtDate(row.date) : '—'}</td>
+                <td className="p-2">{row.line || '—'}</td>
+                <td className="p-2">
+                  {row.machine_id}
+                  {row.machine_name ? ` - ${row.machine_name}` : ''}
+                </td>
+                <td className="p-2">
+                  {row.emp_id}
+                  {row.emp_name ? ` - ${row.emp_name}` : ''}
+                </td>
+                <td className="p-2">{fmtTime(row.start_time || row.idle_start_time)}</td>
+                <td className="p-2">
+                  {row.status === 'In progress' ? (
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass.active}`}>In progress</span>
+                  ) : (
+                    fmtTime(row.finish_time)
+                  )}
+                </td>
+                <td className="p-2 text-center font-medium">{row.duration_mins != null ? `${row.duration_mins}m` : '—'}</td>
+                <td className="p-2">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${row.status === 'In progress' ? statusClass.active : statusClass.resolved}`}>
+                    {row.status}
+                  </span>
+                </td>
+                <td className="p-2">
+                  {row.m4_category ? (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${m4Class[row.m4_category] || 'bg-gray-100 text-gray-700'}`}>
+                      {row.m4_category}
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+                <td className="p-2">{row.m4_reason || '—'}</td>
+                <td className="p-2 text-gray-600">{row.m4_notes || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-gray-50 font-semibold">
+              <td className="p-2 border-t" colSpan={6}>
+                Total: {rows.length} events
+                {inProgress > 0 ? ` (${inProgress} in progress)` : ''}
+              </td>
+              <td className="p-2 border-t text-center">{totalMins}m</td>
+              <td className="p-2 border-t" colSpan={4}></td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     );
   };
@@ -729,12 +870,11 @@ export const Reports: React.FC = () => {
           <th className="text-left p-2 border-b">Machine</th>
           <th className="text-left p-2 border-b">Employee</th>
           <th className="text-left p-2 border-b">Line</th>
-          <th className="text-center p-2 border-b">Target</th>
-          <th className="text-center p-2 border-b">Output %</th>
+          <th className="text-center p-2 border-b">Shift target</th>
           <th className="text-left p-2 border-b">Cycles</th>
+          <th className="text-center p-2 border-b">Box</th>
           <th className="text-left p-2 border-b">Output</th>
           <th className="text-left p-2 border-b">Active Mins</th>
-          <th className="text-left p-2 border-b">Idle Mins</th>
           <th className="text-left p-2 border-b">Utilisation</th>
           <th className="text-left p-2 border-b">Shift Efficiency</th>
         </tr></thead>
@@ -745,12 +885,17 @@ export const Reports: React.FC = () => {
               <td className="p-2">{row.machine_id}{row.machine_name ? ` - ${row.machine_name}` : ''}</td>
               <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
               <td className="p-2">{row.work_centre_name}</td>
-              <td className="p-2 text-center">{r(row.target)}</td>
-              <td className="p-2 text-center">{effBadge(r(row.output_percent))}</td>
+              <td className="p-2 text-center" title={row.routing_mins_per_box ? `Routing: ${row.routing_mins_per_box} min / 6 prs` : 'No routing for this machine'}>
+                {row.shift_target_output != null && Number(row.shift_target_output) > 0
+                  ? r(row.shift_target_output)
+                  : '—'}
+              </td>
               <td className="p-2">{row.cycles}</td>
+              <td className="p-2 text-center font-semibold text-slate-800">
+                {row.boxes != null ? row.boxes : (Number(row.total_output || 0) > 0 ? Math.round(Number(row.total_output) / 6) : 0)}
+              </td>
               <td className="p-2 font-semibold">{row.total_output}</td>
               <td className="p-2">{row.shift_actual_mins}m</td>
-              <td className="p-2 text-orange-600">{row.shift_idle_mins}m</td>
               <td className="p-2">
                 <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
                   row.shift_utilisation_pct >= 70 ? 'bg-green-100 text-green-700' :
@@ -768,11 +913,13 @@ export const Reports: React.FC = () => {
         </tbody>
         <tfoot>
           <tr className="bg-gray-50 font-semibold">
-            <td className="p-2 border-t" colSpan={5}>Total (Shift: 09:00–17:30 = 510 mins)</td>
+            <td className="p-2 border-t" colSpan={5}>Total (Shift: 09:00–17:30, 480 mins excl. 30 min lunch)</td>
             <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.cycles||0),0)}</td>
+            <td className="p-2 border-t text-center">
+              {data!.reduce((s:number,r:any)=>s+Number(r.boxes ?? (Number(r.total_output||0)>0?Math.round(Number(r.total_output)/6):0)),0)}
+            </td>
             <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.total_output||0),0)}</td>
             <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.shift_actual_mins||0),0)}m</td>
-            <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.shift_idle_mins||0),0)}m</td>
             <td className="p-2 border-t" colSpan={2}></td>
           </tr>
         </tfoot>
@@ -799,6 +946,8 @@ export const Reports: React.FC = () => {
       case 'downtime':             return renderDowntime();
       case 'attendance-production':return renderAttendanceProduction();
       case 'shift-summary':        return renderShiftSummary();
+      case 'bottleneck':           return renderStoppageReport('red');
+      case 'breakdown':            return renderStoppageReport('amber');
     }
   };
 

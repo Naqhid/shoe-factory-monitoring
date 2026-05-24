@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
+import { SearchableSelect } from './SearchableSelect';
 
 interface WorkCentre {
   id: number;
@@ -289,6 +290,15 @@ export const ManualProductionEntryForm: React.FC = () => {
 
     return byLine.filter((e) => !blockedEmpCodes.has(String(e.code)));
   }, [employees, workCentreId, activeSessions, machineId]);
+
+  const employeeSelectOptions = React.useMemo(
+    () =>
+      filteredEmployees.map((emp) => ({
+        value: emp.code,
+        label: `${emp.code} - ${emp.name}`,
+      })),
+    [filteredEmployees]
+  );
 
   const hasSlotSelection = entryMode === 'bottleneck'
     ? !!manualStartTime && !!manualFinishTime
@@ -1308,19 +1318,19 @@ export const ManualProductionEntryForm: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Employee *</label>
-              <select
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="manual-entry-employee">
+                Employee *
+              </label>
+              <SearchableSelect
+                id="manual-entry-employee"
                 value={empId}
-                onChange={(e) => setEmpId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
+                onChange={setEmpId}
+                options={employeeSelectOptions}
+                placeholder="Select employee"
+                searchPlaceholder="Search by code or name..."
                 required
                 disabled={loading || !workCentreId}
-              >
-                <option value="">Select employee</option>
-                {filteredEmployees.map((emp) => (
-                  <option key={emp.code} value={emp.code}>{emp.code} - {emp.name}</option>
-                ))}
-              </select>
+              />
             </div>
 
             <div>
@@ -1336,7 +1346,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 value={(() => {
                   const base = Number(targetMins || 0);
                   const pairs = Math.max(1, Number(outputPairs || 12));
-                  return (Math.round((base * (pairs / 12)) * 10) / 10).toFixed(1);
+                  return (Math.round((base * (pairs / 6)) * 10) / 10).toFixed(1);
                 })()}
                 readOnly
                 className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-600"

@@ -5,6 +5,26 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { ModernScanner } from './ModernScanner';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
+import { SearchableSelect } from './SearchableSelect';
+import {
+  extractLegacyId,
+  parseMachineQr,
+  resolveWorkCentreId,
+  type WorkCentreOption,
+} from '../utils/parseMachineQr';
+
+interface EmployeeOption {
+  code: string;
+  name: string;
+  work_centre_id?: number;
+}
+
+interface MachineOption {
+  machine_id: string;
+  name?: string;
+  machine_name?: string;
+  work_centre_id?: number;
+}
 
 interface FormData {
   employee_id: string; // The code (e.g. EMP-1001)
@@ -13,6 +33,7 @@ interface FormData {
   machine_id: string;
   machine_name?: string;
   work_centre_id?: number;
+  work_centre_name?: string;
   login_date_time: string;
 }
 
@@ -61,30 +82,10 @@ export const MobileLineSetupForm: React.FC = () => {
     login_date_time: new Date().toISOString().slice(0, 16),
   });
 
-  const extractId = (text: string) => {
-    if (!text) return '';
-    const trimmed = text.trim();
-    if (trimmed.includes('://')) return trimmed;
-    const idMatch = trimmed.match(/ID:\s*([\w-]+)/i);
-    if (idMatch) return idMatch[1].trim();
-    const empMacMatch = trimmed.match(/(EMP-\d+|MAC-\d+)/i);
-    if (empMacMatch) return empMacMatch[1].trim();
-    const lines = trimmed.split(/\r?\n/);
-    if (lines.length > 1) {
-      for (const line of lines) {
-        const cleaned = line.trim();
-        if (cleaned.match(/^(EMP-\d+|MAC-\d+|ID:\s*[\w-]+|[\w-]+)$/i)) {
-          return extractId(cleaned);
-        }
-      }
-    }
-    return trimmed;
-  };
-
   const handleEmployeeScan = async (data: { text: string } | null) => {
     if (data && data.text && !isProcessing) {
       setIsProcessing(true);
-      const empId = extractId(data.text.trim());
+      const empId = extractLegacyId(data.text.trim());
       setScanningEmployee(false);
       const loadingToast = toast.loading(`Fetching employee ${empId}...`);
 
@@ -150,31 +151,65 @@ export const MobileLineSetupForm: React.FC = () => {
     }
   };
 
+  const workCentreLabel = (wcId?: number) => {
+    if (wcId == null) return '';
+    const wc = workCentres.find((w) => w.id === wcId);
+    return wc?.name || wc?.code || `Line ${wcId}`;
+  };
+
   const handleMachineScan = async (data: { text: string } | null) => {
     if (data && data.text && !isProcessing) {
       setIsProcessing(true);
-      const machId = extractId(data.text.trim());
+      const parsed = parseMachineQr(data.text.trim());
+      if (!parsed?.machineId) {
+        toast.error('Could not read machine QR code');
+        setIsProcessing(false);
+        return;
+      }
+
+      const machId = parsed.machineId;
+      const wcFromQr = resolveWorkCentreId(parsed, workCentres);
       setScanningMachine(false);
       const loadingToast = toast.loading(`Fetching machine ${machId}...`);
 
       try {
-        const response = await fetchWithRetry(`${API_BASE}/api/masters/machine_centres/machine_id/${encodeURIComponent(machId)}`);
+        const response = await fetchWithRetry(
+          `${API_BASE}/api/masters/machine_centres/machine_id/${encodeURIComponent(machId)}`
+        );
         const result = await response.json();
 
+        const wcId = wcFromQr ?? result.data?.work_centre_id;
+        const wcName = workCentreLabel(wcId);
+
         if (result.success && result.data) {
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             machine_id: machId,
-            machine_name: result.data.name,
-            work_centre_id: result.data.work_centre_id || prev.work_centre_id
+            machine_name: result.data.name || result.data.machine_name,
+            work_centre_id: wcId ?? prev.work_centre_id,
+            work_centre_name: wcName || prev.work_centre_name,
           }));
-          toast.success(`Machine detected: ${result.data.name}`, { id: loadingToast });
+          const lineHint = wcName ? ` on ${wcName}` : '';
+          toast.success(`Machine detected: ${result.data.name}${lineHint}`, { id: loadingToast });
         } else {
-          setFormData(prev => ({ ...prev, machine_id: machId }));
-          toast.success(`Machine ID locked: ${machId}`, { id: loadingToast });
+          setFormData((prev) => ({
+            ...prev,
+            machine_id: machId,
+            work_centre_id: wcId ?? prev.work_centre_id,
+            work_centre_name: wcName || prev.work_centre_name,
+          }));
+          toast.success(
+            wcName ? `Machine ${machId} — ${wcName}` : `Machine ID locked: ${machId}`,
+            { id: loadingToast }
+          );
         }
-      } catch (e) {
-        setFormData(prev => ({ ...prev, machine_id: machId }));
+      } catch {
+        setFormData((prev) => ({
+          ...prev,
+          machine_id: machId,
+          work_centre_id: wcFromQr ?? prev.work_centre_id,
+          work_centre_name: workCentreLabel(wcFromQr) || prev.work_centre_name,
+        }));
         toast.success(`Machine ID locked: ${machId}`, { id: loadingToast });
       } finally {
         setTimeout(() => setIsProcessing(false), 500);
@@ -240,6 +275,49 @@ export const MobileLineSetupForm: React.FC = () => {
   const [manualMachEntry, setManualMachEntry] = React.useState(false);
   const [manualEmpInput, setManualEmpInput] = React.useState('');
   const [manualMachInput, setManualMachInput] = React.useState('');
+  const [employees, setEmployees] = React.useState<EmployeeOption[]>([]);
+  const [machines, setMachines] = React.useState<MachineOption[]>([]);
+  const [workCentres, setWorkCentres] = React.useState<WorkCentreOption[]>([]);
+  const [mastersLoading, setMastersLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadMasters = async () => {
+      setMastersLoading(true);
+      try {
+        const [empRes, machineRes, wcRes] = await Promise.all([
+          apiFetch(`${API_BASE}/api/masters/employees?limit=1000`).then((r) => r.json()),
+          apiFetch(`${API_BASE}/api/masters/machine_centres?limit=500`).then((r) => r.json()),
+          apiFetch(`${API_BASE}/api/masters/work_centres?limit=200`).then((r) => r.json()),
+        ]);
+        if (empRes.success) setEmployees(empRes.data || []);
+        if (machineRes.success) setMachines(machineRes.data || []);
+        if (wcRes.success) setWorkCentres(wcRes.data || []);
+      } catch {
+        toast.error('Failed to load employee and machine lists');
+      } finally {
+        setMastersLoading(false);
+      }
+    };
+    loadMasters();
+  }, []);
+
+  const employeeSelectOptions = React.useMemo(
+    () =>
+      employees.map((emp) => ({
+        value: emp.code,
+        label: `${emp.code} - ${emp.name}`,
+      })),
+    [employees]
+  );
+
+  const machineSelectOptions = React.useMemo(
+    () =>
+      machines.map((m) => ({
+        value: m.machine_id,
+        label: `${m.machine_id} - ${m.machine_name || m.name || 'Machine'}`,
+      })),
+    [machines]
+  );
 
   const handleManualEmployeeSubmit = async () => {
     const empId = manualEmpInput.trim();
@@ -309,27 +387,39 @@ export const MobileLineSetupForm: React.FC = () => {
                 onClick={() => { setManualEmpEntry(v => !v); setManualEmpInput(''); }}
                 className="w-full text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
               >
-                {manualEmpEntry ? 'Hide manual entry' : "Can't scan? Type employee code"}
+                {manualEmpEntry ? 'Hide manual entry' : "Can't scan? Select or type employee"}
               </button>
               {manualEmpEntry && (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={manualEmpInput}
-                    onChange={e => setManualEmpInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleManualEmployeeSubmit()}
-                    placeholder="e.g. EMP-1001"
-                    className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
-                    autoFocus
+                <div className="space-y-2">
+                  <SearchableSelect
+                    value={formData.employee_id}
+                    onChange={(code) => {
+                      if (code) handleEmployeeScan({ text: code });
+                    }}
+                    options={employeeSelectOptions}
+                    placeholder="Select employee"
+                    searchPlaceholder="Search by code or name..."
+                    disabled={isProcessing || mastersLoading}
                   />
-                  <button
-                    type="button"
-                    onClick={handleManualEmployeeSubmit}
-                    disabled={!manualEmpInput.trim() || isProcessing}
-                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
-                  >
-                    Verify
-                  </button>
+                  <p className="text-center text-xs text-gray-400">or type employee code</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={manualEmpInput}
+                      onChange={(e) => setManualEmpInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleManualEmployeeSubmit()}
+                      placeholder="e.g. 165 or EMP-1001"
+                      className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleManualEmployeeSubmit}
+                      disabled={!manualEmpInput.trim() || isProcessing}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
+                    >
+                      Verify
+                    </button>
+                  </div>
                 </div>
               )}
               {formData.employee_id ? (
@@ -372,27 +462,39 @@ export const MobileLineSetupForm: React.FC = () => {
                 onClick={() => { setManualMachEntry(v => !v); setManualMachInput(''); }}
                 className="w-full text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
               >
-                {manualMachEntry ? 'Hide manual entry' : "Can't scan? Type machine ID"}
+                {manualMachEntry ? 'Hide manual entry' : "Can't scan? Select or type machine"}
               </button>
               {manualMachEntry && (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={manualMachInput}
-                    onChange={e => setManualMachInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleManualMachineSubmit()}
-                    placeholder="e.g. MAC-001"
-                    className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
-                    autoFocus
+                <div className="space-y-2">
+                  <SearchableSelect
+                    value={formData.machine_id}
+                    onChange={(code) => {
+                      if (code) handleMachineScan({ text: code });
+                    }}
+                    options={machineSelectOptions}
+                    placeholder="Select machine"
+                    searchPlaceholder="Search by machine ID or name..."
+                    disabled={isProcessing || mastersLoading}
                   />
-                  <button
-                    type="button"
-                    onClick={handleManualMachineSubmit}
-                    disabled={!manualMachInput.trim() || isProcessing}
-                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
-                  >
-                    Verify
-                  </button>
+                  <p className="text-center text-xs text-gray-400">or type machine ID</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={manualMachInput}
+                      onChange={(e) => setManualMachInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleManualMachineSubmit()}
+                      placeholder="e.g. 01 or MAC-001"
+                      className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleManualMachineSubmit}
+                      disabled={!manualMachInput.trim() || isProcessing}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 rounded-xl font-semibold transition-colors"
+                    >
+                      Verify
+                    </button>
+                  </div>
                 </div>
               )}
               {formData.machine_id ? (
@@ -400,6 +502,9 @@ export const MobileLineSetupForm: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-green-600 font-semibold truncate">{formData.machine_id}</p>
                     <p className="text-sm text-gray-800 font-medium truncate">{formData.machine_name || formData.machine_id}</p>
+                    {formData.work_centre_name && (
+                      <p className="text-xs text-gray-500 truncate">Line: {formData.work_centre_name}</p>
+                    )}
                   </div>
                   <button
                     type="button"

@@ -18,6 +18,7 @@
 
 const pool = require('../../config/database');
 const wipStateService = require('../services/wipStateService');
+const { getRoutingMinsSqlExpr } = require('../utils/routingMinsColumn');
 
 // ── Work Centre ID for Line 3 (Heel Grip is the input machine here) ──────────
 const LINE_3_WORK_CENTRE_ID = 3;
@@ -45,6 +46,7 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
     try {
         const { workCentreId } = req.params;
         const date = req.query.date || new Date().toISOString().split('T')[0];
+        const routingMinsExpr = await getRoutingMinsSqlExpr('prl');
 
         const [rows] = await pool.query(`
             SELECT
@@ -55,7 +57,7 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                 COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
                 COALESCE(ROUND(mcs.avg_efficiency_percent, 1), 0) AS avg_efficiency_percent,
                 COALESCE(
-                    (SELECT ROUND(SUM(prl.mins_12_prs_box), 2)
+                    (SELECT ROUND(SUM(${routingMinsExpr}), 2)
                      FROM production_routing_lines prl
                      JOIN production_routing_header prh ON prl.routing_header_id = prh.id
                      JOIN production_plan pp2 ON prh.style_id = pp2.style_id

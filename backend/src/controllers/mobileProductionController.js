@@ -1,13 +1,16 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
+const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
 
 const resolveTargetsFromPlan = async (conn, { machineId, workCentreId, prodDate }) => {
   let targetMins = 0;
   let targetPairs = 0;
+  const routingMinsCol = await getRoutingMinsColumnName();
+  const pairsPerBin = await getPairsPerRoutingBin();
 
   const [routingRows] = await conn.execute(
-    `SELECT prl.mins_12_prs_box
+    `SELECT prl.${routingMinsCol} AS routing_mins_per_bin
      FROM production_plan pp
      JOIN production_routing_header prh ON prh.style_id = pp.style_id AND prh.deleted_at IS NULL
      JOIN production_routing_lines prl
@@ -24,7 +27,7 @@ const resolveTargetsFromPlan = async (conn, { machineId, workCentreId, prodDate 
     [machineId, workCentreId, prodDate]
   );
   if (routingRows.length > 0) {
-    targetMins = parseFloat(routingRows[0].mins_12_prs_box || 0) || 0;
+    targetMins = parseFloat(routingRows[0].routing_mins_per_bin || 0) || 0;
   }
 
   const [planRows] = await conn.execute(
@@ -42,6 +45,7 @@ const resolveTargetsFromPlan = async (conn, { machineId, workCentreId, prodDate 
   return {
     targetMins: Math.max(0, targetMins),
     targetPairs: Math.max(0, targetPairs),
+    pairsPerBin,
   };
 };
 
@@ -603,7 +607,7 @@ exports.createManualEntry = async (req, res, next) => {
 
     let insertedId = null;
     let summaryData = null;
-    let enforcedTargets = { targetMins: 0, targetPairs: 0 };
+    let enforcedTargets = { targetMins: 0, targetPairs: 0, pairsPerBin: 6 };
 
     await withTransaction(async (conn) => {
       enforcedTargets = await resolveTargetsFromPlan(conn, {
@@ -710,7 +714,7 @@ exports.createManualEntry = async (req, res, next) => {
         emp_id,
         start_time,
         finish_time: finishProvided ? finish_time : null,
-        target_mins: isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
+        target_mins: isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / enforcedTargets.pairsPerBin),
         output_pairs: manualOutputPairs,
         stoppage_reason: stoppageReasonValue,
         button_status: buttonStatus,
@@ -727,7 +731,7 @@ exports.createManualEntry = async (req, res, next) => {
           machine_id,
           emp_id,
           manualOutputPairs,
-          isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
+          isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / enforcedTargets.pairsPerBin),
           normalizedStartTime,
           normalizedFinishTime,
           idleStartTime,
@@ -1008,7 +1012,7 @@ exports.updateManualEntry = async (req, res, next) => {
     }
 
     let summaryData = null;
-    let enforcedTargets = { targetMins: 0, targetPairs: 0 };
+    let enforcedTargets = { targetMins: 0, targetPairs: 0, pairsPerBin: 6 };
     const beforeData = existingRows[0];
     await withTransaction(async (conn) => {
       enforcedTargets = await resolveTargetsFromPlan(conn, {
@@ -1040,7 +1044,7 @@ exports.updateManualEntry = async (req, res, next) => {
         emp_id,
         start_time,
         finish_time: finishProvided ? finish_time : null,
-        target_mins: entryMeta.isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12),
+        target_mins: entryMeta.isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / enforcedTargets.pairsPerBin),
         output_pairs: manualOutputPairs,
         stoppage_reason: entryMeta.isStoppageEvent
           ? buildStoppageReason(entryMeta.prefix, stoppage_reason, approverIdentity)
@@ -1048,7 +1052,7 @@ exports.updateManualEntry = async (req, res, next) => {
         button_status: buttonStatus,
       };
 
-      const scaledTargetMins = entryMeta.isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / 12);
+      const scaledTargetMins = entryMeta.isStoppageEvent ? 0 : enforcedTargets.targetMins * (manualOutputPairs / enforcedTargets.pairsPerBin);
 
       await conn.execute(
         `UPDATE machine_centre_production
@@ -1637,7 +1641,8 @@ exports.updateStatus = async (req, res, next) => {
           prodDate: today,
         });
         const baseTargetMins = Number(resolvedTargets?.targetMins || existingRecord.target_mins || 0);
-        const scaledTargetMins = baseTargetMins > 0 ? (baseTargetMins * (finishOutputPairs / 12)) : 0;
+        const pairsPerBin = resolvedTargets.pairsPerBin || 6;
+        const scaledTargetMins = baseTargetMins > 0 ? (baseTargetMins * (finishOutputPairs / pairsPerBin)) : 0;
 
         updateQuery += ', finish_time = NOW(), prod_date = CURDATE(), output_pairs = ?, target_mins = ?';
         params.push(finishOutputPairs, scaledTargetMins);
@@ -1867,7 +1872,7 @@ exports.refreshPivotData = async (req, res, next) => {
         SUM(actual_time),
         SUM(idle_mins),
         CASE WHEN SUM(target_mins) > 0 THEN (SUM(actual_time) / SUM(target_mins)) * 100 ELSE 0 END,
-        SUM(actual_time) / 12,
+        CASE WHEN SUM(output_pairs) > 0 THEN SUM(actual_time) / (SUM(output_pairs) / 6) ELSE 0 END,
         MAX(button_status)
       FROM machine_centre_production
       GROUP BY prod_date, work_centre_id, machine_id, emp_id
@@ -2087,8 +2092,9 @@ exports.getInitData = async (req, res, next) => {
     // Get target mins from routing for today's plan and machine
     let targetMins = 0;
     try {
+      const routingMinsCol = await getRoutingMinsColumnName();
       const [linesRows] = await db.query(
-        `SELECT prl.mins_12_prs_box
+        `SELECT prl.${routingMinsCol} AS routing_mins_per_bin
          FROM production_plan pp
          JOIN production_routing_header prh ON prh.style_id = pp.style_id AND prh.deleted_at IS NULL
          JOIN production_routing_lines prl
@@ -2104,7 +2110,7 @@ exports.getInitData = async (req, res, next) => {
          LIMIT 1`,
         [machineId, finalWorkCentreId]
       );
-      if (linesRows.length > 0) targetMins = parseFloat(linesRows[0].mins_12_prs_box || 0);
+      if (linesRows.length > 0) targetMins = parseFloat(linesRows[0].routing_mins_per_bin || 0);
     } catch (err) {
       logger.warn('Could not fetch routing data, using fallback target mins 0:', err.message);
     }
@@ -2143,6 +2149,8 @@ exports.getInitData = async (req, res, next) => {
       }
     }
 
+    const pairsPerBin = await getPairsPerRoutingBin();
+
     res.json({
       success: true,
       data: {
@@ -2151,6 +2159,7 @@ exports.getInitData = async (req, res, next) => {
         workCentre: { id: finalWorkCentreId, name: workCentre.name },
         targetMins,
         targetPairs,
+        pairsPerBin,
         existingRecord
       }
     });

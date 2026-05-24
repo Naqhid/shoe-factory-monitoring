@@ -61,9 +61,6 @@ function clampMobileTargetPairs(value: unknown): number {
 const MOBILE_SHIFT_START_MINUTES = 9 * 60; // 9:00 AM
 const MOBILE_SHIFT_END_MINUTES = 17 * 60 + 30; // 5:30 PM
 
-/** Pace for expected-by-now (pairs per productive clock hour inside shift, lunch excluded). */
-const MOBILE_PAIRS_PER_HOUR_TARGET = 24;
-
 const getLunchBoundsMs = (d: Date) => {
     const isFriday = d.getDay() === FRIDAY_INDEX;
     const lunchS = isFriday ? FRIDAY_LUNCH_START_MINUTES : DEFAULT_LUNCH_START_MINUTES;
@@ -96,6 +93,36 @@ const getProductiveElapsedMinutesInShift = (now: Date, shiftStartMin: number, sh
     const startMs = shiftStart.getTime();
     if (t <= startMs) return 0;
     return productiveMinutesExcludingLunch(now, startMs, t);
+};
+
+/** Full shift productive minutes (9:00–17:30 minus lunch) and elapsed/remaining portions. */
+const getProductiveShiftTotals = (now: Date) => {
+    const shiftStart = new Date(now);
+    shiftStart.setHours(Math.floor(MOBILE_SHIFT_START_MINUTES / 60), MOBILE_SHIFT_START_MINUTES % 60, 0, 0);
+    const shiftEnd = new Date(now);
+    shiftEnd.setHours(Math.floor(MOBILE_SHIFT_END_MINUTES / 60), MOBILE_SHIFT_END_MINUTES % 60, 0, 0);
+    const totalProductiveMins = productiveMinutesExcludingLunch(
+        now,
+        shiftStart.getTime(),
+        shiftEnd.getTime()
+    );
+    const elapsedProductiveMins = getProductiveElapsedMinutesInShift(
+        now,
+        MOBILE_SHIFT_START_MINUTES,
+        MOBILE_SHIFT_END_MINUTES
+    );
+    const remainingProductiveMins = Math.max(0, totalProductiveMins - elapsedProductiveMins);
+    return { totalProductiveMins, elapsedProductiveMins, remainingProductiveMins };
+};
+
+/** Shift pair target from routing standard time per bin (mins_6_prs_box) and productive minutes. */
+const computeShiftTargetPairs = (
+    targetMinsPerBin: number,
+    pairsPerBin: number,
+    totalProductiveMins: number
+) => {
+    if (targetMinsPerBin <= 0 || pairsPerBin <= 0 || totalProductiveMins <= 0) return 0;
+    return Math.round((totalProductiveMins / targetMinsPerBin) * pairsPerBin);
 };
 
 const getMinutesOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
@@ -239,6 +266,9 @@ export const MobileProduction: React.FC = () => {
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
     const [dailyTargetPairs, setDailyTargetPairs] = useState<number | null>(null);
+    /** Routing mins/pairs per bin (6-pr baseline) used for shift day target — not scaled by operator dropdown. */
+    const [routingMinsPerBin, setRoutingMinsPerBin] = React.useState(0);
+    const [routingPairsPerBin, setRoutingPairsPerBin] = React.useState(MOBILE_PAIRS_PER_BIN);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
     const [startReminderDue, setStartReminderDue] = useState(false);
@@ -261,7 +291,8 @@ export const MobileProduction: React.FC = () => {
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
     const [selectedTargetPairs, setSelectedTargetPairs] = useState(MOBILE_PAIRS_PER_BIN);
     const baseTargetMinsRef = React.useRef(0);
-    const baseTargetPairsRef = React.useRef(12);
+    /** Routing mins column is per bin (6 pairs after mins_6_prs_box migration). */
+    const baseTargetPairsRef = React.useRef(MOBILE_PAIRS_PER_BIN);
     
     // Pull-to-refresh state
     const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -281,7 +312,7 @@ export const MobileProduction: React.FC = () => {
 
     const getScaledTargetMins = React.useCallback((pairs: number) => {
         const baseMins = Number(baseTargetMinsRef.current || 0);
-        const basePairs = Number(baseTargetPairsRef.current || 12);
+        const basePairs = Number(baseTargetPairsRef.current || MOBILE_PAIRS_PER_BIN);
         if (baseMins <= 0 || basePairs <= 0) return 0;
         return Number(((baseMins * pairs) / basePairs).toFixed(1));
     }, []);
@@ -326,13 +357,25 @@ export const MobileProduction: React.FC = () => {
 
     const initializeTargetPairBaseline = React.useCallback(
         (
-            refreshedBaseMins12: number,
+            refreshedBaseMins: number,
             _planningTrayPairs: number,
-            opts?: { resumeRecordTargetMins?: number | null; resumeRecordTargetPairs?: number | null }
+            opts?: {
+                resumeRecordTargetMins?: number | null;
+                resumeRecordTargetPairs?: number | null;
+                pairsPerRoutingBin?: number;
+            }
         ): { scaledTargetMins: number; targetPairs: number } => {
-            const safeBase = Number(refreshedBaseMins12 || 0);
-            baseTargetPairsRef.current = 12;
+            const safeBase = Number(refreshedBaseMins || 0);
+            const routingBin =
+                opts?.pairsPerRoutingBin != null && opts.pairsPerRoutingBin > 0
+                    ? opts.pairsPerRoutingBin
+                    : MOBILE_PAIRS_PER_BIN;
+            baseTargetPairsRef.current = routingBin;
             baseTargetMinsRef.current = safeBase > 0 ? safeBase : 0;
+            if (safeBase > 0) {
+                setRoutingMinsPerBin(safeBase);
+                setRoutingPairsPerBin(routingBin);
+            }
 
             let next = MOBILE_PAIRS_PER_BIN;
             const resumePairsRaw = opts?.resumeRecordTargetPairs;
@@ -379,28 +422,44 @@ export const MobileProduction: React.FC = () => {
     };
 
     const dailyPaceSnapshot = React.useMemo(() => {
-        const daily = dailyTargetPairs;
-        if (daily == null || daily <= 0) return null;
         const now = currentTime;
-        const shiftStart = new Date(now);
-        shiftStart.setHours(Math.floor(MOBILE_SHIFT_START_MINUTES / 60), MOBILE_SHIFT_START_MINUTES % 60, 0, 0);
-        const shiftEnd = new Date(now);
-        shiftEnd.setHours(Math.floor(MOBILE_SHIFT_END_MINUTES / 60), MOBILE_SHIFT_END_MINUTES % 60, 0, 0);
-        const totalShiftMins = Math.max(1, Math.floor((shiftEnd.getTime() - shiftStart.getTime()) / 60000));
-        const elapsedMins = Math.max(
-            1,
-            Math.min(
-                Math.max(0, Math.floor((Math.min(now.getTime(), shiftEnd.getTime()) - shiftStart.getTime()) / 60000)),
-                totalShiftMins
-            )
-        );
-        const expected = Math.round((daily * elapsedMins) / totalShiftMins);
+        const { totalProductiveMins, elapsedProductiveMins, remainingProductiveMins } =
+            getProductiveShiftTotals(now);
+        if (totalProductiveMins <= 0) return null;
+
+        const minsPerBin = routingMinsPerBin > 0 ? routingMinsPerBin : Number(productionData?.target_mins || 0);
+        const pairsPerBin =
+            routingPairsPerBin > 0 ? routingPairsPerBin : MOBILE_PAIRS_PER_BIN;
+
+        let daily = computeShiftTargetPairs(minsPerBin, pairsPerBin, totalProductiveMins);
+        if (daily <= 0 && dailyTargetPairs != null && dailyTargetPairs > 0) {
+            daily = dailyTargetPairs;
+        }
+        if (daily <= 0) return null;
+
+        const elapsedMins = Math.max(0, elapsedProductiveMins);
+        const expected =
+            elapsedMins > 0 ? Math.round((daily * elapsedMins) / totalProductiveMins) : 0;
         const actual = totalOutputToday;
         const gap = actual - expected;
-        const projectedEod = elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalShiftMins) : 0;
-        const remainingMins = Math.max(0, Math.floor((shiftEnd.getTime() - Math.min(now.getTime(), shiftEnd.getTime())) / 60000));
-        return { expected, daily, gap, projectedEod, remainingMins };
-    }, [currentTime, dailyTargetPairs, totalOutputToday]);
+        const projectedEod =
+            elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalProductiveMins) : 0;
+        return {
+            expected,
+            daily,
+            gap,
+            projectedEod,
+            remainingMins: Math.round(remainingProductiveMins),
+            totalProductiveMins: Math.round(totalProductiveMins),
+        };
+    }, [
+        currentTime,
+        dailyTargetPairs,
+        totalOutputToday,
+        routingMinsPerBin,
+        routingPairsPerBin,
+        productionData?.target_mins,
+    ]);
 
     // Update current time every second
     useEffect(() => {
@@ -1122,6 +1181,7 @@ export const MobileProduction: React.FC = () => {
                             {
                                 resumeRecordTargetMins: Number(activeRecord.target_mins ?? 0) || null,
                                 resumeRecordTargetPairs: targetPairsFromDb > 0 ? targetPairsFromDb : null,
+                                pairsPerRoutingBin: Number(initRes?.data?.pairsPerBin) || MOBILE_PAIRS_PER_BIN,
                             }
                         );
 
@@ -1174,7 +1234,7 @@ export const MobileProduction: React.FC = () => {
                             return;
                         }
 
-                        const { employee, machine, workCentre, targetMins, existingRecord } = result.data;
+                        const { employee, machine, workCentre, targetMins, existingRecord, pairsPerBin } = result.data;
                         const { scaledTargetMins, targetPairs: binPairs } = initializeTargetPairBaseline(
                             Number(targetMins || 0),
                             MOBILE_PAIRS_PER_BIN,
@@ -1185,8 +1245,9 @@ export const MobileProduction: React.FC = () => {
                                           Number(existingRecord.target_pairs || 0) > 0
                                               ? Number(existingRecord.target_pairs)
                                               : null,
+                                      pairsPerRoutingBin: Number(pairsPerBin) || MOBILE_PAIRS_PER_BIN,
                                   }
-                                : undefined
+                                : { pairsPerRoutingBin: Number(pairsPerBin) || MOBILE_PAIRS_PER_BIN }
                         );
 
                         setSessionStatus('active');
@@ -2039,7 +2100,7 @@ export const MobileProduction: React.FC = () => {
                                         {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
                                     </button>
                                 </div>
-                                {loadingSummary ? (
+                                {loadingSummary && !dailyPaceSnapshot ? (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/80 py-1">
                                         Loading daily pace…
                                     </div>
@@ -2051,14 +2112,14 @@ export const MobileProduction: React.FC = () => {
                                                     ? 'bg-emerald-600/20 border-emerald-300/55 ring-emerald-400/30'
                                                     : 'bg-red-950/50 border-red-400/45 ring-red-500/35'
                                             }`}
-                                            title="Actual output vs projected end-of-day output at current pace (9:00–5:30). Projected = (actual ÷ elapsed mins) × total shift mins."
+                                            title={`Actual output vs expected by now at routing standard (${dailyPaceSnapshot.totalProductiveMins} productive mins, lunch excluded). Projected EOD = (actual ÷ elapsed productive mins) × shift productive mins.`}
                                         >
                                             <p className="text-[11px] sm:text-xs uppercase opacity-90 font-semibold tracking-wide text-white">
                                                 Actual vs pace
                                             </p>
                                             <div
                                                 className="mt-1.5 md:mt-1 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1"
-                                                aria-label={`${totalOutputToday} pairs produced, ${dailyPaceSnapshot.projectedEod} projected end of day`}
+                                                aria-label={`${totalOutputToday} pairs produced, ${dailyPaceSnapshot.expected} expected by now`}
                                             >
                                                 <div className="flex items-baseline justify-center gap-2 sm:gap-2.5 flex-nowrap tabular-nums">
                                                     <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold text-emerald-300 drop-shadow-sm min-w-0">
@@ -2068,7 +2129,7 @@ export const MobileProduction: React.FC = () => {
                                                         /
                                                     </span>
                                                     <span className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-white min-w-0">
-                                                        {dailyPaceSnapshot.projectedEod}
+                                                        {dailyPaceSnapshot.expected}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-baseline justify-center gap-1.5 border-t border-white/20 pt-1.5 mt-0.5 w-full min-[400px]:border-t-0 min-[400px]:border-l min-[400px]:border-white/25 min-[400px]:pt-0 min-[400px]:mt-0 min-[400px]:pl-4 min-[400px]:w-auto min-[400px]:basis-auto">
@@ -2087,20 +2148,22 @@ export const MobileProduction: React.FC = () => {
                                                 </div>
                                             </div>
                                             <p className="text-[10px] sm:text-[11px] opacity-80 mt-1 md:mt-0.5 max-w-full mx-auto break-words px-0.5 leading-snug">
-                                                pairs · projected EOD · {dailyPaceSnapshot.remainingMins}m left
+                                                pairs now · EOD proj. {dailyPaceSnapshot.projectedEod} · {dailyPaceSnapshot.remainingMins}m left
                                             </p>
                                         </div>
                                         <div className="w-full min-w-0 rounded-xl bg-white/10 px-3 py-2.5 sm:px-3 sm:py-2 md:px-2 md:py-2 border border-white/25 shadow-md ring-1 ring-white/10">
-                                            <p className="text-[11px] sm:text-xs uppercase opacity-80 font-semibold tracking-wide">Day target</p>
+                                            <p className="text-[11px] sm:text-xs uppercase opacity-80 font-semibold tracking-wide">Shift target</p>
                                             <p className="text-[1.65rem] leading-none sm:text-2xl md:text-3xl font-bold tabular-nums text-sky-100 mt-1.5 md:mt-1">
                                                 {dailyPaceSnapshot.daily}
                                             </p>
-                                            <p className="text-[10px] sm:text-[11px] opacity-75 mt-1 md:mt-0.5">pairs (line plan)</p>
+                                            <p className="text-[10px] sm:text-[11px] opacity-75 mt-1 md:mt-0.5">
+                                                pairs @ routing ({dailyPaceSnapshot.totalProductiveMins}m shift)
+                                            </p>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/70 px-2 py-2 rounded-lg bg-white/5 border border-white/10">
-                                        No production plan for this line today — expected pace and day target are unavailable.
+                                        No routing target time for this machine — shift target and pace are unavailable.
                                     </div>
                                 )}
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
