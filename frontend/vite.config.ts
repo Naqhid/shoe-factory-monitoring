@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
@@ -8,18 +8,18 @@ const certPath = path.resolve(__dirname, 'cert')
 const keyFile = path.join(certPath, 'key.pem')
 const certFile = path.join(certPath, 'cert.pem')
 
-const useHttps = fs.existsSync(keyFile) && fs.existsSync(certFile)
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  /** Split-dev proxy — set VITE_DEV_API_PROXY in frontend/.env.local (develop: 3001, feature: 3101). */
+  const devApiProxyTarget = env.VITE_DEV_API_PROXY?.trim()
+  const devApiProxy = devApiProxyTarget
+    ? {
+        '/api': { target: devApiProxyTarget, changeOrigin: true },
+        '/health': { target: devApiProxyTarget, changeOrigin: true },
+      }
+    : undefined
 
-/** Optional split-dev proxy — set VITE_DEV_API_PROXY in .env.local (not committed). */
-const devApiProxyTarget = process.env.VITE_DEV_API_PROXY?.trim()
-const devApiProxy = devApiProxyTarget
-  ? {
-      '/api': { target: devApiProxyTarget, changeOrigin: true },
-      '/health': { target: devApiProxyTarget, changeOrigin: true },
-    }
-  : undefined
-
-export default defineConfig({
+  return {
   plugins: [
     react(),
     VitePWA({
@@ -98,4 +98,5 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'react-query'],
   },
+  }
 })
