@@ -156,8 +156,8 @@ exports.createWipDailyState = async (req, res, next) => {
 
     const [result] = await pool.query(
       `INSERT INTO wip_daily_state
-         (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed, manual_wip_override)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
       [
         fields.work_centre_id,
         fields.state_date,
@@ -223,7 +223,8 @@ exports.updateWipDailyState = async (req, res, next) => {
            today_input = ?,
            current_wip = ?,
            closing_wip = ?,
-           is_closed = ?
+           is_closed = ?,
+           manual_wip_override = 1
        WHERE id = ?`,
       [
         workCentreId,

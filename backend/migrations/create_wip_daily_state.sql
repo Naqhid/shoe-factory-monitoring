@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS wip_daily_state (
     current_wip     INT NOT NULL DEFAULT 0,   -- opening_wip + today_input - today_output (live)
     closing_wip     INT NOT NULL DEFAULT 0,   -- Snapshot at end of day (= current_wip at EOD)
     is_closed       TINYINT(1) NOT NULL DEFAULT 0, -- 1 = day has been closed/finalised
+    manual_wip_override TINYINT(1) NOT NULL DEFAULT 0, -- 1 = current/closing WIP set via UI, not live formula
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_wip_wc_date (work_centre_id, state_date),
