@@ -19,6 +19,7 @@
 const pool = require('../../config/database');
 const wipStateService = require('../services/wipStateService');
 const { getRoutingMinsSqlExpr } = require('../utils/routingMinsColumn');
+const { aggregateWorkCentreCycleLoss } = require('../utils/cycleLossMins');
 
 // ── Work Centre ID for Line 3 (legacy constant; input machine resolved per line) ──
 const LINE_3_WORK_CENTRE_ID = 3;
@@ -148,6 +149,8 @@ exports.getDashboard = async (req, res) => {
              FROM machine_centre_summary WHERE prod_date = ? AND work_centre_id = ?`,
             [today, workCentreId]
         );
+
+        const cycleLoss = await aggregateWorkCentreCycleLoss(pool, Number(workCentreId), today);
 
         const wcTarget = wcPlanningData[0]?.target || 0;
         const wcOutput = wcSummaryData[0]?.output || 0;
@@ -348,6 +351,9 @@ exports.getDashboard = async (req, res) => {
                     output: Math.round(output),
                     outputPercent: Math.round(outputPercent),
                     efficiencyPercent: Math.round(efficiencyPercent),
+                    lossOfMinutes: cycleLoss.lossOfMinutes,
+                    lossInactiveMins: cycleLoss.inactiveMins,
+                    lossExtraMins: cycleLoss.extraMins,
                     // MES WIP fields for overall section
                     openingWip: wipData.openingWip,
                     currentWip: wipData.currentWip,

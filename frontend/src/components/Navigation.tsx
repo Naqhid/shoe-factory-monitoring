@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList, MonitorDot, AlertTriangle, PencilRuler } from 'lucide-react';
-import { isMenuAllowed } from '../utils/roleConfig';
+import { isMenuAllowed, getEffectiveRole } from '../utils/roleConfig';
 import { AlertBell } from './AlertBell';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
@@ -61,17 +61,6 @@ export const Navigation: React.FC<NavigationProps> = ({
   const [processExpanded, setProcessExpanded] = React.useState(true);
   const [setupExpanded, setSetupExpanded] = React.useState(false);
   
-  const getUserRoleFromSession = () => {
-    if (typeof localStorage !== 'undefined') {
-      const userInfo = localStorage.getItem('user_info');
-      if (userInfo) {
-        const user = JSON.parse(userInfo);
-        return user.role || 'Admin';
-      }
-    }
-    return 'Admin';
-  };
-  
   const getUserInfo = () => {
     if (typeof localStorage !== 'undefined') {
       const userInfo = localStorage.getItem('user_info');
@@ -82,12 +71,13 @@ export const Navigation: React.FC<NavigationProps> = ({
     return null;
   };
   
-  const userRole = getUserRoleFromSession();
   const user = getUserInfo();
+  const userRole = getEffectiveRole(user) || 'Admin';
+  const menuAccess = user ?? { role: userRole };
 
-  const filteredProcessMenus = processMenus.filter(menu => isMenuAllowed(menu.key, userRole));
-  const filteredMasterMenus = masterMenus.filter(menu => isMenuAllowed(menu.key, userRole));
-  const filteredSetupMenus = setupMenus.filter(menu => isMenuAllowed(menu.key, userRole));
+  const filteredProcessMenus = processMenus.filter(menu => isMenuAllowed(menu.key, menuAccess));
+  const filteredMasterMenus = masterMenus.filter(menu => isMenuAllowed(menu.key, menuAccess));
+  const filteredSetupMenus = setupMenus.filter(menu => isMenuAllowed(menu.key, menuAccess));
 
   const handleLogout = () => {
     if (typeof localStorage !== 'undefined') {
@@ -149,7 +139,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               </div>
               <div className="flex items-center justify-between">
                 <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                  {user.role || 'Admin'}
+                  {userRole}
                 </span>
               </div>
               <div className="mt-2">

@@ -5,7 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { Header } from './components/Header';
 import { Layout } from './components/Layout';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
-import { isMenuAllowed, getDefaultRoute } from './utils/roleConfig';
+import { isMenuAllowed, getDefaultRoute, getEffectiveRole } from './utils/roleConfig';
 import { API_BASE_URL, apiFetch } from './services/api';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
@@ -238,13 +238,13 @@ function App() {
       const userInfo = localStorage.getItem('user_info');
       if (userInfo) {
         const user = JSON.parse(userInfo);
-        const userRole = user.role || 'Admin';
-        const defaultRoute = getDefaultRoute(userRole, user);
+        const userRole = getEffectiveRole(user) || 'Admin';
+        const defaultRoute = getDefaultRoute(user);
         if (location.pathname === '/' && defaultRoute !== '/overview') {
           navigate(defaultRoute, { replace: true });
           return;
         }
-        if (activeMenu && !isMenuAllowed(activeMenu, userRole)) {
+        if (activeMenu && !isMenuAllowed(activeMenu, user)) {
           const denialKey = `${userRole}:${activeMenu}`;
           if (lastAccessDeniedRef.current !== denialKey) {
             toast.error(`Access denied. You don't have permission to view this page.`);
