@@ -7,7 +7,7 @@
  *   Current WIP = Opening WIP + Input - Output
  *
  *   - Opening WIP : Previous day's closing WIP (carried forward automatically).
- *   - Input       : Cumulative production from Heel Grip Machine (machine_id = '03') today.
+ *   - Input       : Cumulative production from the line's input machine (machine_centres name contains "(Input)", e.g. 01).
  *   - Output      : End-of-line completed production (existing logic, unchanged).
  *
  * PERSISTENCE (DB only — no code fallbacks or hardcoded opening WIP):
@@ -27,8 +27,11 @@ const pool = require('../../config/database');
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-/** Machine ID for the Heel Grip Machine — the sole Input source for WIP. */
-const HEEL_GRIP_MACHINE_ID = '03';
+/** Default WIP input machine when no "(Input)" machine is configured on the line. */
+const WIP_INPUT_MACHINE_ID = '01';
+
+/** @deprecated Use resolveWipInputMachineId — kept for callers that imported HEEL_GRIP_MACHINE_ID */
+const HEEL_GRIP_MACHINE_ID = WIP_INPUT_MACHINE_ID;
 
 /** Line 3 in the UI maps to work_centre_id 5; EOL output is Final Inspection (machine 07). */
 const LINE_3_WORK_CENTRE_ID = 5;
@@ -189,18 +192,49 @@ async function resolveCarryForwardOpening(workCentreId, beforeDate) {
 
 // ── Core Service Functions ────────────────────────────────────────────────────
 
+const wipInputMachineCache = new Map();
+
 /**
- * Fetches today's input quantity from the Heel Grip Machine (machine_id = '03')
- * for a given work centre and date.
+ * Resolves the WIP input machine for a work centre.
+ * Prefers machine_centres marked "(Input)" in name (e.g. 01 Quarter Zig Zag Stitching).
  *
- * Input = total output_pairs produced by the Heel Grip Machine today.
- * This is the raw material entering the production line.
+ * @param {number} workCentreId
+ * @returns {Promise<string>}
+ */
+async function resolveWipInputMachineId(workCentreId) {
+    const wc = Number(workCentreId);
+    if (wipInputMachineCache.has(wc)) {
+        return wipInputMachineCache.get(wc);
+    }
+
+    const [rows] = await pool.query(
+        `SELECT machine_id
+         FROM machine_centres
+         WHERE work_centre_id = ?
+           AND deleted_at IS NULL
+           AND COALESCE(is_active, 1) = 1
+           AND (machine_name LIKE '%(Input)%' OR name LIKE '%(Input)%')
+         ORDER BY machine_id
+         LIMIT 1`,
+        [wc]
+    );
+
+    const machineId = rows.length ? String(rows[0].machine_id) : WIP_INPUT_MACHINE_ID;
+    wipInputMachineCache.set(wc, machineId);
+    return machineId;
+}
+
+/**
+ * Fetches today's input quantity from the line input machine for a work centre and date.
+ *
+ * Input = total output_pairs produced by the input machine today (feeds WIP / TV dashboard).
  *
  * @param {number} workCentreId
  * @param {string} date  YYYY-MM-DD
  * @returns {Promise<number>}
  */
 async function getTodayInput(workCentreId, date) {
+    const inputMachineId = await resolveWipInputMachineId(workCentreId);
     const [rows] = await pool.query(
         `SELECT COALESCE(SUM(output_pairs), 0) AS today_input
          FROM machine_centre_production
@@ -208,7 +242,7 @@ async function getTodayInput(workCentreId, date) {
            AND DATE(prod_date) = ?
            AND machine_id = ?
            AND button_status = 2`,
-        [workCentreId, date, HEEL_GRIP_MACHINE_ID]
+        [workCentreId, date, inputMachineId]
     );
     return Math.round(Number(rows[0]?.today_input || 0));
 }
@@ -366,9 +400,11 @@ async function getWipState(workCentreId, date) {
 }
 
 module.exports = {
+    WIP_INPUT_MACHINE_ID,
     HEEL_GRIP_MACHINE_ID,
     LINE_3_WORK_CENTRE_ID,
     EOL_MACHINE_ID,
+    resolveWipInputMachineId,
     getTodayInput,
     getEolOutputFromProduction,
     getEolOutput,

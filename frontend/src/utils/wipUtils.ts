@@ -59,7 +59,7 @@ export function formatInput(input: number | null | undefined): string {
  * The backend is the source of truth; this is a fallback/sanity check.
  *
  * @param openingWip  Opening WIP for the day
- * @param input       Today's input from Heel Grip Machine
+ * @param input       Today's input from the line input machine (e.g. 01)
  * @param output      Today's end-of-line output
  * @returns           Current WIP (floored at 0)
  */

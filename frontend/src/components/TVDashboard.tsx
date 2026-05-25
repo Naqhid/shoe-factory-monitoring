@@ -615,7 +615,7 @@ export const TVDashboard: React.FC = () => {
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Target</div>
                             <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.target}</div>
                         </div>
-                        {/* ── Input (Heel Grip Machine) — NEW MES card ── */}
+                        {/* ── Input (line input machine, e.g. 01 Quarter Zig Zag) ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-[50ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-cyan-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
                             <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input</div>

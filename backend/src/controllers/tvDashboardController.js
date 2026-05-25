@@ -6,7 +6,7 @@
  * MES WIP LOGIC (replaces old Target - Output formula):
  *   Current WIP = Opening WIP + Input - Output
  *
- *   - Input  : Production from Heel Grip Machine (machine_id = '03') — line entry point.
+ *   - Input  : Production from the line input machine (e.g. 01 Quarter Zig Zag Stitching (Input)).
  *   - Output : End-of-line completed production (existing logic, unchanged).
  *   - Opening WIP : From wip_daily_state only (seed SQL or prior closeDay carry-forward).
  *
@@ -20,15 +20,12 @@ const pool = require('../../config/database');
 const wipStateService = require('../services/wipStateService');
 const { getRoutingMinsSqlExpr } = require('../utils/routingMinsColumn');
 
-// ── Work Centre ID for Line 3 (Heel Grip is the input machine here) ──────────
+// ── Work Centre ID for Line 3 (legacy constant; input machine resolved per line) ──
 const LINE_3_WORK_CENTRE_ID = 3;
 
 // ── Machine ID constants ──────────────────────────────────────────────────────
 /** End-of-line Final Inspection machine for Line 2A (work_centre_id = 5) */
 const EOL_MACHINE_LINE_2A = '07';
-
-/** Heel Grip Machine — Input source for WIP calculation */
-const HEEL_GRIP_MACHINE_ID = wipStateService.HEEL_GRIP_MACHINE_ID; // '03'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -121,8 +118,7 @@ exports.getDashboard = async (req, res) => {
         const outputPercent = target > 0 ? (output / target) * 100 : 0;
         const efficiencyPercent = summaryData[0]?.eol_efficiency_percent || 0;
 
-        // ── 3. Input from Heel Grip Machine (machine_id = '03') ───────────────
-        // This is the live input entering the production line today.
+        // ── 3. Input from line input machine (e.g. 01 — Quarter Zig Zag Stitching) ──
         const overallInput = await wipStateService.getTodayInput(Number(workCentreId), today);
 
         // ── 4. MES WIP: Opening WIP + Input - Output ──────────────────────────
@@ -311,13 +307,13 @@ exports.getDashboard = async (req, res) => {
         `, [today, today, today]);
 
         // Enrich each line with MES WIP (Opening WIP + Input - Output)
-        // and live Input from Heel Grip Machine
+        // and live Input from the line input machine
         const linePerformance = await Promise.all(
             linePerformanceRaw.map(async (line) => {
                 const lineWcId = Number(line.work_centre_id);
                 const lineOutput = Number(line.output || 0);
 
-                // Fetch live input from Heel Grip Machine for this line
+                // Fetch live input from the line input machine
                 const lineInput = await wipStateService.getTodayInput(lineWcId, today);
 
                 // Compute and persist MES WIP for this line
@@ -331,7 +327,7 @@ exports.getDashboard = async (req, res) => {
                     work_centre_id: lineWcId,
                     line_name: line.line_name,
                     target: Math.round(line.target || 0),
-                    input: lineInput,                          // NEW: Heel Grip Machine input
+                    input: lineInput,
                     output: Math.round(lineOutput),
                     output_percentage: Math.round(line.output_percentage || 0),
                     efficiency: Math.round(line.efficiency || 0),
@@ -348,7 +344,7 @@ exports.getDashboard = async (req, res) => {
                 topSection: {
                     workCentreName: 'Overall Performance',
                     target: Math.round(target),
-                    input: overallInput,                       // NEW: Heel Grip input
+                    input: overallInput,
                     output: Math.round(output),
                     outputPercent: Math.round(outputPercent),
                     efficiencyPercent: Math.round(efficiencyPercent),
