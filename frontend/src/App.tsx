@@ -239,8 +239,12 @@ function App() {
       if (userInfo) {
         const user = JSON.parse(userInfo);
         const userRole = user.role || 'Admin';
+        const defaultRoute = getDefaultRoute(userRole, user);
+        if (location.pathname === '/' && defaultRoute !== '/overview') {
+          navigate(defaultRoute, { replace: true });
+          return;
+        }
         if (activeMenu && !isMenuAllowed(activeMenu, userRole)) {
-          const defaultRoute = getDefaultRoute(userRole, user);
           const denialKey = `${userRole}:${activeMenu}`;
           if (lastAccessDeniedRef.current !== denialKey) {
             toast.error(`Access denied. You don't have permission to view this page.`);
@@ -252,7 +256,7 @@ function App() {
         }
       }
     }
-  }, [isAuthenticated, activeMenu, navigate]);
+  }, [isAuthenticated, activeMenu, navigate, location.pathname]);
 
   // Show login first when app opens; after login, show the main app
   if (!isAuthenticated) {
