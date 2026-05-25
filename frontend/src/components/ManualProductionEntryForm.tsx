@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { SearchableSelect } from './SearchableSelect';
+import { WipDailyStateTab } from './WipDailyStateTab';
 
 interface WorkCentre {
   id: number;
@@ -151,7 +152,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [tableTotal, setTableTotal] = React.useState(0);
   const [tableTotalPages, setTableTotalPages] = React.useState(1);
   const [tableFilteredOutputTotal, setTableFilteredOutputTotal] = React.useState(0);
-  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit' | 'production' | 'summary'>('entries');
+  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit' | 'production' | 'summary' | 'wip'>('entries');
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
@@ -1686,6 +1687,13 @@ export const ManualProductionEntryForm: React.FC = () => {
             >
               Daily Summary
             </button>
+            <button
+              type="button"
+              onClick={() => withDiscardCheck(() => setActiveTab('wip'))}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'wip' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'}`}
+            >
+              WIP Management
+            </button>
           </div>
 
           {activeTab === 'entries' ? (
@@ -2521,6 +2529,10 @@ export const ManualProductionEntryForm: React.FC = () => {
             })()}
           </div>
         )}
+        {activeTab === 'wip' && (
+          <WipDailyStateTab workCentres={workCentres} canEdit={canEdit} />
+        )}
+
         {activeTab === 'summary' && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-end gap-3">

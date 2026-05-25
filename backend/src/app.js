@@ -28,6 +28,7 @@ const alertController = require('./controllers/alertController');
 const backupController = require('./controllers/backupController');
 const missedActionsController = require('./controllers/missedActionsController');
 const tabBroadcastController = require('./controllers/tabBroadcastController');
+const wipDailyStateController = require('./controllers/wipDailyStateController');
 const checkDayLock = require('./middleware/checkDayLock');
 const backupService = require('./services/backupService');
 const errorHandler = require('./middleware/errorHandler');
@@ -212,7 +213,7 @@ const initDb = async () => {
     }
 
     // ── MES WIP daily state table ─────────────────────────────────────────────
-    // Persists Opening WIP, Input (Heel Grip Machine), Current WIP, Closing WIP
+    // Persists Opening WIP, Input (line input machine, e.g. 01), Current WIP, Closing WIP
     // per work centre per day. Formula: Current WIP = Opening WIP + Input - Output
     await db.execute(`
       CREATE TABLE IF NOT EXISTS wip_daily_state (
@@ -663,6 +664,13 @@ app.post('/api/mobile-production', checkDayLock('prod_date', 'work_centre_id'), 
 app.post('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.createManualEntry);
 app.put('/api/mobile-production/manual-entry/:id', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.updateManualEntry);
 app.delete('/api/mobile-production/manual-entry/:id', authenticate, requireManualEntryAccess, checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.deleteManualEntry);
+
+// WIP daily state CRUD (manual entry area)
+app.get('/api/wip-daily-state', authenticate, requireManualEntryAccess, wipDailyStateController.listWipDailyState);
+app.get('/api/wip-daily-state/:id', authenticate, requireManualEntryAccess, wipDailyStateController.getWipDailyStateById);
+app.post('/api/wip-daily-state', authenticate, requireManualEntryAccess, checkDayLock('state_date', 'work_centre_id'), wipDailyStateController.createWipDailyState);
+app.put('/api/wip-daily-state/:id', authenticate, requireManualEntryAccess, checkDayLock('state_date', 'work_centre_id'), wipDailyStateController.updateWipDailyState);
+app.delete('/api/wip-daily-state/:id', authenticate, requireManualEntryAccess, checkDayLock('state_date', 'work_centre_id'), wipDailyStateController.deleteWipDailyState);
 app.put('/api/mobile-production/:id', mobileProductionController.update);
 app.patch('/api/mobile-production/:id/status', checkDayLock('prod_date', 'work_centre_id'), mobileProductionController.updateStatus);
 app.delete('/api/mobile-production/:id', mobileProductionController.delete);

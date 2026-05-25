@@ -1,10 +1,10 @@
 -- ============================================================
 -- MES-style WIP Daily State Table
--- Tracks Opening WIP, Today's Input (from Heel Grip Machine),
+-- Tracks Opening WIP, Today's Input (from line input machine, e.g. 01),
 -- and Current/Closing WIP per work centre per day.
 --
 -- WIP Formula: Current WIP = Opening WIP + Input - Output
--- Input source: Heel Grip Machine (machine_id = '03')
+-- Input source: line input machine (machine_centres name contains "(Input)", e.g. 01)
 -- Output source: End-of-line machine (existing logic, unchanged)
 -- ============================================================
 
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS wip_daily_state (
     work_centre_id  INT NOT NULL,
     state_date      DATE NOT NULL,
     opening_wip     INT NOT NULL DEFAULT 0,   -- Carried forward from previous day's closing WIP
-    today_input     INT NOT NULL DEFAULT 0,   -- Cumulative input from Heel Grip Machine today
+    today_input     INT NOT NULL DEFAULT 0,   -- Cumulative input from line input machine today
     current_wip     INT NOT NULL DEFAULT 0,   -- opening_wip + today_input - today_output (live)
     closing_wip     INT NOT NULL DEFAULT 0,   -- Snapshot at end of day (= current_wip at EOD)
     is_closed       TINYINT(1) NOT NULL DEFAULT 0, -- 1 = day has been closed/finalised

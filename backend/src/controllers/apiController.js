@@ -2,16 +2,22 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
 
-/** Heel Grip = line input; EOL Final Inspection = line output (Line 3). */
-const HEEL_GRIP_MACHINE_ID = '03';
+/** EOL Final Inspection = line output (Line 2A / wc 5). */
 const EOL_MACHINE_ID = '07';
 
+/** Per-line input: machine_centres whose name contains "(Input)" (e.g. 01 Quarter Zig Zag Stitching). */
 const SQL_LINE_INPUT_JOIN = `
   LEFT JOIN (
-    SELECT work_centre_id, DATE(prod_date) AS prod_date, SUM(output_pairs) AS total_input
-    FROM machine_centre_production
-    WHERE machine_id = '${HEEL_GRIP_MACHINE_ID}' AND button_status = 2
-    GROUP BY work_centre_id, DATE(prod_date)
+    SELECT mcp.work_centre_id, DATE(mcp.prod_date) AS prod_date, SUM(mcp.output_pairs) AS total_input
+    FROM machine_centre_production mcp
+    INNER JOIN machine_centres mc
+      ON mc.machine_id = mcp.machine_id
+     AND mc.work_centre_id = mcp.work_centre_id
+     AND mc.deleted_at IS NULL
+     AND COALESCE(mc.is_active, 1) = 1
+     AND (mc.machine_name LIKE '%(Input)%' OR mc.name LIKE '%(Input)%')
+    WHERE mcp.button_status = 2
+    GROUP BY mcp.work_centre_id, DATE(mcp.prod_date)
   ) line_input ON line_input.work_centre_id = %WC% AND line_input.prod_date = %DATE%`;
 
 const SQL_LINE_EOL_JOIN = `
