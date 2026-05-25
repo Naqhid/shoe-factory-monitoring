@@ -256,7 +256,8 @@ async function getTodayInput(workCentreId, date) {
  */
 async function fetchWipStateRow(workCentreId, date) {
     const [rows] = await pool.query(
-        `SELECT opening_wip, today_input, current_wip, closing_wip, is_closed
+        `SELECT opening_wip, today_input, current_wip, closing_wip, is_closed,
+                COALESCE(manual_wip_override, 0) AS manual_wip_override
          FROM wip_daily_state
          WHERE work_centre_id = ? AND state_date = ?`,
         [workCentreId, date]
@@ -306,34 +307,64 @@ async function openNextDayRowFromClose(workCentreId, closedDateKey, closingWip) 
  */
 async function computeAndPersistWip(workCentreId, date, todayOutput) {
     const state = await fetchWipStateRow(workCentreId, date);
-    const todayInput = await getTodayInput(workCentreId, date);
+    const todayInputLive = await getTodayInput(workCentreId, date);
     const roundedOutput = Math.round(todayOutput);
 
     if (!state) {
         return {
             openingWip: 0,
-            todayInput,
+            todayInput: todayInputLive,
             currentWip: 0,
             closingWip: 0,
         };
     }
 
     const openingWip = Math.round(Number(state.opening_wip || 0));
-    const currentWip = clampWip(openingWip + todayInput - roundedOutput);
+    const isClosed = Boolean(Number(state.is_closed));
+    const manualOverride = Boolean(Number(state.manual_wip_override));
+
+    // Respect manual edits and closed-day snapshots — do not overwrite with live formula.
+    if (isClosed || manualOverride) {
+        const storedCurrent = clampWip(state.current_wip);
+        const storedClosing = clampWip(state.closing_wip);
+        const displayWip =
+            isClosed && storedClosing > 0 ? storedClosing : storedCurrent;
+
+        if (manualOverride && !isClosed) {
+            await pool.query(
+                `UPDATE wip_daily_state
+                 SET today_input = ?
+                 WHERE work_centre_id = ? AND state_date = ?`,
+                [todayInputLive, workCentreId, date]
+            );
+        }
+
+        return {
+            openingWip,
+            todayInput:
+                manualOverride && !isClosed
+                    ? todayInputLive
+                    : Math.round(Number(state.today_input || 0)),
+            currentWip: displayWip,
+            closingWip: storedClosing,
+        };
+    }
+
+    const currentWip = clampWip(openingWip + todayInputLive - roundedOutput);
 
     await pool.query(
         `UPDATE wip_daily_state
          SET today_input = ?,
              current_wip = ?
          WHERE work_centre_id = ? AND state_date = ?`,
-        [todayInput, currentWip, workCentreId, date]
+        [todayInputLive, currentWip, workCentreId, date]
     );
 
     return {
         openingWip,
-        todayInput,
+        todayInput: todayInputLive,
         currentWip,
-        closingWip: Math.round(state.closing_wip),
+        closingWip: Math.round(state.closing_wip || 0),
     };
 }
 

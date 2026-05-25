@@ -231,6 +231,16 @@ const initDb = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     logger.info('wip_daily_state table ready');
+    try {
+      await db.execute(
+        'ALTER TABLE wip_daily_state ADD COLUMN manual_wip_override TINYINT(1) NOT NULL DEFAULT 0'
+      );
+      logger.info('Added manual_wip_override to wip_daily_state');
+    } catch (wipAlterError) {
+      if (wipAlterError.code !== 'ER_DUP_FIELDNAME') {
+        throw wipAlterError;
+      }
+    }
 
   } catch (e) {
     logger.error('Failed to init database:', e.message);
