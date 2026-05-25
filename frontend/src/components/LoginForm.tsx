@@ -3,7 +3,7 @@ import { LogIn, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { getDefaultRoute, type UserRole } from '../utils/roleConfig';
+import { getDefaultRoute } from '../utils/roleConfig';
 
 export const LoginForm: React.FC = () => {
   const [login, setLogin] = useState('');
@@ -36,8 +36,7 @@ export const LoginForm: React.FC = () => {
         const user = data.data;
         toast.success(`Welcome, ${user.name}`);
 
-        const userRole = (user.role || 'Admin') as UserRole;
-        const defaultRoute = getDefaultRoute(userRole, user);
+        const defaultRoute = getDefaultRoute(user);
         navigate(defaultRoute);
       } else {
         toast.error(data.message || 'Login failed');

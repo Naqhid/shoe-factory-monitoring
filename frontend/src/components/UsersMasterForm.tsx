@@ -322,6 +322,8 @@ export const UsersMasterForm: React.FC = () => {
                   <option value="IED">IED</option>
                   <option value="Planner">Planner</option>
                   <option value="Unit Head">Unit Head</option>
+                  <option value="Production Manager">Production Manager</option>
+                  <option value="Quality">Quality</option>
                 </select>
               </div>
 

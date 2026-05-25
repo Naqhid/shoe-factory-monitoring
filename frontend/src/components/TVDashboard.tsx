@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
+import { TvPlanPacePanel } from './TvPlanPacePanel';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
 
@@ -166,7 +167,8 @@ export const TVDashboard: React.FC = () => {
     const [stoppageCarouselIndex, setStoppageCarouselIndex] = useState(0);
     const [stoppageCarouselProgress, setStoppageCarouselProgress] = useState(0);
 
-    const DETAIL_CAROUSEL_SLIDES = 2;
+    const DETAIL_CAROUSEL_SLIDES = 3;
+    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Plan pace'];
     const DETAIL_CAROUSEL_MS = 30000;
     const STOPPAGE_CAROUSEL_MS = 15000;
 
@@ -502,6 +504,47 @@ export const TVDashboard: React.FC = () => {
         ? Math.round((Number(topSection.input || 0) / Number(topSection.target || 0)) * 100)
         : 0;
 
+    const planPaceSnapshot = (() => {
+        const now = currentTime;
+        const shiftStart = new Date(now);
+        shiftStart.setHours(9, 0, 0, 0);
+        const shiftEnd = new Date(now);
+        shiftEnd.setHours(17, 30, 0, 0);
+        const totalShiftMins = Math.max(1, Math.floor((shiftEnd.getTime() - shiftStart.getTime()) / 60000));
+        const elapsedMins = Math.max(
+            0,
+            Math.min(Math.floor((now.getTime() - shiftStart.getTime()) / 60000), totalShiftMins)
+        );
+        const remainingMins = Math.max(0, totalShiftMins - elapsedMins);
+
+        const daily = Number(topSection.target || 0);
+        const actual = Number(topSection.output || 0);
+        if (daily <= 0) return null;
+
+        const expected =
+            elapsedMins > 0 ? Math.round((daily * elapsedMins) / totalShiftMins) : 0;
+        const projectedEod =
+            elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalShiftMins) : 0;
+        const onTrack = projectedEod >= daily;
+        const shortBy = onTrack ? 0 : daily - projectedEod;
+
+        const elapsedPct = Math.round((elapsedMins / totalShiftMins) * 100);
+
+        return {
+            daily,
+            actual,
+            expected,
+            projectedEod,
+            shortBy,
+            remainingMins,
+            onTrack,
+            elapsedPct,
+            lossOfMinutes: Math.round(Number(topSection.lossOfMinutes || 0)),
+            lossInactiveMins: Math.round(Number(topSection.lossInactiveMins || 0)),
+            lossExtraMins: Math.round(Number(topSection.lossExtraMins || 0)),
+        };
+    })();
+
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
         output: item.output || 0
@@ -674,14 +717,16 @@ export const TVDashboard: React.FC = () => {
                     <h3 className="font-bold text-blue-600 truncate" style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}>
                         {detailCarouselIndex === 0
                             ? 'LINE PERFORMANCE'
-                            : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
+                            : detailCarouselIndex === 1
+                                ? `${lowerSection.workCentreName || 'Line'} - Hourly Output`
+                                : `${topSection.workCentreName || lowerSection.workCentreName || 'Line'} — Actual vs plan pace`}
                     </h3>
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {dashboardAgeSec !== null && dashboardAgeSec > 30 && detailCarouselIndex === 0 && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Stale</span>
                         )}
                         <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
-                            {['Line table', 'Hourly chart'].map((label, i) => (
+                            {DETAIL_CAROUSEL_LABELS.map((label, i) => (
                                 <button
                                     key={label}
                                     type="button"
@@ -778,6 +823,18 @@ export const TVDashboard: React.FC = () => {
                                 fitContainer
                                 hideTitle
                             />
+                        </div>
+                        <div className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
+                            {planPaceSnapshot ? (
+                                <TvPlanPacePanel
+                                    snapshot={planPaceSnapshot}
+                                    lineName={topSection.workCentreName || lowerSection.workCentreName}
+                                />
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center p-6 text-center text-slate-500 text-sm sm:text-base font-medium">
+                                    No production plan target set for today — add planning to show pace vs plan.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -30,6 +30,38 @@ interface Props {
 }
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
+const LINE_COLOR = '#3b82f6';
+const DROP_COLOR = '#dc2626';
+
+type HourlyChartRow = HourlyData & {
+  isDrop: boolean;
+  productionRise: number | null;
+  productionDrop: number | null;
+};
+
+/** Split series per edge: only the segment between two hours is red when output drops. */
+const enrichHourlyWithDrops = (data: HourlyData[]): HourlyChartRow[] => {
+  const rows: HourlyChartRow[] = data.map((d, i) => ({
+    ...d,
+    isDrop: i > 0 && Number(d.production) < Number(data[i - 1].production),
+    productionRise: null,
+    productionDrop: null,
+  }));
+
+  for (let i = 1; i < data.length; i++) {
+    const prev = Number(data[i - 1].production) || 0;
+    const curr = Number(data[i].production) || 0;
+    if (curr < prev) {
+      rows[i - 1].productionDrop = prev;
+      rows[i].productionDrop = curr;
+    } else {
+      if (rows[i - 1].productionRise == null) rows[i - 1].productionRise = prev;
+      rows[i].productionRise = curr;
+    }
+  }
+
+  return rows;
+};
 
 export const HourlyOutputChart: React.FC<Props> = ({
   workCentreId, workCentreName, showProgress = false, progress = 0, date, fitContainer = false, hideTitle = false
@@ -85,7 +117,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
   const tvLabelPadY = isMobile ? 4 : 5;
 
   const TvLineProductionLabel = (props: any) => {
-    const { x, y, value } = props;
+    const { x, y, value, payload } = props;
     if (x == null || y == null || value == null) return null;
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
@@ -93,7 +125,8 @@ export const HourlyOutputChart: React.FC<Props> = ({
     const fs = tvLabelFontSize;
     const w = Math.max(28, text.length * fs * 0.62 + tvLabelPadX * 2);
     const h = fs + tvLabelPadY * 2;
-    const border = '#1d4ed8';
+    const isDrop = Boolean(payload?.isDrop);
+    const border = isDrop ? DROP_COLOR : '#1d4ed8';
     const left = x - w / 2;
     const top = y - h - 10;
     return (
@@ -111,7 +144,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
           x={w / 2}
           y={h / 2 + fs * 0.32}
           textAnchor="middle"
-          fill="#0f172a"
+          fill={isDrop ? DROP_COLOR : '#0f172a'}
           fontSize={fs}
           fontWeight={800}
           style={{ paintOrder: 'stroke fill', stroke: '#ffffff', strokeWidth: 3 }}
@@ -119,6 +152,23 @@ export const HourlyOutputChart: React.FC<Props> = ({
           {text}
         </text>
       </g>
+    );
+  };
+
+  const TvLineDot = (props: any) => {
+    const { cx, cy, payload } = props;
+    if (cx == null || cy == null) return null;
+    const isDrop = Boolean(payload?.isDrop);
+    const r = fitContainer ? 7 : 6;
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill={isDrop ? DROP_COLOR : LINE_COLOR}
+        stroke="#ffffff"
+        strokeWidth={2}
+      />
     );
   };
 
@@ -238,9 +288,9 @@ export const HourlyOutputChart: React.FC<Props> = ({
     ? machineData.find(m => m.machine_id === selectedMachine)
     : null;
 
-  const chartDataLine = lineData?.hourlyData || [];
+  const chartDataLine = enrichHourlyWithDrops(lineData?.hourlyData || []);
   const chartDataMachineAll = buildCombinedData();
-  const chartDataMachineSingle = activeMachine?.hourlyData || [];
+  const chartDataMachineSingle = enrichHourlyWithDrops(activeMachine?.hourlyData || []);
 
   const noData = viewMode === 'line'
     ? chartDataLine.length === 0
@@ -310,7 +360,8 @@ export const HourlyOutputChart: React.FC<Props> = ({
     : {};
 
   const lineChartLegendPayload = [
-    { value: 'Hourly Production', type: 'line' as const, color: '#3b82f6' },
+    { value: 'Hourly Production', type: 'line' as const, color: LINE_COLOR },
+    { value: 'Drop from previous hour', type: 'line' as const, color: DROP_COLOR },
     ...(lineData?.target
       ? [{ value: `Target: ${lineData.target}`, type: 'line' as const, color: '#f97316' }]
       : []),
@@ -430,9 +481,37 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 {!fitContainer && lineData?.average ? (
                   <ReferenceLine y={lineData.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="8 6" />
                 ) : null}
-                <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={fitContainer ? 5 : 4}
-                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name="Hourly Production"
-                  isAnimationActive={false}>
+                <Line
+                  type="monotone"
+                  dataKey="productionRise"
+                  stroke={LINE_COLOR}
+                  strokeWidth={fitContainer ? 5 : 4}
+                  connectNulls={false}
+                  dot={false}
+                  activeDot={false}
+                  name="Hourly Production"
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="productionDrop"
+                  stroke={DROP_COLOR}
+                  strokeWidth={fitContainer ? 5 : 4}
+                  connectNulls={false}
+                  dot={false}
+                  activeDot={false}
+                  name="Drop from previous hour"
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="production"
+                  stroke="transparent"
+                  strokeWidth={0}
+                  dot={<TvLineDot />}
+                  activeDot={{ r: fitContainer ? 9 : 8, fill: DROP_COLOR }}
+                  isAnimationActive={false}
+                >
                   <LabelList dataKey="production" content={TvLineProductionLabel} />
                 </Line>
               </LineChart>
@@ -500,9 +579,37 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 {!fitContainer && activeMachine?.average ? (
                   <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="8 6" />
                 ) : null}
-                <Line type="monotone" dataKey="production" stroke="#3b82f6" strokeWidth={fitContainer ? 5 : 4}
-                  dot={{ fill: '#3b82f6', r: 6 }} activeDot={{ r: 8 }} name={`${activeMachine?.machine_name} Output`}
-                  isAnimationActive={false}>
+                <Line
+                  type="monotone"
+                  dataKey="productionRise"
+                  stroke={LINE_COLOR}
+                  strokeWidth={fitContainer ? 5 : 4}
+                  connectNulls={false}
+                  dot={false}
+                  activeDot={false}
+                  name={`${activeMachine?.machine_name} Output`}
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="productionDrop"
+                  stroke={DROP_COLOR}
+                  strokeWidth={fitContainer ? 5 : 4}
+                  connectNulls={false}
+                  dot={false}
+                  activeDot={false}
+                  name="Drop from previous hour"
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="production"
+                  stroke="transparent"
+                  strokeWidth={0}
+                  dot={<TvLineDot />}
+                  activeDot={{ r: fitContainer ? 9 : 8 }}
+                  isAnimationActive={false}
+                >
                   <LabelList dataKey="production" content={TvLineProductionLabel} />
                 </Line>
               </LineChart>
