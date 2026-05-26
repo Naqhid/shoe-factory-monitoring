@@ -462,7 +462,11 @@ export const MobileProduction: React.FC = () => {
     ]);
 
     const outputExpectedNow = dailyPaceSnapshot?.expected ?? 0;
-    const binsCompletedToday = totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs));
+    const pairsPerBox = Math.max(1, clampMobileTargetPairs(selectedTargetPairs));
+    const binsCompletedToday = totalOutputToday / pairsPerBox;
+    const boxesExpectedNow =
+        pairsPerBox > 0 ? Math.round(outputExpectedNow / pairsPerBox) : 0;
+    const formatBoxesDisplay = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
     // Update current time every second
     useEffect(() => {
@@ -2347,10 +2351,20 @@ export const MobileProduction: React.FC = () => {
                                     <Loader2 className="h-8 w-8 animate-spin text-cyan-600 mx-auto my-4" />
                                 ) : (
                                     <>
-                                        <p className="text-3xl md:text-5xl font-bold text-cyan-900 tabular-nums">
-                                            {Number.isInteger(binsCompletedToday) ? binsCompletedToday : binsCompletedToday.toFixed(2)}
-                                        </p>
-                                        <p className="text-xs text-cyan-700 mt-1">Completed</p>
+                                        <div className="flex items-baseline justify-center gap-2 tabular-nums">
+                                            <span
+                                                className={`text-3xl md:text-5xl font-bold ${
+                                                    binsCompletedToday < boxesExpectedNow ? 'text-red-700' : 'text-cyan-900'
+                                                }`}
+                                            >
+                                                {formatBoxesDisplay(binsCompletedToday)}
+                                            </span>
+                                            <span className="text-xl md:text-3xl font-semibold text-cyan-400">/</span>
+                                            <span className="text-3xl md:text-5xl font-bold text-cyan-900">
+                                                {formatBoxesDisplay(boxesExpectedNow)}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-cyan-700 mt-1">boxes (actual / pace)</p>
                                     </>
                                 )}
                             </div>
