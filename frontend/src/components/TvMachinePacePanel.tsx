@@ -5,42 +5,42 @@ interface TvMachinePacePanelProps {
   machines: MachinePaceSnapshot[];
 }
 
-/** Match TVDashboard carousel title on machine-pace slide (see TVDashboard h3). */
-export const TV_MACHINE_PACE_HEADER_FONT: React.CSSProperties = {
-  fontSize: '16px',
-  fontWeight: 700,
-  letterSpacing: '0.3px',
-};
-
 const legendDot = (className: string) => (
   <span className={`inline-block h-2 w-2 rounded-sm shrink-0 ${className}`} aria-hidden />
 );
 
-/** Single-line legend — Current pace · EOD projection daily / target · mins left. */
+const legendDivider = () => (
+  <span className="h-4 w-px shrink-0 bg-slate-300" aria-hidden />
+);
+
+/** Legend for carousel header — same size as line title; colors match Pace / EOD columns. */
 export const TvMachinePaceLegend: React.FC = () => (
-  <div
-    className="flex items-center gap-x-2.5 shrink-0 whitespace-nowrap font-bold leading-tight"
-    style={TV_MACHINE_PACE_HEADER_FONT}
-  >
-    <span className="inline-flex items-center gap-0.5 text-emerald-700">
+  <div className="flex items-center gap-4 sm:gap-6 shrink-0 whitespace-nowrap font-bold leading-tight">
+    <span
+      className="inline-flex items-center gap-1.5 text-emerald-700"
+      title="Pace column: actual / target at this time"
+    >
       {legendDot('bg-emerald-600')}
-      Current pace actual/target
+      <span>Pace</span>
+      <span className="font-semibold text-slate-500">act / tgt</span>
     </span>
-    <span className="inline-flex items-center gap-0.5 text-blue-700">
+    {legendDivider()}
+    <span
+      className="inline-flex items-center gap-1.5 text-blue-700"
+      title="EOD column: projection / daily target"
+    >
       {legendDot('bg-blue-600')}
-      EOD projection daily / target
+      <span>EOD</span>
+      <span className="font-semibold text-slate-500">proj / plan</span>
     </span>
-    <span className="inline-flex items-center gap-0.5 text-sky-600">
-      {legendDot('bg-sky-500')}
-      mins left
-    </span>
+    {legendDivider()}
+  
   </div>
 );
 
 const COLUMN_HEADERS = [
-  { label: 'Current pace', className: 'text-emerald-700' },
+  { label: 'Pace', className: 'text-emerald-700' },
   { label: 'EOD', className: 'text-blue-700' },
-  { label: 'Left', className: 'text-sky-600' },
 ] as const;
 
 const gridLayout = (count: number) => {
@@ -53,14 +53,14 @@ const gridLayout = (count: number) => {
 const numClass = 'text-[clamp(0.8rem,2vw,1.15rem)] font-black leading-none';
 
 const machineTitleClass =
-  'text-[clamp(0.75rem,1.5vw,0.9rem)] font-bold text-slate-900 text-center leading-snug line-clamp-2 px-0.5';
+  'text-[clamp(0.75rem,1.5vw,0.9rem)] font-bold text-slate-900 text-center leading-snug line-clamp-2 px-0.5 mb-3';
 
 const PaceNumbers: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) => {
   const paceBehind = snap.actual < snap.expected;
   const eodBehind = snap.daily > 0 && snap.projectedEod < snap.daily;
 
   return (
-  <div className="grid grid-cols-3 w-full h-full items-center gap-px tabular-nums">
+  <div className="grid grid-cols-2 w-full h-full items-center gap-px tabular-nums">
     <div className="flex items-baseline justify-center gap-px min-w-0">
       <span className={`${numClass} ${paceBehind ? 'text-red-700' : 'text-emerald-700'}`}>{snap.actual}</span>
       <span className="text-[10px] font-semibold text-slate-400">/</span>
@@ -70,9 +70,6 @@ const PaceNumbers: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) => {
       <span className={`${numClass} ${eodBehind ? 'text-red-700' : 'text-blue-700'}`}>{snap.projectedEod}</span>
       <span className="text-[10px] font-semibold text-blue-400">/</span>
       <span className={`${numClass} text-indigo-900`}>{snap.daily > 0 ? snap.daily : '—'}</span>
-    </div>
-    <div className="flex items-center justify-center min-w-0">
-      <span className={`${numClass} text-sky-600`}>{snap.remainingMins}m</span>
     </div>
   </div>
   );
@@ -103,7 +100,7 @@ const MachinePaceCard: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) => {
       <p className={machineTitleClass} title={`${snap.machineName} (${snap.machineId})`}>
         {snap.machineName}
       </p>
-      <div className="grid grid-cols-3 gap-px text-[clamp(0.65rem,1.1vw,0.8rem)] font-extrabold uppercase text-center leading-none py-0.5 border-b border-slate-100">
+      <div className="grid grid-cols-2 gap-px text-[clamp(0.65rem,1.1vw,0.8rem)] font-extrabold uppercase text-center leading-none py-0.5 border-b border-slate-100">
         {COLUMN_HEADERS.map((h) => (
           <span key={h.label} className={h.className}>
             {h.label}

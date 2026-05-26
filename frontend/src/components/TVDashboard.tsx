@@ -4,7 +4,7 @@ import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, 
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { TvPlanPacePanel } from './TvPlanPacePanel';
-import { TvMachinePacePanel, TvMachinePaceLegend, TV_MACHINE_PACE_HEADER_FONT } from './TvMachinePacePanel';
+import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
@@ -171,7 +171,7 @@ export const TVDashboard: React.FC = () => {
     const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
 
     const DETAIL_CAROUSEL_SLIDES = 4;
-    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Plan pace', 'Actual vs target pace'];
+    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Plan pace', 'Machine pace'];
     const DETAIL_CAROUSEL_MS = 60000;
     const STOPPAGE_CAROUSEL_MS = 15000;
 
@@ -590,6 +590,10 @@ export const TVDashboard: React.FC = () => {
         };
     })();
 
+    const productiveMinsLeft = Math.round(
+        getProductiveShiftTotals(currentTime).remainingProductiveMins
+    );
+
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
         output: item.output || 0
@@ -618,16 +622,29 @@ export const TVDashboard: React.FC = () => {
                                 )}
                             </button>
                         </div>
-                        <div className="text-right rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 ring-1 bg-slate-950/50 backdrop-blur-md ring-white/30 sm:bg-white/10 flex-shrink-0 leading-tight">
-                            <div className="text-white text-[10px] sm:text-lg font-semibold tabular-nums whitespace-nowrap">
-                                {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </div>
-                            <div className="text-blue-100 text-[10px] sm:text-base font-medium tabular-nums whitespace-nowrap">
-                                {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                            </div>
-                            <div className="hidden sm:block text-blue-100 text-[10px] sm:text-xs mt-0.5 font-medium whitespace-nowrap">
-                                Last update: {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Waiting...'}
-                            </div>
+                        <div className="text-right rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 ring-1 bg-slate-950/50 backdrop-blur-md ring-white/30 sm:bg-white/10 flex-shrink-0 max-w-[min(100%,42rem)]">
+                            <p className="text-[9px] sm:text-sm font-medium tabular-nums whitespace-nowrap leading-tight">
+                                <span className="text-sky-200 font-bold">{productiveMinsLeft}m left</span>
+                                <span className="text-white/35 mx-1 sm:mx-1.5" aria-hidden>·</span>
+                                <span className="text-white font-semibold">
+                                    {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </span>
+                                <span className="text-white/35 mx-1 sm:mx-1.5" aria-hidden>·</span>
+                                <span className="text-blue-100">
+                                    {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </span>
+                                <span className="text-white/35 mx-1 sm:mx-1.5" aria-hidden>·</span>
+                                <span className="text-blue-100/90 text-[8px] sm:text-xs">
+                                    Last update:{' '}
+                                    {lastUpdatedAt
+                                        ? lastUpdatedAt.toLocaleTimeString('en-US', {
+                                              hour: '2-digit',
+                                              minute: '2-digit',
+                                              second: '2-digit',
+                                          })
+                                        : 'Waiting...'}
+                                </span>
+                            </p>
                         </div>
                     </div>
                     {showStatusBar && (
@@ -760,29 +777,27 @@ export const TVDashboard: React.FC = () => {
             <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg border border-gray-100 ring-1 ring-slate-200/60 overflow-hidden">
                 <div className="flex-shrink-0 border-b border-gray-100 px-3 sm:px-4 pt-3 pb-2">
                     <div className="flex items-center justify-between gap-2 min-w-0 overflow-hidden">
-                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
-                    <h3
-                        className={`font-bold text-blue-600 shrink-0 ${
-                            detailCarouselIndex === 3 ? 'truncate max-w-[28%] sm:max-w-[34%]' : 'truncate'
-                        }`}
-                        style={detailCarouselIndex === 3 ? TV_MACHINE_PACE_HEADER_FONT : { fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}
-                    >
-                        {detailCarouselIndex === 0
-                            ? 'LINE PERFORMANCE'
-                            : detailCarouselIndex === 1
-                                ? `${lowerSection.workCentreName || 'Line'} - Hourly Output`
-                                : detailCarouselIndex === 2
-                                    ? `${currentLineName} — Actual vs plan pace`
-                                    : `${currentLineName} — Actual vs target pace`}
-                    </h3>
+                    <div className="flex items-center min-w-0 flex-1 overflow-hidden gap-2">
                     {detailCarouselIndex === 3 ? (
-                        <>
-                            <span className="text-slate-300 shrink-0 hidden sm:inline" aria-hidden>
-                                |
+                        <div className="flex items-center min-w-0 flex-1 gap-4 sm:gap-6 text-sm sm:text-base font-bold leading-tight overflow-hidden">
+                            <span className="text-blue-600 truncate min-w-0" title={currentLineName}>
+                                {currentLineName}
                             </span>
+                            <span className="h-4 w-px shrink-0 bg-slate-300" aria-hidden />
                             <TvMachinePaceLegend />
-                        </>
-                    ) : null}
+                        </div>
+                    ) : (
+                        <h3
+                            className="font-bold text-blue-600 truncate"
+                            style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}
+                        >
+                            {detailCarouselIndex === 0
+                                ? 'LINE PERFORMANCE'
+                                : detailCarouselIndex === 1
+                                    ? `${lowerSection.workCentreName || 'Line'} - Hourly Output`
+                                    : `${currentLineName} · Plan pace`}
+                        </h3>
+                    )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {dashboardAgeSec !== null && dashboardAgeSec > 30 && detailCarouselIndex === 0 && (
