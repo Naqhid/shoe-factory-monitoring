@@ -30,37 +30,58 @@ interface Props {
 }
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
-const LINE_COLOR = '#3b82f6';
+const FLAT_COLOR = '#3b82f6';
+const RISE_COLOR = '#16a34a';
 const DROP_COLOR = '#dc2626';
 
 type HourlyChartRow = HourlyData & {
   isDrop: boolean;
-  productionRise: number | null;
-  productionDrop: number | null;
+  isRise: boolean;
 };
 
-/** Split series per edge: only the segment between two hours is red when output drops. */
-const enrichHourlyWithDrops = (data: HourlyData[]): HourlyChartRow[] => {
-  const rows: HourlyChartRow[] = data.map((d, i) => ({
-    ...d,
-    isDrop: i > 0 && Number(d.production) < Number(data[i - 1].production),
-    productionRise: null,
-    productionDrop: null,
-  }));
+const enrichHourlyWithDrops = (data: HourlyData[]): HourlyChartRow[] =>
+  data.map((d, i) => {
+    const prev = i > 0 ? Number(data[i - 1].production) : null;
+    const curr = Number(d.production);
+    return {
+      ...d,
+      isDrop: prev != null && curr < prev,
+      isRise: prev != null && curr > prev,
+    };
+  });
 
-  for (let i = 1; i < data.length; i++) {
-    const prev = Number(data[i - 1].production) || 0;
-    const curr = Number(data[i].production) || 0;
-    if (curr < prev) {
-      rows[i - 1].productionDrop = prev;
-      rows[i].productionDrop = curr;
-    } else {
-      if (rows[i - 1].productionRise == null) rows[i - 1].productionRise = prev;
-      rows[i].productionRise = curr;
-    }
+const segmentColorForPoint = (payload: { isDrop?: boolean; isRise?: boolean } | undefined) => {
+  if (payload?.isDrop) return DROP_COLOR;
+  if (payload?.isRise) return RISE_COLOR;
+  return FLAT_COLOR;
+};
+
+const segmentColorBetween = (prevVal: number, currVal: number) => {
+  if (currVal < prevVal) return DROP_COLOR;
+  if (currVal > prevVal) return RISE_COLOR;
+  return FLAT_COLOR;
+};
+
+type HourlySegmentLine = { dataKey: string; color: string };
+
+/** One Recharts series per edge (only two non-null points) so segments never cross-connect. */
+const buildHourlySegmentLines = (data: HourlyData[]): {
+  rows: HourlyChartRow[];
+  segments: HourlySegmentLine[];
+} => {
+  const rows = enrichHourlyWithDrops(data);
+  const segments: HourlySegmentLine[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const key = `seg_${i}`;
+    const prevVal = Number(rows[i - 1].production) || 0;
+    const currVal = Number(rows[i].production) || 0;
+    rows[i - 1] = { ...rows[i - 1], [key]: prevVal } as HourlyChartRow;
+    rows[i] = { ...rows[i], [key]: currVal } as HourlyChartRow;
+    segments.push({ dataKey: key, color: segmentColorBetween(prevVal, currVal) });
   }
 
-  return rows;
+  return { rows, segments };
 };
 
 export const HourlyOutputChart: React.FC<Props> = ({
@@ -125,8 +146,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
     const fs = tvLabelFontSize;
     const w = Math.max(28, text.length * fs * 0.62 + tvLabelPadX * 2);
     const h = fs + tvLabelPadY * 2;
-    const isDrop = Boolean(payload?.isDrop);
-    const border = isDrop ? DROP_COLOR : '#1d4ed8';
+    const accent = segmentColorForPoint(payload);
     const left = x - w / 2;
     const top = y - h - 10;
     return (
@@ -136,7 +156,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
           height={h}
           rx={8}
           fill="#ffffff"
-          stroke={border}
+          stroke={accent}
           strokeWidth={2.5}
           opacity={0.98}
         />
@@ -144,7 +164,7 @@ export const HourlyOutputChart: React.FC<Props> = ({
           x={w / 2}
           y={h / 2 + fs * 0.32}
           textAnchor="middle"
-          fill={isDrop ? DROP_COLOR : '#0f172a'}
+          fill={accent}
           fontSize={fs}
           fontWeight={800}
           style={{ paintOrder: 'stroke fill', stroke: '#ffffff', strokeWidth: 3 }}
@@ -158,14 +178,13 @@ export const HourlyOutputChart: React.FC<Props> = ({
   const TvLineDot = (props: any) => {
     const { cx, cy, payload } = props;
     if (cx == null || cy == null) return null;
-    const isDrop = Boolean(payload?.isDrop);
     const r = fitContainer ? 7 : 6;
     return (
       <circle
         cx={cx}
         cy={cy}
         r={r}
-        fill={isDrop ? DROP_COLOR : LINE_COLOR}
+        fill={segmentColorForPoint(payload)}
         stroke="#ffffff"
         strokeWidth={2}
       />
@@ -288,9 +307,13 @@ export const HourlyOutputChart: React.FC<Props> = ({
     ? machineData.find(m => m.machine_id === selectedMachine)
     : null;
 
-  const chartDataLine = enrichHourlyWithDrops(lineData?.hourlyData || []);
+  const { rows: chartDataLine, segments: lineSegments } = buildHourlySegmentLines(
+    lineData?.hourlyData || []
+  );
   const chartDataMachineAll = buildCombinedData();
-  const chartDataMachineSingle = enrichHourlyWithDrops(activeMachine?.hourlyData || []);
+  const { rows: chartDataMachineSingle, segments: machineSegments } = buildHourlySegmentLines(
+    activeMachine?.hourlyData || []
+  );
 
   const noData = viewMode === 'line'
     ? chartDataLine.length === 0
@@ -359,8 +382,11 @@ export const HourlyOutputChart: React.FC<Props> = ({
     ? { scale: 'point' as const, padding: { left: 56, right: 56 } }
     : {};
 
+  const lineStrokeWidth = fitContainer ? 5 : 4;
+
   const lineChartLegendPayload = [
-    { value: 'Hourly Production', type: 'line' as const, color: LINE_COLOR },
+    { value: 'Increase from previous hour', type: 'line' as const, color: RISE_COLOR },
+    { value: 'Same as previous hour', type: 'line' as const, color: FLAT_COLOR },
     { value: 'Drop from previous hour', type: 'line' as const, color: DROP_COLOR },
     ...(lineData?.target
       ? [{ value: `Target: ${lineData.target}`, type: 'line' as const, color: '#f97316' }]
@@ -481,35 +507,27 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 {!fitContainer && lineData?.average ? (
                   <ReferenceLine y={lineData.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="8 6" />
                 ) : null}
-                <Line
-                  type="monotone"
-                  dataKey="productionRise"
-                  stroke={LINE_COLOR}
-                  strokeWidth={fitContainer ? 5 : 4}
-                  connectNulls={false}
-                  dot={false}
-                  activeDot={false}
-                  name="Hourly Production"
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="productionDrop"
-                  stroke={DROP_COLOR}
-                  strokeWidth={fitContainer ? 5 : 4}
-                  connectNulls={false}
-                  dot={false}
-                  activeDot={false}
-                  name="Drop from previous hour"
-                  isAnimationActive={false}
-                />
+                {lineSegments.map((seg) => (
+                  <Line
+                    key={seg.dataKey}
+                    type="monotone"
+                    dataKey={seg.dataKey}
+                    stroke={seg.color}
+                    strokeWidth={lineStrokeWidth}
+                    connectNulls={false}
+                    dot={false}
+                    activeDot={false}
+                    legendType="none"
+                    isAnimationActive={false}
+                  />
+                ))}
                 <Line
                   type="monotone"
                   dataKey="production"
                   stroke="transparent"
                   strokeWidth={0}
                   dot={<TvLineDot />}
-                  activeDot={{ r: fitContainer ? 9 : 8, fill: DROP_COLOR }}
+                  activeDot={false}
                   isAnimationActive={false}
                 >
                   <LabelList dataKey="production" content={TvLineProductionLabel} />
@@ -579,35 +597,27 @@ export const HourlyOutputChart: React.FC<Props> = ({
                 {!fitContainer && activeMachine?.average ? (
                   <ReferenceLine y={activeMachine.average} stroke="#22c55e" strokeWidth={3} strokeDasharray="8 6" />
                 ) : null}
-                <Line
-                  type="monotone"
-                  dataKey="productionRise"
-                  stroke={LINE_COLOR}
-                  strokeWidth={fitContainer ? 5 : 4}
-                  connectNulls={false}
-                  dot={false}
-                  activeDot={false}
-                  name={`${activeMachine?.machine_name} Output`}
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="productionDrop"
-                  stroke={DROP_COLOR}
-                  strokeWidth={fitContainer ? 5 : 4}
-                  connectNulls={false}
-                  dot={false}
-                  activeDot={false}
-                  name="Drop from previous hour"
-                  isAnimationActive={false}
-                />
+                {machineSegments.map((seg) => (
+                  <Line
+                    key={seg.dataKey}
+                    type="monotone"
+                    dataKey={seg.dataKey}
+                    stroke={seg.color}
+                    strokeWidth={lineStrokeWidth}
+                    connectNulls={false}
+                    dot={false}
+                    activeDot={false}
+                    legendType="none"
+                    isAnimationActive={false}
+                  />
+                ))}
                 <Line
                   type="monotone"
                   dataKey="production"
                   stroke="transparent"
                   strokeWidth={0}
                   dot={<TvLineDot />}
-                  activeDot={{ r: fitContainer ? 9 : 8 }}
+                  activeDot={false}
                   isAnimationActive={false}
                 >
                   <LabelList dataKey="production" content={TvLineProductionLabel} />
