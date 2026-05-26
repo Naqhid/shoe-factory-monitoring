@@ -4,6 +4,8 @@ import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, 
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { TvPlanPacePanel } from './TvPlanPacePanel';
+import { TvMachinePacePanel, TvMachinePaceLegend, TV_MACHINE_PACE_HEADER_FONT } from './TvMachinePacePanel';
+import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
 
@@ -166,10 +168,11 @@ export const TVDashboard: React.FC = () => {
     const [detailCarouselProgress, setDetailCarouselProgress] = useState(0);
     const [stoppageCarouselIndex, setStoppageCarouselIndex] = useState(0);
     const [stoppageCarouselProgress, setStoppageCarouselProgress] = useState(0);
+    const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
 
-    const DETAIL_CAROUSEL_SLIDES = 3;
-    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Plan pace'];
-    const DETAIL_CAROUSEL_MS = 30000;
+    const DETAIL_CAROUSEL_SLIDES = 4;
+    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Plan pace', 'Actual vs target pace'];
+    const DETAIL_CAROUSEL_MS = 60000;
     const STOPPAGE_CAROUSEL_MS = 15000;
 
     const bottleneckList = dashboardData?.lowerSection?.bottlenecks ?? [];
@@ -339,6 +342,30 @@ export const TVDashboard: React.FC = () => {
     }, [workCentres, currentIndex, currentDate]);
 
     useEffect(() => {
+        if (!workCentres.length || !currentDate) return;
+        const workCentreId = workCentres[currentIndex]?.id;
+        if (!workCentreId) return;
+
+        const loadMachinePace = async () => {
+            try {
+                const res = await apiFetch(
+                    `${API_BASE_URL}/api/tv-dashboard/machine-centres/${workCentreId}?date=${currentDate}`
+                );
+                const result = await res.json();
+                if (result.success) {
+                    setMachinePaceRows(result.data || []);
+                } else {
+                    setMachinePaceRows([]);
+                }
+            } catch {
+                setMachinePaceRows([]);
+            }
+        };
+
+        loadMachinePace();
+    }, [workCentres, currentIndex, currentDate, dashboardUpdatedAt]);
+
+    useEffect(() => {
         if (workCentres.length <= 1 || pinnedWorkCentreId !== null) return;
         setProgress(0);
         const interval = setInterval(() => {
@@ -443,6 +470,19 @@ export const TVDashboard: React.FC = () => {
         };
     }, [isCriticalStaleNow, isOffline]);
 
+    const machinePaceSnapshots = useMemo(() => {
+        const now = currentTime;
+        return machinePaceRows.map((row: any) =>
+            buildMachinePaceSnapshot(
+                String(row.machine_id),
+                row.machine_name || row.machine_centre_name || String(row.machine_id),
+                Number(row.total_output_pairs || 0),
+                Number(row.target_mins_per_box || 0),
+                now
+            )
+        );
+    }, [machinePaceRows, currentTime]);
+
     if (errorMessage && !dashboardData) {
         return (
             <div className="h-full min-h-0 bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center p-6">
@@ -470,6 +510,11 @@ export const TVDashboard: React.FC = () => {
 
     const { topSection, middleSection, lowerSection } = dashboardData;
     const currentWorkCentreId = workCentres[currentIndex]?.id;
+    const currentLineName =
+        middleSection?.workCentreName ||
+        lowerSection?.workCentreName ||
+        workCentres[currentIndex]?.name ||
+        'Line';
     const secondsSinceUpdate = lastUpdatedAt ? Math.floor((currentTime.getTime() - lastUpdatedAt.getTime()) / 1000) : null;
     const isStale = secondsSinceUpdate !== null && secondsSinceUpdate > 30;
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
@@ -713,14 +758,32 @@ export const TVDashboard: React.FC = () => {
             <div className="flex-1 min-h-0 grid grid-cols-4 gap-2 sm:gap-3 overflow-hidden min-w-0">
             <div className="col-span-3 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
             <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg border border-gray-100 ring-1 ring-slate-200/60 overflow-hidden">
-                <div className="flex items-center justify-between gap-2 px-3 sm:px-4 pt-3 pb-2 flex-shrink-0 border-b border-gray-100">
-                    <h3 className="font-bold text-blue-600 truncate" style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}>
+                <div className="flex-shrink-0 border-b border-gray-100 px-3 sm:px-4 pt-3 pb-2">
+                    <div className="flex items-center justify-between gap-2 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                    <h3
+                        className={`font-bold text-blue-600 shrink-0 ${
+                            detailCarouselIndex === 3 ? 'truncate max-w-[28%] sm:max-w-[34%]' : 'truncate'
+                        }`}
+                        style={detailCarouselIndex === 3 ? TV_MACHINE_PACE_HEADER_FONT : { fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}
+                    >
                         {detailCarouselIndex === 0
                             ? 'LINE PERFORMANCE'
                             : detailCarouselIndex === 1
                                 ? `${lowerSection.workCentreName || 'Line'} - Hourly Output`
-                                : `${topSection.workCentreName || lowerSection.workCentreName || 'Line'} — Actual vs plan pace`}
+                                : detailCarouselIndex === 2
+                                    ? `${currentLineName} — Actual vs plan pace`
+                                    : `${currentLineName} — Actual vs target pace`}
                     </h3>
+                    {detailCarouselIndex === 3 ? (
+                        <>
+                            <span className="text-slate-300 shrink-0 hidden sm:inline" aria-hidden>
+                                |
+                            </span>
+                            <TvMachinePaceLegend />
+                        </>
+                    ) : null}
+                    </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {dashboardAgeSec !== null && dashboardAgeSec > 30 && detailCarouselIndex === 0 && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Stale</span>
@@ -743,6 +806,7 @@ export const TVDashboard: React.FC = () => {
                                 />
                             ))}
                         </div>
+                    </div>
                     </div>
                 </div>
                 <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -828,13 +892,16 @@ export const TVDashboard: React.FC = () => {
                             {planPaceSnapshot ? (
                                 <TvPlanPacePanel
                                     snapshot={planPaceSnapshot}
-                                    lineName={topSection.workCentreName || lowerSection.workCentreName}
+                                    lineName={currentLineName}
                                 />
                             ) : (
                                 <div className="flex-1 flex items-center justify-center p-6 text-center text-slate-500 text-sm sm:text-base font-medium">
                                     No production plan target set for today — add planning to show pace vs plan.
                                 </div>
                             )}
+                        </div>
+                        <div className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
+                            <TvMachinePacePanel machines={machinePaceSnapshots} />
                         </div>
                     </div>
                 </div>

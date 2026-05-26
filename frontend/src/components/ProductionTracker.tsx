@@ -312,22 +312,28 @@ export const ProductionTracker: React.FC = () => {
   const enrichedLines = React.useMemo(() => {
     const text = lineSearch.trim().toLowerCase();
     const mapped = linePerformance.map((line: any, index: number) => {
-      const efficiency = Number(line.efficiency) || 0;
       const target = Number(line.target) || 0;
       const output = Number(line.output) || 0;
-      const outputPct = Number(line.output_percentage) || 0;
+      const outputPct =
+        target > 0
+          ? Math.round(
+              Number(
+                line.output_percentage ?? (output / target) * 100
+              )
+            )
+          : 0;
       const gap = Math.max(0, target - output);
-      const warning = shiftProjection.inLast60 && (efficiency < 90 || outputPct < 90 || gap > 0);
-      const critical = shiftProjection.inLast30 && (efficiency < 80 || outputPct < 80 || gap > 0);
+      const warning = shiftProjection.inLast60 && (outputPct < 90 || gap > 0);
+      const critical = shiftProjection.inLast30 && (outputPct < 80 || gap > 0);
       const riskScore = critical ? 2 : warning ? 1 : 0;
       const riskLabel = riskScore === 2 ? 'Critical' : riskScore === 1 ? 'At Risk' : 'Monitor';
-      return { line, index, efficiency, target, output, outputPct, gap, riskScore, riskLabel };
+      return { line, index, target, output, outputPct, gap, riskScore, riskLabel };
     });
     const filtered = text
       ? mapped.filter(({ line }: any) => String(line.line_name || '').toLowerCase().includes(text))
       : mapped;
     const sorted = [...filtered].sort((a, b) => {
-      if (lineSort === 'efficiency') return b.efficiency - a.efficiency;
+      if (lineSort === 'efficiency') return b.outputPct - a.outputPct;
       if (lineSort === 'output_gap') return b.gap - a.gap;
       return b.riskScore - a.riskScore;
     });
@@ -637,7 +643,7 @@ export const ProductionTracker: React.FC = () => {
 
                 <div className="pr-1">
                   <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5 sm:gap-3">
-                    {enrichedLines.map(({ line, index, efficiency, target, output, outputPct, gap, riskScore, riskLabel }) => {
+                    {enrichedLines.map(({ line, index, target, output, outputPct, gap, riskScore, riskLabel }) => {
                       return (
                         <button
                           key={`${line.line_name}-${index}`}
@@ -650,7 +656,7 @@ export const ProductionTracker: React.FC = () => {
                           }}
                         className="relative bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#d8e3ff] w-full min-h-[100px] sm:min-h-[144px] hover:shadow-md flex flex-col items-center justify-center text-center"
                         >
-                          <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(efficiency)}`} />
+                          <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(outputPct)}`} />
                           <div className="text-xs sm:text-xl font-bold text-slate-800 mb-1 sm:mb-2 leading-tight">
                             {line.line_name || `Line ${index + 1}`}
                           </div>
@@ -658,8 +664,8 @@ export const ProductionTracker: React.FC = () => {
                             {riskLabel} • Gap {gap}
                           </div>
 
-                          <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${efficiency >= 90 ? 'text-green-600' : efficiency >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
-                            {efficiency}%
+                          <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${outputPct >= 90 ? 'text-green-600' : outputPct >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
+                            {outputPct}%
                           </div>
 
                           <div className="text-xs sm:text-2xl font-bold text-slate-800 mt-1 sm:mt-2">
@@ -1013,7 +1019,7 @@ export const ProductionTracker: React.FC = () => {
                   className="w-full rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
                 >
                   <option value="risk">Sort: Risk first</option>
-                  <option value="efficiency">Sort: Efficiency high to low</option>
+                  <option value="efficiency">Sort: Output % high to low</option>
                   <option value="output_gap">Sort: Output gap high to low</option>
                 </select>
               </div>
