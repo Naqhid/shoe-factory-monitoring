@@ -289,10 +289,38 @@ async function openNextDayRowFromClose(workCentreId, closedDateKey, closingWip) 
     const opening = clampWip(closingWip);
     await pool.query(
         `INSERT INTO wip_daily_state
-             (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed)
-         VALUES (?, ?, ?, 0, ?, 0, 0)`,
+             (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed, manual_wip_override)
+         VALUES (?, ?, ?, 0, ?, 0, 0, 0)`,
         [workCentreId, nextDate, opening, opening]
     );
+}
+
+/**
+ * Creates today's row when missing, using the latest prior day's closing WIP (or live current if still open).
+ *
+ * @param {number} workCentreId
+ * @param {string} date  YYYY-MM-DD
+ * @returns {Promise<boolean>}  true when a row exists or was created
+ */
+async function ensureWipRowForDate(workCentreId, date) {
+    const existing = await fetchWipStateRow(workCentreId, date);
+    if (existing) {
+        return true;
+    }
+
+    const carryForward = await resolveCarryForwardOpening(workCentreId, date);
+    if (carryForward === null) {
+        return false;
+    }
+
+    const openingWip = clampWip(carryForward);
+    await pool.query(
+        `INSERT INTO wip_daily_state
+             (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed, manual_wip_override)
+         VALUES (?, ?, ?, 0, ?, 0, 0, 0)`,
+        [workCentreId, date, openingWip, openingWip]
+    );
+    return true;
 }
 
 /**
@@ -306,6 +334,8 @@ async function openNextDayRowFromClose(workCentreId, closedDateKey, closingWip) 
  * @returns {Promise<{openingWip: number, todayInput: number, currentWip: number, closingWip: number}>}
  */
 async function computeAndPersistWip(workCentreId, date, todayOutput) {
+    await ensureWipRowForDate(workCentreId, date);
+
     const state = await fetchWipStateRow(workCentreId, date);
     const todayInputLive = await getTodayInput(workCentreId, date);
     const roundedOutput = Math.round(todayOutput);
@@ -378,7 +408,8 @@ async function computeAndPersistWip(workCentreId, date, todayOutput) {
  */
 async function closeDay(workCentreId, date) {
     const [rows] = await pool.query(
-        `SELECT current_wip FROM wip_daily_state
+        `SELECT current_wip, closing_wip, COALESCE(manual_wip_override, 0) AS manual_wip_override
+         FROM wip_daily_state
          WHERE work_centre_id = ? AND state_date = ?`,
         [workCentreId, date]
     );
@@ -387,13 +418,18 @@ async function closeDay(workCentreId, date) {
         throw new Error(`No WIP state found for work_centre_id=${workCentreId} on ${date}`);
     }
 
-    const closingWip = clampWip(rows[0].current_wip);
+    const row = rows[0];
+    const storedClosing = clampWip(row.closing_wip);
+    const closingWip =
+        Number(row.manual_wip_override) && storedClosing > 0
+            ? storedClosing
+            : clampWip(row.current_wip);
 
     await pool.query(
         `UPDATE wip_daily_state
-         SET closing_wip = ?, is_closed = 1
+         SET closing_wip = ?, current_wip = ?, is_closed = 1
          WHERE work_centre_id = ? AND state_date = ?`,
-        [closingWip, workCentreId, date]
+        [closingWip, closingWip, workCentreId, date]
     );
 
     await openNextDayRowFromClose(workCentreId, date, closingWip);
@@ -442,6 +478,7 @@ module.exports = {
     resolveCarryForwardOpening,
     fetchWipStateRow,
     openNextDayRowFromClose,
+    ensureWipRowForDate,
     computeAndPersistWip,
     closeDay,
     getWipState,

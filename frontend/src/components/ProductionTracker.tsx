@@ -344,6 +344,18 @@ export const ProductionTracker: React.FC = () => {
   const lineInputPercent = selectedLineDetail && Number(selectedLineDetail.target || 0) > 0
     ? Math.round((Number(selectedLineDetail.input || 0) / Number(selectedLineDetail.target || 0)) * 100)
     : 0;
+  const lineOutputPercent = selectedLineDetail
+    ? Math.round(
+        Number(
+          selectedLineDetail.output_percentage ??
+            (Number(selectedLineDetail.target || 0) > 0
+              ? (Number(selectedLineDetail.output || 0) / Number(selectedLineDetail.target || 0)) * 100
+              : 0)
+        )
+      )
+    : 0;
+  const efficiencyPctColor = (pct: number) =>
+    pct >= 90 ? 'text-green-600' : pct >= 70 ? 'text-yellow-600' : 'text-red-500';
   const outputPercent = Number(topSection?.outputPercent) || 0;
   const efficiencyPercent = Number(topSection?.efficiencyPercent) || 0;
   const efficiencyGaugePercent = Math.min(Math.max(efficiencyPercent, 0), 100);
@@ -813,16 +825,17 @@ export const ProductionTracker: React.FC = () => {
                   <p className="text-xs text-slate-500 font-semibold">Output</p>
                   <p className="text-2xl font-bold text-indigo-700">{Number(selectedLineDetail.output || 0)}</p>
                 </div>
-                <div className="bg-green-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Efficiency</p>
-                  <p className="text-2xl font-bold text-green-700">{Number(selectedLineDetail.efficiency || 0)}%</p>
-                </div>
                 <div className="bg-sky-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Input %</p>
-                  <p className={`text-2xl font-bold ${
-                    lineInputPercent >= 90 ? 'text-green-600' : 
-                    lineInputPercent >= 70 ? 'text-yellow-600' : 'text-red-500'
-                  }`}>{lineInputPercent}%</p>
+                  <p className="text-xs text-slate-500 font-semibold">Input efficiency %</p>
+                  <p className={`text-2xl font-bold ${efficiencyPctColor(lineInputPercent)}`}>
+                    {lineInputPercent}%
+                  </p>
+                </div>
+                <div className="bg-violet-50 rounded-xl p-3">
+                  <p className="text-xs text-slate-500 font-semibold">Output efficiency %</p>
+                  <p className={`text-2xl font-bold ${efficiencyPctColor(lineOutputPercent)}`}>
+                    {lineOutputPercent}%
+                  </p>
                 </div>
                 <div className="bg-orange-50 rounded-xl p-3">
                   <p className="text-xs text-slate-500 font-semibold">WIP</p>
@@ -849,12 +862,12 @@ export const ProductionTracker: React.FC = () => {
               <div className="bg-slate-50 rounded-xl p-3">
                 <p className="text-xs text-slate-500 font-semibold mb-1">Output Progress</p>
                 <p className="text-lg font-bold text-slate-800 mb-2">
-                  {Number(selectedLineDetail.output || 0)} / {Number(selectedLineDetail.target || 0)} ({Number(selectedLineDetail.output_percentage || 0)}%)
+                  {Number(selectedLineDetail.output || 0)} / {Number(selectedLineDetail.target || 0)} ({lineOutputPercent}%)
                 </p>
                 <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-blue-600"
-                    style={{ width: `${Math.min(Math.max(Number(selectedLineDetail.output_percentage || 0), 0), 100)}%` }}
+                    style={{ width: `${Math.min(Math.max(lineOutputPercent, 0), 100)}%` }}
                   />
                 </div>
               </div>

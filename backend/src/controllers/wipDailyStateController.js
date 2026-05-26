@@ -2,6 +2,7 @@
 
 const pool = require('../../config/database');
 const logger = require('../utils/logger');
+const wipStateService = require('../services/wipStateService');
 
 function clampWip(value) {
   return Math.max(0, Math.round(Number(value) || 0));
@@ -177,6 +178,16 @@ exports.createWipDailyState = async (req, res, next) => {
       [result.insertId]
     );
 
+    if (fields.is_closed) {
+      const closingForNext =
+        fields.closing_wip > 0 ? fields.closing_wip : fields.current_wip;
+      await wipStateService.openNextDayRowFromClose(
+        fields.work_centre_id,
+        fields.state_date,
+        closingForNext
+      );
+    }
+
     return res.status(201).json({
       success: true,
       message: 'WIP record created',
@@ -237,6 +248,16 @@ exports.updateWipDailyState = async (req, res, next) => {
         id,
       ]
     );
+
+    if (fields.is_closed) {
+      const closingForNext =
+        fields.closing_wip > 0 ? fields.closing_wip : fields.current_wip;
+      await wipStateService.openNextDayRowFromClose(
+        workCentreId,
+        stateDate,
+        closingForNext
+      );
+    }
 
     const [rows] = await pool.query(
       `SELECT w.*, wc.name AS work_centre_name
