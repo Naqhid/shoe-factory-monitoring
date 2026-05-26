@@ -461,6 +461,9 @@ export const MobileProduction: React.FC = () => {
         productionData?.target_mins,
     ]);
 
+    const outputExpectedNow = dailyPaceSnapshot?.expected ?? 0;
+    const binsCompletedToday = totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs));
+
     // Update current time every second
     useEffect(() => {
         const timer = setInterval(() => {
@@ -2067,8 +2070,11 @@ export const MobileProduction: React.FC = () => {
                         >
                             <div className="flex flex-col items-center justify-center gap-2 w-full text-center pl-10 pr-8 md:pl-0 md:pr-0">
                                 {!headerExpanded && (
-                                    <span className="text-xs md:text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full animate-pulse">
-                                        Tap to view details
+                                    <span className="text-xs md:text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full">
+                                        Tap to view details · Status:{' '}
+                                        <span className={`inline-block px-2 py-0.5 rounded-full ${getStatusBgColor()} ${getStatusColor()}`}>
+                                            {getStatusText()}
+                                        </span>
                                     </span>
                                 )}
                             </div>
@@ -2267,7 +2273,7 @@ export const MobileProduction: React.FC = () => {
                         )}
                         
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm">
+                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm text-center">
                                 <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
                                 <p className="text-3xl md:text-5xl font-bold text-blue-900">{Number(productionData.target_mins || 0).toFixed(1)}</p>
                                 <p className="text-xs text-blue-600 mt-1">mins</p>
@@ -2284,15 +2290,15 @@ export const MobileProduction: React.FC = () => {
                                         <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
                                     </div>
                                 )}
-                                <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Actual Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-purple-900">
+                                <p className="text-xs font-semibold text-purple-700 uppercase mb-1 text-center">Actual Time</p>
+                                <p className="text-3xl md:text-5xl font-bold text-purple-900 text-center">
                                     <span>{Math.floor(actualTimeCounter / 60)}</span><span className="text-2xl md:text-3xl">m</span>
                                     <span className="text-2xl md:text-3xl font-bold text-purple-700 ml-2"><span>{actualTimeCounter % 60}</span>s</span>
                                 </p>
                             </div>
-                            <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm">
+                            <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-6 rounded-xl border-2 border-green-200 shadow-sm text-center">
                                 <p className="text-xs font-semibold text-green-700 uppercase mb-1">
-                                    Target Pairs / BIN <span className="font-normal normal-case text-green-600">(1–12)</span>
+                                    Pairs/box <span className="font-normal normal-case text-green-600">(1–12)</span>
                                 </p>
                                 <select
                                     value={selectedTargetPairs}
@@ -2309,14 +2315,20 @@ export const MobileProduction: React.FC = () => {
                                 </select>
                                
                             </div>
-                            <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm relative">
-                                <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Total Output</p>
+                            <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-6 rounded-xl border-2 border-orange-200 shadow-sm relative text-center">
+                                <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Output</p>
                                 {loadingSummary ? (
                                     <Loader2 className="h-8 w-8 animate-spin text-orange-600 mx-auto my-4" />
                                 ) : (
                                     <>
-                                        <p className="text-3xl md:text-5xl font-bold text-orange-900"><span>{totalOutputToday}</span></p>
-                                        <p className="text-xs text-orange-600 mt-1">pairs (today)</p>
+                                        <div className="flex items-baseline justify-center gap-2 tabular-nums">
+                                            <span className={`text-3xl md:text-5xl font-bold ${totalOutputToday < outputExpectedNow ? 'text-red-700' : 'text-orange-900'}`}>
+                                                {totalOutputToday}
+                                            </span>
+                                            <span className="text-xl md:text-3xl font-semibold text-orange-400">/</span>
+                                            <span className="text-3xl md:text-5xl font-bold text-orange-900">{outputExpectedNow}</span>
+                                        </div>
+                                        <p className="text-xs text-orange-600 mt-1">pairs (actual / pace)</p>
                                     </>
                                 )}
                                 {/* Refresh button for manual update */}
@@ -2329,7 +2341,20 @@ export const MobileProduction: React.FC = () => {
                                     <RefreshCw className={`h-4 w-4 text-orange-600 ${loadingSummary ? 'animate-spin' : ''}`} />
                                 </button>
                             </div>
-                            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm">
+                            <div className="bg-gradient-to-br from-cyan-50 to-sky-100 p-4 md:p-6 rounded-xl border-2 border-cyan-200 shadow-sm text-center">
+                                <p className="text-xs font-semibold text-cyan-700 uppercase mb-1">Boxes</p>
+                                {loadingSummary ? (
+                                    <Loader2 className="h-8 w-8 animate-spin text-cyan-600 mx-auto my-4" />
+                                ) : (
+                                    <>
+                                        <p className="text-3xl md:text-5xl font-bold text-cyan-900 tabular-nums">
+                                            {Number.isInteger(binsCompletedToday) ? binsCompletedToday : binsCompletedToday.toFixed(2)}
+                                        </p>
+                                        <p className="text-xs text-cyan-700 mt-1">Completed</p>
+                                    </>
+                                )}
+                            </div>
+                            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm text-center">
                                 <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Avg Efficiency</p>
                                 {loadingSummary ? (
                                     <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mx-auto my-4" />
@@ -2339,11 +2364,6 @@ export const MobileProduction: React.FC = () => {
                                         <p className="text-xs text-indigo-600 mt-1">percentage</p>
                                     </>
                                 )}
-                            </div>
-                            <div className={`p-4 md:p-6 rounded-xl border-2 shadow-sm ${getStatusBgColor()} ${getStatusColor()}`}>
-                                <p className="text-xs font-semibold uppercase mb-1 opacity-90">Status</p>
-                                <p className="text-3xl md:text-5xl font-bold"><span>{getStatusText()}</span></p>
-                                <p className="text-xs mt-1 opacity-90">current</p>
                             </div>
                         </div>
                     </div>
