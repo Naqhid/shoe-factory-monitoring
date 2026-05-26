@@ -588,10 +588,10 @@ const mobileSessionController = {
             }
 
             const session = rows[0];
-            if (session.status !== 'active') {
+            if (session.status !== 'active' && session.status !== 'waiting') {
                 return res.status(400).json({
                     success: false,
-                    message: 'Session is not active and cannot be deactivated'
+                    message: 'Only active or waiting sessions can be deactivated'
                 });
             }
 

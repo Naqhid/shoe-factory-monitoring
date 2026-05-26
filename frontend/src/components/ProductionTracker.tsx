@@ -312,22 +312,28 @@ export const ProductionTracker: React.FC = () => {
   const enrichedLines = React.useMemo(() => {
     const text = lineSearch.trim().toLowerCase();
     const mapped = linePerformance.map((line: any, index: number) => {
-      const efficiency = Number(line.efficiency) || 0;
       const target = Number(line.target) || 0;
       const output = Number(line.output) || 0;
-      const outputPct = Number(line.output_percentage) || 0;
+      const outputPct =
+        target > 0
+          ? Math.round(
+              Number(
+                line.output_percentage ?? (output / target) * 100
+              )
+            )
+          : 0;
       const gap = Math.max(0, target - output);
-      const warning = shiftProjection.inLast60 && (efficiency < 90 || outputPct < 90 || gap > 0);
-      const critical = shiftProjection.inLast30 && (efficiency < 80 || outputPct < 80 || gap > 0);
+      const warning = shiftProjection.inLast60 && (outputPct < 90 || gap > 0);
+      const critical = shiftProjection.inLast30 && (outputPct < 80 || gap > 0);
       const riskScore = critical ? 2 : warning ? 1 : 0;
       const riskLabel = riskScore === 2 ? 'Critical' : riskScore === 1 ? 'At Risk' : 'Monitor';
-      return { line, index, efficiency, target, output, outputPct, gap, riskScore, riskLabel };
+      return { line, index, target, output, outputPct, gap, riskScore, riskLabel };
     });
     const filtered = text
       ? mapped.filter(({ line }: any) => String(line.line_name || '').toLowerCase().includes(text))
       : mapped;
     const sorted = [...filtered].sort((a, b) => {
-      if (lineSort === 'efficiency') return b.efficiency - a.efficiency;
+      if (lineSort === 'efficiency') return b.outputPct - a.outputPct;
       if (lineSort === 'output_gap') return b.gap - a.gap;
       return b.riskScore - a.riskScore;
     });
@@ -344,6 +350,18 @@ export const ProductionTracker: React.FC = () => {
   const lineInputPercent = selectedLineDetail && Number(selectedLineDetail.target || 0) > 0
     ? Math.round((Number(selectedLineDetail.input || 0) / Number(selectedLineDetail.target || 0)) * 100)
     : 0;
+  const lineOutputPercent = selectedLineDetail
+    ? Math.round(
+        Number(
+          selectedLineDetail.output_percentage ??
+            (Number(selectedLineDetail.target || 0) > 0
+              ? (Number(selectedLineDetail.output || 0) / Number(selectedLineDetail.target || 0)) * 100
+              : 0)
+        )
+      )
+    : 0;
+  const efficiencyPctColor = (pct: number) =>
+    pct >= 90 ? 'text-green-600' : pct >= 70 ? 'text-yellow-600' : 'text-red-500';
   const outputPercent = Number(topSection?.outputPercent) || 0;
   const efficiencyPercent = Number(topSection?.efficiencyPercent) || 0;
   const efficiencyGaugePercent = Math.min(Math.max(efficiencyPercent, 0), 100);
@@ -625,7 +643,7 @@ export const ProductionTracker: React.FC = () => {
 
                 <div className="pr-1">
                   <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5 sm:gap-3">
-                    {enrichedLines.map(({ line, index, efficiency, target, output, outputPct, gap, riskScore, riskLabel }) => {
+                    {enrichedLines.map(({ line, index, target, output, outputPct, gap, riskScore, riskLabel }) => {
                       return (
                         <button
                           key={`${line.line_name}-${index}`}
@@ -638,7 +656,7 @@ export const ProductionTracker: React.FC = () => {
                           }}
                         className="relative bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#d8e3ff] w-full min-h-[100px] sm:min-h-[144px] hover:shadow-md flex flex-col items-center justify-center text-center"
                         >
-                          <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(efficiency)}`} />
+                          <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(outputPct)}`} />
                           <div className="text-xs sm:text-xl font-bold text-slate-800 mb-1 sm:mb-2 leading-tight">
                             {line.line_name || `Line ${index + 1}`}
                           </div>
@@ -646,8 +664,8 @@ export const ProductionTracker: React.FC = () => {
                             {riskLabel} • Gap {gap}
                           </div>
 
-                          <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${efficiency >= 90 ? 'text-green-600' : efficiency >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
-                            {efficiency}%
+                          <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${outputPct >= 90 ? 'text-green-600' : outputPct >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
+                            {outputPct}%
                           </div>
 
                           <div className="text-xs sm:text-2xl font-bold text-slate-800 mt-1 sm:mt-2">
@@ -813,16 +831,17 @@ export const ProductionTracker: React.FC = () => {
                   <p className="text-xs text-slate-500 font-semibold">Output</p>
                   <p className="text-2xl font-bold text-indigo-700">{Number(selectedLineDetail.output || 0)}</p>
                 </div>
-                <div className="bg-green-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Efficiency</p>
-                  <p className="text-2xl font-bold text-green-700">{Number(selectedLineDetail.efficiency || 0)}%</p>
-                </div>
                 <div className="bg-sky-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Input %</p>
-                  <p className={`text-2xl font-bold ${
-                    lineInputPercent >= 90 ? 'text-green-600' : 
-                    lineInputPercent >= 70 ? 'text-yellow-600' : 'text-red-500'
-                  }`}>{lineInputPercent}%</p>
+                  <p className="text-xs text-slate-500 font-semibold">Input efficiency %</p>
+                  <p className={`text-2xl font-bold ${efficiencyPctColor(lineInputPercent)}`}>
+                    {lineInputPercent}%
+                  </p>
+                </div>
+                <div className="bg-violet-50 rounded-xl p-3">
+                  <p className="text-xs text-slate-500 font-semibold">Output efficiency %</p>
+                  <p className={`text-2xl font-bold ${efficiencyPctColor(lineOutputPercent)}`}>
+                    {lineOutputPercent}%
+                  </p>
                 </div>
                 <div className="bg-orange-50 rounded-xl p-3">
                   <p className="text-xs text-slate-500 font-semibold">WIP</p>
@@ -849,12 +868,12 @@ export const ProductionTracker: React.FC = () => {
               <div className="bg-slate-50 rounded-xl p-3">
                 <p className="text-xs text-slate-500 font-semibold mb-1">Output Progress</p>
                 <p className="text-lg font-bold text-slate-800 mb-2">
-                  {Number(selectedLineDetail.output || 0)} / {Number(selectedLineDetail.target || 0)} ({Number(selectedLineDetail.output_percentage || 0)}%)
+                  {Number(selectedLineDetail.output || 0)} / {Number(selectedLineDetail.target || 0)} ({lineOutputPercent}%)
                 </p>
                 <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-blue-600"
-                    style={{ width: `${Math.min(Math.max(Number(selectedLineDetail.output_percentage || 0), 0), 100)}%` }}
+                    style={{ width: `${Math.min(Math.max(lineOutputPercent, 0), 100)}%` }}
                   />
                 </div>
               </div>
@@ -1000,7 +1019,7 @@ export const ProductionTracker: React.FC = () => {
                   className="w-full rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
                 >
                   <option value="risk">Sort: Risk first</option>
-                  <option value="efficiency">Sort: Efficiency high to low</option>
+                  <option value="efficiency">Sort: Output % high to low</option>
                   <option value="output_gap">Sort: Output gap high to low</option>
                 </select>
               </div>

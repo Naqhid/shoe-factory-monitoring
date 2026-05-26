@@ -1,7 +1,8 @@
 import React from 'react';
 import { API_BASE_URL, apiFetch } from '../services/api';
-import { RefreshCw, ChevronDown, ChevronRight, Clock, RotateCcw } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronRight, Clock, RotateCcw, UserX } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface SessionLogEntry {
   session_id: string;
@@ -53,6 +54,8 @@ const LogPage: React.FC = () => {
   const [cycleDetails, setCycleDetails] = React.useState<Record<string, CycleDetail[]>>({});
   const [loadingCycles, setLoadingCycles] = React.useState<Set<string>>(new Set());
   const [reactivatingSessions, setReactivatingSessions] = React.useState<Set<string>>(new Set());
+  const [deactivatingSessions, setDeactivatingSessions] = React.useState<Set<string>>(new Set());
+  const [deactivateTarget, setDeactivateTarget] = React.useState<SessionLogEntry | null>(null);
 
   React.useEffect(() => {
     const fetchWorkCentres = async () => {
@@ -171,6 +174,35 @@ const LogPage: React.FC = () => {
     }
   };
 
+  const getEmployeeLabel = (log: SessionLogEntry) =>
+    log.emp_name ? `${log.emp_name} (${log.emp_code})` : log.emp_code || 'this employee';
+
+  const performDeactivate = async (log: SessionLogEntry) => {
+    if (!log?.session_id || deactivatingSessions.has(log.session_id)) return;
+    setDeactivatingSessions((prev) => new Set(prev).add(log.session_id));
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/mobile-sessions/deactivate`, {
+        method: 'POST',
+        body: JSON.stringify({ session_id: log.session_id }),
+      });
+      const result = await response.json();
+      if (response.ok && result.success) {
+        toast.success(result.message || 'Session deactivated');
+        await handleRefresh();
+      } else {
+        toast.error(result.message || 'Failed to deactivate session');
+      }
+    } catch {
+      toast.error('Unable to deactivate session');
+    } finally {
+      setDeactivatingSessions((prev) => {
+        const next = new Set(prev);
+        next.delete(log.session_id);
+        return next;
+      });
+    }
+  };
+
   const handleReactivate = async (log: SessionLogEntry) => {
     if (!log?.session_id || reactivatingSessions.has(log.session_id)) return;
     setReactivatingSessions((prev) => new Set(prev).add(log.session_id));
@@ -221,8 +253,27 @@ const LogPage: React.FC = () => {
     }
   };
 
+  const deactivateMessage = deactivateTarget
+    ? `Deactivate login for ${getEmployeeLabel(deactivateTarget)} on ${deactivateTarget.machine_name || deactivateTarget.machine_id}? They will need to scan and log in again on mobile.`
+    : '';
+
   return (
     <div className="p-4 md:p-6">
+      <ConfirmDialog
+        isOpen={deactivateTarget !== null}
+        title="Deactivate session?"
+        message={deactivateMessage}
+        confirmText="Deactivate"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (!deactivateTarget) return;
+          const log = deactivateTarget;
+          setDeactivateTarget(null);
+          void performDeactivate(log);
+        }}
+        onCancel={() => setDeactivateTarget(null)}
+      />
+
       <h1 className="text-2xl font-bold text-gray-900 mb-4">Machine Login Logs</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 bg-white border border-gray-200 rounded-lg p-4">
@@ -329,21 +380,33 @@ const LogPage: React.FC = () => {
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-700 capitalize">{log.status}</td>
                     <td className="px-3 py-3 text-sm text-center">
-                      {log.status !== 'active' ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReactivate(log);
-                          }}
-                          disabled={reactivatingSessions.has(log.session_id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <RotateCcw className={`h-3 w-3 ${reactivatingSessions.has(log.session_id) ? 'animate-spin' : ''}`} />
-                          {reactivatingSessions.has(log.session_id) ? 'Reactivating...' : 'Reactivate'}
-                        </button>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
+                      <div className="flex flex-wrap items-center justify-center gap-1">
+                        {log.status === 'active' || log.status === 'waiting' ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeactivateTarget(log);
+                            }}
+                            disabled={deactivatingSessions.has(log.session_id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <UserX className={`h-3 w-3 ${deactivatingSessions.has(log.session_id) ? 'animate-pulse' : ''}`} />
+                            {deactivatingSessions.has(log.session_id) ? 'Deactivating...' : 'Deactivate'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReactivate(log);
+                            }}
+                            disabled={reactivatingSessions.has(log.session_id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <RotateCcw className={`h-3 w-3 ${reactivatingSessions.has(log.session_id) ? 'animate-spin' : ''}`} />
+                            {reactivatingSessions.has(log.session_id) ? 'Reactivating...' : 'Reactivate'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                   

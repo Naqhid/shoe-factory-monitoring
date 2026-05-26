@@ -337,29 +337,33 @@ class ApiController {
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
-      let where = 'WHERE DATE(ms.activated_at) BETWEEN ? AND ?';
+      // Use production prod_date (not mobile_sessions.activated_at — that updates on each login).
+      let where = 'WHERE DATE(mcp.prod_date) BETWEEN ? AND ? AND mcp.button_status = 2';
       const params = [fromDate, toDate];
-      if (workCentreId) { where += ' AND ms.work_centre_id = ?'; params.push(workCentreId); }
-      if (search) { where += ' AND (e.name LIKE ? OR e.code LIKE ? OR wc.name LIKE ? OR mc.machine_name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
+      if (workCentreId) { where += ' AND mcp.work_centre_id = ?'; params.push(workCentreId); }
+      if (search) {
+        where += ' AND (e.name LIKE ? OR e.code LIKE ? OR wc.name LIKE ? OR mc.machine_name LIKE ? OR mc.name LIKE ?)';
+        const s = `%${search}%`;
+        params.push(s, s, s, s, s);
+      }
 
       const baseQuery = `
-        FROM mobile_sessions ms
-        JOIN employees e ON ms.emp_id = e.id
-        JOIN work_centres wc ON ms.work_centre_id = wc.id
-        LEFT JOIN machine_centres mc ON ms.machine_id = mc.machine_id
-        LEFT JOIN production_plan pp ON pp.work_centre_id = ms.work_centre_id AND pp.plan_date = DATE(ms.activated_at)
-        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'ms.work_centre_id').replace(/%DATE%/g, 'DATE(ms.activated_at)')}
-        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'ms.work_centre_id').replace(/%DATE%/g, 'DATE(ms.activated_at)')}
-        LEFT JOIN machine_centre_production mcp ON mcp.machine_id = ms.machine_id
-          AND mcp.work_centre_id = ms.work_centre_id
-          AND DATE(mcp.prod_date) = DATE(ms.activated_at)
+        FROM machine_centre_production mcp
+        JOIN employees e ON e.code = mcp.emp_id
+        JOIN work_centres wc ON mcp.work_centre_id = wc.id
+        LEFT JOIN machine_centres mc ON mcp.machine_id = mc.machine_id AND mc.work_centre_id = mcp.work_centre_id
+        LEFT JOIN production_plan pp ON pp.work_centre_id = mcp.work_centre_id AND pp.plan_date = DATE(mcp.prod_date)
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${where}
-        GROUP BY DATE(mcp.prod_date), ms.work_centre_id, ms.emp_id, ms.machine_id, pp.total_target_per_day, line_input.total_input, line_eol.line_eol_output`;
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, mcp.emp_id, mcp.machine_id,
+          e.code, e.name, wc.name, mc.machine_id, mc.machine_name, mc.name,
+          pp.total_target_per_day, line_input.total_input, line_eol.line_eol_output`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [data] = await db.query(`
         SELECT DATE(mcp.prod_date) as date, wc.name as line, e.code as emp_code, e.name as emp_name,
-          ms.machine_id, COALESCE(mc.machine_name, mc.name) as machine_name,
+          mcp.machine_id, COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
           ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
