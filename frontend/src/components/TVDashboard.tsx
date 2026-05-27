@@ -801,24 +801,6 @@ export const TVDashboard: React.FC = () => {
                         {dashboardAgeSec !== null && dashboardAgeSec > 30 && detailCarouselIndex === 0 && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Stale</span>
                         )}
-                        <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
-                            {DETAIL_CAROUSEL_LABELS.map((label, i) => (
-                                <button
-                                    key={label}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={detailCarouselIndex === i}
-                                    aria-label={label}
-                                    onClick={() => {
-                                        setDetailCarouselIndex(i);
-                                        setDetailCarouselProgress(0);
-                                    }}
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                        detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
-                                    }`}
-                                />
-                            ))}
-                        </div>
                     </div>
                     </div>
                 </div>
@@ -935,9 +917,29 @@ export const TVDashboard: React.FC = () => {
                             style={{ width: `${detailCarouselProgress}%` }}
                         />
                     </div>
-                    <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold text-center mt-0.5 tabular-nums hidden sm:block">
-                        Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
-                    </p>
+                    <div className="mt-1 flex items-center justify-center gap-2.5">
+                        <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
+                            {DETAIL_CAROUSEL_LABELS.map((label, i) => (
+                                <button
+                                    key={label}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={detailCarouselIndex === i}
+                                    aria-label={label}
+                                    onClick={() => {
+                                        setDetailCarouselIndex(i);
+                                        setDetailCarouselProgress(0);
+                                    }}
+                                    className={`h-2 rounded-full transition-all duration-300 ${
+                                        detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                        <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold tabular-nums">
+                            Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
+                        </p>
+                    </div>
                 </div>
             </div>
             </div>
