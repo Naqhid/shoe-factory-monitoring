@@ -463,9 +463,11 @@ export const MobileProduction: React.FC = () => {
 
     const outputExpectedNow = dailyPaceSnapshot?.expected ?? 0;
     const pairsPerBox = Math.max(1, clampMobileTargetPairs(selectedTargetPairs));
-    const binsCompletedToday = totalOutputToday / pairsPerBox;
+    // Full boxes only — pace 16 pairs @ 6/box = 2 boxes, not 3 (18 pairs needed for 3).
+    const binsCompletedToday =
+        pairsPerBox > 0 ? Math.floor(totalOutputToday / pairsPerBox) : 0;
     const boxesExpectedNow =
-        pairsPerBox > 0 ? Math.round(outputExpectedNow / pairsPerBox) : 0;
+        pairsPerBox > 0 ? Math.floor(outputExpectedNow / pairsPerBox) : 0;
     const formatBoxesDisplay = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
     // Update current time every second
