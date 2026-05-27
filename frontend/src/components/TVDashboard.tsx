@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
-import { TvPlanPacePanel } from './TvPlanPacePanel';
+// import { TvPlanPacePanel } from './TvPlanPacePanel';
 import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
@@ -170,8 +170,8 @@ export const TVDashboard: React.FC = () => {
     const [stoppageCarouselProgress, setStoppageCarouselProgress] = useState(0);
     const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
 
-    const DETAIL_CAROUSEL_SLIDES = 4;
-    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Plan pace', 'Machine pace'];
+    const DETAIL_CAROUSEL_SLIDES = 3;
+    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Machine pace'];
     const DETAIL_CAROUSEL_MS = 60000;
     const STOPPAGE_CAROUSEL_MS = 15000;
 
@@ -778,7 +778,7 @@ export const TVDashboard: React.FC = () => {
                 <div className="flex-shrink-0 border-b border-gray-100 px-3 sm:px-4 pt-3 pb-2">
                     <div className="flex items-center justify-between gap-2 min-w-0 overflow-hidden">
                     <div className="flex items-center min-w-0 flex-1 overflow-hidden gap-2">
-                    {detailCarouselIndex === 3 ? (
+                    {detailCarouselIndex === 2 ? (
                         <div className="flex items-center min-w-0 flex-1 gap-4 sm:gap-6 text-sm sm:text-base font-bold leading-tight overflow-hidden">
                             <span className="text-blue-600 truncate min-w-0" title={currentLineName}>
                                 {currentLineName}
@@ -793,9 +793,7 @@ export const TVDashboard: React.FC = () => {
                         >
                             {detailCarouselIndex === 0
                                 ? 'LINE PERFORMANCE'
-                                : detailCarouselIndex === 1
-                                    ? `${lowerSection.workCentreName || 'Line'} - Hourly Output`
-                                    : `${currentLineName} · Plan pace`}
+                                : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
                         </h3>
                     )}
                     </div>
@@ -803,24 +801,6 @@ export const TVDashboard: React.FC = () => {
                         {dashboardAgeSec !== null && dashboardAgeSec > 30 && detailCarouselIndex === 0 && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Stale</span>
                         )}
-                        <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
-                            {DETAIL_CAROUSEL_LABELS.map((label, i) => (
-                                <button
-                                    key={label}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={detailCarouselIndex === i}
-                                    aria-label={label}
-                                    onClick={() => {
-                                        setDetailCarouselIndex(i);
-                                        setDetailCarouselProgress(0);
-                                    }}
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                        detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
-                                    }`}
-                                />
-                            ))}
-                        </div>
                     </div>
                     </div>
                 </div>
@@ -903,7 +883,8 @@ export const TVDashboard: React.FC = () => {
                                 hideTitle
                             />
                         </div>
-                        <div className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
+                        {/* Plan pace slide — hidden from carousel; Full line card on machine pace covers line-level plan */}
+                        {/* <div className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
                             {planPaceSnapshot ? (
                                 <TvPlanPacePanel
                                     snapshot={planPaceSnapshot}
@@ -914,9 +895,18 @@ export const TVDashboard: React.FC = () => {
                                     No production plan target set for today — add planning to show pace vs plan.
                                 </div>
                             )}
-                        </div>
+                        </div> */}
                         <div className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
-                            <TvMachinePacePanel machines={machinePaceSnapshots} />
+                            <TvMachinePacePanel
+                                machines={machinePaceSnapshots}
+                                linePlan={{
+                                    lineName: currentLineName,
+                                    dailyTarget: Number(topSection.target || 0),
+                                    lineOutput: Number(topSection.output || 0),
+                                    expectedNow: planPaceSnapshot?.expected,
+                                    projectedEod: planPaceSnapshot?.projectedEod,
+                                }}
+                            />
                         </div>
                     </div>
                 </div>
@@ -927,9 +917,29 @@ export const TVDashboard: React.FC = () => {
                             style={{ width: `${detailCarouselProgress}%` }}
                         />
                     </div>
-                    <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold text-center mt-0.5 tabular-nums hidden sm:block">
-                        Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
-                    </p>
+                    <div className="mt-1 flex items-center justify-center gap-2.5">
+                        <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
+                            {DETAIL_CAROUSEL_LABELS.map((label, i) => (
+                                <button
+                                    key={label}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={detailCarouselIndex === i}
+                                    aria-label={label}
+                                    onClick={() => {
+                                        setDetailCarouselIndex(i);
+                                        setDetailCarouselProgress(0);
+                                    }}
+                                    className={`h-2 rounded-full transition-all duration-300 ${
+                                        detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                        <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold tabular-nums">
+                            Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
+                        </p>
+                    </div>
                 </div>
             </div>
             </div>

@@ -118,7 +118,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     try { return JSON.parse(localStorage.getItem('user_info') || 'null'); } catch { return null; }
   }, []);
   const currentRole: string = (currentUser?.role || '').toLowerCase();
-  const canEdit = currentRole === 'admin' || currentRole === 'supervisor' || currentRole === 'manager' || currentRole === 'line supervisor' || currentRole === 'unit head' || currentRole === 'ied';
+  const canEdit = currentRole === 'admin' || currentRole === 'supervisor' || currentRole === 'manager' || currentRole === 'line supervisor' || currentRole === 'unit head';
   // All authenticated users can VIEW — only canEdit users can add/edit/delete
   const isAuthenticated = !!currentUser;
 

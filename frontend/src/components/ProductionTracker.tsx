@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
-  AlertTriangle,
+  ArrowLeft,
   ArrowDownToLine,
   BarChart3,
   Bell,
-  Briefcase,
-  ChevronRight,
   Menu,
   PackageOpen,
   RefreshCw,
@@ -23,7 +21,177 @@ import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { Reports } from './Reports';
-import { formatInput } from '../utils/wipUtils';
+import { formatInput, formatWip } from '../utils/wipUtils';
+import { buildMachinePaceSnapshot } from '../utils/shiftPaceUtils';
+
+const SHIFT_START_HOUR = 9;
+const SHIFT_END_HOUR = 17;
+const SHIFT_END_MINUTE = 30;
+
+const lineCardWipClass = (wip: number, target: number): string => {
+  if (target <= 0) return 'text-slate-600';
+  const ratio = wip / target;
+  if (ratio > 0.5) return 'text-orange-600';
+  if (ratio > 0.25) return 'text-amber-600';
+  return 'text-emerald-600';
+};
+
+const getLineShiftPace = (target: number, output: number, now: Date) => {
+  const start = new Date(now);
+  start.setHours(SHIFT_START_HOUR, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(SHIFT_END_HOUR, SHIFT_END_MINUTE, 0, 0);
+  const totalShiftMins = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 60000));
+  const elapsedMins = Math.max(
+    0,
+    Math.min(Math.floor((now.getTime() - start.getTime()) / 60000), totalShiftMins)
+  );
+  const daily = Math.round(target);
+  const actual = Math.round(output);
+  const expected = elapsedMins > 0 ? Math.round((daily * elapsedMins) / totalShiftMins) : 0;
+  const projectedEod = elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalShiftMins) : 0;
+  const pacePct = expected > 0 ? Math.round((actual / expected) * 100) : null;
+  return { expected, projectedEod, pacePct, daily, actual };
+};
+
+const paceEfficiencyCircleClass = (pct: number | null): string => {
+  if (pct == null) return 'bg-slate-300 ring-slate-400/50';
+  if (pct >= 100) return 'bg-emerald-500 ring-emerald-600/50';
+  if (pct >= 70) return 'bg-amber-400 ring-amber-500/50';
+  return 'bg-red-500 ring-red-600/50';
+};
+
+const LinePaceEodEffBlock: React.FC<{
+  actual: number;
+  expected: number;
+  projectedEod: number;
+  daily: number;
+  pacePct: number | null;
+}> = ({ actual, expected, projectedEod, daily, pacePct }) => {
+  const paceBehind = expected > 0 && actual < expected;
+  const eodBehind = daily > 0 && projectedEod < daily;
+  const numClass = 'text-sm sm:text-lg font-black tabular-nums leading-none';
+  const slashClass = 'text-xs sm:text-base font-black text-slate-800 leading-none';
+  const effLabel =
+    pacePct != null
+      ? `Pace efficiency ${pacePct}% (${actual} / ${expected})`
+      : 'No pace target set';
+  const effTextClass =
+    pacePct != null && pacePct >= 100
+      ? 'text-sm sm:text-base'
+      : 'text-base sm:text-lg';
+
+  const metricTileClass =
+    'rounded-lg border border-slate-200 bg-slate-50/80 px-1 py-1 sm:px-1.5 sm:py-1.5 min-h-0 flex flex-col justify-center flex-1';
+  const labelClass =
+    'text-[9px] sm:text-[10px] font-extrabold uppercase text-center mb-0.5 sm:mb-1';
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] w-full gap-1 sm:gap-1.5 mt-1 sm:mt-1.5 items-stretch min-h-[5.25rem] sm:min-h-[6.5rem]">
+      <div className="flex flex-col gap-1 min-w-0 min-h-0">
+        <div className={metricTileClass}>
+          <div className={`${labelClass} text-emerald-700`}>Pace</div>
+          <div className="flex items-baseline justify-center gap-0.5 tabular-nums">
+            {expected > 0 ? (
+              <>
+                <span className={`${numClass} ${paceBehind ? 'text-red-600' : 'text-emerald-700'}`}>{actual}</span>
+                <span className={slashClass}>/</span>
+                <span className={`${numClass} text-slate-900`}>{expected}</span>
+              </>
+            ) : (
+              <span className={`${numClass} text-slate-700`}>{actual}</span>
+            )}
+          </div>
+        </div>
+        <div className={metricTileClass}>
+          <div className={`${labelClass} text-blue-700`}>EOD</div>
+          <div className="flex items-baseline justify-center gap-0.5 tabular-nums">
+            {daily > 0 ? (
+              <>
+                <span className={`${numClass} ${eodBehind ? 'text-red-600' : 'text-blue-700'}`}>{projectedEod}</span>
+                <span className={slashClass}>/</span>
+                <span className={`${numClass} text-indigo-900`}>{daily}</span>
+              </>
+            ) : (
+              <span className={`${numClass} text-slate-400`}>—</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center self-stretch shrink-0 px-0.5 sm:px-1 min-w-[4rem] sm:min-w-[5rem]">
+        <span
+          className={`inline-flex shrink-0 size-[clamp(4rem,14vw,5rem)] items-center justify-center rounded-full ring-2 ring-white shadow-md font-black tabular-nums leading-none text-white ${paceEfficiencyCircleClass(pacePct)}`}
+          title={effLabel}
+          aria-label={effLabel}
+        >
+          <span className={effTextClass}>{pacePct != null ? `${pacePct}%` : '—'}</span>
+        </span>
+      </div>
+    </div>
+  );
+};
+
+/** Compact Pace / EOD / efficiency on one row (line detail — machine wise). */
+const MachinePaceInlineRow: React.FC<{
+  actual: number;
+  expected: number;
+  projectedEod: number;
+  daily: number;
+  pacePct: number | null;
+}> = ({ actual, expected, projectedEod, daily, pacePct }) => {
+  const paceBehind = expected > 0 && actual < expected;
+  const eodBehind = daily > 0 && projectedEod < daily;
+  const numClass = 'text-sm font-black tabular-nums leading-none';
+  const slashClass = 'text-xs font-black text-slate-800 leading-none';
+  const labelClass = 'text-[9px] font-extrabold uppercase leading-none';
+  const effLabel =
+    pacePct != null
+      ? `Pace efficiency ${pacePct}% (${actual} / ${expected})`
+      : 'No pace target set';
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] w-full items-center gap-0 border border-slate-200 rounded-lg bg-white overflow-hidden">
+      <div className="min-w-0 border-r border-slate-200 px-1 py-1 text-center">
+        <div className={`${labelClass} text-emerald-700`}>Pace</div>
+        <div className="flex items-baseline justify-center gap-0.5 tabular-nums mt-0.5">
+          {expected > 0 ? (
+            <>
+              <span className={`${numClass} ${paceBehind ? 'text-red-600' : 'text-emerald-700'}`}>{actual}</span>
+              <span className={slashClass}>/</span>
+              <span className={`${numClass} text-slate-900`}>{expected}</span>
+            </>
+          ) : (
+            <span className={`${numClass} text-slate-700`}>{actual}</span>
+          )}
+        </div>
+      </div>
+      <div className="min-w-0 border-r border-slate-200 px-1 py-1 text-center">
+        <div className={`${labelClass} text-blue-700`}>EOD</div>
+        <div className="flex items-baseline justify-center gap-0.5 tabular-nums mt-0.5">
+          {daily > 0 ? (
+            <>
+              <span className={`${numClass} ${eodBehind ? 'text-red-600' : 'text-blue-700'}`}>{projectedEod}</span>
+              <span className={slashClass}>/</span>
+              <span className={`${numClass} text-indigo-900`}>{daily}</span>
+            </>
+          ) : (
+            <span className={`${numClass} text-slate-400`}>—</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-center shrink-0 px-1 py-0.5">
+        <span
+          className={`inline-flex size-9 items-center justify-center rounded-full ring-1 ring-white shadow font-black tabular-nums text-xs text-white ${paceEfficiencyCircleClass(pacePct)}`}
+          title={effLabel}
+          aria-label={effLabel}
+        >
+          {pacePct != null ? `${pacePct}%` : '—'}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 const getTodayDate = () => {
   const today = new Date();
@@ -33,12 +201,9 @@ const getTodayDate = () => {
   return `${year}-${month}-${day}`;
 };
 
-const SHIFT_START_HOUR = 9;
-const SHIFT_END_HOUR = 17;
-const SHIFT_END_MINUTE = 30;
-
 export const ProductionTracker: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [workCentres, setWorkCentres] = useState<any[]>([]);
   const [selectedLine, setSelectedLine] = useState('');
@@ -48,8 +213,8 @@ export const ProductionTracker: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeMobileTab, setActiveMobileTab] = useState<'dashboard' | 'trends' | 'reports'>('dashboard');
   const [selectedLineDetail, setSelectedLineDetail] = useState<any | null>(null);
-  const [lineMachines, setLineMachines] = useState<any[]>([]);
-  const [lineMachinesLoading, setLineMachinesLoading] = useState(false);
+  const [detailMachineRows, setDetailMachineRows] = useState<any[]>([]);
+  const [detailMachinesLoading, setDetailMachinesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [dashboardLastUpdated, setDashboardLastUpdated] = useState<Date | null>(null);
@@ -59,9 +224,7 @@ export const ProductionTracker: React.FC = () => {
   const [lineSearch, setLineSearch] = useState('');
   const [lineSort, setLineSort] = useState<'risk' | 'efficiency' | 'output_gap'>('risk');
   const [refreshMode, setRefreshMode] = useState<'10s' | '30s' | 'manual'>('10s');
-  const [showTrackerNotifications, setShowTrackerNotifications] = useState(false);
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
-  const [pacingData, setPacingData] = useState<any>(null);
 
   const logAuditEvent = (event: string, payload: Record<string, any> = {}) => {
     try {
@@ -159,18 +322,6 @@ export const ProductionTracker: React.FC = () => {
     }
   };
 
-  const loadPacingData = async () => {
-    try {
-      const workCentreId = selectedLine || workCentres[0]?.id || 1;
-      const res = await apiFetch(`${API_BASE}/api/tracker/pacing?date=${selectedDate}&workCentreId=${workCentreId}`);
-      if (!res.ok) return;
-      const result = await res.json();
-      if (result.success) setPacingData(result.data);
-    } catch {
-      // non-blocking
-    }
-  };
-
   const loadAlertCardCount = async () => {
     try {
       // Keep tracker tile count aligned with Realtime Alert Center
@@ -202,28 +353,11 @@ export const ProductionTracker: React.FC = () => {
     }
   };
 
-  const loadLineMachines = async (workCentreId: number) => {
-    setLineMachinesLoading(true);
-    try {
-      const res = await apiFetch(`${API_BASE}/api/tv-dashboard/machine-centres/${workCentreId}?date=${selectedDate}`);
-      const result = await res.json();
-      if (result.success) {
-        setLineMachines(result.data || []);
-      } else {
-        setLineMachines([]);
-      }
-    } catch {
-      setLineMachines([]);
-    } finally {
-      setLineMachinesLoading(false);
-    }
-  };
-
   const handleManualRefresh = async () => {
     setManualRefreshing(true);
     logAuditEvent('manual_refresh_clicked', { selectedLine, selectedDate });
     try {
-      await Promise.all([loadDashboardData(), loadAttendanceData(), loadAlertCardCount(), loadPacingData()]);
+      await Promise.all([loadDashboardData(), loadAttendanceData(), loadAlertCardCount()]);
       toast.success('Dashboard refreshed');
     } finally {
       setManualRefreshing(false);
@@ -234,13 +368,11 @@ export const ProductionTracker: React.FC = () => {
     if (workCentres.length > 0 && selectedLine) {
       loadDashboardData();
       loadAttendanceData();
-      loadPacingData();
       if (refreshMode === 'manual') return;
       const pollMs = refreshMode === '30s' ? 30000 : 10000;
       const interval = setInterval(() => {
         loadDashboardData();
         loadAttendanceData();
-        loadPacingData();
       }, pollMs);
       return () => clearInterval(interval);
     }
@@ -327,7 +459,20 @@ export const ProductionTracker: React.FC = () => {
       const critical = shiftProjection.inLast30 && (outputPct < 80 || gap > 0);
       const riskScore = critical ? 2 : warning ? 1 : 0;
       const riskLabel = riskScore === 2 ? 'Critical' : riskScore === 1 ? 'At Risk' : 'Monitor';
-      return { line, index, target, output, outputPct, gap, riskScore, riskLabel };
+      const { expected, projectedEod, pacePct } = getLineShiftPace(target, output, currentTime);
+      return {
+        line,
+        index,
+        target,
+        output,
+        outputPct,
+        gap,
+        riskScore,
+        riskLabel,
+        expected,
+        projectedEod,
+        pacePct,
+      };
     });
     const filtered = text
       ? mapped.filter(({ line }: any) => String(line.line_name || '').toLowerCase().includes(text))
@@ -338,14 +483,8 @@ export const ProductionTracker: React.FC = () => {
       return b.riskScore - a.riskScore;
     });
     return sorted;
-  }, [linePerformance, lineSearch, lineSort, shiftProjection.inLast30, shiftProjection.inLast60]);
+  }, [linePerformance, lineSearch, lineSort, shiftProjection.inLast30, shiftProjection.inLast60, currentTime]);
 
-  const attentionQueue = React.useMemo(() => {
-    if (!shiftProjection.inLast60) return [];
-    return enrichedLines
-      .filter((x) => x.riskScore >= 1)
-      .slice(0, 3);
-  }, [enrichedLines, shiftProjection.inLast60]);
   const totalWip = linePerformance.reduce((sum: number, line: any) => sum + (Number(line.wip) || 0), 0);
   const lineInputPercent = selectedLineDetail && Number(selectedLineDetail.target || 0) > 0
     ? Math.round((Number(selectedLineDetail.input || 0) / Number(selectedLineDetail.target || 0)) * 100)
@@ -369,14 +508,72 @@ export const ProductionTracker: React.FC = () => {
     ? Math.round((Number(topSection?.input || 0) / Number(topSection?.target || 0)) * 100)
     : 0;
   const alertCount = alertCardCount;
-  const trackerSignalCount = shiftProjection.shortfall > 0 ? 1 : 0;
   const currentWorkCentreId = parseInt(selectedLine, 10) || workCentres[0]?.id || 1;
   const currentWorkCentreName = workCentres.find((wc) => String(wc.id) === String(currentWorkCentreId))?.name || 'Unknown Line';
-  const statusDotClass = (efficiency: number) => {
-    if (efficiency >= 90) return 'bg-green-500';
-    if (efficiency >= 80) return 'bg-yellow-400';
-    return 'bg-red-500';
-  };
+  const detailRouteMatch = location.pathname.match(/^\/production_tracker\/line\/([^/]+)$/);
+  const detailWorkCentreId = detailRouteMatch ? Number(detailRouteMatch[1]) : NaN;
+  const isDetailRoute = Number.isFinite(detailWorkCentreId);
+
+  useEffect(() => {
+    if (!isDetailRoute) {
+      if (selectedLineDetail) setSelectedLineDetail(null);
+      return;
+    }
+    const detailLine = linePerformance.find((line: any) => Number(line.work_centre_id) === detailWorkCentreId) || null;
+    if (detailLine) {
+      if (!selectedLineDetail || Number(selectedLineDetail.work_centre_id) !== detailWorkCentreId) {
+        setSelectedLineDetail(detailLine);
+      }
+    } else if (selectedLineDetail) {
+      setSelectedLineDetail(null);
+    }
+  }, [isDetailRoute, detailWorkCentreId, linePerformance, selectedLineDetail]);
+
+  useEffect(() => {
+    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
+      setDetailMachineRows([]);
+      return;
+    }
+    let cancelled = false;
+    const loadDetailMachines = async () => {
+      setDetailMachinesLoading(true);
+      try {
+        const res = await apiFetch(
+          `${API_BASE}/api/tv-dashboard/machine-centres/${detailWorkCentreId}?date=${selectedDate}`
+        );
+        const result = await res.json();
+        if (!cancelled) {
+          setDetailMachineRows(result.success ? result.data || [] : []);
+        }
+      } catch {
+        if (!cancelled) setDetailMachineRows([]);
+      } finally {
+        if (!cancelled) setDetailMachinesLoading(false);
+      }
+    };
+    loadDetailMachines();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDetailRoute, detailWorkCentreId, selectedDate, dashboardLastUpdated]);
+
+  const detailMachineSnapshots = useMemo(
+    () =>
+      [...detailMachineRows]
+        .map((row: any) =>
+          buildMachinePaceSnapshot(
+            String(row.machine_id),
+            row.machine_name || row.machine_centre_name || String(row.machine_id),
+            Number(row.total_output_pairs || 0),
+            Number(row.target_mins_per_box || 0),
+            currentTime
+          )
+        )
+        .sort((a, b) =>
+          String(a.machineId).localeCompare(String(b.machineId), undefined, { numeric: true })
+        ),
+    [detailMachineRows, currentTime]
+  );
 
   if (error && !dashboardData) {
     return (
@@ -407,6 +604,165 @@ export const ProductionTracker: React.FC = () => {
   }
 
   if (!dashboardData) return null;
+
+  if (isDetailRoute && selectedLineDetail) {
+    return (
+      <div className="min-h-full h-full bg-slate-100 p-1 sm:p-2 lg:p-3">
+        <div className="w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+            <div className="flex items-baseline gap-2 min-w-0 flex-1 flex-wrap">
+              <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 truncate">
+                {selectedLineDetail.line_name || 'Line Details'}
+              </h3>
+              <span className="text-xs text-slate-500 shrink-0">
+                Last updated{' '}
+                <span className={`font-semibold ${isDashboardStale ? 'text-amber-700' : 'text-slate-600'}`}>
+                  {dashboardAgeLabel}
+                </span>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/production_tracker')}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold shrink-0 shadow-sm"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Back
+            </button>
+          </div>
+
+          <div className="px-2.5 py-2.5 sm:px-3 sm:py-3 lg:px-4 lg:py-4 space-y-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-3">
+              <div className="bg-blue-50 rounded-xl p-2.5 border border-blue-100">
+                <p className="text-[11px] text-slate-500 font-semibold">Target</p>
+                <p className="text-2xl font-extrabold text-blue-700 tracking-tight">{Number(selectedLineDetail.target || 0)}</p>
+              </div>
+              <div className="bg-cyan-50 rounded-xl p-2.5 border border-cyan-100">
+                <p className="text-[11px] text-slate-500 font-semibold">Input</p>
+                <p className="text-2xl font-extrabold text-cyan-700 tracking-tight">{formatInput(selectedLineDetail.input)}</p>
+              </div>
+              <div className="bg-indigo-50 rounded-xl p-2.5 border border-indigo-100">
+                <p className="text-[11px] text-slate-500 font-semibold">Output</p>
+                <p className="text-2xl font-extrabold text-indigo-700 tracking-tight">{Number(selectedLineDetail.output || 0)}</p>
+              </div>
+              <div className="bg-sky-50 rounded-xl p-2.5 border border-sky-100">
+                <p className="text-[11px] text-slate-500 font-semibold">Input efficiency %</p>
+                <p className={`text-2xl font-extrabold tracking-tight ${efficiencyPctColor(lineInputPercent)}`}>
+                  {lineInputPercent}%
+                </p>
+              </div>
+              <div className="bg-violet-50 rounded-xl p-2.5 border border-violet-100">
+                <p className="text-[11px] text-slate-500 font-semibold">Output efficiency %</p>
+                <p className={`text-2xl font-extrabold tracking-tight ${efficiencyPctColor(lineOutputPercent)}`}>
+                  {lineOutputPercent}%
+                </p>
+              </div>
+              <div className="bg-orange-50 rounded-xl p-2.5 border border-orange-100">
+                <p className="text-[11px] text-slate-500 font-semibold">WIP</p>
+                <p className="text-2xl font-extrabold text-orange-700 tracking-tight">{Number(selectedLineDetail.wip || 0)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3">
+              <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <p className="text-xs text-slate-600 font-semibold">Input Progress</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {lineInputPercent}%
+                  </p>
+                </div>
+                <p className="text-base font-extrabold text-slate-800 mb-2">
+                  {formatInput(selectedLineDetail.input)} / {Number(selectedLineDetail.target || 0)}
+                </p>
+                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${
+                      lineInputPercent >= 90 ? 'bg-green-500' :
+                      lineInputPercent >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${lineInputPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <p className="text-xs text-slate-600 font-semibold">Output Progress</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {lineOutputPercent}%
+                  </p>
+                </div>
+                <p className="text-base font-extrabold text-slate-800 mb-2">
+                  {Number(selectedLineDetail.output || 0)} / {Number(selectedLineDetail.target || 0)}
+                </p>
+                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-blue-600"
+                    style={{ width: `${Math.min(Math.max(lineOutputPercent, 0), 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                <span className="text-base sm:text-lg font-extrabold text-blue-800">Machine-level pace</span>
+                <span className="text-xs sm:text-sm font-bold text-amber-900 bg-amber-200/90 px-1.5 py-0.5 rounded ring-1 ring-amber-400/80 normal-case">
+                  Circle = Efficiency %
+                </span>
+              </div>
+              {detailMachinesLoading ? (
+                <p className="text-sm text-slate-500 py-1">Loading…</p>
+              ) : detailMachineSnapshots.length === 0 ? (
+                <p className="text-sm text-slate-500 py-1">No machines on this line.</p>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                  {detailMachineSnapshots.map((snap) => {
+                    const pacePct =
+                      snap.expected > 0 ? Math.round((snap.actual / snap.expected) * 100) : null;
+                    const cardTone =
+                      pacePct == null
+                        ? 'border-slate-200 bg-white'
+                        : pacePct >= 100
+                          ? 'border-emerald-200 bg-emerald-50/40'
+                          : pacePct >= 70
+                            ? 'border-amber-200 bg-amber-50/40'
+                            : 'border-rose-200 bg-rose-50/40';
+                    return (
+                      <div key={snap.machineId} className={`rounded-xl border px-2 py-1.5 shadow-sm ${cardTone}`}>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800 leading-tight mb-1 line-clamp-2">
+                          {snap.machineName}
+                        </p>
+                        <MachinePaceInlineRow
+                          actual={snap.actual}
+                          expected={snap.expected}
+                          projectedEod={snap.projectedEod}
+                          daily={snap.daily}
+                          pacePct={pacePct}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMobileTab('trends');
+                navigate('/production_tracker');
+              }}
+              className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 shadow-sm"
+            >
+              View Hourly Trend
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full h-full bg-slate-100 p-1 sm:p-2 lg:p-2 flex flex-col">
@@ -475,98 +831,22 @@ export const ProductionTracker: React.FC = () => {
               >
                 <SlidersHorizontal className="h-4 w-4" />
               </button>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowTrackerNotifications((prev) => !prev);
-                    logAuditEvent('tracker_notifications_opened', { selectedLine: currentWorkCentreId, selectedDate, trackerSignalCount });
-                  }}
-                  className="relative inline-flex items-center justify-center h-7 w-7 rounded-md text-xs font-semibold bg-white/12 hover:bg-white/20"
-                  title="Production tracker notifications"
-                >
-                  <Bell className="h-3.5 w-3.5" />
-                  {trackerSignalCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] text-center font-bold">
-                      {trackerSignalCount}
-                    </span>
-                  )}
-                </button>
-                {showTrackerNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-[290px] sm:w-[320px] bg-white rounded-xl shadow-xl border border-slate-200 p-2.5 z-40">
-                    <div className="space-y-2">
-                      {pacingData && pacingData.target > 0 ? (() => {
-                        const gap = pacingData.gap;
-                        const ahead = gap >= 0;
-                        const paceRate = pacingData.pace_rate;
-                        const borderColor = paceRate >= 100 ? 'border-green-100' : paceRate >= 85 ? 'border-amber-100' : 'border-red-100';
-                        const bgColor = paceRate >= 100 ? 'bg-green-50' : paceRate >= 85 ? 'bg-amber-50' : 'bg-red-50';
-                        const barColor = paceRate >= 100 ? 'bg-green-500' : paceRate >= 85 ? 'bg-amber-400' : 'bg-red-500';
-                        const labelColor = paceRate >= 100 ? 'text-green-700' : paceRate >= 85 ? 'text-amber-700' : 'text-red-700';
-                        return (
-                          <div className={`rounded-lg p-2.5 text-slate-900 border ${borderColor} ${bgColor}`}>
-                            <p className="text-xs font-semibold text-slate-500">Target Risk Projection</p>
-                            <p className="text-sm font-bold mt-1">
-                              {shiftProjection.shortfall > 0
-                                ? `At current pace: miss by ${shiftProjection.shortfall} pairs`
-                                : `At current pace: on track (+${Math.max(0, shiftProjection.projected - Number(topSection?.target || 0))} pairs)`}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
-                            <p className={`text-sm font-bold mt-2 ${labelColor}`}>
-                              {ahead ? `▲ +${gap} ahead` : `▼ ${Math.abs(gap)} behind`} · {paceRate}% of pace
-                            </p>
-                            <div className="mt-1.5 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(paceRate, 100)}%` }} />
-                            </div>
-                            <p className="text-xs text-slate-500 mt-1">
-                              {pacingData.actual} / {pacingData.expected_by_now} expected by now
-                            </p>
-                            <div className="flex gap-3 text-xs text-slate-500 mt-0.5">
-                              <span>Now: <b className="text-slate-700">{pacingData.current_rate_per_hour}/hr</b></span>
-                              <span>Need: <b className="text-slate-700">{pacingData.required_rate_per_hour}/hr</b></span>
-                              <span>EOD: <b className="text-slate-700">{pacingData.projected_eod}</b></span>
-                            </div>
-                          </div>
-                        );
-                      })() : (
-                        <div className="bg-slate-50 rounded-lg p-2.5 text-slate-900 border border-slate-100">
-                          <p className="text-xs font-semibold text-slate-500">Target Risk Projection</p>
-                          <p className="text-sm font-bold mt-1">
-                            {shiftProjection.shortfall > 0
-                              ? `At current pace: miss by ${shiftProjection.shortfall} pairs`
-                              : `At current pace: on track (+${Math.max(0, shiftProjection.projected - Number(topSection?.target || 0))} pairs)`}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-1">Shift ends in {shiftProjection.minutesToShiftEnd} min</p>
-                        </div>
-                      )}
-                      {shiftProjection.inLast60 && attentionQueue.length > 0 && (
-                        <div className="bg-red-50 rounded-lg p-2.5 text-slate-900 border border-red-100">
-                          <p className="text-xs font-semibold text-red-700 mb-1.5">Attention Queue</p>
-                          <div className="space-y-1.5">
-                            {attentionQueue.map(({ line, riskScore, riskLabel }) => (
-                              <button
-                                key={`attention-bell-${line.line_name}-${line.work_centre_id || 'x'}`}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedLineDetail(line);
-                                  const wcId = Number(line.work_centre_id || currentWorkCentreId);
-                                  loadLineMachines(wcId);
-                                  setShowTrackerNotifications(false);
-                                  logAuditEvent('attention_queue_opened_from_bell', { line: line.line_name, riskScore, riskLabel });
-                                }}
-                                className="w-full text-left rounded-lg border border-red-100 bg-white px-2 py-1.5 hover:bg-red-50"
-                              >
-                                <span className="font-semibold text-slate-800 text-xs">{line.line_name || 'Line'}</span>
-                                <span className="ml-2 text-[11px] text-red-600 font-semibold">{riskLabel}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/alert_center');
+                  logAuditEvent('alerts_opened_from_bell', { count: alertCount, selectedLine: currentWorkCentreId, selectedDate });
+                }}
+                className="relative inline-flex items-center justify-center h-7 w-7 rounded-md text-xs font-semibold bg-white/12 hover:bg-white/20"
+                title={alertCount > 0 ? `${alertCount} alerts — open Alert Center` : 'Open Alert Center'}
+              >
+                <Bell className="h-3.5 w-3.5" />
+                {alertCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] text-center font-bold">
+                    {alertCount > 99 ? '99+' : alertCount}
+                  </span>
                 )}
-              </div>
+              </button>
             </div>
           </div>
 
@@ -631,9 +911,17 @@ export const ProductionTracker: React.FC = () => {
               </div>
 
               <div className="bg-[#f7f9ff] rounded-2xl p-2 sm:p-3 text-slate-900 border border-[#dbe5ff] flex flex-col gap-2 min-h-[120px] sm:min-h-[150px] max-h-[40vh] overflow-y-auto">
-                <div className="flex items-center justify-between mb-1 sm:mb-2">
-                  <h3 className="text-base sm:text-xl font-bold">Production Lines</h3>
-                  <div className="px-2 py-1 rounded-full bg-slate-100 text-[11px] sm:text-sm font-semibold flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-1 sm:mb-2">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <h3 className="text-base sm:text-xl font-bold">Lines</h3>
+                    <span
+                      className="text-[10px] sm:text-xs font-semibold text-amber-900 bg-amber-200 px-2 py-0.5 rounded ring-1 ring-amber-300 whitespace-nowrap"
+                      title="Colored circle shows pace efficiency percentage"
+                    >
+                      Circle = Efficiency %
+                    </span>
+                  </div>
+                  <div className="px-2 py-1 rounded-full bg-slate-100 text-[11px] sm:text-sm font-semibold flex items-center gap-1.5 shrink-0">
                     <span className="h-2.5 w-2.5 rounded-full bg-green-500 inline-block" />
                     <span>Live</span>
                     <span className="text-slate-400">•</span>
@@ -643,91 +931,52 @@ export const ProductionTracker: React.FC = () => {
 
                 <div className="pr-1">
                   <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5 sm:gap-3">
-                    {enrichedLines.map(({ line, index, target, output, outputPct, gap, riskScore, riskLabel }) => {
+                    {enrichedLines.map(({
+                      line,
+                      index,
+                      target,
+                      output,
+                      expected,
+                      projectedEod,
+                      pacePct,
+                    }) => {
+                      const lineWip = Number(line.wip || 0);
                       return (
                         <button
                           key={`${line.line_name}-${index}`}
                           type="button"
                           onClick={() => {
-                            setSelectedLineDetail(line);
                             const wcId = Number(line.work_centre_id || currentWorkCentreId);
-                            loadLineMachines(wcId);
+                            navigate(`/production_tracker/line/${wcId}`);
                             logAuditEvent('line_detail_opened', { line: line.line_name, workCentreId: wcId });
                           }}
-                        className="relative bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#d8e3ff] w-full min-h-[100px] sm:min-h-[144px] hover:shadow-md flex flex-col items-center justify-center text-center"
+                        className="relative bg-white rounded-xl sm:rounded-2xl p-2 sm:p-3 border border-[#d8e3ff] w-full min-h-[120px] sm:min-h-[156px] hover:shadow-md flex flex-col items-stretch text-center"
                         >
-                          <span className={`absolute top-2 right-2 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${statusDotClass(outputPct)}`} />
-                          <div className="text-xs sm:text-xl font-bold text-slate-800 mb-1 sm:mb-2 leading-tight">
-                            {line.line_name || `Line ${index + 1}`}
-                          </div>
-                          <div className={`text-[10px] sm:text-xs font-semibold mb-1 ${riskScore >= 1 ? 'text-red-600' : 'text-slate-500'}`}>
-                            {riskLabel} • Gap {gap}
-                          </div>
-
-                          <div className={`text-2xl sm:text-5xl font-extrabold leading-none ${outputPct >= 90 ? 'text-green-600' : outputPct >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
-                            {outputPct}%
-                          </div>
-
-                          <div className="text-xs sm:text-2xl font-bold text-slate-800 mt-1 sm:mt-2">
-                            {output} / {target}
-                          </div>
-
-                          <div className="mt-1.5 sm:mt-2 h-1.5 sm:h-2.5 bg-slate-200 rounded-full overflow-hidden w-full">
+                          <div className="w-full flex items-start justify-between gap-1 mb-0.5">
+                            <div className="text-xs sm:text-xl font-bold text-slate-800 leading-tight text-left min-w-0 flex-1">
+                              {line.line_name || `Line ${index + 1}`}
+                            </div>
                             <div
-                              className={`h-full rounded-full ${outputPct >= 90 ? 'bg-green-500' : outputPct >= 80 ? 'bg-amber-400' : 'bg-orange-500'}`}
-                              style={{ width: `${Math.min(Math.max(outputPct, 0), 100)}%` }}
-                            />
+                              className={`shrink-0 inline-flex items-center gap-0.5 sm:gap-1 font-bold text-[10px] sm:text-sm ${lineCardWipClass(lineWip, target)}`}
+                              title={`Line WIP: ${formatWip(lineWip)}`}
+                            >
+                              <PackageOpen className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" aria-hidden />
+                              <span className="tabular-nums">WIP {formatWip(lineWip)}</span>
+                            </div>
                           </div>
 
-                          <div className="mt-1.5 sm:mt-2 inline-flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold text-[10px] sm:text-sm">
-                            <Briefcase className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span>WIP {Number(line.wip || 0)}</span>
-                          </div>
+                          <LinePaceEodEffBlock
+                            actual={output}
+                            expected={expected}
+                            projectedEod={projectedEod}
+                            daily={target}
+                            pacePct={pacePct}
+                          />
                         </button>
                       );
                     })}
                   </div>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
-                <div className="bg-[#f7f9ff] rounded-2xl p-2.5 sm:p-3.5 text-slate-900 border border-[#dbe5ff] min-h-[104px] sm:min-h-[clamp(128px,18vh,220px)] flex flex-col justify-center">
-                  <div className="text-xs sm:text-sm text-slate-500 font-semibold mb-1">Projected EOD Output</div>
-                  <div className={`text-3xl sm:text-5xl font-bold leading-none ${
-                    shiftProjection.projected >= Number(topSection?.target || 0) ? 'text-green-600' : 'text-red-500'
-                  }`}>{shiftProjection.projected.toLocaleString()}</div>
-                  <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm font-semibold text-slate-500">
-                    Target: {Number(topSection?.target || 0).toLocaleString()} · {shiftProjection.minutesToShiftEnd}m left
-                  </div>
-                  <div className={`mt-1 text-xs font-semibold ${
-                    shiftProjection.shortfall > 0 ? 'text-red-500' : 'text-green-600'
-                  }`}>
-                    {shiftProjection.shortfall > 0
-                      ? `▼ Short by ${shiftProjection.shortfall} pairs at current pace`
-                      : `▲ On track to meet target`}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate('/alert_center');
-                    logAuditEvent('alerts_card_opened', { count: alertCount, selectedLine: currentWorkCentreId, selectedDate });
-                  }}
-                  className={`bg-[#f7f9ff] rounded-2xl p-2.5 sm:p-3.5 text-slate-900 border border-[#dbe5ff] flex items-center justify-between min-h-[92px] sm:min-h-[clamp(120px,16vh,180px)] w-full text-left hover:bg-red-50/40 hover:ring-2 hover:ring-red-200 transition-colors ${
-                    alertCount > 0 ? 'ring-2 ring-red-200/70' : ''
-                  }`}
-                  title="Open Alert Center"
-                >
-                  <div>
-                    <div className="text-3xl sm:text-5xl font-bold text-red-500">{alertCount}</div>
-                    <div className="text-base sm:text-xl font-semibold text-slate-700">Alerts</div>
-                    <div className="text-[11px] sm:text-sm font-medium text-slate-500 mt-0.5">Tap to open details</div>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-red-500">
-                    <AlertTriangle className="h-8 w-8 sm:h-10 sm:w-10" />
-                    <ChevronRight className="h-5 w-5" />
-                  </div>
-                </button>
               </div>
             </div>
           )}
@@ -798,155 +1047,6 @@ export const ProductionTracker: React.FC = () => {
           </div>
         </section>
       </div>
-
-      {selectedLineDetail && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-              <h3 className="text-lg font-bold text-slate-900">{selectedLineDetail.line_name || 'Line Details'}</h3>
-              <button
-                type="button"
-                onClick={() => setSelectedLineDetail(null)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <div className="bg-amber-50 rounded-xl p-3">
-                <p className="text-xs text-slate-500 font-semibold">Data Freshness</p>
-                <p className="text-sm font-bold text-amber-700 mt-1">Dashboard updated {dashboardAgeLabel}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-blue-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Target</p>
-                  <p className="text-2xl font-bold text-blue-700">{Number(selectedLineDetail.target || 0)}</p>
-                </div>
-                <div className="bg-cyan-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Input</p>
-                  <p className="text-2xl font-bold text-cyan-700">{formatInput(selectedLineDetail.input)}</p>
-                </div>
-                <div className="bg-indigo-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Output</p>
-                  <p className="text-2xl font-bold text-indigo-700">{Number(selectedLineDetail.output || 0)}</p>
-                </div>
-                <div className="bg-sky-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Input efficiency %</p>
-                  <p className={`text-2xl font-bold ${efficiencyPctColor(lineInputPercent)}`}>
-                    {lineInputPercent}%
-                  </p>
-                </div>
-                <div className="bg-violet-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">Output efficiency %</p>
-                  <p className={`text-2xl font-bold ${efficiencyPctColor(lineOutputPercent)}`}>
-                    {lineOutputPercent}%
-                  </p>
-                </div>
-                <div className="bg-orange-50 rounded-xl p-3">
-                  <p className="text-xs text-slate-500 font-semibold">WIP</p>
-                  <p className="text-2xl font-bold text-orange-700">{Number(selectedLineDetail.wip || 0)}</p>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-500 font-semibold mb-1">Input Progress</p>
-                <p className="text-lg font-bold text-slate-800 mb-2">
-                  {formatInput(selectedLineDetail.input)} / {Number(selectedLineDetail.target || 0)} ({lineInputPercent}%)
-                </p>
-                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      lineInputPercent >= 90 ? 'bg-green-500' : 
-                      lineInputPercent >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${lineInputPercent}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-500 font-semibold mb-1">Output Progress</p>
-                <p className="text-lg font-bold text-slate-800 mb-2">
-                  {Number(selectedLineDetail.output || 0)} / {Number(selectedLineDetail.target || 0)} ({lineOutputPercent}%)
-                </p>
-                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-blue-600"
-                    style={{ width: `${Math.min(Math.max(lineOutputPercent, 0), 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-500 font-semibold mb-2">Live Machine Status</p>
-                {lineMachinesLoading ? (
-                  <p className="text-sm text-slate-500">Loading machines...</p>
-                ) : lineMachines.length === 0 ? (
-                  <p className="text-sm text-slate-500">No machine data available.</p>
-                ) : (
-                  <>
-                    <p className="text-xs text-slate-500 mb-2">
-                      {lineMachines.filter((m: any) => m.emp_code && Number(m.total_output_pairs || 0) === 0).length === 0
-                        ? <span className="font-semibold text-green-600">✓ No Bottlenecks - All machines performing well!</span>
-                        : <span>Bottleneck hint: <span className="font-bold text-red-600">{lineMachines.filter((m: any) => m.emp_code && Number(m.total_output_pairs || 0) === 0).length} idle machines</span></span>
-                      }
-                    </p>
-                    <div className="space-y-1.5 max-h-44 overflow-auto pr-1">
-                    {[...lineMachines].filter((m: any) => m.emp_code).sort((a: any, b: any) => Number(a.total_output_pairs || 0) - Number(b.total_output_pairs || 0)).slice(0, 10).map((machine: any, idx: number) => {
-                      const output = Number(machine.total_output_pairs || 0);
-                      const isBottleneck = output === 0;
-                      return (
-                      <div key={`${machine.machine_id || idx}`} className={`flex items-center justify-between text-sm rounded-lg px-2.5 py-1.5 border-l-4 ${
-                        isBottleneck
-                          ? 'bg-red-50 border-red-500 border border-red-200'
-                          : 'bg-white border-green-500 border border-slate-200'
-                      }`}>
-                        <span className="font-semibold text-slate-700">
-                          {machine.machine_id || '—'}
-                          {(machine.machine_name || machine.machine_centre_name || machine.name) && (
-                            <span className="text-slate-500 font-medium"> - {machine.machine_name || machine.machine_centre_name || machine.name}</span>
-                          )}
-                        </span>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {machine.emp_code && (
-                            <span className="text-[10px] text-slate-400 font-medium">{machine.emp_name || machine.emp_code}</span>
-                          )}
-                          {Number(machine.avg_efficiency_percent) > 0 && (
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                              Number(machine.avg_efficiency_percent) >= 90 ? 'bg-green-100 text-green-700'
-                              : Number(machine.avg_efficiency_percent) >= 70 ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-red-100 text-red-700'
-                            }`}>{Number(machine.avg_efficiency_percent)}%</span>
-                          )}
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            isBottleneck ? 'bg-red-500 text-white' : 'bg-green-100 text-green-700'
-                          }`}>
-                            {isBottleneck ? '⚠ Bottleneck' : `✓ ${output} pairs`}
-                          </span>
-                        </div>
-                      </div>
-                      );
-                    })}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveMobileTab('trends');
-                  setSelectedLineDetail(null);
-                }}
-                className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
-              >
-                View Hourly Trend
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showFilterDrawer && (
         <div className="fixed inset-0 z-50">

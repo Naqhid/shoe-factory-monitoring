@@ -253,10 +253,10 @@ const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner'
 const PRODUCTION_ROUTING_ALLOWED_ROLES = new Set(['Admin', 'IED']);
 const PRODUCTION_PLANNING_ALLOWED_ROLES = new Set(['Admin', 'Planner']);
 const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head', 'Production Manager', 'Quality']);
-const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED']);
+const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
 const ADMIN_ALLOWED_ROLES = new Set(['Admin']);
 const LINE_SETUP_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
-const MANUAL_ENTRY_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
+const MANUAL_ENTRY_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'Planner', 'Unit Head']);
 
 const requireLogsAccess = (req, res, next) => {
   const role = req.user?.role;
