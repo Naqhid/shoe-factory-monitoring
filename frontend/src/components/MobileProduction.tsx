@@ -469,6 +469,8 @@ export const MobileProduction: React.FC = () => {
     const boxesExpectedNow =
         pairsPerBox > 0 ? Math.floor(outputExpectedNow / pairsPerBox) : 0;
     const formatBoxesDisplay = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+    const outputPaceEfficiencyPct =
+        outputExpectedNow > 0 ? Math.round((totalOutputToday / outputExpectedNow) * 100) : 0;
 
     // Update current time every second
     useEffect(() => {
@@ -1756,11 +1758,17 @@ export const MobileProduction: React.FC = () => {
             return { label: 'Idle', color: 'text-gray-700', bgColor: 'bg-gray-400' };
         }
 
-        // Use efficiency from summary table
-        const efficiency = parseFloat(avgEfficiencyToday || '0');
+        // Use the same efficiency shown on the screen: Output actual / pace.
+        // Thresholds match the efficiency circle:
+        //  - <70%  => Low
+        //  - 70-99 => Average
+        //  - 100%+ => On-track
+        const efficiency =
+            outputExpectedNow > 0 ? outputPaceEfficiencyPct : parseFloat(avgEfficiencyToday || '0');
+
         if (efficiency < 70) {
             return { label: 'Low', color: 'text-white', bgColor: 'bg-red-500' };
-        } else if (efficiency < 90) {
+        } else if (efficiency < 100) {
             return { label: 'Average', color: 'text-white', bgColor: 'bg-orange-500' };
         }
         return { label: 'On-track', color: 'text-white', bgColor: 'bg-green-500' };
@@ -2371,12 +2379,22 @@ export const MobileProduction: React.FC = () => {
                                 )}
                             </div>
                             <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-6 rounded-xl border-2 border-indigo-200 shadow-sm text-center">
-                                <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Avg Efficiency</p>
+                                <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Efficiency</p>
                                 {loadingSummary ? (
                                     <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mx-auto my-4" />
                                 ) : (
                                     <>
-                                        <p className="text-3xl md:text-5xl font-bold text-indigo-900"><span>{avgEfficiencyToday}</span>%</p>
+                                        <p
+                                            className={`text-3xl md:text-5xl font-bold mt-1 ${
+                                                outputPaceEfficiencyPct >= 100
+                                                    ? 'text-green-700'
+                                                    : outputPaceEfficiencyPct >= 70
+                                                      ? 'text-amber-700'
+                                                      : 'text-red-700'
+                                            }`}
+                                        >
+                                            <span>{outputPaceEfficiencyPct}</span>%
+                                        </p>
                                         <p className="text-xs text-indigo-600 mt-1">percentage</p>
                                     </>
                                 )}
