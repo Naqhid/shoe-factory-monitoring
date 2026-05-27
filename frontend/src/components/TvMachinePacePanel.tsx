@@ -1,8 +1,18 @@
 import React from 'react';
 import type { MachinePaceSnapshot } from '../utils/shiftPaceUtils';
 
+export interface TvLinePlanSummary {
+  lineName: string;
+  /** Daily pairs target from production planning for this line. */
+  dailyTarget: number;
+  lineOutput: number;
+  expectedNow?: number;
+  projectedEod?: number;
+}
+
 interface TvMachinePacePanelProps {
   machines: MachinePaceSnapshot[];
+  linePlan?: TvLinePlanSummary | null;
 }
 
 const legendDot = (className: string) => (
@@ -36,6 +46,17 @@ export const TvMachinePaceLegend: React.FC = () => (
     {legendDivider()}
     <span className="inline-flex items-center gap-1.5 text-slate-600" title="Efficiency shown in circle">
       <span className="font-semibold text-amber-900 bg-amber-200 px-2 py-0.5 rounded ring-1 ring-amber-300">Circle = Eff %</span>
+    </span>
+    {legendDivider()}
+    <span
+      className="inline-flex items-center gap-1.5 text-indigo-800"
+      title="Indigo card in the grid: whole-line totals, not a single machine"
+    >
+      <span
+        className="inline-block h-2.5 w-4 shrink-0 rounded-sm border-2 border-indigo-600 bg-indigo-100 ring-1 ring-indigo-400"
+        aria-hidden
+      />
+      <span>Full line</span>
     </span>
   </div>
 );
@@ -94,10 +115,14 @@ const PaceEfficiencyBadge: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) 
 const machineTitleClass =
   'text-[clamp(0.75rem,1.5vw,0.9rem)] font-bold text-slate-900 text-center leading-snug line-clamp-2 px-0.5 mb-3';
 
-const PaceEodEffMetrics: React.FC<{ snap: MachinePaceSnapshot; routing?: boolean }> = ({
-  snap,
-  routing = true,
-}) => {
+const PaceEodEffMetrics: React.FC<{
+  snap: MachinePaceSnapshot;
+  routing?: boolean;
+  paceRouting?: boolean;
+  eodRouting?: boolean;
+}> = ({ snap, routing = true, paceRouting, eodRouting }) => {
+  const showPaceRatio = paceRouting ?? routing;
+  const showEodRatio = eodRouting ?? routing;
   const paceBehind = snap.actual < snap.expected;
   const eodBehind = snap.daily > 0 && snap.projectedEod < snap.daily;
 
@@ -106,7 +131,7 @@ const PaceEodEffMetrics: React.FC<{ snap: MachinePaceSnapshot; routing?: boolean
       <div className="grid grid-rows-[auto_1fr] min-h-0 border-r border-slate-300">
         <span className={`${columnHeaderClass} text-emerald-700`}>Pace</span>
         <div className="flex items-center justify-center min-h-0 px-0.5 tabular-nums">
-          {routing ? (
+          {showPaceRatio ? (
             <div className="flex items-baseline justify-center gap-0.5 min-w-0">
               <span className={`${numClass} ${paceBehind ? 'text-red-700' : 'text-emerald-700'}`}>{snap.actual}</span>
               <span className={slashClass}>/</span>
@@ -120,7 +145,7 @@ const PaceEodEffMetrics: React.FC<{ snap: MachinePaceSnapshot; routing?: boolean
       <div className="grid grid-rows-[auto_1fr] min-h-0 border-r border-slate-300">
         <span className={`${columnHeaderClass} text-blue-700`}>EOD</span>
         <div className="flex items-center justify-center min-h-0 px-0.5 tabular-nums">
-          {routing ? (
+          {showEodRatio ? (
             <div className="flex items-baseline justify-center gap-0.5 min-w-0">
               <span className={`${numClass} ${eodBehind ? 'text-red-700' : 'text-blue-700'}`}>{snap.projectedEod}</span>
               <span className={slashClass}>/</span>
@@ -133,6 +158,73 @@ const PaceEodEffMetrics: React.FC<{ snap: MachinePaceSnapshot; routing?: boolean
       </div>
       <div className="flex items-center justify-center min-h-0 px-1 self-stretch">
         <PaceEfficiencyBadge snap={snap} />
+      </div>
+    </div>
+  );
+};
+
+const fullLineCardShellClass =
+  'h-full min-h-0 grid grid-rows-[auto_1fr] gap-0.5 rounded-lg border-[3px] border-indigo-600 bg-gradient-to-br from-indigo-200 via-blue-100 to-violet-100 p-0.5 overflow-hidden shadow-[0_4px_16px_rgba(67,56,202,0.28)] ring-2 ring-indigo-300/80';
+
+const fullLineMetricsPanelClass =
+  'min-h-0 rounded-md border border-indigo-300/70 bg-white/90 overflow-hidden shadow-inner';
+
+const FullLineCardHeader: React.FC<{ lineName: string }> = ({ lineName }) => (
+  <div className="rounded-md bg-gradient-to-r from-indigo-800 to-indigo-600 px-1 py-1 text-center shadow-sm">
+    <p
+      className="text-[clamp(0.7rem,1.35vw,0.88rem)] font-black uppercase tracking-[0.14em] text-white leading-tight"
+      title={`${lineName} — whole line`}
+    >
+      Full line
+    </p>
+  </div>
+);
+
+const linePlanToPaceSnap = (plan: TvLinePlanSummary): MachinePaceSnapshot => {
+  const daily = Math.round(Number(plan.dailyTarget) || 0);
+  const actual = Math.round(Number(plan.lineOutput) || 0);
+  const expected = Math.round(Number(plan.expectedNow) || 0);
+  const projectedEod = Math.round(Number(plan.projectedEod) || 0);
+
+  return {
+    machineId: '__line__',
+    machineName: plan.lineName,
+    actual,
+    expected,
+    daily,
+    projectedEod,
+    shortBy: daily > 0 && projectedEod < daily ? daily - projectedEod : 0,
+    remainingMins: 0,
+    onTrack: daily > 0 && projectedEod >= daily,
+    hasRouting: daily > 0,
+  };
+};
+
+const LinePlanningCard: React.FC<{ plan: TvLinePlanSummary }> = ({ plan }) => {
+  const snap = linePlanToPaceSnap(plan);
+
+  if (snap.daily <= 0) {
+    return (
+      <div className={fullLineCardShellClass}>
+        <FullLineCardHeader lineName={plan.lineName} />
+        <div className={`${fullLineMetricsPanelClass} flex-1 flex items-center justify-center text-center px-1`}>
+          <p className="text-[clamp(0.7rem,1.4vw,0.85rem)] font-bold text-indigo-700/80 leading-snug">
+            No plan set for today
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={fullLineCardShellClass} title={`${plan.lineName} — daily plan ${snap.daily} pairs`}>
+      <FullLineCardHeader lineName={plan.lineName} />
+      <div className={fullLineMetricsPanelClass}>
+        <PaceEodEffMetrics
+          snap={snap}
+          paceRouting={snap.expected > 0}
+          eodRouting={snap.daily > 0}
+        />
       </div>
     </div>
   );
@@ -166,16 +258,27 @@ const MachinePaceCard: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) => {
   );
 };
 
-export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines }) => {
+type GridTile =
+  | { kind: 'machine'; snap: MachinePaceSnapshot }
+  | { kind: 'line-plan'; plan: TvLinePlanSummary };
+
+export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines, linePlan }) => {
   const sorted = [...machines].sort((a, b) =>
     String(a.machineId).localeCompare(String(b.machineId), undefined, { numeric: true })
   );
-  const { cols, rows } = gridLayout(sorted.length);
+
+  const tiles: GridTile[] = sorted.map((snap) => ({ kind: 'machine', snap }));
+  if (linePlan) {
+    const insertAt = Math.floor((tiles.length + 1) / 2);
+    tiles.splice(insertAt, 0, { kind: 'line-plan', plan: linePlan });
+  }
+
+  const { cols, rows } = gridLayout(tiles.length);
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col overflow-hidden px-1.5 py-0.5">
       <div className="flex-1 min-h-0 overflow-hidden">
-        {sorted.length === 0 ? (
+        {tiles.length === 0 ? (
           <div className="h-full flex items-center justify-center text-sm text-slate-500 font-medium">
             No machines on this line.
           </div>
@@ -187,9 +290,13 @@ export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines
               gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
             }}
           >
-            {sorted.map((snap) => (
-              <MachinePaceCard key={snap.machineId} snap={snap} />
-            ))}
+            {tiles.map((tile, idx) =>
+              tile.kind === 'line-plan' ? (
+                <LinePlanningCard key={`line-plan-${idx}`} plan={tile.plan} />
+              ) : (
+                <MachinePaceCard key={tile.snap.machineId} snap={tile.snap} />
+              )
+            )}
           </div>
         )}
       </div>
