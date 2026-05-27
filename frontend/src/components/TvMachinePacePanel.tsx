@@ -169,16 +169,25 @@ const fullLineCardShellClass =
 const fullLineMetricsPanelClass =
   'min-h-0 rounded-md border border-indigo-300/70 bg-white/90 overflow-hidden shadow-inner';
 
-const FullLineCardHeader: React.FC<{ lineName: string }> = ({ lineName }) => (
-  <div className="rounded-md bg-gradient-to-r from-indigo-800 to-indigo-600 px-1 py-1 text-center shadow-sm">
-    <p
-      className="text-[clamp(0.7rem,1.35vw,0.88rem)] font-black uppercase tracking-[0.14em] text-white leading-tight"
-      title={`${lineName} — whole line`}
-    >
-      Full line
-    </p>
-  </div>
-);
+const fullLineCardTitle = (lineName: string): string => {
+  const name = String(lineName || '').trim() || 'Line';
+  return /^full\b/i.test(name) ? name : `Full ${name}`;
+};
+
+const FullLineCardHeader: React.FC<{ lineName: string }> = ({ lineName }) => {
+  const title = fullLineCardTitle(lineName);
+
+  return (
+    <div className="rounded-md bg-gradient-to-r from-indigo-800 to-indigo-600 px-1 py-1 text-center shadow-sm">
+      <p
+        className="text-[clamp(0.62rem,1.2vw,0.82rem)] font-black uppercase tracking-[0.08em] text-white leading-snug line-clamp-2 px-0.5"
+        title={`${title} — whole line totals`}
+      >
+        {title}
+      </p>
+    </div>
+  );
+};
 
 const linePlanToPaceSnap = (plan: TvLinePlanSummary): MachinePaceSnapshot => {
   const daily = Math.round(Number(plan.dailyTarget) || 0);

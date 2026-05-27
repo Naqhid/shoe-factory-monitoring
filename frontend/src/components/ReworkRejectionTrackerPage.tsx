@@ -53,7 +53,7 @@ const REASON_OPTIONS: Record<string, string[]> = {
 export const ReworkRejectionTrackerPage: React.FC = () => {
   const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
   const isSupervisor = userInfo?.role === 'Line Supervisor';
-  const canEditDelete = ['Admin', 'IED'].includes(userInfo?.role);
+  const canEditDelete = userInfo?.role === 'Admin';
   const supervisorWorkCentreId = userInfo?.work_centre_id ? String(userInfo.work_centre_id) : '';
 
   const [selectedDate, setSelectedDate] = useState(() => {
