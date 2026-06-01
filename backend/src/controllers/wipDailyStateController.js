@@ -33,6 +33,10 @@ function mapRow(row) {
   };
 }
 
+async function refreshLiveWipForOpenDay(workCentreId, stateDate) {
+  await wipStateService.computeAndPersistWip(workCentreId, stateDate);
+}
+
 function parseBodyFields(body) {
   const work_centre_id = Number(body.work_centre_id);
   const state_date = toDateKey(body.state_date);
@@ -52,6 +56,53 @@ function parseBodyFields(body) {
     is_closed,
   };
 }
+
+exports.getWipBreakdown = async (req, res, next) => {
+  try {
+    const workCentreId = Number(req.query.work_centre_id);
+    const stateDate = toDateKey(req.query.date || req.query.state_date);
+    if (!workCentreId || !stateDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'work_centre_id and date are required',
+      });
+    }
+    const breakdown = await wipStateService.getWipBreakdown(workCentreId, stateDate);
+    const live = await wipStateService.computeAndPersistWip(workCentreId, stateDate);
+    return res.json({
+      success: true,
+      data: {
+        ...breakdown,
+        afterRefresh: live,
+      },
+    });
+  } catch (error) {
+    logger.error('Error building WIP breakdown:', error);
+    return next(error);
+  }
+};
+
+exports.refreshLiveWip = async (req, res, next) => {
+  try {
+    const workCentreId = Number(req.body.work_centre_id || req.query.work_centre_id);
+    const stateDate = toDateKey(req.body.state_date || req.query.date);
+    if (!workCentreId || !stateDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'work_centre_id and date are required',
+      });
+    }
+    const live = await wipStateService.computeAndPersistWip(workCentreId, stateDate);
+    return res.json({
+      success: true,
+      message: 'WIP recalculated from live input and EOL output',
+      data: live,
+    });
+  } catch (error) {
+    logger.error('Error refreshing live WIP:', error);
+    return next(error);
+  }
+};
 
 exports.listWipDailyState = async (req, res, next) => {
   try {
@@ -77,6 +128,11 @@ exports.listWipDailyState = async (req, res, next) => {
     if (workCentreId) {
       conditions.push('w.work_centre_id = ?');
       params.push(workCentreId);
+    }
+    const includeFuture =
+      req.query.include_future === '1' || req.query.include_future === 'true';
+    if (!includeFuture) {
+      conditions.push('w.state_date <= CURDATE()');
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -170,6 +226,29 @@ exports.createWipDailyState = async (req, res, next) => {
       ]
     );
 
+    if (!fields.is_closed) {
+      await refreshLiveWipForOpenDay(fields.work_centre_id, fields.state_date);
+    }
+
+    if (fields.is_closed) {
+      let closingForNext =
+        fields.closing_wip > 0 ? fields.closing_wip : fields.current_wip;
+      if (closingForNext <= 0) {
+        const live = await wipStateService.computeAndPersistWip(
+          fields.work_centre_id,
+          fields.state_date
+        );
+        closingForNext = live.currentWip;
+      }
+      if (closingForNext > 0) {
+        await wipStateService.openNextDayRowFromClose(
+          fields.work_centre_id,
+          fields.state_date,
+          closingForNext
+        );
+      }
+    }
+
     const [rows] = await pool.query(
       `SELECT w.*, wc.name AS work_centre_name
        FROM wip_daily_state w
@@ -177,16 +256,6 @@ exports.createWipDailyState = async (req, res, next) => {
        WHERE w.id = ?`,
       [result.insertId]
     );
-
-    if (fields.is_closed) {
-      const closingForNext =
-        fields.closing_wip > 0 ? fields.closing_wip : fields.current_wip;
-      await wipStateService.openNextDayRowFromClose(
-        fields.work_centre_id,
-        fields.state_date,
-        closingForNext
-      );
-    }
 
     return res.status(201).json({
       success: true,
@@ -249,14 +318,28 @@ exports.updateWipDailyState = async (req, res, next) => {
       ]
     );
 
+    if (!fields.is_closed) {
+      await refreshLiveWipForOpenDay(workCentreId, stateDate);
+    }
+
     if (fields.is_closed) {
-      const closingForNext =
+      let closingForNext =
         fields.closing_wip > 0 ? fields.closing_wip : fields.current_wip;
-      await wipStateService.openNextDayRowFromClose(
-        workCentreId,
-        stateDate,
-        closingForNext
-      );
+      if (closingForNext <= 0) {
+        const live = await wipStateService.computeAndPersistWip(workCentreId, stateDate);
+        closingForNext = live.currentWip;
+        await pool.query(
+          `UPDATE wip_daily_state SET closing_wip = ?, current_wip = ? WHERE id = ?`,
+          [closingForNext, closingForNext, id]
+        );
+      }
+      if (closingForNext > 0) {
+        await wipStateService.openNextDayRowFromClose(
+          workCentreId,
+          stateDate,
+          closingForNext
+        );
+      }
     }
 
     const [rows] = await pool.query(

@@ -4,6 +4,8 @@ import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTrian
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
+import { computeCycleNetLostMins } from '../utils/cycleLostMins';
+import { CycleDurationBadge, CycleDurationInline, CycleDurationLostText, sumMinutes } from '../utils/formatCycleDuration';
 import { StoppageReasonModal } from './StoppageReasonModal';
 
 interface ProductionData {
@@ -48,6 +50,50 @@ const FRIDAY_LUNCH_END_MINUTES = 13 * 60; // 1:00 PM
 
 /** Default pairs per BIN when no session preference (matches historical mobile default). */
 const MOBILE_PAIRS_PER_BIN = 6;
+
+type IdleReminderConfig = {
+    idle_interval_secs: number;
+    idle_interval_mins: number;
+    idle_interval_secs_part: number;
+    alarm_duration_secs: number;
+    finish_grace_mins: number;
+};
+
+const DEFAULT_IDLE_REMINDER: IdleReminderConfig = {
+    idle_interval_secs: 40,
+    idle_interval_mins: 0,
+    idle_interval_secs_part: 40,
+    alarm_duration_secs: 12,
+    finish_grace_mins: 0,
+};
+
+const normalizeIdleReminderConfig = (raw?: Partial<IdleReminderConfig> | null): IdleReminderConfig => {
+    let totalSecs = Number(raw?.idle_interval_secs);
+    if (!Number.isFinite(totalSecs) || totalSecs < 15) {
+        const mins = Number(raw?.idle_interval_mins);
+        const part = Number(raw?.idle_interval_secs_part);
+        if (Number.isFinite(mins) || Number.isFinite(part)) {
+            totalSecs = (Number.isFinite(mins) ? Math.max(0, mins) : 0) * 60
+                + (Number.isFinite(part) ? Math.max(0, part) : 0);
+        } else {
+            totalSecs = DEFAULT_IDLE_REMINDER.idle_interval_secs;
+        }
+    }
+    totalSecs = Math.min(7200, Math.max(15, Math.round(totalSecs)));
+    return {
+        idle_interval_secs: totalSecs,
+        idle_interval_mins: Math.floor(totalSecs / 60),
+        idle_interval_secs_part: totalSecs % 60,
+        alarm_duration_secs: Math.min(60, Math.max(3, Number(raw?.alarm_duration_secs) || DEFAULT_IDLE_REMINDER.alarm_duration_secs)),
+        finish_grace_mins: Math.min(60, Math.max(0, Number(raw?.finish_grace_mins) || DEFAULT_IDLE_REMINDER.finish_grace_mins)),
+    };
+};
+
+const formatIdleIntervalLabel = (cfg: IdleReminderConfig) => {
+    if (cfg.idle_interval_secs < 60) return `${cfg.idle_interval_secs} seconds`;
+    if (cfg.idle_interval_secs_part === 0) return `${cfg.idle_interval_mins} minutes`;
+    return `${cfg.idle_interval_mins} min ${cfg.idle_interval_secs_part} sec`;
+};
 /** Allowed target pairs per cycle; must match server finish clamp (1–12). */
 const MOBILE_TARGET_PAIR_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
@@ -271,6 +317,17 @@ export const MobileProduction: React.FC = () => {
     const [routingPairsPerBin, setRoutingPairsPerBin] = React.useState(MOBILE_PAIRS_PER_BIN);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
     const [idleReminderEnabled, setIdleReminderEnabled] = useState(true);
+    const [idleReminderConfig, setIdleReminderConfig] = useState<IdleReminderConfig>(DEFAULT_IDLE_REMINDER);
+    const idleReminderConfigRef = React.useRef<IdleReminderConfig>(DEFAULT_IDLE_REMINDER);
+    const applyIdleReminderConfig = React.useCallback((raw?: Partial<IdleReminderConfig> | null) => {
+        const next = normalizeIdleReminderConfig(raw);
+        const prevSecs = idleReminderConfigRef.current.idle_interval_secs;
+        idleReminderConfigRef.current = next;
+        setIdleReminderConfig(next);
+        if (next.idle_interval_secs !== prevSecs) {
+            lastStartReminderBucketRef.current = 0;
+        }
+    }, []);
     const [startReminderDue, setStartReminderDue] = useState(false);
     const overTargetToastShownRef = React.useRef(false);
     const pendingOverTargetAlarmRef = React.useRef(false);
@@ -286,7 +343,7 @@ export const MobileProduction: React.FC = () => {
     const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
     const [hasTabSessionBinding, setHasTabSessionBinding] = useState(false);
     const [showTimingPopup, setShowTimingPopup] = useState(false);
-    const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number }>>([]);
+    const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number; early_mins: number; lost_mins: number }>>([]);
     const [timingLoading, setTimingLoading] = useState(false);
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
     const [selectedTargetPairs, setSelectedTargetPairs] = useState(MOBILE_PAIRS_PER_BIN);
@@ -342,6 +399,43 @@ export const MobileProduction: React.FC = () => {
         ? slugToMachineId[urlMachineId]
         : urlMachineId;
     const effectiveMachineId = resolvedMachineId || urlMachineId || '';
+
+    const fetchIdleReminderSettings = React.useCallback(async (machineId?: string) => {
+        const mid = machineId || effectiveMachineId;
+        if (!mid) return;
+        try {
+            const res = await apiFetch(
+                `${API_BASE}/api/idle-reminder-settings/machine/${encodeURIComponent(mid)}?_=${Date.now()}`,
+                { cache: 'no-store' }
+            );
+            const json = await res.json();
+            if (json.success && json.data) {
+                applyIdleReminderConfig(json.data);
+            }
+        } catch (error) {
+            console.warn('Failed to load idle reminder settings:', error);
+        }
+    }, [effectiveMachineId, applyIdleReminderConfig]);
+
+    useEffect(() => {
+        if (!effectiveMachineId || sessionStatus !== 'active') return;
+        void fetchIdleReminderSettings(effectiveMachineId);
+    }, [effectiveMachineId, sessionStatus, fetchIdleReminderSettings]);
+
+    useEffect(() => {
+        const refreshSettings = () => {
+            if (document.visibilityState === 'visible' && effectiveMachineId) {
+                void fetchIdleReminderSettings(effectiveMachineId);
+            }
+        };
+        document.addEventListener('visibilitychange', refreshSettings);
+        window.addEventListener('focus', refreshSettings);
+        return () => {
+            document.removeEventListener('visibilitychange', refreshSettings);
+            window.removeEventListener('focus', refreshSettings);
+        };
+    }, [effectiveMachineId, fetchIdleReminderSettings]);
+
     const targetPairsSessionKey = React.useMemo(() => {
         if (!effectiveMachineId || !urlEmpId) return null;
         return `mobile_target_pairs_${effectiveMachineId}_${urlEmpId}`;
@@ -671,7 +765,7 @@ export const MobileProduction: React.FC = () => {
     const playAlertSound = React.useCallback((_mode: 'start' | 'finish') => {
         try {
             stopAlertSound();
-            const ALARM_DURATION_MS = 12000;
+            const ALARM_DURATION_MS = idleReminderConfigRef.current.alarm_duration_secs * 1000;
             playAlarmReminderBackground(ALARM_DURATION_MS);
         } catch (error) {
             console.warn('Alert sound playback blocked or unavailable:', error);
@@ -856,7 +950,7 @@ export const MobileProduction: React.FC = () => {
         const previousStatus = previousButtonStatusRef.current;
         previousButtonStatusRef.current = currentStatus;
 
-        // Fresh transition into FINISH should always start a new 10-minute gap window.
+        // Fresh transition into FINISH starts a new idle gap window.
         if (currentStatus === 2 && previousStatus !== 2) {
             const finishMs = productionData?.finish_time ? new Date(productionData.finish_time).getTime() : NaN;
             const anchor = Number.isFinite(finishMs) && finishMs > 0 ? finishMs : Date.now();
@@ -887,7 +981,7 @@ export const MobileProduction: React.FC = () => {
         }
 
         if (startReminderAnchorRef.current === null) {
-            // For finished state, use current row finish_time (or now) to enforce full 10-minute gap.
+            // For finished state, use current row finish_time (or now) to enforce full idle interval.
             // For other idle states, fall back to latest finished cycle snapshot if available.
             if (productionData.button_status === 2) {
                 const finishMs = productionData.finish_time ? new Date(productionData.finish_time).getTime() : NaN;
@@ -900,7 +994,7 @@ export const MobileProduction: React.FC = () => {
             lastStartReminderBucketRef.current = 0;
         }
 
-        const REMINDER_MS = 10 * 60 * 1000;
+        const REMINDER_MS = idleReminderConfig.idle_interval_secs * 1000;
 
         const tick = () => {
             if (startReminderAnchorRef.current === null) return;
@@ -956,6 +1050,7 @@ export const MobileProduction: React.FC = () => {
         initializing,
         loading,
         idleReminderEnabled,
+        idleReminderConfig,
         playAlertSound,
     ]);
 
@@ -969,7 +1064,7 @@ export const MobileProduction: React.FC = () => {
             } else {
                 // Recompute anchor from current production state in reminder effect.
                 startReminderAnchorRef.current = null;
-                toast.success('Idle reminder enabled (every 10 minutes)');
+                toast.success(`Idle reminder enabled (every ${formatIdleIntervalLabel(idleReminderConfigRef.current)})`);
             }
             return next;
         });
@@ -1064,7 +1159,10 @@ export const MobileProduction: React.FC = () => {
         if (!productionData?.machine_id || pullRefreshing) return;
         setPullRefreshing(true);
         try {
-            await fetchSummaryData(productionData.machine_id);
+            await Promise.all([
+                fetchSummaryData(productionData.machine_id),
+                fetchIdleReminderSettings(productionData.machine_id),
+            ]);
             toast.success('Data refreshed');
         } catch {
             toast.error('Failed to refresh');
@@ -1195,6 +1293,9 @@ export const MobileProduction: React.FC = () => {
                                 pairsPerRoutingBin: Number(initRes?.data?.pairsPerBin) || MOBILE_PAIRS_PER_BIN,
                             }
                         );
+                        if (initRes?.success && initRes?.data?.idleReminder) {
+                            applyIdleReminderConfig(initRes.data.idleReminder);
+                        }
 
                         setSessionStatus('active');
                         setQrData(effectiveMachineId);
@@ -1245,7 +1346,8 @@ export const MobileProduction: React.FC = () => {
                             return;
                         }
 
-                        const { employee, machine, workCentre, targetMins, existingRecord, pairsPerBin } = result.data;
+                        const { employee, machine, workCentre, targetMins, existingRecord, pairsPerBin, idleReminder } = result.data;
+                        if (idleReminder) applyIdleReminderConfig(idleReminder);
                         const { scaledTargetMins, targetPairs: binPairs } = initializeTargetPairBaseline(
                             Number(targetMins || 0),
                             MOBILE_PAIRS_PER_BIN,
@@ -1788,17 +1890,33 @@ export const MobileProduction: React.FC = () => {
                 .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
             const late = allMachineCycles
                 .map((e: any, idx: number) => ({ ...e, cycleNumber: idx + 1 }))
-                .filter((e: any) => Math.round(e.inactive_mins || 0) > 0 || Math.round(e.extra_mins || 0) > 0)
-                .map((e: any) => ({
-                    id: e.id,
-                    cycle: e.cycleNumber,
-                    start_time: e.start_time,
-                    finish_time: e.finish_time,
-                    target_mins: Number(e.target_mins || 0),
-                    actual_mins: Number(e.actual_mins || 0),
-                    start_gap_mins: Math.round(e.inactive_mins || 0),
-                    extra_mins: Math.round(e.extra_mins || 0),
-                }));
+                .map((e: any) => {
+                    const target_mins = Number(e.target_mins || 0);
+                    const startMs = new Date(e.start_time).getTime();
+                    const finishMs = e.finish_time ? new Date(e.finish_time).getTime() : NaN;
+                    const actual_mins = Number.isFinite(finishMs) && Number.isFinite(startMs)
+                        ? Math.max(0, (finishMs - startMs) / 60000)
+                        : Number(e.actual_mins || 0);
+                    const start_gap_mins = Math.max(0, Number(e.inactive_mins || 0));
+                    const extra_mins = Math.max(0, actual_mins - target_mins);
+                    const early_mins = Math.max(0, target_mins - actual_mins);
+                    const lost_mins = e.lost_mins != null
+                        ? Number(e.lost_mins)
+                        : computeCycleNetLostMins(start_gap_mins, target_mins, actual_mins);
+                    return {
+                        id: e.id,
+                        cycle: e.cycleNumber,
+                        start_time: e.start_time,
+                        finish_time: e.finish_time,
+                        target_mins,
+                        actual_mins,
+                        start_gap_mins,
+                        extra_mins,
+                        early_mins,
+                        lost_mins,
+                    };
+                })
+                .filter((e) => e.start_gap_mins > 0.01 || e.extra_mins > 0.01);
             setTimingTotalCycles(allMachineCycles.length);
             setTimingCycles(late);
         } catch { /* non-fatal */ } finally {
@@ -2021,32 +2139,40 @@ export const MobileProduction: React.FC = () => {
                                                 <span className="text-xs font-semibold text-red-700">
                                                     {timingCycles.length} late out of {timingTotalCycles} cycle{timingTotalCycles !== 1 ? 's' : ''}
                                                 </span>
-                                                <span className="text-xs font-bold text-red-800">
-                                                    {timingCycles.reduce((s, c) => s + c.start_gap_mins + c.extra_mins, 0)}m lost
-                                                </span>
+                                                <CycleDurationLostText
+                                                    minutes={sumMinutes(timingCycles.map((c) => c.lost_mins))}
+                                                />
                                             </div>
                                             {timingCycles.map((c) => (
                                                 <div key={c.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
-                                                    <div className="flex items-center justify-between">
+                                                    <div className="flex items-center justify-between gap-2">
                                                         <span className="text-xs font-bold text-gray-500">Cycle #{c.cycle}</span>
-                                                        <span className="text-xs text-gray-400">
-                                                            {new Date(c.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                                                            {c.finish_time ? ` → ${new Date(c.finish_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                                                        <span className="shrink-0">
+                                                            <CycleDurationLostText minutes={c.lost_mins} />
                                                         </span>
                                                     </div>
+                                                    <div className="text-xs text-gray-400">
+                                                        {new Date(c.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                        {c.finish_time ? ` → ${new Date(c.finish_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                                                    </div>
                                                     <div className="flex flex-wrap gap-2">
-                                                        {c.start_gap_mins > 0 && (
-                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
-                                                                ⏱ Started {c.start_gap_mins}m late
-                                                            </span>
+                                                        {c.start_gap_mins > 0.01 && (
+                                                            <CycleDurationBadge minutes={c.start_gap_mins} kind="late" />
                                                         )}
-                                                        {c.extra_mins > 0 && (
-                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
-                                                                +{c.extra_mins}m over target
-                                                            </span>
+                                                        {c.extra_mins > 0.01 && (
+                                                            <CycleDurationBadge minutes={c.extra_mins} kind="extra" />
+                                                        )}
+                                                        {c.early_mins > 0.01 && (
+                                                            <CycleDurationBadge minutes={c.early_mins} kind="early" />
                                                         )}
                                                     </div>
-                                                    <div className="text-xs text-gray-500">Target: {c.target_mins}m &nbsp;&middot;&nbsp; Actual: {c.actual_mins}m</div>
+                                                    <div className="text-xs text-gray-500 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+                                                        <span className="text-gray-500">Target:</span>
+                                                        <CycleDurationInline minutes={c.target_mins} />
+                                                        <span className="text-gray-300" aria-hidden>·</span>
+                                                        <span className="text-gray-500">Actual:</span>
+                                                        <CycleDurationInline minutes={c.actual_mins} minClass="text-gray-800 font-semibold" secClass="text-gray-600 font-medium" />
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -2248,8 +2374,13 @@ export const MobileProduction: React.FC = () => {
                                     title={idleReminderEnabled ? 'Turn OFF idle reminder sound' : 'Turn ON idle reminder sound'}
                                 >
                                     {idleReminderEnabled ? <Bell className="h-4 w-4 text-emerald-100" /> : <BellOff className="h-4 w-4 text-gray-100" />}
-                                    <span className="text-sm font-semibold text-white">
+                                    <span className="text-sm font-semibold text-white text-center leading-tight">
                                         {idleReminderEnabled ? 'Idle Reminder ON' : 'Idle Reminder OFF'}
+                                        {idleReminderEnabled && (
+                                            <span className="block text-[10px] font-normal opacity-90">
+                                                every {formatIdleIntervalLabel(idleReminderConfig)}
+                                            </span>
+                                        )}
                                     </span>
                                 </button>
                             </div>

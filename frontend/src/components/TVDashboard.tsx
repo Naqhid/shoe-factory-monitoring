@@ -171,7 +171,7 @@ export const TVDashboard: React.FC = () => {
     const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
 
     const DETAIL_CAROUSEL_SLIDES = 3;
-    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Machine pace'];
+    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Machines'];
     const DETAIL_CAROUSEL_MS = 60000;
     const STOPPAGE_CAROUSEL_MS = 15000;
 

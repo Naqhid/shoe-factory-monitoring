@@ -27,6 +27,8 @@ const productionLockController = require('./controllers/productionLockController
 const alertController = require('./controllers/alertController');
 const backupController = require('./controllers/backupController');
 const missedActionsController = require('./controllers/missedActionsController');
+const idleReminderSettingsController = require('./controllers/idleReminderSettingsController');
+const idleReminderSettingsService = require('./services/idleReminderSettingsService');
 const tabBroadcastController = require('./controllers/tabBroadcastController');
 const wipDailyStateController = require('./controllers/wipDailyStateController');
 const checkDayLock = require('./middleware/checkDayLock');
@@ -99,6 +101,8 @@ const initDb = async () => {
       )
     `);
     logger.info('missed_action_states table ready');
+    await idleReminderSettingsService.ensureTable();
+    logger.info('machine_idle_reminder_settings table ready');
     // Migrate existing table — add new columns if missing
     for (const [col, def] of [
       ['acknowledged_by', 'VARCHAR(255) NULL'],
@@ -677,6 +681,8 @@ app.delete('/api/mobile-production/manual-entry/:id', authenticate, requireManua
 
 // WIP daily state CRUD (manual entry area)
 app.get('/api/wip-daily-state', authenticate, requireManualEntryAccess, wipDailyStateController.listWipDailyState);
+app.get('/api/wip-daily-state/breakdown', authenticate, requireManualEntryAccess, wipDailyStateController.getWipBreakdown);
+app.post('/api/wip-daily-state/refresh', authenticate, requireManualEntryAccess, wipDailyStateController.refreshLiveWip);
 app.get('/api/wip-daily-state/:id', authenticate, requireManualEntryAccess, wipDailyStateController.getWipDailyStateById);
 app.post('/api/wip-daily-state', authenticate, requireManualEntryAccess, checkDayLock('state_date', 'work_centre_id'), wipDailyStateController.createWipDailyState);
 app.put('/api/wip-daily-state/:id', authenticate, requireManualEntryAccess, checkDayLock('state_date', 'work_centre_id'), wipDailyStateController.updateWipDailyState);
@@ -707,6 +713,10 @@ app.post('/api/missed-actions/snooze', authenticate, requireLogsAccess, missedAc
 app.post('/api/missed-actions/unmute', authenticate, requireLogsAccess, missedActionsController.unmuteAction);
 app.post('/api/missed-actions/root-cause', authenticate, requireLogsAccess, missedActionsController.saveRootCause);
 app.delete('/api/missed-actions/cleanup', authenticate, requireAdminAccess, missedActionsController.cleanupStaleStates);
+app.get('/api/idle-reminder-settings', authenticate, requireLogsAccess, idleReminderSettingsController.listSettings);
+app.get('/api/idle-reminder-settings/machine/:machineId', idleReminderSettingsController.getMachineSettings);
+app.put('/api/idle-reminder-settings/machine/:machineId', authenticate, requireLogsAccess, idleReminderSettingsController.saveMachineSettings);
+app.delete('/api/idle-reminder-settings/machine/:machineId', authenticate, requireLogsAccess, idleReminderSettingsController.resetMachineSettings);
 
 // Machine Centre routes (public - no JWT for factory floor use)
 app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);

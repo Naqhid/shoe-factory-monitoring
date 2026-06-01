@@ -1,14 +1,15 @@
 'use strict';
 
 const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
-const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '0', 10);
+const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
 const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
 const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
 const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
 const LUNCH_START_MINUTE = parseInt(process.env.LUNCH_START_MINUTE || '30', 10);
 const LUNCH_END_HOUR = parseInt(process.env.LUNCH_END_HOUR || '14', 10);
 const LUNCH_END_MINUTE = parseInt(process.env.LUNCH_END_MINUTE || '0', 10);
-const DEFAULT_START_REMINDER_MINS = Math.max(1, parseInt(process.env.CYCLE_START_REMINDER_MINS || '10', 10));
+const LATE_CYCLE_GRACE_SECS = Math.max(1, parseInt(process.env.LATE_CYCLE_GRACE_SECS || '40', 10));
+const LATE_CYCLE_GRACE_MINS = LATE_CYCLE_GRACE_SECS / 60;
 
 const overlapMinutes = (aStart, aEnd, bStart, bEnd) => {
   const start = Math.max(aStart.getTime(), bStart.getTime());
@@ -44,10 +45,23 @@ const computeShiftInactiveMinutes = ({ baselineTs, startTs, startReminderMins })
 };
 
 /**
+ * Net minutes lost on one cycle: late-start gap minus under-target savings, plus over-target time.
+ * Example: 2m late + 1m under target => 1m lost; 6m late + 6.5m under target => 0m lost.
+ */
+const computeCycleNetLostMins = (inactiveMins, targetMins, actualMins) => {
+  const late = Math.max(0, Number(inactiveMins) || 0);
+  const target = Math.max(0, Number(targetMins) || 0);
+  const actual = Math.max(0, Number(actualMins) || 0);
+  const earlySave = Math.max(0, target - actual);
+  const slowExtra = Math.max(0, actual - target);
+  return Math.max(0, late - earlySave) + slowExtra;
+};
+
+/**
  * Sum inactive gaps + extra finish time for completed cycles on a work centre for one day.
  * Matches Missed Actions daily report logic.
  */
-async function aggregateWorkCentreCycleLoss(pool, workCentreId, date, startReminderMins = DEFAULT_START_REMINDER_MINS) {
+async function aggregateWorkCentreCycleLoss(pool, workCentreId, date) {
   const [rows] = await pool.query(
     `
     SELECT
@@ -72,20 +86,24 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date, startRemin
 
   let inactiveMins = 0;
   let extraMins = 0;
+  let netLostMins = 0;
 
   rows.forEach((row) => {
     const actualMins = Math.max(0, Number(row.actual_mins) || 0);
     const targetMins = Math.max(0, Number(row.target_mins) || 0);
-    extraMins += Math.max(0, actualMins - targetMins);
+    const slowExtra = Math.max(0, actualMins - targetMins);
+    extraMins += slowExtra;
 
     const startTs = new Date(row.start_time);
     const shiftStart = new Date(startTs);
     shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
     const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
-    inactiveMins += computeShiftInactiveMinutes({ baselineTs, startTs, startReminderMins });
+    const inactive = computeShiftInactiveMinutes({ baselineTs, startTs, startReminderMins: LATE_CYCLE_GRACE_MINS });
+    inactiveMins += inactive;
+    netLostMins += computeCycleNetLostMins(inactive, targetMins, actualMins);
   });
 
-  const lossOfMinutes = Math.round(inactiveMins + extraMins);
+  const lossOfMinutes = Math.round(netLostMins);
   return {
     lossOfMinutes,
     inactiveMins: Math.round(inactiveMins),
@@ -95,6 +113,8 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date, startRemin
 
 module.exports = {
   computeShiftInactiveMinutes,
+  computeCycleNetLostMins,
   aggregateWorkCentreCycleLoss,
-  DEFAULT_START_REMINDER_MINS,
+  LATE_CYCLE_GRACE_SECS,
+  LATE_CYCLE_GRACE_MINS,
 };

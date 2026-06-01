@@ -124,11 +124,8 @@ exports.getDashboard = async (req, res) => {
 
         // ── 4. MES WIP: Opening WIP + Input - Output ──────────────────────────
         // Replaces old formula: WIP = Target - Output
-        const wipData = await wipStateService.computeAndPersistWip(
-            Number(workCentreId),
-            today,
-            output
-        );
+        const wipData = await wipStateService.computeAndPersistWip(Number(workCentreId), today);
+        const wipBreakdown = await wipStateService.getWipBreakdown(Number(workCentreId), today);
 
         let emojiType = 'sad';
         if (outputPercent >= 90 && efficiencyPercent >= 90) emojiType = 'happy';
@@ -314,24 +311,20 @@ exports.getDashboard = async (req, res) => {
         const linePerformance = await Promise.all(
             linePerformanceRaw.map(async (line) => {
                 const lineWcId = Number(line.work_centre_id);
-                const lineOutput = Number(line.output || 0);
 
                 // Fetch live input from the line input machine
                 const lineInput = await wipStateService.getTodayInput(lineWcId, today);
+                const lineEolOutput = await wipStateService.getEolOutput(lineWcId, today);
 
-                // Compute and persist MES WIP for this line
-                const lineWip = await wipStateService.computeAndPersistWip(
-                    lineWcId,
-                    today,
-                    lineOutput
-                );
+                // Compute and persist MES WIP for this line (EOL output only — not sum of all machines)
+                const lineWip = await wipStateService.computeAndPersistWip(lineWcId, today);
 
                 return {
                     work_centre_id: lineWcId,
                     line_name: line.line_name,
                     target: Math.round(line.target || 0),
                     input: lineInput,
-                    output: Math.round(lineOutput),
+                    output: Math.round(lineEolOutput),
                     output_percentage: Math.round(line.output_percentage || 0),
                     efficiency: Math.round(line.efficiency || 0),
                     wip: lineWip.currentWip,                  // NEW: MES WIP formula
@@ -358,6 +351,7 @@ exports.getDashboard = async (req, res) => {
                     openingWip: wipData.openingWip,
                     currentWip: wipData.currentWip,
                     closingWip: wipData.closingWip,
+                    wipBreakdown,
                     showHappyEmoji: emojiType === 'happy',
                     showMediumEmoji: emojiType === 'medium'
                 },

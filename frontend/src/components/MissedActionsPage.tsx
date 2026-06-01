@@ -1,7 +1,24 @@
 import React from 'react';
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Download, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Download, Loader2, RefreshCw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
+import { computeCycleNetLostMins } from '../utils/cycleLostMins';
+
+function eventLostMins(e: {
+  lost_mins?: number;
+  inactive_mins: number;
+  target_mins: number;
+  actual_mins: number;
+}): number {
+  if (e.lost_mins != null && Number.isFinite(Number(e.lost_mins))) {
+    return Math.round(Number(e.lost_mins));
+  }
+  return computeCycleNetLostMins(
+    Number(e.inactive_mins || 0),
+    Number(e.target_mins || 0),
+    Number(e.actual_mins || 0),
+  );
+}
 
 type MissedAction = {
   issue_key: string;
@@ -46,6 +63,7 @@ type DailyReportEvent = {
   extra_mins: number;
   start_gap_mins: number;
   inactive_mins: number;
+  lost_mins?: number;
   root_cause?: string | null;
 };
 
@@ -54,6 +72,50 @@ type DailyReportLine = {
   cycles: number;
   inactive_mins: number;
   extra_mins: number;
+  lost_mins?: number;
+};
+
+type IdleReminderSettingRow = {
+  machine_id: string;
+  code?: string;
+  machine_name: string;
+  work_centre_id: number;
+  work_centre_name: string;
+  idle_interval_secs: number;
+  idle_interval_mins: number;
+  idle_interval_secs_part: number;
+  alarm_duration_secs: number;
+  finish_grace_mins: number;
+  is_custom: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+
+type IdleReminderDraft = {
+  idle_interval_mins: number;
+  idle_interval_secs_part: number;
+  alarm_duration_secs: number;
+  finish_grace_mins: number;
+};
+
+const formatIdleIntervalLabel = (mins: number, secsPart: number) => {
+  const total = mins * 60 + secsPart;
+  if (total < 60) return `${total}s`;
+  if (secsPart === 0) return `${mins}m`;
+  return `${mins}m ${secsPart}s`;
+};
+
+const draftFromIdleRow = (row: Pick<IdleReminderSettingRow, 'idle_interval_secs' | 'idle_interval_mins' | 'idle_interval_secs_part' | 'alarm_duration_secs' | 'finish_grace_mins'>): IdleReminderDraft => {
+  const total = Number(row.idle_interval_secs) > 0
+    ? Number(row.idle_interval_secs)
+    : (Number(row.idle_interval_mins) || 0) * 60 + (Number(row.idle_interval_secs_part) || 0);
+  const safeTotal = Math.min(7200, Math.max(15, Math.round(total)));
+  return {
+    idle_interval_mins: Math.floor(safeTotal / 60),
+    idle_interval_secs_part: safeTotal % 60,
+    alarm_duration_secs: row.alarm_duration_secs,
+    finish_grace_mins: row.finish_grace_mins,
+  };
 };
 
 /** In-app confirm for operator bulk root cause when all loss cycles already have a cause */
@@ -134,7 +196,7 @@ const RootCauseSelect: React.FC<{
 };
 
 export const MissedActionsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator'>('live');
+  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder'>('live');
   const [isLoading, setIsLoading] = React.useState(true);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -194,12 +256,28 @@ export const MissedActionsPage: React.FC = () => {
   const prevCriticalKeys = React.useRef<Set<string>>(new Set());
   const isFirstFetch = React.useRef(true);
   const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const [reminderSettings, setReminderSettings] = React.useState<IdleReminderSettingRow[]>([]);
+  const [reminderDefaults, setReminderDefaults] = React.useState<IdleReminderDraft>(
+    draftFromIdleRow({
+      idle_interval_secs: 40,
+      idle_interval_mins: 0,
+      idle_interval_secs_part: 40,
+      alarm_duration_secs: 12,
+      finish_grace_mins: 0,
+    })
+  );
+  const [reminderLoading, setReminderLoading] = React.useState(false);
+  const [reminderError, setReminderError] = React.useState<string | null>(null);
+  const [reminderSavingId, setReminderSavingId] = React.useState<string | null>(null);
+  const [reminderDrafts, setReminderDrafts] = React.useState<Record<string, IdleReminderDraft>>({});
+  const [reminderLineFilter, setReminderLineFilter] = React.useState<string>('all');
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     if (tab === 'daily') setActiveTab('daily');
     if (tab === 'live') setActiveTab('live');
+    if (tab === 'reminder' || tab === 'settings') setActiveTab('reminder');
   }, []);
 
   React.useEffect(() => {
@@ -333,6 +411,110 @@ export const MissedActionsPage: React.FC = () => {
     if (activeTab !== 'operator') return;
     if (dailyEvents.length === 0 && !dailyLoading) fetchDailyReport();
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchReminderSettings = React.useCallback(async () => {
+    setReminderLoading(true);
+    setReminderError(null);
+    try {
+      const response = await apiFetch(`${API_BASE}/api/idle-reminder-settings`);
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to load reminder settings');
+      const rows: IdleReminderSettingRow[] = result.data || [];
+      setReminderSettings(rows);
+      if (result.defaults) {
+        setReminderDefaults(draftFromIdleRow({
+          idle_interval_secs: Number(result.defaults.idle_interval_secs) || 40,
+          idle_interval_mins: Number(result.defaults.idle_interval_mins) || 0,
+          idle_interval_secs_part: Number(result.defaults.idle_interval_secs_part) ?? 40,
+          alarm_duration_secs: Number(result.defaults.alarm_duration_secs) || 12,
+          finish_grace_mins: Number(result.defaults.finish_grace_mins) || 0,
+        }));
+      }
+      setReminderDrafts({});
+    } catch (e: any) {
+      setReminderError(e.message || 'Failed to load reminder settings');
+    } finally {
+      setReminderLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (activeTab !== 'reminder') return;
+    fetchReminderSettings();
+  }, [activeTab, fetchReminderSettings]);
+
+  const getReminderDraft = React.useCallback((row: IdleReminderSettingRow): IdleReminderDraft => {
+    const draft = reminderDrafts[row.machine_id];
+    if (draft) return draft;
+    return draftFromIdleRow(row);
+  }, [reminderDrafts]);
+
+  const patchReminderDraft = (machineId: string, patch: Partial<IdleReminderDraft>) => {
+    setReminderDrafts((prev) => {
+      const baseRow = reminderSettings.find((r) => r.machine_id === machineId);
+      const base = prev[machineId] || (baseRow ? draftFromIdleRow(baseRow) : reminderDefaults);
+      return { ...prev, [machineId]: { ...base, ...patch } };
+    });
+  };
+
+  const saveReminderSettings = async (machineId: string) => {
+    const row = reminderSettings.find((r) => r.machine_id === machineId);
+    if (!row) return;
+    const draft = getReminderDraft(row);
+    setReminderSavingId(machineId);
+    try {
+      const response = await apiFetch(`${API_BASE}/api/idle-reminder-settings/machine/${encodeURIComponent(machineId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Save failed');
+      toast.success(`Saved reminder settings for machine ${machineId}`);
+      setReminderDrafts((prev) => {
+        const next = { ...prev };
+        delete next[machineId];
+        return next;
+      });
+      await fetchReminderSettings();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save reminder settings');
+    } finally {
+      setReminderSavingId(null);
+    }
+  };
+
+  const resetReminderSettings = async (machineId: string) => {
+    setReminderSavingId(machineId);
+    try {
+      const response = await apiFetch(`${API_BASE}/api/idle-reminder-settings/machine/${encodeURIComponent(machineId)}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Reset failed');
+      toast.success(`Reset machine ${machineId} to defaults`);
+      setReminderDrafts((prev) => {
+        const next = { ...prev };
+        delete next[machineId];
+        return next;
+      });
+      await fetchReminderSettings();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to reset reminder settings');
+    } finally {
+      setReminderSavingId(null);
+    }
+  };
+
+  const reminderLines = React.useMemo(() => {
+    const lines = new Set(reminderSettings.map((r) => r.work_centre_name).filter(Boolean));
+    return ['all', ...Array.from(lines).sort()];
+  }, [reminderSettings]);
+
+  const filteredReminderSettings = React.useMemo(() => {
+    if (reminderLineFilter === 'all') return reminderSettings;
+    return reminderSettings.filter((r) => r.work_centre_name === reminderLineFilter);
+  }, [reminderLineFilter, reminderSettings]);
 
   const prevDailyReportDate = React.useRef(dailyReportDate);
   const prevDailyDateTo = React.useRef(dailyDateTo);
@@ -518,8 +700,16 @@ export const MissedActionsPage: React.FC = () => {
 
     return Array.from(lineMap.values()).map((line) => ({
       ...line,
-      machines: Array.from(line.machines.values()).sort((a, b) => (b.inactive + b.extra) - (a.inactive + a.extra)),
-    })).sort((a, b) => (b.inactive + b.extra) - (a.inactive + a.extra));
+      machines: Array.from(line.machines.values()).sort((a, b) => {
+        const bLost = b.events.reduce((s, e) => s + eventLostMins(e), 0);
+        const aLost = a.events.reduce((s, e) => s + eventLostMins(e), 0);
+        return bLost - aLost;
+      }),
+    })).sort((a, b) => {
+      const bLost = b.machines.reduce((s, m) => s + m.events.reduce((t, e) => t + eventLostMins(e), 0), 0);
+      const aLost = a.machines.reduce((s, m) => s + m.events.reduce((t, e) => t + eventLostMins(e), 0), 0);
+      return bLost - aLost;
+    });
   }, [dailyEvents]);
 
   const lineLossRows = React.useMemo(() => {
@@ -527,7 +717,7 @@ export const MissedActionsPage: React.FC = () => {
       .map((line) => {
         const inactive = Number(line.inactive_mins || 0);
         const extra = Number(line.extra_mins || 0);
-        const lost = inactive + extra;
+        const lost = Number(line.lost_mins ?? inactive + extra);
         const perCycle = line.cycles > 0 ? lost / line.cycles : 0;
         return {
           ...line,
@@ -575,11 +765,17 @@ export const MissedActionsPage: React.FC = () => {
           extra += Number(event.extra_mins || 0);
         }
       });
+      const total = dailyEvents.reduce((sum, event) => {
+        const eventStart = event.start_time ? new Date(event.start_time) : null;
+        if (!eventStart || Number.isNaN(eventStart.getTime())) return sum;
+        if (eventStart >= start && eventStart < end) return sum + eventLostMins(event);
+        return sum;
+      }, 0);
       return {
         label: `${start.getHours().toString().padStart(2, '0')}:00`,
         inactive,
         extra,
-        total: inactive + extra,
+        total,
       };
     });
     return rows;
@@ -600,11 +796,12 @@ export const MissedActionsPage: React.FC = () => {
     const totalCycles = dailyFilteredEvents.length;
     const inactive = dailyFilteredEvents.reduce((sum, e) => sum + Number(e.inactive_mins || 0), 0);
     const extra = dailyFilteredEvents.reduce((sum, e) => sum + Number(e.extra_mins || 0), 0);
+    const lost = dailyFilteredEvents.reduce((sum, e) => sum + eventLostMins(e), 0);
     return {
       total_cycles: totalCycles,
       total_inactive_mins: inactive,
       total_extra_mins: extra,
-      total_lost_mins: inactive + extra,
+      total_lost_mins: lost,
     };
   }, [dailyFilteredEvents]);
 
@@ -617,7 +814,7 @@ export const MissedActionsPage: React.FC = () => {
       row.cycles += 1;
       row.inactive += Number(e.inactive_mins || 0);
       row.extra += Number(e.extra_mins || 0);
-      row.lost = row.inactive + row.extra;
+      row.lost += eventLostMins(e);
       row.perCycle = row.cycles > 0 ? row.lost / row.cycles : 0;
     });
     let rows = Array.from(byLine.values()).sort((a, b) => b.lost - a.lost);
@@ -693,7 +890,7 @@ export const MissedActionsPage: React.FC = () => {
       if (rc === 'forgot to finish') row.forgot_finish += 1;
       row.total_inactive_mins += late;
       row.total_extra_mins += extra;
-      row.total_lost_mins += late + extra;
+      row.total_lost_mins += eventLostMins(e);
       if (rcLabel) {
         row.rootCauseCounts.set(rcLabel, (row.rootCauseCounts.get(rcLabel) || 0) + 1);
       }
@@ -819,7 +1016,7 @@ export const MissedActionsPage: React.FC = () => {
     } catch {
       timePart = String(ev.start_time || '').slice(0, 16) || '—';
     }
-    const lost = Math.round(Number(ev.inactive_mins || 0)) + Math.round(Number(ev.extra_mins || 0));
+    const lost = eventLostMins(ev);
     return `${machine} · ${timePart} · ${lost}m`;
   };
 
@@ -830,7 +1027,7 @@ export const MissedActionsPage: React.FC = () => {
         toast.error('Cycle not found for this operator.');
         return;
       }
-      const lost = Math.round(Number(ev.inactive_mins || 0)) + Math.round(Number(ev.extra_mins || 0));
+      const lost = eventLostMins(ev);
       if (lost <= 0) {
         toast.error('Not a loss cycle.');
         return;
@@ -899,7 +1096,7 @@ export const MissedActionsPage: React.FC = () => {
   const saveOperatorBulkRootCause = React.useCallback(
     async (employeeCode: string, rootCause: string) => {
       const opKey = (e: DailyReportEvent) => e.employee_code || 'N/A';
-      const lostMins = (e: DailyReportEvent) => Math.round(Number(e.inactive_mins || 0)) + Math.round(Number(e.extra_mins || 0));
+      const lostMins = (e: DailyReportEvent) => eventLostMins(e);
       const candidates = dailyEvents.filter((e) => opKey(e) === employeeCode && lostMins(e) > 0);
       if (candidates.length === 0) {
         toast.error('No cycles with time loss for this operator in the current report.');
@@ -964,7 +1161,7 @@ export const MissedActionsPage: React.FC = () => {
     const map = new Map<string, string | undefined>();
     const byOp = new Map<string, DailyReportEvent[]>();
     dailyEvents.forEach((e) => {
-      const lost = Math.round(Number(e.inactive_mins || 0)) + Math.round(Number(e.extra_mins || 0));
+      const lost = eventLostMins(e);
       if (lost <= 0) return;
       const k = e.employee_code || 'N/A';
       if (!byOp.has(k)) byOp.set(k, []);
@@ -1246,6 +1443,13 @@ export const MissedActionsPage: React.FC = () => {
             className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'operator' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
           >
             Operator Report
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('reminder')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'reminder' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+          >
+            Reminder Settings
           </button>
         </div>
 
@@ -2053,6 +2257,174 @@ export const MissedActionsPage: React.FC = () => {
           </div>
         ) : null}
 
+        {activeTab === 'reminder' && (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Idle Reminder Settings</h1>
+                <p className="text-sm text-gray-500 mt-1">
+                  Per-machine timing for mobile idle alarm and missed-start thresholds.
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Defaults: idle {formatIdleIntervalLabel(reminderDefaults.idle_interval_mins, reminderDefaults.idle_interval_secs_part)}, alarm {reminderDefaults.alarm_duration_secs}s, finish grace {reminderDefaults.finish_grace_mins} min (min 15s idle).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { void fetchReminderSettings(); }}
+                disabled={reminderLoading}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {reminderLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Refresh
+              </button>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
+              <p className="font-semibold">How it works on mobile</p>
+              <ul className="list-disc ml-5 mt-1 space-y-0.5 text-blue-800">
+                <li><strong>Mobile reminder sound</strong> uses <strong>Idle (min/sec)</strong> per machine (e.g. 10 min for machine 07).</li>
+                <li><strong>Late Cycles / daily reports</strong> always use <strong>40 seconds</strong> allowed gap and shift start <strong>9:05 AM</strong> (not the reminder interval).</li>
+                <li><strong>Finish grace</strong> adds extra minutes after target time before a &quot;Finish not clicked&quot; alert appears in Live Issues.</li>
+              </ul>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
+                <select
+                  value={reminderLineFilter}
+                  onChange={(e) => setReminderLineFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white min-w-[180px]"
+                >
+                  {reminderLines.map((line) => (
+                    <option key={line} value={line}>{line === 'all' ? 'All lines' : line}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {reminderError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 text-sm">{reminderError}</div>
+            )}
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {reminderLoading ? (
+                <div className="flex items-center justify-center gap-2 py-16 text-gray-500">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Loading machines…
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Line</th>
+                        <th className="px-3 py-2 text-left">Machine</th>
+                        <th className="px-3 py-2 text-left">Idle (min)</th>
+                        <th className="px-3 py-2 text-left">Idle (sec)</th>
+                        <th className="px-3 py-2 text-left">Alarm (sec)</th>
+                        <th className="px-3 py-2 text-left">Finish grace (min)</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                        <th className="px-3 py-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredReminderSettings.map((row) => {
+                        const draft = getReminderDraft(row);
+                        const isSaving = reminderSavingId === row.machine_id;
+                        const hasDraft = !!reminderDrafts[row.machine_id];
+                        return (
+                          <tr key={row.machine_id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-gray-700">{row.work_centre_name || '—'}</td>
+                            <td className="px-3 py-2">
+                              <span className="font-semibold text-gray-900">{row.machine_id}</span>
+                              {row.machine_name && (
+                                <span className="block text-xs text-gray-500">{row.machine_name}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={120}
+                                value={draft.idle_interval_mins}
+                                onChange={(e) => patchReminderDraft(row.machine_id, { idle_interval_mins: Number(e.target.value) })}
+                                className="w-16 px-2 py-1 border border-gray-300 rounded"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={59}
+                                value={draft.idle_interval_secs_part}
+                                onChange={(e) => patchReminderDraft(row.machine_id, { idle_interval_secs_part: Number(e.target.value) })}
+                                className="w-16 px-2 py-1 border border-gray-300 rounded"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={3}
+                                max={60}
+                                value={draft.alarm_duration_secs}
+                                onChange={(e) => patchReminderDraft(row.machine_id, { alarm_duration_secs: Number(e.target.value) })}
+                                className="w-20 px-2 py-1 border border-gray-300 rounded"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={60}
+                                value={draft.finish_grace_mins}
+                                onChange={(e) => patchReminderDraft(row.machine_id, { finish_grace_mins: Number(e.target.value) })}
+                                className="w-20 px-2 py-1 border border-gray-300 rounded"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.is_custom || hasDraft ? (
+                                <span className="inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">Custom</span>
+                              ) : (
+                                <span className="inline-flex px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">Default</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                disabled={isSaving}
+                                onClick={() => { void saveReminderSettings(row.machine_id); }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 mr-1"
+                              >
+                                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSaving || (!row.is_custom && !hasDraft)}
+                                onClick={() => { void resetReminderSettings(row.machine_id); }}
+                                className="inline-flex px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                              >
+                                Reset
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {filteredReminderSettings.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="px-3 py-10 text-center text-gray-500">No machines found.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'discipline' && (
           <div className="space-y-3">
             <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
@@ -2123,7 +2495,7 @@ export const MissedActionsPage: React.FC = () => {
                 if (discSort === 'late') return Math.round(b.inactive_mins || 0) - Math.round(a.inactive_mins || 0);
                 if (discSort === 'extra') return Math.round(b.extra_mins || 0) - Math.round(a.extra_mins || 0);
                 if (discSort === 'operator') return String(a.employee_name || '').localeCompare(String(b.employee_name || ''));
-                return (b.inactive_mins + b.extra_mins) - (a.inactive_mins + a.extra_mins);
+                return eventLostMins(b) - eventLostMins(a);
               });
 
               if (dailyLoading) return <div className="py-16 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
@@ -2144,8 +2516,8 @@ export const MissedActionsPage: React.FC = () => {
                 const bExtra = b.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
                 const aLate = a.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
                 const bLate = b.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
-                const aCombined = a.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0) + Math.round(r.extra_mins || 0), 0);
-                const bCombined = b.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0) + Math.round(r.extra_mins || 0), 0);
+                const aCombined = a.rows.reduce((s, r) => s + eventLostMins(r), 0);
+                const bCombined = b.rows.reduce((s, r) => s + eventLostMins(r), 0);
                 if (discSort === 'late') {
                   if (bLate !== aLate) return bLate - aLate;
                   return bCombined - aCombined;
@@ -2162,11 +2534,12 @@ export const MissedActionsPage: React.FC = () => {
 
               const totalLateAll = disciplineRows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
               const totalExtraAll = disciplineRows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
-              const totalCombinedAll = totalLateAll + totalExtraAll;
+              const totalCombinedAll = disciplineRows.reduce((s, r) => s + eventLostMins(r), 0);
               const topOffenders = machineGroups.slice(0, 3).map((g) => {
                 const late = g.rows.reduce((s, r) => s + Math.round(r.inactive_mins || 0), 0);
                 const extra = g.rows.reduce((s, r) => s + Math.round(r.extra_mins || 0), 0);
-                return { name: g.machineName, late, extra, combined: late + extra };
+                const combined = g.rows.reduce((s, r) => s + eventLostMins(r), 0);
+                return { name: g.machineName, late, extra, combined };
               });
 
               const csvRowsInMachineOrder = machineGroups.flatMap((mg) => mg.rows);
@@ -2190,7 +2563,7 @@ export const MissedActionsPage: React.FC = () => {
                       <p className="text-4xl font-black text-amber-800 mt-1">{totalExtraAll}</p>
                     </div>
                     <div className="bg-white rounded-xl border-2 border-gray-300 p-4 shadow-sm">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Combined Loss (mins)</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Net Loss (mins)</p>
                       <p className="text-4xl font-black text-gray-900 mt-1">{totalCombinedAll}</p>
                     </div>
                   </div>
@@ -2263,7 +2636,7 @@ export const MissedActionsPage: React.FC = () => {
                                 <div
                                   className="h-full bg-red-400 rounded-full"
                                   style={{
-                                    width: `${Math.max(8, Math.min(100, Math.round(((totalLate + totalExtra) / Math.max(1, totalCombinedAll)) * 100)))}%`,
+                                    width: `${Math.max(8, Math.min(100, Math.round((mg.rows.reduce((s, r) => s + eventLostMins(r), 0) / Math.max(1, totalCombinedAll)) * 100)))}%`,
                                   }}
                                 />
                               </div>
@@ -2557,7 +2930,7 @@ export const MissedActionsPage: React.FC = () => {
                                 {(() => {
                                   const lossList = dailyEvents
                                     .filter((e) => {
-                                      const lost = Math.round(Number(e.inactive_mins || 0)) + Math.round(Number(e.extra_mins || 0));
+                                      const lost = eventLostMins(e);
                                       return (e.employee_code || 'N/A') === row.employee_code && lost > 0;
                                     })
                                     .slice()

@@ -74,8 +74,8 @@ const LinePaceEodEffBlock: React.FC<{
   const slashClass = 'text-xs sm:text-base font-black text-slate-800 leading-none';
   const effLabel =
     pacePct != null
-      ? `Pace efficiency ${pacePct}% (${actual} / ${expected})`
-      : 'No pace target set';
+      ? `Progress ${pacePct}% (${actual} / ${expected} target so far)`
+      : 'No target set for progress';
   const effTextClass =
     pacePct != null && pacePct >= 100
       ? 'text-sm sm:text-base'
@@ -90,7 +90,7 @@ const LinePaceEodEffBlock: React.FC<{
     <div className="grid grid-cols-[minmax(0,1fr)_auto] w-full gap-1 sm:gap-1.5 mt-1 sm:mt-1.5 items-stretch min-h-[5.25rem] sm:min-h-[6.5rem]">
       <div className="flex flex-col gap-1 min-w-0 min-h-0">
         <div className={metricTileClass}>
-          <div className={`${labelClass} text-emerald-700`}>Pace</div>
+          <div className={`${labelClass} text-emerald-700`}>Progress</div>
           <div className="flex items-baseline justify-center gap-0.5 tabular-nums">
             {expected > 0 ? (
               <>
@@ -132,7 +132,7 @@ const LinePaceEodEffBlock: React.FC<{
   );
 };
 
-/** Compact Pace / EOD / efficiency on one row (line detail — machine wise). */
+/** Compact Progress / EOD / efficiency on one row (line detail — machine wise). */
 const MachinePaceInlineRow: React.FC<{
   actual: number;
   expected: number;
@@ -147,13 +147,13 @@ const MachinePaceInlineRow: React.FC<{
   const labelClass = 'text-[9px] font-extrabold uppercase leading-none';
   const effLabel =
     pacePct != null
-      ? `Pace efficiency ${pacePct}% (${actual} / ${expected})`
-      : 'No pace target set';
+      ? `Progress ${pacePct}% (${actual} / ${expected} target so far)`
+      : 'No target set for progress';
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] w-full items-center gap-0 border border-slate-200 rounded-lg bg-white overflow-hidden">
       <div className="min-w-0 border-r border-slate-200 px-1 py-1 text-center">
-        <div className={`${labelClass} text-emerald-700`}>Pace</div>
+        <div className={`${labelClass} text-emerald-700`}>Progress</div>
         <div className="flex items-baseline justify-center gap-0.5 tabular-nums mt-0.5">
           {expected > 0 ? (
             <>
