@@ -14,3 +14,23 @@ export function computeCycleNetLostMins(
   const slowExtra = Math.max(0, actual - target);
   return Math.max(0, late - earlySave) + slowExtra;
 }
+
+export type LateCycleCategory = 'net_loss' | 'on_time' | 'net_gain';
+
+export function classifyLateCycleCategory(input: {
+  start_gap_mins: number;
+  extra_mins: number;
+  target_mins: number;
+  actual_mins: number;
+}): LateCycleCategory {
+  const hasIssue =
+    Number(input.start_gap_mins || 0) > 0.01 || Number(input.extra_mins || 0) > 0.01;
+  if (!hasIssue) return 'on_time';
+  const netSecs = computeCycleNetLostMins(
+    input.start_gap_mins,
+    input.target_mins,
+    input.actual_mins
+  ) * 60;
+  if (netSecs >= 1) return 'net_loss';
+  return 'net_gain';
+}

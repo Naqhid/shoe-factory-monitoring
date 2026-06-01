@@ -124,7 +124,7 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
             <CycleDurationLostText minutes={netLostMins} />
             {showRecoveredNote && (
               <p className="text-[10px] text-emerald-700 font-medium mt-1 max-w-[11rem] leading-snug">
-                Finished early offset late start — no net loss
+                Net gain — early finish offset late start
               </p>
             )}
           </div>

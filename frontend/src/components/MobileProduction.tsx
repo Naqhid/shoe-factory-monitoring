@@ -4,7 +4,7 @@ import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTrian
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
-import { computeCycleNetLostMins } from '../utils/cycleLostMins';
+import { classifyLateCycleCategory, computeCycleNetLostMins } from '../utils/cycleLostMins';
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
 
@@ -1888,7 +1888,7 @@ export const MobileProduction: React.FC = () => {
             const allMachineCycles = json.events
                 .filter((e: any) => e.machine_id === effectiveMachineId)
                 .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-            const late = allMachineCycles
+            const mapped = allMachineCycles
                 .map((e: any, idx: number) => ({ ...e, cycleNumber: idx + 1 }))
                 .map((e: any) => {
                     const target_mins = Number(e.target_mins || 0);
@@ -1913,10 +1913,9 @@ export const MobileProduction: React.FC = () => {
                         early_mins,
                         lost_mins,
                     };
-                })
-                .filter((e) => e.start_gap_mins > 0.01 || e.extra_mins > 0.01);
+                });
             setTimingTotalCycles(allMachineCycles.length);
-            setTimingCycles(late);
+            setTimingCycles(mapped);
         } catch { /* non-fatal */ } finally {
             setTimingLoading(false);
         }
@@ -2176,7 +2175,9 @@ export const MobileProduction: React.FC = () => {
                                         title="View late cycles"
                                     >
                                         <Bell className="h-4 w-4" />
-                                        {timingCycles.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
+                                        {timingCycles.some((c) => classifyLateCycleCategory(c) === 'net_loss') && (
+                                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                                        )}
                                     </button>
                                 </div>
                                 {loadingSummary && !dailyPaceSnapshot ? (
