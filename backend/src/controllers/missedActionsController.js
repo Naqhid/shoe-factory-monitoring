@@ -479,7 +479,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         startTs,
         startReminderSecs: LATE_CYCLE_GRACE_SECS,
       });
-      const lostMins = Math.round(computeCycleNetLostMins(inactiveMins, targetMins, actualMins));
+      const lostMins = computeCycleNetLostMins(inactiveMins, targetMins, actualMins);
 
       return {
         id: row.id,

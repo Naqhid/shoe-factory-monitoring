@@ -11,7 +11,7 @@ function eventLostMins(e: {
   actual_mins: number;
 }): number {
   if (e.lost_mins != null && Number.isFinite(Number(e.lost_mins))) {
-    return Math.round(Number(e.lost_mins));
+    return Number(e.lost_mins);
   }
   return computeCycleNetLostMins(
     Number(e.inactive_mins || 0),
@@ -364,7 +364,7 @@ export const MissedActionsPage: React.FC = () => {
     fetchData();
     const id = window.setInterval(() => {
       fetchData();
-    }, 30000);
+    }, 10000);
     return () => window.clearInterval(id);
   }, [fetchData]);
 
@@ -1464,7 +1464,7 @@ export const MissedActionsPage: React.FC = () => {
             <p className="text-xs text-gray-400 mt-1">
               {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Not updated yet'}
             </p>
-            <p className="text-xs text-gray-400">Auto-refresh every 30s</p>
+            <p className="text-xs text-gray-400">Auto-refresh every 10s</p>
           </div>
         </div>
 

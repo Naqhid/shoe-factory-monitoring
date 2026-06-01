@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { computeCycleNetLostMins } from '../utils/cycleLostMins';
-import { CycleDurationBadge, CycleDurationInline, CycleDurationLostText, sumMinutes } from '../utils/formatCycleDuration';
+import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
 
 interface ProductionData {
@@ -1900,9 +1900,7 @@ export const MobileProduction: React.FC = () => {
                     const start_gap_mins = Math.max(0, Number(e.inactive_mins || 0));
                     const extra_mins = Math.max(0, actual_mins - target_mins);
                     const early_mins = Math.max(0, target_mins - actual_mins);
-                    const lost_mins = e.lost_mins != null
-                        ? Number(e.lost_mins)
-                        : computeCycleNetLostMins(start_gap_mins, target_mins, actual_mins);
+                    const lost_mins = computeCycleNetLostMins(start_gap_mins, target_mins, actual_mins);
                     return {
                         id: e.id,
                         cycle: e.cycleNumber,
@@ -2113,79 +2111,14 @@ export const MobileProduction: React.FC = () => {
                     )}
                         <>
                     {/* Late Cycles Timing Popup */}
-                    {showTimingPopup && (
-                        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 px-4" onClick={() => setShowTimingPopup(false)}>
-                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[75vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                                        <Bell className="h-4 w-4 text-blue-600" /> Late Cycles Today
-                                    </h3>
-                                    <button onClick={() => setShowTimingPopup(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-500">
-                                        <X className="h-4 w-4" />
-                                    </button>
-                                </div>
-                                <div className="overflow-y-auto flex-1 p-3 space-y-2">
-                                    {timingLoading ? (
-                                        <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
-                                    ) : timingCycles.length === 0 ? (
-                                        <div className="text-center py-8">
-                                            <CheckCircle className="h-10 w-10 text-green-400 mx-auto mb-2" />
-                                            <p className="text-sm font-semibold text-gray-600">All cycles on time today!</p>
-                                            <p className="text-xs text-gray-400 mt-1">No late starts or slow finishes</p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 flex items-center justify-between">
-                                                <span className="text-xs font-semibold text-red-700">
-                                                    {timingCycles.length} late out of {timingTotalCycles} cycle{timingTotalCycles !== 1 ? 's' : ''}
-                                                </span>
-                                                <CycleDurationLostText
-                                                    minutes={sumMinutes(timingCycles.map((c) => c.lost_mins))}
-                                                />
-                                            </div>
-                                            {timingCycles.map((c) => (
-                                                <div key={c.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <span className="text-xs font-bold text-gray-500">Cycle #{c.cycle}</span>
-                                                        <span className="shrink-0">
-                                                            <CycleDurationLostText minutes={c.lost_mins} />
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-xs text-gray-400">
-                                                        {new Date(c.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                                                        {c.finish_time ? ` → ${new Date(c.finish_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {c.start_gap_mins > 0.01 && (
-                                                            <CycleDurationBadge minutes={c.start_gap_mins} kind="late" />
-                                                        )}
-                                                        {c.extra_mins > 0.01 && (
-                                                            <CycleDurationBadge minutes={c.extra_mins} kind="extra" />
-                                                        )}
-                                                        {c.early_mins > 0.01 && (
-                                                            <CycleDurationBadge minutes={c.early_mins} kind="early" />
-                                                        )}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
-                                                        <span className="text-gray-500">Target:</span>
-                                                        <CycleDurationInline minutes={c.target_mins} />
-                                                        <span className="text-gray-300" aria-hidden>·</span>
-                                                        <span className="text-gray-500">Actual:</span>
-                                                        <CycleDurationInline minutes={c.actual_mins} minClass="text-gray-800 font-semibold" secClass="text-gray-600 font-medium" />
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="px-4 py-2 border-t border-gray-100 flex justify-end">
-                                    <button onClick={fetchTimingCycles} disabled={timingLoading} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                                        <RefreshCw className={`h-3 w-3 ${timingLoading ? 'animate-spin' : ''}`} /> Refresh
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    <LateCyclesTodayModal
+                        open={showTimingPopup}
+                        loading={timingLoading}
+                        cycles={timingCycles}
+                        totalCycles={timingTotalCycles}
+                        onClose={() => setShowTimingPopup(false)}
+                        onRefresh={fetchTimingCycles}
+                    />
 
                     {/* Full-screen flashing alert overlay when time exceeds target */}
                     {isTargetTimeExceeded && (
