@@ -244,6 +244,7 @@ export const WipDailyStateTab: React.FC<WipDailyStateTabProps> = ({ workCentres,
         <PackageOpen className="inline h-3.5 w-3.5 mr-1 text-amber-600" />
         MES formula: <span className="font-semibold">Current WIP = Opening WIP + Input − Output</span>.
         Input is summed from the line input machine (e.g. 01 Quarter Zig Zag Stitching). Dashboard auto-updates from production; use this tab to seed or correct rows.
+        Future dates are hidden here. Checking Day closed at end of shift carries closing WIP to the next day only when closing WIP is greater than zero.
       </p>
 
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -405,7 +406,12 @@ export const WipDailyStateTab: React.FC<WipDailyStateTabProps> = ({ workCentres,
               ))}
             </div>
             <p className="text-xs text-gray-500 mt-3">
-              Hint: implied output from formula = opening + input − current = {computedFromFormula}
+              While the day is open, current WIP is recalculated live: opening + machine input − output.
+              {!form.is_closed && (
+                <span className="block mt-1 text-gray-600">
+                  Implied output from your numbers above = opening + today input − current = {computedFromFormula}
+                </span>
+              )}
             </p>
             <div className="flex gap-3 mt-5">
               <button

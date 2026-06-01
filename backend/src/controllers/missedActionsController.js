@@ -1,5 +1,7 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const idleReminderSettings = require('../services/idleReminderSettingsService');
+const { computeCycleNetLostMins } = require('../utils/cycleLossMins');
 
 const getIssueKey = (row, actionType) => `${row.session_id}__${row.machine_id}__${row.emp_code || 'NA'}__${actionType}`;
 
@@ -9,7 +11,10 @@ const toNumber = (value, fallback = 0) => {
 };
 
 const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
-const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '0', 10);
+/** Production starts after morning prayer (default 9:05). */
+const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
+/** Late-cycle / daily inactive gap allowance — separate from mobile reminder sound (Reminder Settings). */
+const LATE_CYCLE_GRACE_SECS = Math.max(1, parseInt(process.env.LATE_CYCLE_GRACE_SECS || '40', 10));
 const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
 const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
 const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
@@ -24,7 +29,7 @@ const overlapMinutes = (aStart, aEnd, bStart, bEnd) => {
   return (end - start) / 60000;
 };
 
-const computeShiftInactiveMinutes = ({ baselineTs, startTs, startReminderMins }) => {
+const computeShiftInactiveMinutes = ({ baselineTs, startTs, startReminderSecs }) => {
   if (!baselineTs || !startTs) return 0;
   if (!Number.isFinite(startTs.getTime()) || !Number.isFinite(baselineTs.getTime())) return 0;
 
@@ -46,15 +51,19 @@ const computeShiftInactiveMinutes = ({ baselineTs, startTs, startReminderMins })
   const lunchOverlapMins = overlapMinutes(effectiveStart, effectiveEnd, lunchStart, lunchEnd);
   const gapExcludingLunch = Math.max(0, rawGapMins - lunchOverlapMins);
 
-  return Math.max(0, gapExcludingLunch - startReminderMins);
+  const graceMins = Math.max(0, Number(startReminderSecs) || 0) / 60;
+  return Math.max(0, gapExcludingLunch - graceMins);
 };
 
 const formatShiftStartLabel = () => `${String(SHIFT_START_HOUR).padStart(2, '0')}:${String(SHIFT_START_MINUTE).padStart(2, '0')}`;
 
-const parseActionRows = (rows, startReminderMins, finishGraceMins, now = new Date()) => {
+const parseActionRows = (rows, settingsMap, defaultFinishGraceMins, now = new Date()) => {
   const data = [];
 
   rows.forEach((row) => {
+    const machineSettings = idleReminderSettings.resolveForMachine(settingsMap, row.machine_id);
+    const startReminderSecs = LATE_CYCLE_GRACE_SECS;
+    const finishGraceMins = machineSettings.finish_grace_mins ?? defaultFinishGraceMins;
     const minsSinceActivation = toNumber(row.mins_since_activation, 0);
     const minsSinceFinish = toNumber(row.mins_since_finish, 0);
     const minsSinceStart = toNumber(row.mins_since_start, 0);
@@ -91,7 +100,7 @@ const parseActionRows = (rows, startReminderMins, finishGraceMins, now = new Dat
       const shiftOverdueMins = computeShiftInactiveMinutes({
         baselineTs: finishTs,
         startTs: now,
-        startReminderMins,
+        startReminderSecs,
       });
       if (shiftOverdueMins <= 0) return;
       actionType = 'START_PENDING';
@@ -103,7 +112,7 @@ const parseActionRows = (rows, startReminderMins, finishGraceMins, now = new Dat
       const shiftOverdueMins = computeShiftInactiveMinutes({
         baselineTs: activatedAt,
         startTs: now,
-        startReminderMins,
+        startReminderSecs,
       });
       if (shiftOverdueMins <= 0) return;
       actionType = 'START_PENDING';
@@ -138,7 +147,6 @@ const parseActionRows = (rows, startReminderMins, finishGraceMins, now = new Dat
 
 exports.getMissedActions = async (req, res, next) => {
   try {
-    const startReminderMins = Math.max(1, Number(req.query.startReminderMins) || 10);
     const finishGraceMins = Math.max(0, Number(req.query.finishGraceMins) || 0);
     // Prevent stale "active" sessions from previous shifts/days from polluting today's dashboard.
     // Default keeps current-day sessions and a small lookback window for midnight edge cases.
@@ -196,8 +204,9 @@ exports.getMissedActions = async (req, res, next) => {
       [sessionLookbackHours]
     );
 
+    const settingsMap = await idleReminderSettings.getMapByMachineId();
     const now = new Date();
-    const data = parseActionRows(rows, startReminderMins, finishGraceMins, now);
+    const data = parseActionRows(rows, settingsMap, finishGraceMins, now);
     const issueKeys = data.map((i) => i.issue_key);
     const stateByKey = {};
     if (issueKeys.length > 0) {
@@ -244,7 +253,8 @@ exports.getMissedActions = async (req, res, next) => {
         finish_pending: dataWithState.filter((i) => i.action_type === 'FINISH_PENDING').length,
       },
       thresholds: {
-        startReminderMins,
+        lateCycleGraceSecs: LATE_CYCLE_GRACE_SECS,
+        shiftStart: formatShiftStartLabel(),
         finishGraceMins,
         sessionLookbackHours,
       },
@@ -352,8 +362,6 @@ exports.getWeeklyTrend = async (req, res, next) => {
   try {
     const rawDate = String(req.query?.date || '');
     const endDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
-    const startReminderMins = Math.max(1, Number(req.query.startReminderMins) || 10);
-
     const [rows] = await db.query(
       `
       SELECT
@@ -381,20 +389,31 @@ exports.getWeeklyTrend = async (req, res, next) => {
       [endDate, endDate]
     );
     const inactiveByDay = {};
+    const lostByDay = {};
     cycleRows.forEach((r) => {
       const day = r.prod_date instanceof Date ? r.prod_date.toISOString().slice(0, 10) : String(r.prod_date).slice(0, 10);
       const startTs = new Date(r.start_time);
+      const finishTs = new Date(r.finish_time);
+      const actualMins = Math.max(0, (finishTs.getTime() - startTs.getTime()) / 60000);
+      const targetMins = Math.max(0, toNumber(r.target_mins, 0));
       const shiftStart = new Date(startTs); shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
       const baseline = r.prev_finish ? new Date(r.prev_finish) : shiftStart;
-      const inactive = computeShiftInactiveMinutes({ baselineTs: baseline, startTs, startReminderMins });
+      const inactive = computeShiftInactiveMinutes({
+        baselineTs: baseline,
+        startTs,
+        startReminderSecs: LATE_CYCLE_GRACE_SECS,
+      });
       inactiveByDay[day] = (inactiveByDay[day] || 0) + inactive;
+      const netLost = computeCycleNetLostMins(inactive, targetMins, actualMins);
+      lostByDay[day] = (lostByDay[day] || 0) + netLost;
     });
 
     const trend = rows.map((r) => {
       const day = r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day);
       const inactive = Math.max(0, inactiveByDay[day] || 0);
       const extra = Math.max(0, Number(r.extra_mins || 0));
-      return { day, cycles: Number(r.cycles || 0), inactive_mins: inactive, extra_mins: extra, lost_mins: inactive + extra };
+      const lost = Math.round(lostByDay[day] || 0);
+      return { day, cycles: Number(r.cycles || 0), inactive_mins: inactive, extra_mins: extra, lost_mins: lost };
     });
 
     return res.json({ success: true, trend });
@@ -410,7 +429,6 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
     const rawTo   = String(req.query?.date_to   || req.query?.date || '');
     const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(rawFrom) ? rawFrom : new Date().toISOString().slice(0, 10);
     const dateTo   = /^\d{4}-\d{2}-\d{2}$/.test(rawTo)   ? rawTo   : dateFrom;
-    const startReminderMins = Math.max(1, Number(req.query.startReminderMins) || 10);
     const lineFilter = String(req.query?.line || 'all');
 
     const [rows] = await db.query(
@@ -456,7 +474,12 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
       shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
       const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
       const gapMins = Math.max(0, toNumber((startTs.getTime() - baselineTs.getTime()) / 60000, 0));
-      const inactiveMins = computeShiftInactiveMinutes({ baselineTs, startTs, startReminderMins });
+      const inactiveMins = computeShiftInactiveMinutes({
+        baselineTs,
+        startTs,
+        startReminderSecs: LATE_CYCLE_GRACE_SECS,
+      });
+      const lostMins = Math.round(computeCycleNetLostMins(inactiveMins, targetMins, actualMins));
 
       return {
         id: row.id,
@@ -473,6 +496,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         extra_mins: extraMins,
         start_gap_mins: gapMins,
         inactive_mins: inactiveMins,
+        lost_mins: lostMins,
         root_cause: row.root_cause || null,
       };
     });
@@ -490,29 +514,35 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
           cycles: 0,
           inactive_mins: 0,
           extra_mins: 0,
+          lost_mins: 0,
         });
       }
       const agg = byLineMap.get(key);
       agg.cycles += 1;
       agg.inactive_mins += row.inactive_mins;
       agg.extra_mins += row.extra_mins;
+      agg.lost_mins += row.lost_mins;
     });
 
-    const byLine = Array.from(byLineMap.values()).sort((a, b) => (b.inactive_mins + b.extra_mins) - (a.inactive_mins + a.extra_mins));
+    const byLine = Array.from(byLineMap.values()).sort((a, b) => b.lost_mins - a.lost_mins);
     const totalInactive = filtered.reduce((sum, r) => sum + r.inactive_mins, 0);
     const totalExtra = filtered.reduce((sum, r) => sum + r.extra_mins, 0);
+    const totalLost = filtered.reduce((sum, r) => sum + r.lost_mins, 0);
 
     return res.json({
       success: true,
       date: dateFrom,
       date_from: dateFrom,
       date_to: dateTo,
-      thresholds: { startReminderMins },
+      thresholds: {
+        late_cycle_grace_secs: LATE_CYCLE_GRACE_SECS,
+        shift_start: formatShiftStartLabel(),
+      },
       summary: {
         total_cycles: filtered.length,
         total_inactive_mins: totalInactive,
         total_extra_mins: totalExtra,
-        total_lost_mins: totalInactive + totalExtra,
+        total_lost_mins: totalLost,
       },
       by_line: byLine,
       events: filtered,

@@ -2,6 +2,17 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
 const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
+const wipStateService = require('../services/wipStateService');
+
+const refreshLineWipForDate = async (workCentreId, prodDate) => {
+  try {
+    const dateKey = String(prodDate || '').slice(0, 10);
+    if (!workCentreId || !dateKey) return;
+    await wipStateService.refreshWipAfterProductionChange(Number(workCentreId), dateKey);
+  } catch (err) {
+    logger.warn('WIP refresh after manual production change failed:', err.message);
+  }
+};
 
 const resolveTargetsFromPlan = async (conn, { machineId, workCentreId, prodDate }) => {
   let targetMins = 0;
@@ -758,6 +769,10 @@ exports.createManualEntry = async (req, res, next) => {
       });
     }, { isolationLevel: 'READ COMMITTED' });
 
+    if (!entryMeta.isStoppageEvent) {
+      await refreshLineWipForDate(work_centre_id, prodDate);
+    }
+
     return res.status(201).json({
       success: true,
       message: isStoppageEvent
@@ -872,7 +887,7 @@ exports.getManualEntries = async (req, res, next) => {
 
     const dataSql = `SELECT
         mcp.id,
-        mcp.prod_date,
+        DATE_FORMAT(mcp.prod_date, '%Y-%m-%d') AS prod_date,
         mcp.work_centre_id,
         wc.name AS work_centre_name,
         mcp.machine_id,
@@ -898,6 +913,8 @@ exports.getManualEntries = async (req, res, next) => {
     const [rows] = useAll
       ? await db.query(dataSql, params)
       : await db.query(`${dataSql} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+
+    // prod_date is returned as YYYY-MM-DD string (DATE_FORMAT) — never UTC-shifted JSON dates.
 
     const resolvedLimit = useAll ? total : limit;
     const totalPages = useAll ? 1 : Math.max(1, Math.ceil(total / limit));
@@ -1094,6 +1111,10 @@ exports.updateManualEntry = async (req, res, next) => {
       });
     }, { isolationLevel: 'READ COMMITTED' });
 
+    if (!entryMeta.isStoppageEvent) {
+      await refreshLineWipForDate(work_centre_id, prodDate);
+    }
+
     return res.json({
       success: true,
       message: 'Manual entry updated successfully',
@@ -1143,6 +1164,8 @@ exports.deleteManualEntry = async (req, res, next) => {
         empId: existing.emp_id,
       });
     }, { isolationLevel: 'READ COMMITTED' });
+
+    await refreshLineWipForDate(existing.work_centre_id, existing.prod_date);
 
     return res.json({ success: true, message: 'Manual entry deleted successfully', data: summaryData });
   } catch (error) {
@@ -2151,6 +2174,9 @@ exports.getInitData = async (req, res, next) => {
 
     const pairsPerBin = await getPairsPerRoutingBin();
 
+    const idleReminderSettings = require('../services/idleReminderSettingsService');
+    const idleReminder = await idleReminderSettings.getForMachine(machine.machine_id);
+
     res.json({
       success: true,
       data: {
@@ -2160,7 +2186,8 @@ exports.getInitData = async (req, res, next) => {
         targetMins,
         targetPairs,
         pairsPerBin,
-        existingRecord
+        existingRecord,
+        idleReminder,
       }
     });
   } catch (error) {

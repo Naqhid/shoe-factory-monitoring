@@ -16,6 +16,11 @@
  *   At end of day, closeDay sets closing_wip and inserts the next day's row
  *   (opening_wip = closing_wip). Seed the first row via SQL if needed.
  *
+ * MANUAL MORNING SETUP:
+ *   Saving opening WIP via Manual Entry sets manual_wip_override (audit flag).
+ *   While the day is open, current_wip is always recalculated from live input/output.
+ *   Only closed days freeze current/closing WIP snapshots.
+ *
  * SAFETY:
  *   - WIP is floored at 0 (never negative).
  *   - All arithmetic is done in integer space.
@@ -110,41 +115,93 @@ async function getEolOutputFromProduction(workCentreId, date, machineId = null) 
     return Math.round(Number(rows[0]?.total_output || 0));
 }
 
+const wipEolMachineCache = new Map();
+
 /**
- * End-of-line output for WIP — must match tvDashboardController / line performance.
- * Line 3 (wc 5): EOL Final Inspection machine 07 only.
- * Uses machine_centre_production first (summary is often empty); falls back to summary.
+ * End-of-line machine for WIP output (Final Output / Final Inspection / is_end_of_line).
+ * Must NOT sum all machines — intermediate stages would double-count and freeze WIP incorrectly.
+ *
+ * @param {number} workCentreId
+ * @returns {Promise<string>}
+ */
+async function resolveEolMachineId(workCentreId) {
+    const wc = Number(workCentreId);
+    if (wipEolMachineCache.has(wc)) {
+        return wipEolMachineCache.get(wc);
+    }
+
+    let machineId = null;
+
+    // Prefer explicit Final Output / Final Inspection name (avoids wrong global is_end_of_line on machine 07).
+    const [named] = await pool.query(
+        `SELECT machine_id
+         FROM machine_centres
+         WHERE work_centre_id = ?
+           AND deleted_at IS NULL
+           AND COALESCE(is_active, 1) = 1
+           AND (
+             machine_name LIKE '%Final Output%'
+             OR name LIKE '%Final Output%'
+             OR machine_name LIKE '%Final Inspection%'
+             OR name LIKE '%Final Inspection%'
+           )
+         ORDER BY machine_id DESC
+         LIMIT 1`,
+        [wc]
+    );
+    if (named.length) {
+        machineId = String(named[0].machine_id);
+    }
+
+    if (!machineId) {
+        try {
+            const [flagged] = await pool.query(
+                `SELECT machine_id
+                 FROM machine_centres
+                 WHERE work_centre_id = ?
+                   AND deleted_at IS NULL
+                   AND COALESCE(is_active, 1) = 1
+                   AND COALESCE(is_end_of_line, 0) = 1
+                 ORDER BY machine_id
+                 LIMIT 1`,
+                [wc]
+            );
+            if (flagged.length) {
+                machineId = String(flagged[0].machine_id);
+            }
+        } catch {
+            // is_end_of_line column may not exist on older DBs
+        }
+    }
+
+    if (!machineId) {
+        machineId = EOL_MACHINE_ID;
+    }
+
+    wipEolMachineCache.set(wc, machineId);
+    return machineId;
+}
+
+/**
+ * End-of-line output for WIP — single final machine only (matches dashboard Output).
  *
  * @param {number} workCentreId
  * @param {string} date  YYYY-MM-DD
  * @returns {Promise<number>}
  */
 async function getEolOutput(workCentreId, date) {
-    if (Number(workCentreId) === LINE_3_WORK_CENTRE_ID) {
-        const fromProduction = await getEolOutputFromProduction(workCentreId, date, EOL_MACHINE_ID);
-        if (fromProduction > 0) {
-            return fromProduction;
-        }
+    const eolMachineId = await resolveEolMachineId(workCentreId);
 
-        const [rows] = await pool.query(
-            `SELECT COALESCE(total_output_pairs, 0) AS total_output
-             FROM machine_centre_summary
-             WHERE DATE(prod_date) = ? AND work_centre_id = ? AND machine_id = ?`,
-            [date, workCentreId, EOL_MACHINE_ID]
-        );
-        return Math.round(Number(rows[0]?.total_output || 0));
-    }
-
-    const fromProduction = await getEolOutputFromProduction(workCentreId, date);
+    const fromProduction = await getEolOutputFromProduction(workCentreId, date, eolMachineId);
     if (fromProduction > 0) {
         return fromProduction;
     }
 
     const [rows] = await pool.query(
-        `SELECT COALESCE(SUM(total_output_pairs), 0) AS total_output
+        `SELECT COALESCE(total_output_pairs, 0) AS total_output
          FROM machine_centre_summary
-         WHERE DATE(prod_date) = ? AND work_centre_id = ?`,
-        [date, workCentreId]
+         WHERE DATE(prod_date) = ? AND work_centre_id = ? AND machine_id = ?`,
+        [date, workCentreId, eolMachineId]
     );
     return Math.round(Number(rows[0]?.total_output || 0));
 }
@@ -333,12 +390,17 @@ async function ensureWipRowForDate(workCentreId, date) {
  * @param {number} todayOutput  End-of-line output (from existing dashboard logic)
  * @returns {Promise<{openingWip: number, todayInput: number, currentWip: number, closingWip: number}>}
  */
-async function computeAndPersistWip(workCentreId, date, todayOutput) {
+function isLiveWipDate(date) {
+    const key = String(date || '').slice(0, 10);
+    return key.length === 10 && key === todayString();
+}
+
+async function computeAndPersistWip(workCentreId, date, _todayOutputIgnored) {
     await ensureWipRowForDate(workCentreId, date);
 
     const state = await fetchWipStateRow(workCentreId, date);
     const todayInputLive = await getTodayInput(workCentreId, date);
-    const roundedOutput = Math.round(todayOutput);
+    const roundedOutput = Math.round(await getEolOutput(workCentreId, date));
 
     if (!state) {
         return {
@@ -346,37 +408,23 @@ async function computeAndPersistWip(workCentreId, date, todayOutput) {
             todayInput: todayInputLive,
             currentWip: 0,
             closingWip: 0,
+            eolOutput: roundedOutput,
         };
     }
 
     const openingWip = Math.round(Number(state.opening_wip || 0));
     const isClosed = Boolean(Number(state.is_closed));
-    const manualOverride = Boolean(Number(state.manual_wip_override));
+    const storedClosing = clampWip(state.closing_wip);
+    const liveDate = isLiveWipDate(date);
 
-    // Respect manual edits and closed-day snapshots — do not overwrite with live formula.
-    if (isClosed || manualOverride) {
-        const storedCurrent = clampWip(state.current_wip);
-        const storedClosing = clampWip(state.closing_wip);
-        const displayWip =
-            isClosed && storedClosing > 0 ? storedClosing : storedCurrent;
-
-        if (manualOverride && !isClosed) {
-            await pool.query(
-                `UPDATE wip_daily_state
-                 SET today_input = ?
-                 WHERE work_centre_id = ? AND state_date = ?`,
-                [todayInputLive, workCentreId, date]
-            );
-        }
-
+    // Past closed days with closing snapshot stay frozen. Today always uses live formula.
+    if (!liveDate && isClosed && storedClosing > 0) {
         return {
             openingWip,
-            todayInput:
-                manualOverride && !isClosed
-                    ? todayInputLive
-                    : Math.round(Number(state.today_input || 0)),
-            currentWip: displayWip,
+            todayInput: Math.round(Number(state.today_input || 0)),
+            currentWip: storedClosing,
             closingWip: storedClosing,
+            eolOutput: roundedOutput,
         };
     }
 
@@ -395,6 +443,36 @@ async function computeAndPersistWip(workCentreId, date, todayOutput) {
         todayInput: todayInputLive,
         currentWip,
         closingWip: Math.round(state.closing_wip || 0),
+        eolOutput: roundedOutput,
+    };
+}
+
+/**
+ * Read-only breakdown for troubleshooting WIP (opening + input − EOL output).
+ */
+async function getWipBreakdown(workCentreId, date) {
+    const state = await fetchWipStateRow(workCentreId, date);
+    const inputMachineId = await resolveWipInputMachineId(workCentreId);
+    const eolMachineId = await resolveEolMachineId(workCentreId);
+    const todayInputLive = await getTodayInput(workCentreId, date);
+    const eolOutput = await getEolOutput(workCentreId, date);
+    const openingWip = state ? Math.round(Number(state.opening_wip || 0)) : 0;
+    const computed = clampWip(openingWip + todayInputLive - eolOutput);
+
+    return {
+        workCentreId: Number(workCentreId),
+        stateDate: String(date).slice(0, 10),
+        openingWip,
+        todayInputLive,
+        eolOutput,
+        computedCurrentWip: computed,
+        dbCurrentWip: state ? clampWip(state.current_wip) : null,
+        dbClosingWip: state ? clampWip(state.closing_wip) : null,
+        isClosed: state ? Boolean(Number(state.is_closed)) : false,
+        manualWipOverride: state ? Boolean(Number(state.manual_wip_override)) : false,
+        inputMachineId,
+        eolMachineId,
+        liveDate: isLiveWipDate(date),
     };
 }
 
@@ -466,15 +544,26 @@ async function getWipState(workCentreId, date) {
     };
 }
 
+/**
+ * Recompute WIP after production changes (manual entry, mobile finish, etc.).
+ */
+async function refreshWipAfterProductionChange(workCentreId, date) {
+    return computeAndPersistWip(workCentreId, date);
+}
+
 module.exports = {
     WIP_INPUT_MACHINE_ID,
     HEEL_GRIP_MACHINE_ID,
     LINE_3_WORK_CENTRE_ID,
     EOL_MACHINE_ID,
     resolveWipInputMachineId,
+    resolveEolMachineId,
     getTodayInput,
     getEolOutputFromProduction,
     getEolOutput,
+    refreshWipAfterProductionChange,
+    getWipBreakdown,
+    isLiveWipDate,
     resolveCarryForwardOpening,
     fetchWipStateRow,
     openNextDayRowFromClose,

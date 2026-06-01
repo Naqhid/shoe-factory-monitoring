@@ -23,16 +23,16 @@ const legendDivider = () => (
   <span className="h-4 w-px shrink-0 bg-slate-300" aria-hidden />
 );
 
-/** Legend for carousel header — same size as line title; colors match Pace / EOD columns. */
+/** Legend for carousel header — same size as line title; colors match Progress / EOD columns. */
 export const TvMachinePaceLegend: React.FC = () => (
   <div className="flex items-center gap-4 sm:gap-6 shrink-0 whitespace-nowrap font-bold leading-tight">
     <span
       className="inline-flex items-center gap-1.5 text-emerald-700"
-      title="Pace column: actual / target at this time"
+      title="Progress: actual pairs vs target for the shift so far"
     >
       {legendDot('bg-emerald-600')}
-      <span>Pace</span>
-      <span className="font-semibold text-slate-500">act / tgt</span>
+      <span>Progress</span>
+      <span className="font-semibold text-slate-500">actual / target</span>
     </span>
     {legendDivider()}
     <span
@@ -41,7 +41,7 @@ export const TvMachinePaceLegend: React.FC = () => (
     >
       {legendDot('bg-blue-600')}
       <span>EOD</span>
-      <span className="font-semibold text-slate-500">proj / plan</span>
+      <span className="font-semibold text-slate-500">projected / plan</span>
     </span>
     {legendDivider()}
     <span className="inline-flex items-center gap-1.5 text-slate-600" title="Efficiency shown in circle">
@@ -61,7 +61,7 @@ export const TvMachinePaceLegend: React.FC = () => (
   </div>
 );
 
-/** Pace + EOD columns (header + values); third column is full-height efficiency circle. */
+/** Progress + EOD columns (header + values); third column is full-height efficiency circle. */
 const CARD_METRICS_GRID = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] w-full h-full min-h-0';
 
 const columnHeaderClass =
@@ -93,7 +93,7 @@ const PaceEfficiencyBadge: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) 
   const pct = paceEfficiencyPct(snap.actual, snap.expected);
   const label =
     pct != null
-      ? `Pace efficiency ${pct}% (${snap.actual} / ${snap.expected})`
+      ? `Progress ${pct}% (${snap.actual} / ${snap.expected} target so far)`
       : 'No pace target set';
   const pctLabel = pct != null ? `${pct}%` : '—';
   const textClass =
@@ -129,7 +129,7 @@ const PaceEodEffMetrics: React.FC<{
   return (
     <div className={CARD_METRICS_GRID}>
       <div className="grid grid-rows-[auto_1fr] min-h-0 border-r border-slate-300">
-        <span className={`${columnHeaderClass} text-emerald-700`}>Pace</span>
+        <span className={`${columnHeaderClass} text-emerald-700`}>Progress</span>
         <div className="flex items-center justify-center min-h-0 px-0.5 tabular-nums">
           {showPaceRatio ? (
             <div className="flex items-baseline justify-center gap-0.5 min-w-0">

@@ -78,6 +78,27 @@ const getTodayLocalDate = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 };
 
+/** Calendar date from API — use local date when a timestamp is present (avoids UTC day shift). */
+const parseProdDateKey = (value?: string | null): string => {
+  if (!value) return '';
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : '';
+  }
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const formatProdDateKey = (dateKey: string): string => {
+  const key = parseProdDateKey(dateKey);
+  if (!key) return '-';
+  const [year, month, day] = key.split('-');
+  return `${day}/${month}/${year}`;
+};
+
 const SLOT_TYPES = [
   { value: 'hourly', label: 'Hourly', minutes: 60 },
   { value: 'half_hourly', label: 'Half-hourly', minutes: 30 },
@@ -347,12 +368,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     });
   };
 
-  const formatDisplayDate = (value?: string | null) => {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-    return date.toLocaleDateString('en-GB');
-  };
+  const formatDisplayDate = (value?: string | null) => formatProdDateKey(parseProdDateKey(value));
 
   const getAuditActionBadgeClass = (action: string) => {
     if (action === 'CREATE') return 'bg-green-100 text-green-700';
@@ -787,7 +803,7 @@ export const ManualProductionEntryForm: React.FC = () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prod_date: String(row.prod_date || '').slice(0, 10),
+          prod_date: parseProdDateKey(row.prod_date),
           work_centre_id: row.work_centre_id,
           machine_id: row.machine_id,
           emp_id: row.emp_id,
@@ -975,7 +991,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     setShowForm(true);
     setEntryMode('production');
     setEditingId(row.id);
-    setEntryDate(String(row.prod_date || '').slice(0, 10) || getTodayLocalDate());
+    setEntryDate(parseProdDateKey(row.prod_date) || getTodayLocalDate());
     setWorkCentreId(String(row.work_centre_id));
     setMachineId(row.machine_id);
     setEmpId(row.emp_id);
@@ -995,7 +1011,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        prod_date: String(row.prod_date || '').split('T')[0],
+        prod_date: parseProdDateKey(row.prod_date),
         work_centre_id: String(row.work_centre_id),
       });
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/${row.id}?${params.toString()}`, {
@@ -1257,7 +1273,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
                   {editingId
-                    ? 'Edit a saved manual production cycle.'
+                    ? 'Editing the saved production date for this record (not auto-set to today).'
                     : entryMode === 'bottleneck'
                       ? 'Record a bottleneck event with explicit start/finish timing and M4 analysis for the TV dashboard.'
                       : 'Use this when supervisor/admin needs to enter a completed cycle manually.'}
@@ -1272,6 +1288,11 @@ export const ManualProductionEntryForm: React.FC = () => {
                   className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
                   disabled={loading}
                 />
+                {editingId && parseProdDateKey(entryDate) !== getTodayLocalDate() && (
+                  <p className="text-[11px] text-amber-700 mt-1 max-w-[11rem] ml-auto leading-snug">
+                    This entry is for {formatProdDateKey(entryDate)}. Use Add New Entry for today.
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -1578,7 +1599,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                   const row = manualEntries.find(r => r.id === id);
                   if (!row) continue;
                   try {
-                    const p = new URLSearchParams({ prod_date: String(row.prod_date || '').split('T')[0], work_centre_id: String(row.work_centre_id) });
+                    const p = new URLSearchParams({ prod_date: parseProdDateKey(row.prod_date), work_centre_id: String(row.work_centre_id) });
                     const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/${id}?${p.toString()}`, { method: 'DELETE' });
                     const j = await res.json();
                     if (!j.success) failed++;
@@ -1750,6 +1771,8 @@ export const ManualProductionEntryForm: React.FC = () => {
               onClick={() => withDiscardCheck(() => {
                 setShowForm(true);
                 setEditingId(null);
+                setEntryMode('production');
+                setEntryDate(getTodayLocalDate());
               })}
               className={`bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full ${!canEdit ? 'hidden' : ''}`}
             >
