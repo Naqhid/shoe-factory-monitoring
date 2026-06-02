@@ -8,6 +8,7 @@ export type LateCycleTiming = {
   cycle: number;
   start_time: string;
   finish_time: string | null;
+  output_pairs?: number;
   target_mins: number;
   actual_mins: number;
   start_gap_mins: number;
@@ -112,11 +113,23 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
     : 0;
 
   return (
-    <article className="rounded-lg border border-gray-200 bg-gray-50/80 text-xs" onClick={(e) => e.stopPropagation()}>
+    <article className="relative rounded-lg border border-gray-200 bg-gray-50/80 text-xs" onClick={(e) => e.stopPropagation()}>
+      {Number(cycle.output_pairs || 0) > 0 && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <span className="inline-flex flex-col items-center justify-center rounded-lg bg-indigo-100/95 border-2 border-indigo-300 px-4 py-2 min-w-[4.25rem] shadow-md">
+            <span className="text-2xl leading-none font-black text-indigo-900 tabular-nums">
+              {Math.round(Number(cycle.output_pairs || 0))}
+            </span>
+            <span className="text-[11px] leading-none mt-1 font-extrabold uppercase tracking-wider text-indigo-700">
+              pairs
+            </span>
+          </span>
+        </div>
+      )}
       <header className="px-2.5 py-2 bg-white border-b border-gray-100 flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-bold text-gray-800">Cycle #{cycle.cycle}</p>
-          <p className="text-[10px] text-gray-500 font-mono tabular-nums mt-0.5">
+          <p className="text-xs font-bold text-gray-800">Box {cycle.cycle}</p>
+          <p className="inline-flex items-center rounded-md bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] text-blue-700 font-mono tabular-nums mt-0.5">
             {formatClock(cycle.start_time)}
             {cycle.finish_time ? ` → ${formatClock(cycle.finish_time)}` : ''}
           </p>
@@ -125,6 +138,7 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
           {isNetGain ? (
             <>
               <CycleInfoTip
+                className="items-end"
                 text={TIPS.netGain}
                 label={<span className="text-[9px] font-semibold uppercase text-amber-700">Early</span>}
               />
@@ -135,6 +149,7 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
           ) : (
             <>
               <CycleInfoTip
+                className="items-end"
                 text={TIPS.netLost}
                 label={<span className="text-[9px] font-semibold uppercase text-gray-400">Late</span>}
               />
@@ -179,12 +194,12 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
         </section>
       )}
 
-      <footer className="px-2.5 py-1.5 flex flex-wrap items-start gap-x-4 gap-y-1 text-[10px] text-gray-500">
+      <footer className="px-2.5 py-1.5 flex flex-wrap items-start gap-x-4 gap-y-1 text-[10px] text-gray-500 bg-blue-50/50 border-t border-blue-100">
         <CycleInfoTip
           text={TIPS.target}
           label={
-            <span>
-              <span className="text-gray-400">Target </span>
+            <span className="inline-flex items-center rounded-md bg-blue-100/80 border border-blue-200 px-1.5 py-0.5">
+              <span className="text-blue-700 font-semibold mr-1">Target</span>
               <CycleDurationInline
                 minutes={cycle.target_mins}
                 minClass="text-blue-800 font-semibold"
@@ -196,8 +211,8 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
         <CycleInfoTip
           text={TIPS.actual}
           label={
-            <span>
-              <span className="text-gray-400">Actual </span>
+            <span className="inline-flex items-center rounded-md bg-violet-100/80 border border-violet-200 px-1.5 py-0.5">
+              <span className="text-violet-700 font-semibold mr-1">Actual</span>
               <CycleDurationInline
                 minutes={cycle.actual_mins}
                 minClass="text-gray-800 font-semibold"

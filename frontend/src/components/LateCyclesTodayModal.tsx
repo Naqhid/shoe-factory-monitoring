@@ -1,7 +1,12 @@
 import React from 'react';
 import { Bell, CheckCircle, Loader2, RefreshCw, X } from 'lucide-react';
-import { classifyLateCycleCategory, computeCycleNetLostMins, LateCycleCategory } from '../utils/cycleLostMins';
-import { CycleDurationInline, sumMinutes } from '../utils/formatCycleDuration';
+import {
+  classifyLateCycleCategory,
+  computeCycleNetGainMins,
+  computeCycleNetLostMins,
+  LateCycleCategory,
+} from '../utils/cycleLostMins';
+import { CycleDurationInline, minutesToDurationParts, sumMinutes } from '../utils/formatCycleDuration';
 import { LateCycleTiming, LateCycleTimingCard } from './LateCycleTimingCard';
 
 const FILTER_OPTIONS: { value: LateCycleCategory; label: string }[] = [
@@ -49,22 +54,31 @@ export function LateCyclesTodayModal({
   const visibleCycles = byCategory[filter];
   const modalTitle =
     filter === 'net_gain'
-      ? 'Early Cycles Today'
+      ? 'Early Boxes Today'
       : filter === 'on_time'
-        ? 'On-time Cycles Today'
-        : 'Late Cycles Today';
+        ? 'On-time Boxes Today'
+        : 'Late Boxes Today';
   const totalLostMins = sumMinutes(
     byCategory.net_loss.map((c) =>
       computeCycleNetLostMins(c.start_gap_mins, c.target_mins, c.actual_mins)
     )
   );
+  const totalEarlyMins = sumMinutes(
+    byCategory.net_gain.map((c) =>
+      computeCycleNetGainMins(c.start_gap_mins, c.target_mins, c.actual_mins)
+    )
+  );
+  const netDeltaMins = totalEarlyMins - totalLostMins;
+  const hasNetDelta = Math.abs(netDeltaMins) * 60 >= 1;
+  const isNetGain = netDeltaMins > 0;
+  const netDeltaParts = minutesToDurationParts(Math.abs(netDeltaMins));
 
   const emptyMessage =
     filter === 'net_loss'
-      ? 'No late cycles today.'
+      ? 'No late boxes today.'
       : filter === 'net_gain'
-        ? 'No early cycles today.'
-        : 'No fully on-time cycles today.';
+        ? 'No early boxes today.'
+        : 'No fully on-time boxes today.';
 
   if (!open) return null;
 
@@ -98,7 +112,7 @@ export function LateCyclesTodayModal({
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 overscroll-contain px-2.5 py-2 space-y-2 min-h-0">
+        <div className="overflow-y-auto overflow-x-hidden flex-1 overscroll-contain px-2.5 py-2 space-y-2 min-h-0">
           {loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
@@ -106,12 +120,12 @@ export function LateCyclesTodayModal({
           ) : totalCycles === 0 ? (
             <div className="text-center py-6">
               <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-gray-700">No cycles recorded today</p>
+              <p className="text-sm font-semibold text-gray-700">No boxes recorded today</p>
             </div>
           ) : (
             <>
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 space-y-2 text-xs">
-                <div className="grid grid-cols-3 gap-1.5 text-center">
+                <div className="grid grid-cols-4 gap-1.5 text-center">
                   <div className="rounded-md bg-emerald-50 border border-emerald-200 px-1 py-1.5">
                     <p className="text-[9px] font-bold uppercase text-emerald-700">On time</p>
                     <p className="text-sm font-black text-emerald-900 tabular-nums">{byCategory.on_time.length}</p>
@@ -124,15 +138,59 @@ export function LateCyclesTodayModal({
                     <p className="text-[9px] font-bold uppercase text-red-700">Late</p>
                     <p className="text-sm font-black text-red-900 tabular-nums">{byCategory.net_loss.length}</p>
                   </div>
+                  <div
+                    className={`rounded-md px-1 py-1.5 border ${
+                      !hasNetDelta
+                        ? 'bg-gray-50 border-gray-200'
+                        : isNetGain
+                          ? 'bg-emerald-50 border-emerald-200'
+                          : 'bg-red-50 border-red-200'
+                    }`}
+                  >
+                    <p
+                      className={`text-[9px] font-bold uppercase ${
+                        !hasNetDelta
+                          ? 'text-gray-700'
+                          : isNetGain
+                            ? 'text-emerald-700'
+                            : 'text-red-700'
+                      }`}
+                    >
+                      {!hasNetDelta ? 'Neutral' : isNetGain ? 'Gain' : 'Loss'}
+                    </p>
+                    <p
+                      className={`text-[10px] font-black tabular-nums ${
+                        !hasNetDelta
+                          ? 'text-gray-800'
+                          : isNetGain
+                            ? 'text-emerald-900'
+                            : 'text-red-900'
+                      }`}
+                    >
+                      {!hasNetDelta ? '0m' : `${netDeltaParts.wholeMinutes}m ${netDeltaParts.seconds}s`}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[10px] text-gray-500 tabular-nums">{totalCycles} cycles today</p>
-                {byCategory.net_loss.length > 0 && (
+                <p className="text-[10px] text-gray-500 tabular-nums">
+                  {visibleCycles.length} shown · {totalCycles} boxes today
+                </p>
+                {filter === 'net_loss' && byCategory.net_loss.length > 0 && (
                   <p className="text-red-800 font-semibold flex flex-wrap items-baseline gap-x-1">
                     <span className="text-[10px] uppercase">Total late</span>
                     <CycleDurationInline
                       minutes={totalLostMins}
                       minClass="text-red-900 font-bold"
                       secClass="text-red-500 font-semibold"
+                    />
+                  </p>
+                )}
+                {filter === 'net_gain' && byCategory.net_gain.length > 0 && (
+                  <p className="text-amber-800 font-semibold flex flex-wrap items-baseline gap-x-1">
+                    <span className="text-[10px] uppercase">Total early</span>
+                    <CycleDurationInline
+                      minutes={totalEarlyMins}
+                      minClass="text-amber-900 font-bold"
+                      secClass="text-amber-600 font-semibold"
                     />
                   </p>
                 )}

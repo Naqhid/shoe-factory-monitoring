@@ -8,6 +8,7 @@ import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
+import { minutesToDurationParts } from '../utils/formatCycleDuration';
 
 export const TVDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -520,6 +521,14 @@ export const TVDashboard: React.FC = () => {
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
     const linePerformanceRows = Array.isArray(lowerSection?.linePerformance) ? lowerSection.linePerformance : [];
     const machineTimeLossRows = Array.isArray(lowerSection?.machineTimeLosses) ? lowerSection.machineTimeLosses : [];
+    const netMachineDeltaMins = machineTimeLossRows.reduce((sum: number, row: any) => sum + Number(row.net_mins || 0), 0);
+    const netMachineDeltaParts = minutesToDurationParts(Math.abs(netMachineDeltaMins));
+    const netMachineDeltaLabel =
+      Math.abs(netMachineDeltaMins) * 60 < 1
+        ? 'neutral'
+        : netMachineDeltaMins > 0
+          ? 'gain'
+          : 'loss';
     const topPerformer = linePerformanceRows.reduce((best: any, line: any) => {
         if (!best) return line;
         return Number(line.efficiency || 0) > Number(best.efficiency || 0) ? line : best;
@@ -726,7 +735,7 @@ export const TVDashboard: React.FC = () => {
                         {/* ── Input % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-sky-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input efficiency %</div>
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input %</div>
                             <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${overallInputPercent >= 90 ? 'text-green-300' : overallInputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {overallInputPercent}%
                             </div>
@@ -740,7 +749,7 @@ export const TVDashboard: React.FC = () => {
                         {/* ── Output % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Activity className="h-4 w-4 sm:h-7 sm:w-7 text-purple-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output efficiency %</div>
+                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output %</div>
                             <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
                                 {topSection.outputPercent}%
                             </div>
@@ -960,12 +969,15 @@ export const TVDashboard: React.FC = () => {
                                 <div className="h-full flex flex-col text-center px-1 py-0.5">
                                     {machineTimeLossRows.length > 0 ? (
                                         <>
-                                            <p className="text-[11px] sm:text-xs font-bold text-blue-700 mb-0.5 tracking-wide">
-                                                {currentLineName}
-                                            </p>
-                                            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">
-                                                Machine-wise time loss
-                                            </p>
+                                            <div className="mb-1.5 flex items-center justify-center gap-1.5 text-center flex-wrap">
+                                                <p className="text-[11px] sm:text-xs font-bold text-blue-700 tracking-wide">
+                                                    {currentLineName}
+                                                </p>
+                                                <span className="text-[10px] sm:text-xs text-slate-300">|</span>
+                                                <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                                    Machine-wise net balance
+                                                </p>
+                                            </div>
                                             <div className="grid grid-cols-1 gap-1 overflow-auto pr-0.5">
                                                 {machineTimeLossRows.slice(0, 8).map((row: any) => (
                                                     <div
@@ -975,17 +987,34 @@ export const TVDashboard: React.FC = () => {
                                                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate pr-2 text-left bg-amber-50/60 border border-amber-100 rounded px-1.5 py-0.5">
                                                             {row.machine_name || `Machine ${row.machine_id}`}
                                                         </span>
-                                                        <span className="text-[10px] sm:text-[11px] font-black text-red-700 tabular-nums shrink-0 bg-red-50 px-1.5 py-0.5 rounded">
-                                                            {Math.max(0, Math.round(Number(row.loss_mins) || 0))}m
-                                                        </span>
+                                                        {(() => {
+                                                            const net = Number(row.net_mins || 0);
+                                                            const parts = minutesToDurationParts(Math.abs(net));
+                                                            const tone =
+                                                                net > 0
+                                                                    ? 'text-emerald-700 bg-emerald-50'
+                                                                    : 'text-red-700 bg-red-50';
+                                                            const status = net > 0 ? 'gain' : 'loss';
+                                                            return (
+                                                                <span className={`text-[10px] sm:text-[11px] font-black tabular-nums shrink-0 px-1.5 py-0.5 rounded ${tone}`}>
+                                                                    {parts.wholeMinutes}m {parts.seconds}s {status}
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 ))}
                                                 <div className="rounded-lg border border-red-300 bg-gradient-to-r from-red-50 to-red-100 px-2 py-1.5 flex items-center justify-between shadow-sm">
                                                     <span className="text-[10px] sm:text-[11px] font-extrabold text-red-900 uppercase tracking-wide">
                                                         Total
                                                     </span>
-                                                    <span className="text-[10px] sm:text-[11px] font-black text-red-800 tabular-nums bg-white/80 px-1.5 py-0.5 rounded">
-                                                        {timeLossMins}m
+                                                    <span className={`text-[10px] sm:text-[11px] font-black tabular-nums bg-white/80 px-1.5 py-0.5 rounded ${
+                                                        netMachineDeltaLabel === 'gain'
+                                                            ? 'text-emerald-800'
+                                                            : netMachineDeltaLabel === 'loss'
+                                                              ? 'text-red-800'
+                                                              : 'text-gray-700'
+                                                    }`}>
+                                                        {netMachineDeltaParts.wholeMinutes}m {netMachineDeltaParts.seconds}s {netMachineDeltaLabel}
                                                     </span>
                                                 </div>
                                             </div>

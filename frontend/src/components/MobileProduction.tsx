@@ -276,7 +276,7 @@ export const MobileProduction: React.FC = () => {
     const [isSessionAuthorizedController, setIsSessionAuthorizedController] = useState(false);
     const [hasTabSessionBinding, setHasTabSessionBinding] = useState(false);
     const [showTimingPopup, setShowTimingPopup] = useState(false);
-    const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number; early_mins: number; lost_mins: number }>>([]);
+    const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number; early_mins: number; lost_mins: number; output_pairs?: number }>>([]);
     const [timingLoading, setTimingLoading] = useState(false);
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
     const [selectedTargetPairs, setSelectedTargetPairs] = useState(MOBILE_PAIRS_PER_BIN);
@@ -1859,6 +1859,7 @@ export const MobileProduction: React.FC = () => {
                         extra_mins,
                         early_mins,
                         lost_mins,
+                        output_pairs: Number(e.output_pairs || 0),
                     };
                 });
             setTimingTotalCycles(allMachineCycles.length);

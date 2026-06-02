@@ -167,22 +167,28 @@ async function aggregateMachineCycleLosses(pool, workCentreId, date) {
       startTs,
       startReminderMins: LATE_CYCLE_GRACE_MINS,
     });
-    const netLostMins = computeCycleNetLostMins(inactiveMins, targetMins, actualMins);
+    const earlySaveMins = Math.max(0, targetMins - actualMins);
+    const slowExtraMins = Math.max(0, actualMins - targetMins);
+    const netDeltaMins = earlySaveMins - inactiveMins - slowExtraMins;
 
     if (!byMachine.has(machineId)) {
       byMachine.set(machineId, {
         machine_id: machineId,
         machine_name: row.machine_name || `Machine ${machineId}`,
-        loss_mins: 0,
+        net_mins: 0,
       });
     }
-    byMachine.get(machineId).loss_mins += netLostMins;
+    byMachine.get(machineId).net_mins += netDeltaMins;
   });
 
   return Array.from(byMachine.values())
-    .map((m) => ({ ...m, loss_mins: Math.max(0, Math.round(Number(m.loss_mins) || 0)) }))
-    .filter((m) => m.loss_mins > 0)
-    .sort((a, b) => b.loss_mins - a.loss_mins);
+    .map((m) => ({
+      ...m,
+      net_mins: Number(m.net_mins) || 0,
+      abs_net_mins: Math.abs(Number(m.net_mins) || 0),
+    }))
+    .filter((m) => m.abs_net_mins * 60 >= 1)
+    .sort((a, b) => b.abs_net_mins - a.abs_net_mins);
 }
 
 module.exports = {
