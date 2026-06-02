@@ -975,7 +975,7 @@ export const TVDashboard: React.FC = () => {
                                                 </p>
                                                 <span className="text-[10px] sm:text-xs text-slate-300">|</span>
                                                 <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                                    Machine-wise net balance
+                                                   Time loss
                                                 </p>
                                             </div>
                                             <div className="grid grid-cols-1 gap-1 overflow-auto pr-0.5">
