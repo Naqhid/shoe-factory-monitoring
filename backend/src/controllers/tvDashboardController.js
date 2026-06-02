@@ -19,7 +19,7 @@
 const pool = require('../../config/database');
 const wipStateService = require('../services/wipStateService');
 const { getRoutingMinsSqlExpr } = require('../utils/routingMinsColumn');
-const { aggregateWorkCentreCycleLoss } = require('../utils/cycleLossMins');
+const { aggregateMachineCycleLosses, aggregateWorkCentreCycleLoss } = require('../utils/cycleLossMins');
 
 // ── Work Centre ID for Line 3 (legacy constant; input machine resolved per line) ──
 const LINE_3_WORK_CENTRE_ID = 3;
@@ -148,6 +148,7 @@ exports.getDashboard = async (req, res) => {
         );
 
         const cycleLoss = await aggregateWorkCentreCycleLoss(pool, Number(workCentreId), today);
+        const machineTimeLosses = await aggregateMachineCycleLosses(pool, Number(workCentreId), today);
 
         const wcTarget = wcPlanningData[0]?.target || 0;
         const wcOutput = wcSummaryData[0]?.output || 0;
@@ -369,6 +370,7 @@ exports.getDashboard = async (req, res) => {
                     hourlyData: hourlyData,
                     bottlenecks: bottlenecks,
                     breakdowns: breakdowns,
+                    machineTimeLosses,
                     linePerformance,
                     workCentreName: wcData[0]?.name || 'N/A'
                 }

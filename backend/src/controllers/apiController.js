@@ -425,12 +425,12 @@ class ApiController {
     }
   }
 
-  // Shift constants: 09:00 - 17:30
+  // Shift constants: 09:05 - 17:35
   static get SHIFT_START_H() { return 9; }
-  static get SHIFT_START_M() { return 0; }
+  static get SHIFT_START_M() { return 5; }
   static get SHIFT_END_H() { return 17; }
-  static get SHIFT_END_M() { return 30; }
-  static get SHIFT_MINS() { return (17 * 60 + 30) - (9 * 60); } // 510 mins
+  static get SHIFT_END_M() { return 35; }
+  static get SHIFT_MINS() { return (17 * 60 + 35) - (9 * 60 + 5); } // 510 mins
 
   // #3 Downtime report — idle events with reasons per machine per day
   async getDowntimeReport(req, res, next) {
@@ -522,7 +522,7 @@ class ApiController {
     } catch (e) { next(e); }
   }
 
-  // #2 Shift summary — shift-aware efficiency (09:00-17:30 = 510 mins, 30 min lunch excluded)
+  // #2 Shift summary — shift-aware efficiency (09:05-17:35 = 510 mins, 30 min lunch excluded)
   async getShiftSummaryReport(req, res, next) {
     try {
       const { fromDate, toDate, date, work_centre_id, workCentreId } = req.query;
@@ -555,8 +555,8 @@ class ApiController {
           COALESCE(SUM(
             CASE WHEN mcp.button_status = 2 THEN
               GREATEST(0, TIMESTAMPDIFF(MINUTE,
-                GREATEST(mcp.start_time, CONCAT(DATE(mcp.prod_date), ' 09:00:00')),
-                LEAST(mcp.finish_time, CONCAT(DATE(mcp.prod_date), ' 17:30:00'))))
+                GREATEST(mcp.start_time, CONCAT(DATE(mcp.prod_date), ' 09:05:00')),
+                LEAST(mcp.finish_time, CONCAT(DATE(mcp.prod_date), ' 17:35:00'))))
             END
           ), 0) AS shift_actual_mins
         FROM machine_centre_production mcp
@@ -640,8 +640,8 @@ class ApiController {
         success: true,
         fromDate: from,
         toDate: to,
-        shift_start: '09:00',
-        shift_end: '17:30',
+        shift_start: '09:05',
+        shift_end: '17:35',
         shift_mins: SHIFT_MINS,
         lunch_mins: LUNCH_MINS,
         shift_working_mins: SHIFT_WORKING_MINS,

@@ -16,7 +16,7 @@ const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
 /** Late-cycle / daily inactive gap allowance — separate from mobile reminder sound (Reminder Settings). */
 const LATE_CYCLE_GRACE_SECS = Math.max(1, parseInt(process.env.LATE_CYCLE_GRACE_SECS || '40', 10));
 const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
-const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
+const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '35', 10);
 const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
 const LUNCH_START_MINUTE = parseInt(process.env.LUNCH_START_MINUTE || '30', 10);
 const LUNCH_END_HOUR = parseInt(process.env.LUNCH_END_HOUR || '14', 10);
@@ -439,6 +439,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         wc.name AS work_centre_name,
         mcp.machine_id,
         mc.machine_name,
+        mcp.output_pairs,
         mcp.emp_id,
         e.code AS employee_code,
         e.name AS employee_name,
@@ -479,7 +480,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         startTs,
         startReminderSecs: LATE_CYCLE_GRACE_SECS,
       });
-      const lostMins = Math.round(computeCycleNetLostMins(inactiveMins, targetMins, actualMins));
+      const lostMins = computeCycleNetLostMins(inactiveMins, targetMins, actualMins);
 
       return {
         id: row.id,
@@ -487,6 +488,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         work_centre_name: row.work_centre_name || 'N/A',
         machine_id: row.machine_id,
         machine_name: row.machine_name || row.machine_id || 'N/A',
+        output_pairs: toNumber(row.output_pairs, 0),
         employee_code: row.employee_code || 'N/A',
         employee_name: row.employee_name || row.employee_code || 'N/A',
         start_time: row.start_time,

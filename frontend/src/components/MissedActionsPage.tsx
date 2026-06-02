@@ -11,7 +11,7 @@ function eventLostMins(e: {
   actual_mins: number;
 }): number {
   if (e.lost_mins != null && Number.isFinite(Number(e.lost_mins))) {
-    return Math.round(Number(e.lost_mins));
+    return Number(e.lost_mins);
   }
   return computeCycleNetLostMins(
     Number(e.inactive_mins || 0),
@@ -364,7 +364,7 @@ export const MissedActionsPage: React.FC = () => {
     fetchData();
     const id = window.setInterval(() => {
       fetchData();
-    }, 30000);
+    }, 10000);
     return () => window.clearInterval(id);
   }, [fetchData]);
 
@@ -1464,7 +1464,7 @@ export const MissedActionsPage: React.FC = () => {
             <p className="text-xs text-gray-400 mt-1">
               {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Not updated yet'}
             </p>
-            <p className="text-xs text-gray-400">Auto-refresh every 30s</p>
+            <p className="text-xs text-gray-400">Auto-refresh every 10s</p>
           </div>
         </div>
 
@@ -2284,7 +2284,7 @@ export const MissedActionsPage: React.FC = () => {
               <p className="font-semibold">How it works on mobile</p>
               <ul className="list-disc ml-5 mt-1 space-y-0.5 text-blue-800">
                 <li><strong>Mobile reminder sound</strong> uses <strong>Idle (min/sec)</strong> per machine (e.g. 10 min for machine 07).</li>
-                <li><strong>Late Cycles / daily reports</strong> always use <strong>40 seconds</strong> allowed gap and shift start <strong>9:05 AM</strong> (not the reminder interval).</li>
+                <li><strong>Late Cycles / daily reports</strong> use shift <strong>9:05 AM – 5:35 PM</strong>, <strong>40 seconds</strong> allowed gap (not the reminder interval).</li>
                 <li><strong>Finish grace</strong> adds extra minutes after target time before a &quot;Finish not clicked&quot; alert appears in Live Issues.</li>
               </ul>
             </div>
