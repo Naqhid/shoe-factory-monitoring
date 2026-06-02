@@ -91,7 +91,7 @@ export function LateCyclesTodayModal({
       aria-labelledby="late-cycles-title"
     >
       <div
-        className="bg-white w-full sm:max-w-sm sm:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[min(78dvh,640px)]"
+        className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-sm sm:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[100dvh] sm:max-h-[min(78dvh,640px)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-100">
@@ -112,7 +112,7 @@ export function LateCyclesTodayModal({
           </button>
         </div>
 
-        <div className="overflow-y-auto overflow-x-hidden flex-1 overscroll-contain px-2.5 py-2 space-y-2 min-h-0">
+        <div className="overflow-y-auto overflow-x-hidden flex-1 overscroll-contain px-2.5 pb-2 pt-0 sm:pt-2 space-y-2 min-h-0">
           {loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-blue-500" />

@@ -112,20 +112,10 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
     ? computeCycleNetGainMins(cycle.start_gap_mins, cycle.target_mins, cycle.actual_mins)
     : 0;
 
+  const pairCount = Math.round(Number(cycle.output_pairs || 0));
+
   return (
-    <article className="relative rounded-lg border border-gray-200 bg-gray-50/80 text-xs" onClick={(e) => e.stopPropagation()}>
-      {Number(cycle.output_pairs || 0) > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-          <span className="inline-flex flex-col items-center justify-center rounded-lg bg-indigo-100/95 border-2 border-indigo-300 px-4 py-2 min-w-[4.25rem] shadow-md">
-            <span className="text-2xl leading-none font-black text-indigo-900 tabular-nums">
-              {Math.round(Number(cycle.output_pairs || 0))}
-            </span>
-            <span className="text-[11px] leading-none mt-1 font-extrabold uppercase tracking-wider text-indigo-700">
-              pairs
-            </span>
-          </span>
-        </div>
-      )}
+    <article className="rounded-lg border border-gray-200 bg-gray-50/80 text-xs" onClick={(e) => e.stopPropagation()}>
       <header className="px-2.5 py-2 bg-white border-b border-gray-100 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-bold text-gray-800">Box {cycle.cycle}</p>
@@ -161,36 +151,49 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
         </div>
       </header>
 
-      {hasBreakdown && (
-        <section className="px-2.5 py-1.5 bg-white border-b border-gray-100">
-          <CycleInfoTip
-            fullWidth
-            text={TIPS.whySection(hasEarly)}
-            label={<span className="text-[9px] font-bold uppercase text-gray-400">Why lost</span>}
-          />
-          <div className="mt-1">
-            <BreakdownRow
-              label="Late start"
-              tip={TIPS.lateStart}
-              minutes={cycle.start_gap_mins}
-              sign="+"
-              tone="loss"
-            />
-            <BreakdownRow
-              label="Late finish"
-              tip={TIPS.lateFinish}
-              minutes={cycle.extra_mins}
-              sign="+"
-              tone="loss"
-            />
-            <BreakdownRow
-              label="Finished early"
-              tip={TIPS.finishedEarly}
-              minutes={cycle.early_mins}
-              sign="−"
-              tone="save"
-            />
-          </div>
+      {(hasBreakdown || pairCount > 0) && (
+        <section className="relative px-2.5 py-1.5 bg-white border-b border-gray-100">
+          {hasBreakdown ? (
+            <>
+              <CycleInfoTip
+                text={TIPS.whySection(hasEarly)}
+                label={<span className="text-[9px] font-bold uppercase text-gray-400">Why lost</span>}
+              />
+              <div className="mt-1">
+                <BreakdownRow
+                  label="Late start"
+                  tip={TIPS.lateStart}
+                  minutes={cycle.start_gap_mins}
+                  sign="+"
+                  tone="loss"
+                />
+                <BreakdownRow
+                  label="Late finish"
+                  tip={TIPS.lateFinish}
+                  minutes={cycle.extra_mins}
+                  sign="+"
+                  tone="loss"
+                />
+                <BreakdownRow
+                  label="Finished early"
+                  tip={TIPS.finishedEarly}
+                  minutes={cycle.early_mins}
+                  sign="−"
+                  tone="save"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="min-h-[3.25rem]" />
+          )}
+          {pairCount > 0 && (
+            <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 inline-flex flex-col items-center rounded-lg bg-indigo-100 border-2 border-indigo-300 px-3 py-1.5 shadow-sm">
+              <span className="text-xl leading-none font-black text-indigo-900 tabular-nums">{pairCount}</span>
+              <span className="text-[10px] leading-none mt-0.5 font-extrabold uppercase tracking-wider text-indigo-700">
+                pairs
+              </span>
+            </span>
+          )}
         </section>
       )}
 

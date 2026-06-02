@@ -982,9 +982,19 @@ export const TVDashboard: React.FC = () => {
                                                 {machineTimeLossRows.slice(0, 8).map((row: any) => (
                                                     <div
                                                         key={`${row.machine_id}-${row.machine_name}`}
-                                                        className="rounded-lg border border-red-200 bg-white px-2 py-1.5 flex items-center justify-between shadow-[0_1px_0_rgba(239,68,68,0.1)]"
+                                                        className={`rounded-lg px-2 py-1.5 flex items-center justify-between shadow-sm ${
+                                                            Number(row.net_mins || 0) > 0
+                                                                ? 'border border-emerald-200 bg-emerald-50/70'
+                                                                : 'border border-red-200 bg-white'
+                                                        }`}
                                                     >
-                                                        <span className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate pr-2 text-left bg-amber-50/60 border border-amber-100 rounded px-1.5 py-0.5">
+                                                        <span
+                                                            className={`text-[10px] sm:text-[11px] font-bold truncate pr-2 text-left rounded px-1.5 py-0.5 ${
+                                                                Number(row.net_mins || 0) > 0
+                                                                    ? 'text-emerald-900 bg-emerald-100 border border-emerald-300'
+                                                                    : 'text-slate-900 bg-amber-50/60 border border-amber-100'
+                                                            }`}
+                                                        >
                                                             {row.machine_name || `Machine ${row.machine_id}`}
                                                         </span>
                                                         {(() => {
@@ -992,8 +1002,8 @@ export const TVDashboard: React.FC = () => {
                                                             const parts = minutesToDurationParts(Math.abs(net));
                                                             const tone =
                                                                 net > 0
-                                                                    ? 'text-emerald-700 bg-emerald-50'
-                                                                    : 'text-red-700 bg-red-50';
+                                                                    ? 'text-emerald-800 bg-emerald-100 border border-emerald-300'
+                                                                    : 'text-red-700 bg-red-50 border border-red-200';
                                                             const status = net > 0 ? 'gain' : 'loss';
                                                             return (
                                                                 <span className={`text-[10px] sm:text-[11px] font-black tabular-nums shrink-0 px-1.5 py-0.5 rounded ${tone}`}>
