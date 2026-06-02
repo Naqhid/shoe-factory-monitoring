@@ -279,9 +279,9 @@ class ProductionTrackerController {
       if (!date) return res.status(400).json({ success: false, error: 'Date is required' });
 
       const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
-      const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '0', 10);
+      const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
       const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
-      const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
+      const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '35', 10);
 
       const now = new Date();
       const shiftStart = new Date(now);

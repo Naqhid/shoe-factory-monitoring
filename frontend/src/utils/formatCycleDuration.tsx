@@ -109,6 +109,30 @@ export function CycleDurationBadge({ minutes, kind }: { minutes: number; kind: C
   );
 }
 
+export function CycleDurationGainText({
+  minutes,
+  zeroClassName = 'text-amber-700',
+}: {
+  minutes: number;
+  zeroClassName?: string;
+}) {
+  if (!Number.isFinite(minutes) || minutes * 60 < 1) {
+    return (
+      <span className={`text-xs font-bold tabular-nums inline-flex items-baseline gap-x-1 ${zeroClassName}`}>
+        <span>0 m</span>
+        <span className="opacity-80">0 s</span>
+        <span>gain</span>
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs font-bold tabular-nums inline-flex items-baseline flex-nowrap gap-x-1">
+      <DurationAmount minutes={minutes} minClass="text-amber-900 font-bold" secClass="text-amber-600 font-semibold" spaced />
+      <span className="text-amber-800">gain</span>
+    </span>
+  );
+}
+
 export function CycleDurationLostText({
   minutes,
   zeroClassName = 'text-gray-400',

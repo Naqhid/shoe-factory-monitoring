@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { classifyLateCycleCategory, computeCycleNetLostMins } from '../utils/cycleLostMins';
+import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours } from '../utils/shiftPaceUtils';
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
 
@@ -102,74 +103,6 @@ function clampMobileTargetPairs(value: unknown): number {
     if (!Number.isFinite(n)) return MOBILE_PAIRS_PER_BIN;
     return Math.min(12, Math.max(1, n));
 }
-
-/** Shift window for "expected by now" (local time). */
-const MOBILE_SHIFT_START_MINUTES = 9 * 60; // 9:00 AM
-const MOBILE_SHIFT_END_MINUTES = 17 * 60 + 30; // 5:30 PM
-
-const getLunchBoundsMs = (d: Date) => {
-    const isFriday = d.getDay() === FRIDAY_INDEX;
-    const lunchS = isFriday ? FRIDAY_LUNCH_START_MINUTES : DEFAULT_LUNCH_START_MINUTES;
-    const lunchE = isFriday ? FRIDAY_LUNCH_END_MINUTES : DEFAULT_LUNCH_END_MINUTES;
-    const ls = new Date(d);
-    ls.setHours(Math.floor(lunchS / 60), lunchS % 60, 0, 0);
-    const le = new Date(d);
-    le.setHours(Math.floor(lunchE / 60), lunchE % 60, 0, 0);
-    return { lunchStartMs: ls.getTime(), lunchEndMs: le.getTime() };
-};
-
-/** Minutes in [rangeStartMs, rangeEndMs] on the same calendar day as `day`, excluding lunch overlap. */
-const productiveMinutesExcludingLunch = (day: Date, rangeStartMs: number, rangeEndMs: number) => {
-    if (rangeEndMs <= rangeStartMs) return 0;
-    const rawMin = (rangeEndMs - rangeStartMs) / 60000;
-    const { lunchStartMs, lunchEndMs } = getLunchBoundsMs(day);
-    const overlapStart = Math.max(rangeStartMs, lunchStartMs);
-    const overlapEnd = Math.min(rangeEndMs, lunchEndMs);
-    const lunchOverlapMin = overlapEnd > overlapStart ? (overlapEnd - overlapStart) / 60000 : 0;
-    return Math.max(0, rawMin - lunchOverlapMin);
-};
-
-/** Productive minutes from shift start through `now` (capped at shift end), lunch excluded. */
-const getProductiveElapsedMinutesInShift = (now: Date, shiftStartMin: number, shiftEndMin: number) => {
-    const shiftStart = new Date(now);
-    shiftStart.setHours(Math.floor(shiftStartMin / 60), shiftStartMin % 60, 0, 0);
-    const shiftEnd = new Date(now);
-    shiftEnd.setHours(Math.floor(shiftEndMin / 60), shiftEndMin % 60, 0, 0);
-    const t = Math.min(now.getTime(), shiftEnd.getTime());
-    const startMs = shiftStart.getTime();
-    if (t <= startMs) return 0;
-    return productiveMinutesExcludingLunch(now, startMs, t);
-};
-
-/** Full shift productive minutes (9:00–17:30 minus lunch) and elapsed/remaining portions. */
-const getProductiveShiftTotals = (now: Date) => {
-    const shiftStart = new Date(now);
-    shiftStart.setHours(Math.floor(MOBILE_SHIFT_START_MINUTES / 60), MOBILE_SHIFT_START_MINUTES % 60, 0, 0);
-    const shiftEnd = new Date(now);
-    shiftEnd.setHours(Math.floor(MOBILE_SHIFT_END_MINUTES / 60), MOBILE_SHIFT_END_MINUTES % 60, 0, 0);
-    const totalProductiveMins = productiveMinutesExcludingLunch(
-        now,
-        shiftStart.getTime(),
-        shiftEnd.getTime()
-    );
-    const elapsedProductiveMins = getProductiveElapsedMinutesInShift(
-        now,
-        MOBILE_SHIFT_START_MINUTES,
-        MOBILE_SHIFT_END_MINUTES
-    );
-    const remainingProductiveMins = Math.max(0, totalProductiveMins - elapsedProductiveMins);
-    return { totalProductiveMins, elapsedProductiveMins, remainingProductiveMins };
-};
-
-/** Shift pair target from routing standard time per bin (mins_6_prs_box) and productive minutes. */
-const computeShiftTargetPairs = (
-    targetMinsPerBin: number,
-    pairsPerBin: number,
-    totalProductiveMins: number
-) => {
-    if (targetMinsPerBin <= 0 || pairsPerBin <= 0 || totalProductiveMins <= 0) return 0;
-    return Math.round((totalProductiveMins / targetMinsPerBin) * pairsPerBin);
-};
 
 const getMinutesOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
 
@@ -786,7 +719,8 @@ export const MobileProduction: React.FC = () => {
                     productionData.button_status === 1 &&
                     !productionData.is_paused &&
                     targetMins > 0 &&
-                    actualTimeCounter / 60 > targetMins;
+                    actualTimeCounter / 60 > targetMins &&
+                    isWithinShiftHours(new Date());
                 if (!exceeded) {
                     pendingOverTargetAlarmRef.current = false;
                 } else {
@@ -829,7 +763,8 @@ export const MobileProduction: React.FC = () => {
                     productionData.button_status === 1 &&
                     !productionData.is_paused &&
                     targetMins > 0 &&
-                    actualTimeCounter / 60 > targetMins;
+                    actualTimeCounter / 60 > targetMins &&
+                    isWithinShiftHours(new Date());
                 if (!exceeded) {
                     pendingOverTargetAlarmRef.current = false;
                 } else {
@@ -855,6 +790,11 @@ export const MobileProduction: React.FC = () => {
     }, [productionData, actualTimeCounter, playAlertSound, idleReminderEnabled]);
 
     useEffect(() => {
+        if (!isWithinShiftHours(new Date())) {
+            pendingOverTargetAlarmRef.current = false;
+            stopAlertSound();
+            return;
+        }
         if (!productionData || productionData.button_status !== 1 || productionData.is_paused) {
             overTargetToastShownRef.current = false;
             pendingOverTargetAlarmRef.current = false;
@@ -884,6 +824,7 @@ export const MobileProduction: React.FC = () => {
             pendingOverTargetAlarmRef.current = true;
         }
     }, [
+        currentTime,
         productionData?.id,
         productionData?.button_status,
         productionData?.is_paused,
@@ -998,7 +939,7 @@ export const MobileProduction: React.FC = () => {
 
         const tick = () => {
             if (startReminderAnchorRef.current === null) return;
-            if (isLunchBreakTime(new Date())) {
+            if (isLunchBreakTime(new Date()) || !isWithinShiftHours(new Date())) {
                 setStartReminderDue(false);
                 pendingStartReminderAlarmRef.current = false;
                 return;
@@ -1885,8 +1826,14 @@ export const MobileProduction: React.FC = () => {
             const res = await apiFetch(`${API_BASE}/api/missed-actions/daily-report?date_from=${localDate}&date_to=${localDate}&startReminderMins=10`);
             const json = await res.json();
             if (!json.success || !Array.isArray(json.events)) return;
+            const activeWorkCentreId = Number(productionData?.work_centre_id || 0);
             const allMachineCycles = json.events
-                .filter((e: any) => e.machine_id === effectiveMachineId)
+                .filter((e: any) => {
+                    const sameMachine = String(e.machine_id || '') === String(effectiveMachineId);
+                    if (!sameMachine) return false;
+                    if (activeWorkCentreId <= 0) return true;
+                    return Number(e.work_centre_id || 0) === activeWorkCentreId;
+                })
                 .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
             const mapped = allMachineCycles
                 .map((e: any, idx: number) => ({ ...e, cycleNumber: idx + 1 }))
@@ -1919,7 +1866,7 @@ export const MobileProduction: React.FC = () => {
         } catch { /* non-fatal */ } finally {
             setTimingLoading(false);
         }
-    }, [API_BASE, effectiveMachineId]);
+    }, [API_BASE, effectiveMachineId, productionData?.work_centre_id]);
 
     const getStatusText = () => {
         return calculateStatus().label;
@@ -1933,7 +1880,9 @@ export const MobileProduction: React.FC = () => {
         return calculateStatus().bgColor;
     };
 
+    const isShiftHoursActive = isWithinShiftHours(currentTime);
     const isTargetTimeExceeded =
+        isShiftHoursActive &&
         !!productionData &&
         productionData.button_status === 1 &&
         !productionData.is_paused &&
@@ -1949,7 +1898,7 @@ export const MobileProduction: React.FC = () => {
     const idleMinutes = (() => {
         if (!productionData) return 0;
         const isRunning = productionData.button_status === 1 && !productionData.is_paused;
-        if (isRunning || startReminderAnchorRef.current === null || isLunchBreakActive) return 0;
+        if (isRunning || startReminderAnchorRef.current === null || isLunchBreakActive || !isShiftHoursActive) return 0;
         const elapsedMs = getIdleMsExcludingLunch(startReminderAnchorRef.current, currentTime.getTime());
         return Math.max(0, Math.floor(elapsedMs / 60000));
     })();
@@ -1968,6 +1917,7 @@ export const MobileProduction: React.FC = () => {
         }
         if (showStartPressHint) {
             if (isLunchBreakActive) return 'Lunch time started.';
+            if (!isShiftHoursActive) return 'Shift ended for today.';
             if (productionData?.button_status === 2) {
                 return `Production is idle for ${idleMinutes} min. Tap RESET, then tap START.`;
             }

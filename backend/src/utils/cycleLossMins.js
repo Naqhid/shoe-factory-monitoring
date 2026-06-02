@@ -3,7 +3,7 @@
 const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
 const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
 const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
-const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
+const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '35', 10);
 const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
 const LUNCH_START_MINUTE = parseInt(process.env.LUNCH_START_MINUTE || '30', 10);
 const LUNCH_END_HOUR = parseInt(process.env.LUNCH_END_HOUR || '14', 10);
@@ -68,7 +68,6 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date) {
       mcp.start_time,
       mcp.finish_time,
       mcp.target_mins,
-      TIMESTAMPDIFF(MINUTE, mcp.start_time, mcp.finish_time) AS actual_mins,
       LAG(mcp.finish_time) OVER (
         PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
         ORDER BY mcp.start_time
@@ -89,7 +88,12 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date) {
   let netLostMins = 0;
 
   rows.forEach((row) => {
-    const actualMins = Math.max(0, Number(row.actual_mins) || 0);
+    const startMs = row.start_time ? new Date(row.start_time).getTime() : NaN;
+    const finishMs = row.finish_time ? new Date(row.finish_time).getTime() : NaN;
+    const actualMins =
+      Number.isFinite(startMs) && Number.isFinite(finishMs)
+        ? Math.max(0, (finishMs - startMs) / 60000)
+        : 0;
     const targetMins = Math.max(0, Number(row.target_mins) || 0);
     const slowExtra = Math.max(0, actualMins - targetMins);
     extraMins += slowExtra;
@@ -111,10 +115,81 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date) {
   };
 }
 
+/**
+ * Machine-wise net time loss for one work centre/day.
+ * Returns sorted rows with machine id/name and rounded minutes.
+ */
+async function aggregateMachineCycleLosses(pool, workCentreId, date) {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      mcp.machine_id,
+      COALESCE(mc.name, mc.machine_name, CONCAT('Machine ', mcp.machine_id)) AS machine_name,
+      mcp.start_time,
+      mcp.finish_time,
+      mcp.target_mins,
+      LAG(mcp.finish_time) OVER (
+        PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
+        ORDER BY mcp.start_time
+      ) AS prev_finish_time
+    FROM machine_centre_production mcp
+    LEFT JOIN machine_centres mc
+      ON mc.machine_id = mcp.machine_id
+      AND mc.work_centre_id = mcp.work_centre_id
+    WHERE mcp.work_centre_id = ?
+      AND DATE(mcp.prod_date) = DATE(?)
+      AND mcp.button_status = 2
+      AND mcp.start_time IS NOT NULL
+      AND mcp.finish_time IS NOT NULL
+    ORDER BY mcp.machine_id, mcp.start_time
+    `,
+    [workCentreId, date]
+  );
+
+  const byMachine = new Map();
+  rows.forEach((row) => {
+    const machineId = String(row.machine_id || '');
+    if (!machineId) return;
+
+    const startMs = row.start_time ? new Date(row.start_time).getTime() : NaN;
+    const finishMs = row.finish_time ? new Date(row.finish_time).getTime() : NaN;
+    const actualMins =
+      Number.isFinite(startMs) && Number.isFinite(finishMs)
+        ? Math.max(0, (finishMs - startMs) / 60000)
+        : 0;
+    const targetMins = Math.max(0, Number(row.target_mins) || 0);
+    const startTs = new Date(row.start_time);
+    const shiftStart = new Date(startTs);
+    shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+    const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
+    const inactiveMins = computeShiftInactiveMinutes({
+      baselineTs,
+      startTs,
+      startReminderMins: LATE_CYCLE_GRACE_MINS,
+    });
+    const netLostMins = computeCycleNetLostMins(inactiveMins, targetMins, actualMins);
+
+    if (!byMachine.has(machineId)) {
+      byMachine.set(machineId, {
+        machine_id: machineId,
+        machine_name: row.machine_name || `Machine ${machineId}`,
+        loss_mins: 0,
+      });
+    }
+    byMachine.get(machineId).loss_mins += netLostMins;
+  });
+
+  return Array.from(byMachine.values())
+    .map((m) => ({ ...m, loss_mins: Math.max(0, Math.round(Number(m.loss_mins) || 0)) }))
+    .filter((m) => m.loss_mins > 0)
+    .sort((a, b) => b.loss_mins - a.loss_mins);
+}
+
 module.exports = {
   computeShiftInactiveMinutes,
   computeCycleNetLostMins,
   aggregateWorkCentreCycleLoss,
+  aggregateMachineCycleLosses,
   LATE_CYCLE_GRACE_SECS,
   LATE_CYCLE_GRACE_MINS,
 };

@@ -519,6 +519,7 @@ export const TVDashboard: React.FC = () => {
     const isStale = secondsSinceUpdate !== null && secondsSinceUpdate > 30;
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
     const linePerformanceRows = Array.isArray(lowerSection?.linePerformance) ? lowerSection.linePerformance : [];
+    const machineTimeLossRows = Array.isArray(lowerSection?.machineTimeLosses) ? lowerSection.machineTimeLosses : [];
     const topPerformer = linePerformanceRows.reduce((best: any, line: any) => {
         if (!best) return line;
         return Number(line.efficiency || 0) > Number(best.efficiency || 0) ? line : best;
@@ -529,18 +530,17 @@ export const TVDashboard: React.FC = () => {
         return efficiency < 90 || outputPct < 90;
     }).length;
     const shiftWindow = (() => {
-        const now = currentTime;
-        const start = new Date(now);
-        start.setHours(9, 0, 0, 0);
-        const end = new Date(now);
-        end.setHours(17, 30, 0, 0);
-        const totalMin = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 60000));
-        const elapsedMin = Math.min(totalMin, Math.max(0, Math.floor((now.getTime() - start.getTime()) / 60000)));
-        const remainingMin = Math.max(0, totalMin - elapsedMin);
-        const elapsedPct = Math.round((elapsedMin / totalMin) * 100);
-        return { elapsedPct, remainingMin };
+        const { elapsedPct, remainingProductiveMins } = getProductiveShiftTotals(currentTime);
+        return { elapsedPct, remainingMin: Math.round(remainingProductiveMins) };
     })();
     const targetGap = Math.max(0, Number(topSection.target || 0) - Number(topSection.output || 0));
+    const timeLossMins = Math.max(0, Math.round(Number(topSection.lossOfMinutes || 0)));
+    const reworkRejectionCount = Math.max(
+        0,
+        Math.round(
+            Number(reworkSummary[Number(currentWorkCentreId)]?.total_rejection || 0)
+        )
+    );
     const recoveryLabel =
         targetGap > 0
             ? `Gap: ${targetGap}`
@@ -550,30 +550,25 @@ export const TVDashboard: React.FC = () => {
         : 0;
 
     const planPaceSnapshot = (() => {
-        const now = currentTime;
-        const shiftStart = new Date(now);
-        shiftStart.setHours(9, 0, 0, 0);
-        const shiftEnd = new Date(now);
-        shiftEnd.setHours(17, 30, 0, 0);
-        const totalShiftMins = Math.max(1, Math.floor((shiftEnd.getTime() - shiftStart.getTime()) / 60000));
-        const elapsedMins = Math.max(
-            0,
-            Math.min(Math.floor((now.getTime() - shiftStart.getTime()) / 60000), totalShiftMins)
-        );
-        const remainingMins = Math.max(0, totalShiftMins - elapsedMins);
+        const { totalProductiveMins, elapsedProductiveMins, remainingProductiveMins, elapsedPct } =
+            getProductiveShiftTotals(currentTime);
+        const elapsedMins = Math.max(0, elapsedProductiveMins);
+        const remainingMins = Math.round(remainingProductiveMins);
 
         const daily = Number(topSection.target || 0);
         const actual = Number(topSection.output || 0);
         if (daily <= 0) return null;
 
         const expected =
-            elapsedMins > 0 ? Math.round((daily * elapsedMins) / totalShiftMins) : 0;
+            elapsedMins > 0 && totalProductiveMins > 0
+                ? Math.round((daily * elapsedMins) / totalProductiveMins)
+                : 0;
         const projectedEod =
-            elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalShiftMins) : 0;
+            elapsedMins > 0 && totalProductiveMins > 0
+                ? Math.round((actual / elapsedMins) * totalProductiveMins)
+                : 0;
         const onTrack = projectedEod >= daily;
         const shortBy = onTrack ? 0 : daily - projectedEod;
-
-        const elapsedPct = Math.round((elapsedMins / totalShiftMins) * 100);
 
         return {
             daily,
@@ -945,29 +940,61 @@ export const TVDashboard: React.FC = () => {
             </div>
 
             <div className="col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
-                <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-white ring-1 ring-slate-200/60 overflow-hidden">
-                    <div className="flex-shrink-0 mb-1.5">
-                        <h3 className="font-bold text-red-600 flex items-center gap-1.5 leading-tight text-sm sm:text-base">
-                            <TrendingUp className="h-3.5 w-3.5 text-red-600 motion-safe:animate-pulse motion-reduce:animate-none flex-shrink-0" />
-                            <span>Bottleneck &amp; Breakdown</span>
-                        </h3>
-                        <div className="flex flex-wrap items-center gap-1 mt-1">
-                            <span className="inline-flex items-center rounded-md bg-orange-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold text-orange-900 ring-1 ring-orange-300 tabular-nums">
-                                Bottleneck {bottleneckList.length}
+                <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-gradient-to-b from-white to-slate-50 ring-1 ring-slate-200/60 overflow-hidden">
+                    <div className="flex-shrink-0 mb-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center rounded-md bg-orange-100 px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold text-orange-900 ring-1 ring-orange-300 tabular-nums shadow-sm">
+                                Time loss
                             </span>
-                            <span className="inline-flex items-center rounded-md bg-red-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold text-red-900 ring-1 ring-red-300 tabular-nums">
+                            <span className="inline-flex items-center rounded-md bg-amber-100 px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold text-amber-900 ring-1 ring-amber-300 tabular-nums shadow-sm">
+                                Rework {reworkRejectionCount}
+                            </span>
+                            <span className="inline-flex items-center rounded-md bg-rose-100 px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold text-rose-900 ring-1 ring-rose-300 tabular-nums shadow-sm">
                                 Breakdown {breakdownList.length}
-                            </span>
-                            <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold text-gray-700 ring-1 ring-gray-200 tabular-nums">
-                                Total {mergedStoppageEvents.length}
                             </span>
                         </div>
                     </div>
                     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                         <div className="relative flex-1 min-h-0 w-full overflow-hidden">
                             {mergedStoppageEvents.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-center px-2">
-                                    <p className="text-[10px] sm:text-xs text-gray-400">No bottlenecks or breakdowns today</p>
+                                <div className="h-full flex flex-col text-center px-1 py-0.5">
+                                    {machineTimeLossRows.length > 0 ? (
+                                        <>
+                                            <p className="text-[11px] sm:text-xs font-bold text-blue-700 mb-0.5 tracking-wide">
+                                                {currentLineName}
+                                            </p>
+                                            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">
+                                                Machine-wise time loss
+                                            </p>
+                                            <div className="grid grid-cols-1 gap-1 overflow-auto pr-0.5">
+                                                {machineTimeLossRows.slice(0, 8).map((row: any) => (
+                                                    <div
+                                                        key={`${row.machine_id}-${row.machine_name}`}
+                                                        className="rounded-lg border border-red-200 bg-white px-2 py-1.5 flex items-center justify-between shadow-[0_1px_0_rgba(239,68,68,0.1)]"
+                                                    >
+                                                        <span className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate pr-2 text-left bg-amber-50/60 border border-amber-100 rounded px-1.5 py-0.5">
+                                                            {row.machine_name || `Machine ${row.machine_id}`}
+                                                        </span>
+                                                        <span className="text-[10px] sm:text-[11px] font-black text-red-700 tabular-nums shrink-0 bg-red-50 px-1.5 py-0.5 rounded">
+                                                            {Math.max(0, Math.round(Number(row.loss_mins) || 0))}m
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                                <div className="rounded-lg border border-red-300 bg-gradient-to-r from-red-50 to-red-100 px-2 py-1.5 flex items-center justify-between shadow-sm">
+                                                    <span className="text-[10px] sm:text-[11px] font-extrabold text-red-900 uppercase tracking-wide">
+                                                        Total
+                                                    </span>
+                                                    <span className="text-[10px] sm:text-[11px] font-black text-red-800 tabular-nums bg-white/80 px-1.5 py-0.5 rounded">
+                                                        {timeLossMins}m
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center">
+                                            <p className="text-[10px] sm:text-xs text-gray-400">No stoppage events today</p>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div

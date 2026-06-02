@@ -1,7 +1,7 @@
 import React from 'react';
-import { computeCycleNetLostMins } from '../utils/cycleLostMins';
+import { classifyLateCycleCategory, computeCycleNetGainMins, computeCycleNetLostMins } from '../utils/cycleLostMins';
 import { CycleInfoTip } from './CycleInfoTip';
-import { CycleDurationInline, CycleDurationLostText } from '../utils/formatCycleDuration';
+import { CycleDurationGainText, CycleDurationInline, CycleDurationLostText } from '../utils/formatCycleDuration';
 
 export type LateCycleTiming = {
   id: number;
@@ -46,6 +46,10 @@ const TIPS = {
   netLost:
     'Total time lost on this cycle.\n\n' +
     'It combines late start and late finish, minus any time saved by finishing early.',
+  netGain:
+    'Time recovered on this cycle.\n\n' +
+    'Net gain = finished early − late start − late finish\n\n' +
+    'Delays were fully offset (or more) by finishing under target.',
   target:
     'How long this cycle should take according to routing (the standard target time).',
   actual:
@@ -102,8 +106,10 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
   const hasEarly = cycle.early_mins > 0.01;
   const hasBreakdown = hasLate || hasExtra || hasEarly;
   const netLostMins = computeCycleNetLostMins(cycle.start_gap_mins, cycle.target_mins, cycle.actual_mins);
-  const netLostSecs = netLostMins * 60;
-  const showRecoveredNote = netLostSecs < 1 && hasLate && hasEarly;
+  const isNetGain = classifyLateCycleCategory(cycle) === 'net_gain';
+  const netGainMins = isNetGain
+    ? computeCycleNetGainMins(cycle.start_gap_mins, cycle.target_mins, cycle.actual_mins)
+    : 0;
 
   return (
     <article className="rounded-lg border border-gray-200 bg-gray-50/80 text-xs" onClick={(e) => e.stopPropagation()}>
@@ -116,18 +122,27 @@ export function LateCycleTimingCard({ cycle }: { cycle: LateCycleTiming }) {
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <CycleInfoTip
-            text={TIPS.netLost}
-            label={<span className="text-[9px] font-semibold uppercase text-gray-400">Net lost</span>}
-          />
-          <div className="-mt-0.5">
-            <CycleDurationLostText minutes={netLostMins} />
-            {showRecoveredNote && (
-              <p className="text-[10px] text-emerald-700 font-medium mt-1 max-w-[11rem] leading-snug">
-                Net gain — early finish offset late start
-              </p>
-            )}
-          </div>
+          {isNetGain ? (
+            <>
+              <CycleInfoTip
+                text={TIPS.netGain}
+                label={<span className="text-[9px] font-semibold uppercase text-amber-700">Early</span>}
+              />
+              <div className="-mt-0.5">
+                <CycleDurationGainText minutes={netGainMins} />
+              </div>
+            </>
+          ) : (
+            <>
+              <CycleInfoTip
+                text={TIPS.netLost}
+                label={<span className="text-[9px] font-semibold uppercase text-gray-400">Late</span>}
+              />
+              <div className="-mt-0.5">
+                <CycleDurationLostText minutes={netLostMins} />
+              </div>
+            </>
+          )}
         </div>
       </header>
 

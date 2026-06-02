@@ -913,7 +913,7 @@ export const Reports: React.FC = () => {
         </tbody>
         <tfoot>
           <tr className="bg-gray-50 font-semibold">
-            <td className="p-2 border-t" colSpan={5}>Total (Shift: 09:00–17:30, 480 mins excl. 30 min lunch)</td>
+            <td className="p-2 border-t" colSpan={5}>Total (Shift: 09:05–17:35, 480 mins excl. 30 min lunch)</td>
             <td className="p-2 border-t">{data!.reduce((s:number,r:any)=>s+Number(r.cycles||0),0)}</td>
             <td className="p-2 border-t text-center">
               {data!.reduce((s:number,r:any)=>s+Number(r.boxes ?? (Number(r.total_output||0)>0?Math.round(Number(r.total_output)/6):0)),0)}

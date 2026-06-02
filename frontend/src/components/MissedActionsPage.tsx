@@ -2284,7 +2284,7 @@ export const MissedActionsPage: React.FC = () => {
               <p className="font-semibold">How it works on mobile</p>
               <ul className="list-disc ml-5 mt-1 space-y-0.5 text-blue-800">
                 <li><strong>Mobile reminder sound</strong> uses <strong>Idle (min/sec)</strong> per machine (e.g. 10 min for machine 07).</li>
-                <li><strong>Late Cycles / daily reports</strong> always use <strong>40 seconds</strong> allowed gap and shift start <strong>9:05 AM</strong> (not the reminder interval).</li>
+                <li><strong>Late Cycles / daily reports</strong> use shift <strong>9:05 AM – 5:35 PM</strong>, <strong>40 seconds</strong> allowed gap (not the reminder interval).</li>
                 <li><strong>Finish grace</strong> adds extra minutes after target time before a &quot;Finish not clicked&quot; alert appears in Live Issues.</li>
               </ul>
             </div>

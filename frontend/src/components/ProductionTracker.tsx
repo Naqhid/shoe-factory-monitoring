@@ -22,11 +22,7 @@ import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { Reports } from './Reports';
 import { formatInput, formatWip } from '../utils/wipUtils';
-import { buildMachinePaceSnapshot } from '../utils/shiftPaceUtils';
-
-const SHIFT_START_HOUR = 9;
-const SHIFT_END_HOUR = 17;
-const SHIFT_END_MINUTE = 30;
+import { buildMachinePaceSnapshot, getProductiveShiftTotals, SHIFT_END_MINUTES, SHIFT_START_MINUTES } from '../utils/shiftPaceUtils';
 
 const lineCardWipClass = (wip: number, target: number): string => {
   if (target <= 0) return 'text-slate-600';
@@ -37,27 +33,27 @@ const lineCardWipClass = (wip: number, target: number): string => {
 };
 
 const getLineShiftPace = (target: number, output: number, now: Date) => {
-  const start = new Date(now);
-  start.setHours(SHIFT_START_HOUR, 0, 0, 0);
-  const end = new Date(now);
-  end.setHours(SHIFT_END_HOUR, SHIFT_END_MINUTE, 0, 0);
-  const totalShiftMins = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 60000));
-  const elapsedMins = Math.max(
-    0,
-    Math.min(Math.floor((now.getTime() - start.getTime()) / 60000), totalShiftMins)
-  );
+  const { totalProductiveMins, elapsedProductiveMins } = getProductiveShiftTotals(now);
   const daily = Math.round(target);
   const actual = Math.round(output);
-  const expected = elapsedMins > 0 ? Math.round((daily * elapsedMins) / totalShiftMins) : 0;
-  const projectedEod = elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalShiftMins) : 0;
+  const elapsed = Math.max(0, elapsedProductiveMins);
+  const expected =
+    elapsed > 0 && daily > 0 && totalProductiveMins > 0
+      ? Math.round((daily * elapsed) / totalProductiveMins)
+      : 0;
+  const projectedEod =
+    elapsed > 0 && totalProductiveMins > 0
+      ? Math.round((actual / elapsed) * totalProductiveMins)
+      : 0;
   const pacePct = expected > 0 ? Math.round((actual / expected) * 100) : null;
   return { expected, projectedEod, pacePct, daily, actual };
 };
 
 const paceEfficiencyCircleClass = (pct: number | null): string => {
   if (pct == null) return 'bg-slate-300 ring-slate-400/50';
-  if (pct >= 100) return 'bg-emerald-500 ring-emerald-600/50';
-  if (pct >= 70) return 'bg-amber-400 ring-amber-500/50';
+  if (pct > 90) return 'bg-emerald-500 ring-emerald-600/50';
+  if (pct >= 70) return 'bg-orange-400 ring-orange-500/50';
+  if (pct >= 50) return 'bg-amber-400 ring-amber-500/50';
   return 'bg-red-500 ring-red-600/50';
 };
 
@@ -74,7 +70,7 @@ const LinePaceEodEffBlock: React.FC<{
   const slashClass = 'text-xs sm:text-base font-black text-slate-800 leading-none';
   const effLabel =
     pacePct != null
-      ? `Progress ${pacePct}% (${actual} / ${expected} target so far)`
+      ? `In progress ${pacePct}% (${actual} / ${expected} target so far)`
       : 'No target set for progress';
   const effTextClass =
     pacePct != null && pacePct >= 100
@@ -90,7 +86,7 @@ const LinePaceEodEffBlock: React.FC<{
     <div className="grid grid-cols-[minmax(0,1fr)_auto] w-full gap-1 sm:gap-1.5 mt-1 sm:mt-1.5 items-stretch min-h-[5.25rem] sm:min-h-[6.5rem]">
       <div className="flex flex-col gap-1 min-w-0 min-h-0">
         <div className={metricTileClass}>
-          <div className={`${labelClass} text-emerald-700`}>Progress</div>
+          <div className={`${labelClass} text-emerald-700`}>In progress</div>
           <div className="flex items-baseline justify-center gap-0.5 tabular-nums">
             {expected > 0 ? (
               <>
@@ -147,13 +143,13 @@ const MachinePaceInlineRow: React.FC<{
   const labelClass = 'text-[9px] font-extrabold uppercase leading-none';
   const effLabel =
     pacePct != null
-      ? `Progress ${pacePct}% (${actual} / ${expected} target so far)`
+      ? `In progress ${pacePct}% (${actual} / ${expected} target so far)`
       : 'No target set for progress';
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] w-full items-center gap-0 border border-slate-200 rounded-lg bg-white overflow-hidden">
       <div className="min-w-0 border-r border-slate-200 px-1 py-1 text-center">
-        <div className={`${labelClass} text-emerald-700`}>Progress</div>
+        <div className={`${labelClass} text-emerald-700`}>In progress</div>
         <div className="flex items-baseline justify-center gap-0.5 tabular-nums mt-0.5">
           {expected > 0 ? (
             <>
@@ -426,14 +422,15 @@ export const ProductionTracker: React.FC = () => {
   const shiftProjection = React.useMemo(() => {
     const now = currentTime;
     const start = new Date(now);
-    start.setHours(SHIFT_START_HOUR, 0, 0, 0);
+    start.setHours(Math.floor(SHIFT_START_MINUTES / 60), SHIFT_START_MINUTES % 60, 0, 0);
     const end = new Date(now);
-    end.setHours(SHIFT_END_HOUR, SHIFT_END_MINUTE, 0, 0);
-    const elapsedMin = Math.max(1, Math.floor((Math.min(now.getTime(), end.getTime()) - start.getTime()) / 60000));
-    const shiftMin = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 60000));
+    end.setHours(Math.floor(SHIFT_END_MINUTES / 60), SHIFT_END_MINUTES % 60, 0, 0);
+    const { totalProductiveMins, elapsedProductiveMins } = getProductiveShiftTotals(now);
+    const elapsedMin = Math.max(1, elapsedProductiveMins);
     const produced = Number(topSection?.output || 0);
     const target = Number(topSection?.target || 0);
-    const projected = Math.round((produced / elapsedMin) * shiftMin);
+    const projected =
+      totalProductiveMins > 0 ? Math.round((produced / elapsedMin) * totalProductiveMins) : 0;
     const shortfall = Math.max(0, target - projected);
     const minutesToShiftEnd = Math.max(0, Math.floor((end.getTime() - now.getTime()) / 60000));
     const inLast60 = minutesToShiftEnd <= 60;
@@ -667,7 +664,7 @@ export const ProductionTracker: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3">
               <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <p className="text-xs text-slate-600 font-semibold">Input Progress</p>
+                  <p className="text-xs text-slate-600 font-semibold">Input in progress</p>
                   <p className="text-sm font-bold text-slate-800">
                     {lineInputPercent}%
                   </p>
@@ -688,7 +685,7 @@ export const ProductionTracker: React.FC = () => {
 
               <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <p className="text-xs text-slate-600 font-semibold">Output Progress</p>
+                  <p className="text-xs text-slate-600 font-semibold">Output in progress</p>
                   <p className="text-sm font-bold text-slate-800">
                     {lineOutputPercent}%
                   </p>

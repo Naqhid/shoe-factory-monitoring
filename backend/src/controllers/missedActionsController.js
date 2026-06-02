@@ -16,7 +16,7 @@ const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
 /** Late-cycle / daily inactive gap allowance — separate from mobile reminder sound (Reminder Settings). */
 const LATE_CYCLE_GRACE_SECS = Math.max(1, parseInt(process.env.LATE_CYCLE_GRACE_SECS || '40', 10));
 const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
-const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '30', 10);
+const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '35', 10);
 const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
 const LUNCH_START_MINUTE = parseInt(process.env.LUNCH_START_MINUTE || '30', 10);
 const LUNCH_END_HOUR = parseInt(process.env.LUNCH_END_HOUR || '14', 10);

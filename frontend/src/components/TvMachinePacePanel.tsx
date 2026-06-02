@@ -28,10 +28,10 @@ export const TvMachinePaceLegend: React.FC = () => (
   <div className="flex items-center gap-4 sm:gap-6 shrink-0 whitespace-nowrap font-bold leading-tight">
     <span
       className="inline-flex items-center gap-1.5 text-emerald-700"
-      title="Progress: actual pairs vs target for the shift so far"
+      title="In progress: actual pairs vs target for the shift so far"
     >
       {legendDot('bg-emerald-600')}
-      <span>Progress</span>
+      <span>In progress</span>
       <span className="font-semibold text-slate-500">actual / target</span>
     </span>
     {legendDivider()}
@@ -84,8 +84,9 @@ const paceEfficiencyPct = (actual: number, expected: number): number | null => {
 
 const paceEfficiencyCircleClass = (pct: number | null): string => {
   if (pct == null) return 'bg-slate-300 ring-slate-400/50';
-  if (pct >= 100) return 'bg-emerald-500 ring-emerald-600/50';
-  if (pct >= 70) return 'bg-amber-400 ring-amber-500/50';
+  if (pct > 90) return 'bg-emerald-500 ring-emerald-600/50';
+  if (pct >= 70) return 'bg-orange-400 ring-orange-500/50';
+  if (pct >= 50) return 'bg-amber-400 ring-amber-500/50';
   return 'bg-red-500 ring-red-600/50';
 };
 
@@ -93,7 +94,7 @@ const PaceEfficiencyBadge: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) 
   const pct = paceEfficiencyPct(snap.actual, snap.expected);
   const label =
     pct != null
-      ? `Progress ${pct}% (${snap.actual} / ${snap.expected} target so far)`
+      ? `In progress ${pct}% (${snap.actual} / ${snap.expected} target so far)`
       : 'No pace target set';
   const pctLabel = pct != null ? `${pct}%` : '—';
   const textClass =
@@ -129,7 +130,7 @@ const PaceEodEffMetrics: React.FC<{
   return (
     <div className={CARD_METRICS_GRID}>
       <div className="grid grid-rows-[auto_1fr] min-h-0 border-r border-slate-300">
-        <span className={`${columnHeaderClass} text-emerald-700`}>Progress</span>
+        <span className={`${columnHeaderClass} text-emerald-700`}>In progress</span>
         <div className="flex items-center justify-center min-h-0 px-0.5 tabular-nums">
           {showPaceRatio ? (
             <div className="flex items-baseline justify-center gap-0.5 min-w-0">

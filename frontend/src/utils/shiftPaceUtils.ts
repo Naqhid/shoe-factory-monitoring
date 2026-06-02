@@ -1,4 +1,4 @@
-/** Shift pace helpers (9:00–17:30, lunch excluded) — shared by mobile and TV dashboards. */
+/** Shift pace helpers (9:05–17:35, lunch excluded) — shared by mobile and TV dashboards. */
 
 const FRIDAY_INDEX = 5;
 const DEFAULT_LUNCH_START_MINUTES = 13 * 60 + 30;
@@ -6,9 +6,14 @@ const DEFAULT_LUNCH_END_MINUTES = 14 * 60;
 const FRIDAY_LUNCH_START_MINUTES = 12 * 60 + 30;
 const FRIDAY_LUNCH_END_MINUTES = 13 * 60;
 
-export const SHIFT_START_MINUTES = 9 * 60;
-export const SHIFT_END_MINUTES = 17 * 60 + 30;
+export const SHIFT_START_MINUTES = 9 * 60 + 5;
+export const SHIFT_END_MINUTES = 17 * 60 + 35;
 export const DEFAULT_PAIRS_PER_BIN = 6;
+
+export function isWithinShiftHours(d: Date): boolean {
+  const mins = d.getHours() * 60 + d.getMinutes();
+  return mins >= SHIFT_START_MINUTES && mins < SHIFT_END_MINUTES;
+}
 
 const getLunchBoundsMs = (d: Date) => {
   const isFriday = d.getDay() === FRIDAY_INDEX;

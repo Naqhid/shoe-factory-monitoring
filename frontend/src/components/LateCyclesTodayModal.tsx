@@ -5,9 +5,9 @@ import { CycleDurationInline, sumMinutes } from '../utils/formatCycleDuration';
 import { LateCycleTiming, LateCycleTimingCard } from './LateCycleTimingCard';
 
 const FILTER_OPTIONS: { value: LateCycleCategory; label: string }[] = [
-  { value: 'net_loss', label: 'Net loss' },
+  { value: 'net_loss', label: 'Late' },
   { value: 'on_time', label: 'On time' },
-  { value: 'net_gain', label: 'Net gain' },
+  { value: 'net_gain', label: 'Early' },
 ];
 
 type Props = {
@@ -47,6 +47,12 @@ export function LateCyclesTodayModal({
   }, [cycles]);
 
   const visibleCycles = byCategory[filter];
+  const modalTitle =
+    filter === 'net_gain'
+      ? 'Early Cycles Today'
+      : filter === 'on_time'
+        ? 'On-time Cycles Today'
+        : 'Late Cycles Today';
   const totalLostMins = sumMinutes(
     byCategory.net_loss.map((c) =>
       computeCycleNetLostMins(c.start_gap_mins, c.target_mins, c.actual_mins)
@@ -55,9 +61,9 @@ export function LateCyclesTodayModal({
 
   const emptyMessage =
     filter === 'net_loss'
-      ? 'No cycles with net time lost today.'
+      ? 'No late cycles today.'
       : filter === 'net_gain'
-        ? 'No cycles where early finish offset the delay.'
+        ? 'No early cycles today.'
         : 'No fully on-time cycles today.';
 
   if (!open) return null;
@@ -78,7 +84,7 @@ export function LateCyclesTodayModal({
           <div className="min-w-0">
             <h3 id="late-cycles-title" className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
               <Bell className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-              <span className="truncate">Late Cycles Today</span>
+              <span className="truncate">{modalTitle}</span>
             </h3>
             <p className="text-[10px] text-gray-400 mt-0.5">Tap ? on any row for a full explanation</p>
           </div>
@@ -111,18 +117,18 @@ export function LateCyclesTodayModal({
                     <p className="text-sm font-black text-emerald-900 tabular-nums">{byCategory.on_time.length}</p>
                   </div>
                   <div className="rounded-md bg-amber-50 border border-amber-200 px-1 py-1.5">
-                    <p className="text-[9px] font-bold uppercase text-amber-800">Net gain</p>
+                    <p className="text-[9px] font-bold uppercase text-amber-800">Early</p>
                     <p className="text-sm font-black text-amber-900 tabular-nums">{byCategory.net_gain.length}</p>
                   </div>
                   <div className="rounded-md bg-red-50 border border-red-200 px-1 py-1.5">
-                    <p className="text-[9px] font-bold uppercase text-red-700">Net loss</p>
+                    <p className="text-[9px] font-bold uppercase text-red-700">Late</p>
                     <p className="text-sm font-black text-red-900 tabular-nums">{byCategory.net_loss.length}</p>
                   </div>
                 </div>
                 <p className="text-[10px] text-gray-500 tabular-nums">{totalCycles} cycles today</p>
                 {byCategory.net_loss.length > 0 && (
                   <p className="text-red-800 font-semibold flex flex-wrap items-baseline gap-x-1">
-                    <span className="text-[10px] uppercase">Total net loss</span>
+                    <span className="text-[10px] uppercase">Total late</span>
                     <CycleDurationInline
                       minutes={totalLostMins}
                       minClass="text-red-900 font-bold"
