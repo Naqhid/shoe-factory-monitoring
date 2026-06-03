@@ -101,6 +101,20 @@ const initDb = async () => {
       )
     `);
     logger.info('missed_action_states table ready');
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS machine_time_loss_reasons (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        work_centre_id INT NOT NULL,
+        machine_id VARCHAR(64) NOT NULL,
+        prod_date DATE NOT NULL,
+        reason VARCHAR(255) NOT NULL,
+        updated_by VARCHAR(128) NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_machine_time_loss_day (work_centre_id, machine_id, prod_date),
+        INDEX idx_wc_date (work_centre_id, prod_date)
+      )
+    `);
+    logger.info('machine_time_loss_reasons table ready');
     await idleReminderSettingsService.ensureTable();
     logger.info('machine_idle_reminder_settings table ready');
     // Migrate existing table — add new columns if missing
@@ -715,6 +729,8 @@ app.get('/api/tracker/line-performance', authenticate, requireTrackerAccess, pro
 app.post('/api/tracker/alert-actions/query', authenticate, requireTrackerAccess, productionTrackerController.getAlertActions.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, productionTrackerController.acknowledgeAlert.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
+app.get('/api/tracker/machine-time-loss', authenticate, requireTrackerAccess, productionTrackerController.getMachineTimeLossMeta.bind(productionTrackerController));
+app.post('/api/tracker/time-loss-reason', authenticate, requireTrackerAccess, productionTrackerController.saveMachineTimeLossReason.bind(productionTrackerController));
 app.get('/api/missed-actions', authenticate, requireLogsAccess, missedActionsController.getMissedActions);
 app.get('/api/missed-actions/daily-report', authenticate, requireMissedActionsReadAccess, missedActionsController.getMissedActionsDailyReport);
 app.get('/api/missed-actions/weekly-trend', authenticate, requireLogsAccess, missedActionsController.getWeeklyTrend);

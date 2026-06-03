@@ -44,48 +44,15 @@ interface WorkCentre {
 
 type EntryKind = 'bottleneck' | 'breakdown';
 
-const REASON_OPTIONS: Record<string, string[]> = {
-  MAN: ['Skill', 'Handling', 'Spec Awareness', 'Inspection'],
-  MACHINE: ['Settings', 'Needle/Foot', 'Skiving/Folding', 'Alignment'],
-  MATERIAL: ['Quality/Thickness', 'Thread/Accessories', 'Component Accuracy', 'Defects'],
-  METHOD: ['Sequence', 'SOP', 'Marking', 'QC Checks'],
-};
+import {
+  M4_BADGE_CLASS,
+  M4_CATEGORIES,
+  M4_REASON_OPTIONS,
+  buildM4DetailText,
+  parseM4FromDetail,
+} from '../utils/m4ReasonUtils';
 
-const M4_CATEGORIES = ['MAN', 'MACHINE', 'MATERIAL', 'METHOD'] as const;
-
-const M4_BADGE_CLASS: Record<string, string> = {
-  MAN: 'bg-blue-100 text-blue-800 ring-blue-200',
-  MACHINE: 'bg-violet-100 text-violet-800 ring-violet-200',
-  MATERIAL: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
-  METHOD: 'bg-indigo-100 text-indigo-800 ring-indigo-200',
-};
-
-const buildM4DetailText = (category: string, reason: string, notes: string) => {
-  const base = `${category} - ${reason}`;
-  const trimmedNotes = notes.trim();
-  return trimmedNotes ? `${base} — ${trimmedNotes}` : base;
-};
-
-const parseM4FromDetail = (detail?: string | null) => {
-  const text = (detail || '').trim();
-  if (!text) {
-    return { reasonCategory: '', reason: '', notes: '' };
-  }
-  for (const category of Object.keys(REASON_OPTIONS)) {
-    const match = text.match(new RegExp(`^${category}\\s*[-–—:]\\s*(.+)$`, 'i'));
-    if (!match) continue;
-    const rest = match[1].trim();
-    const reasons = REASON_OPTIONS[category] || [];
-    const matchedReason = reasons.find((r) => rest === r || rest.startsWith(`${r} `) || rest.startsWith(`${r}—`) || rest.startsWith(`${r}-`));
-    if (matchedReason) {
-      let notes = rest.slice(matchedReason.length).replace(/^[\s—–-]+/, '').trim();
-      if (notes.startsWith('(') && notes.endsWith(')')) notes = notes.slice(1, -1).trim();
-      return { reasonCategory: category, reason: matchedReason, notes };
-    }
-    return { reasonCategory: category, reason: rest, notes: '' };
-  }
-  return { reasonCategory: '', reason: '', notes: text };
-};
+const REASON_OPTIONS = M4_REASON_OPTIONS;
 
 const CONFIG: Record<
   EntryKind,
