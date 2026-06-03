@@ -23,6 +23,48 @@ import { HourlyOutputChart } from './HourlyOutputChart';
 import { Reports } from './Reports';
 import { formatInput, formatWip } from '../utils/wipUtils';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals, SHIFT_END_MINUTES, SHIFT_START_MINUTES } from '../utils/shiftPaceUtils';
+import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import { TimeLossReasonDialog } from './TimeLossReasonDialog';
+import {
+  formatReasonDisplayLabel,
+  M4_BADGE_CLASS,
+  M4_REASON_ROW_CLASS,
+  M4_REASON_TEXT_CLASS,
+  parseM4FromDetail,
+} from '../utils/m4ReasonUtils';
+
+type MachineTimeLossMeta = {
+  machine_id: string;
+  machine_name: string;
+  net_mins: number;
+  reason: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+};
+
+const machineKeysMatch = (left: string, right: string) => {
+  const a = String(left ?? '').trim();
+  const b = String(right ?? '').trim();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const na = Number(a);
+  const nb = Number(b);
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+};
+
+const formatSignedNetBalance = (netMins: number) => {
+  if (Math.abs(netMins) * 60 < 1) return null;
+  const parts = minutesToDurationParts(Math.abs(netMins));
+  const dur = `${parts.wholeMinutes}m ${parts.seconds}s`;
+  return netMins < 0 ? `${dur} loss` : `${dur} gain`;
+};
+
+/** Duration only for card badges (label already says Time loss / Net balance). */
+const formatNetBalanceDuration = (netMins: number) => {
+  if (Math.abs(netMins) * 60 < 1) return null;
+  const parts = minutesToDurationParts(Math.abs(netMins));
+  return `${parts.wholeMinutes}m ${parts.seconds}s`;
+};
 
 const lineCardWipClass = (wip: number, target: number): string => {
   if (target <= 0) return 'text-slate-600';
@@ -221,6 +263,9 @@ export const ProductionTracker: React.FC = () => {
   const [lineSort, setLineSort] = useState<'risk' | 'efficiency' | 'output_gap'>('risk');
   const [refreshMode, setRefreshMode] = useState<'10s' | '30s' | 'manual'>('10s');
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
+  const [machineLossMeta, setMachineLossMeta] = useState<MachineTimeLossMeta[]>([]);
+  const [reasonDialog, setReasonDialog] = useState<{ machineId: string; machineName: string } | null>(null);
+  const [reasonSaving, setReasonSaving] = useState(false);
 
   const logAuditEvent = (event: string, payload: Record<string, any> = {}) => {
     try {
@@ -546,6 +591,19 @@ export const ProductionTracker: React.FC = () => {
     [detailWorkCentreId, selectedDate]
   );
 
+  const loadMachineTimeLossMeta = useCallback(async () => {
+    if (!Number.isFinite(detailWorkCentreId)) return;
+    try {
+      const res = await apiFetch(
+        `${API_BASE}/api/tracker/machine-time-loss?work_centre_id=${detailWorkCentreId}&date=${selectedDate}`
+      );
+      const json = await res.json();
+      setMachineLossMeta(json.success && Array.isArray(json.machines) ? json.machines : []);
+    } catch {
+      setMachineLossMeta([]);
+    }
+  }, [detailWorkCentreId, selectedDate]);
+
   useEffect(() => {
     if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
       setDetailMachineRows([]);
@@ -555,14 +613,58 @@ export const ProductionTracker: React.FC = () => {
   }, [isDetailRoute, detailWorkCentreId, selectedDate, loadDetailMachines]);
 
   useEffect(() => {
+    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
+      setMachineLossMeta([]);
+      return;
+    }
+    loadMachineTimeLossMeta();
+  }, [isDetailRoute, detailWorkCentreId, selectedDate, dashboardLastUpdated, loadMachineTimeLossMeta]);
+
+  useEffect(() => {
     if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) return;
     if (refreshMode === 'manual') return;
     const pollMs = refreshMode === '30s' ? 30000 : 10000;
     const interval = setInterval(() => {
       loadDetailMachines(true);
+      loadMachineTimeLossMeta();
     }, pollMs);
     return () => clearInterval(interval);
-  }, [isDetailRoute, detailWorkCentreId, selectedDate, refreshMode, loadDetailMachines]);
+  }, [isDetailRoute, detailWorkCentreId, selectedDate, refreshMode, loadDetailMachines, loadMachineTimeLossMeta]);
+
+  const findLossMetaForMachine = useCallback(
+    (machineId: string) =>
+      machineLossMeta.find((row) => machineKeysMatch(row.machine_id, machineId)),
+    [machineLossMeta]
+  );
+
+  const saveTimeLossReason = async (reason: string) => {
+    if (!reasonDialog || !Number.isFinite(detailWorkCentreId)) return;
+    setReasonSaving(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/tracker/time-loss-reason`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          work_centre_id: detailWorkCentreId,
+          machine_id: reasonDialog.machineId,
+          date: selectedDate,
+          reason,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        toast.error(json.error || json.message || 'Failed to save reason');
+        return;
+      }
+      toast.success('Time loss reason saved');
+      setReasonDialog(null);
+      await loadMachineTimeLossMeta();
+    } catch {
+      toast.error('Failed to save time loss reason');
+    } finally {
+      setReasonSaving(false);
+    }
+  };
 
   const detailMachineSnapshots = useMemo(
     () =>
@@ -613,8 +715,20 @@ export const ProductionTracker: React.FC = () => {
   if (!dashboardData) return null;
 
   if (isDetailRoute && selectedLineDetail) {
+    const dialogMeta = reasonDialog ? findLossMetaForMachine(reasonDialog.machineId) : undefined;
+    const dialogNetLabel = dialogMeta ? formatSignedNetBalance(dialogMeta.net_mins) : null;
+
     return (
       <div className="min-h-full h-full bg-slate-100 p-1 sm:p-2 lg:p-3">
+        <TimeLossReasonDialog
+          open={!!reasonDialog}
+          machineName={reasonDialog?.machineName || ''}
+          netLossLabel={dialogNetLabel}
+          initialReason={dialogMeta?.reason || ''}
+          saving={reasonSaving}
+          onSave={saveTimeLossReason}
+          onClose={() => setReasonDialog(null)}
+        />
         <div className="w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
             <div className="flex items-baseline gap-2 min-w-0 flex-1 flex-wrap">
@@ -736,6 +850,14 @@ export const ProductionTracker: React.FC = () => {
                           : pacePct >= 70
                             ? 'border-amber-200 bg-amber-50/40'
                             : 'border-rose-200 bg-rose-50/40';
+                    const lossMeta = findLossMetaForMachine(snap.machineId);
+                    const netMins = Number(lossMeta?.net_mins ?? 0);
+                    const hasNetLoss = netMins < 0 && Math.abs(netMins) * 60 >= 1;
+                    const hasNetGain = netMins > 0 && Math.abs(netMins) * 60 >= 1;
+                    const netBalanceLabel = formatSignedNetBalance(netMins);
+                    const netDurationLabel = formatNetBalanceDuration(netMins);
+                    const reasonParsed = lossMeta?.reason ? parseM4FromDetail(lossMeta.reason) : null;
+                    const showReasonRow = hasNetLoss || hasNetGain || !!lossMeta?.reason;
                     return (
                       <div key={snap.machineId} className={`rounded-xl border px-2 py-1.5 shadow-sm ${cardTone}`}>
                         <p className="text-xs sm:text-sm font-bold text-slate-800 leading-tight mb-1 line-clamp-2">
@@ -748,6 +870,72 @@ export const ProductionTracker: React.FC = () => {
                           daily={snap.daily}
                           pacePct={pacePct}
                         />
+                        {showReasonRow && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReasonDialog({
+                                machineId: snap.machineId,
+                                machineName: snap.machineName,
+                              })
+                            }
+                            className="mt-1.5 w-full text-left rounded-lg border border-slate-200 bg-white/80 px-2 py-1.5 hover:border-blue-300 hover:bg-blue-50/60 transition-colors"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              {netDurationLabel ? (
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm sm:text-base font-black tabular-nums ring-1 ${
+                                    hasNetLoss
+                                      ? 'bg-red-100 text-red-800 ring-red-300'
+                                      : 'bg-emerald-100 text-emerald-800 ring-emerald-300'
+                                  }`}
+                                >
+                                  <span className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wide opacity-90">
+                                    {hasNetLoss ? 'Time loss' : 'Net balance'}
+                                  </span>
+                                  <span>{netDurationLabel}</span>
+                                </span>
+                              ) : null}
+                              {reasonParsed?.reason ? (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 max-w-full min-w-0 rounded-md px-2 py-1 text-sm sm:text-base font-black ring-1 ${
+                                    M4_REASON_ROW_CLASS[reasonParsed.reasonCategory] ||
+                                    'bg-indigo-50 ring-indigo-200'
+                                  }`}
+                                >
+                                  <span
+                                    className={`text-[10px] sm:text-xs font-extrabold uppercase tracking-wide shrink-0 ${
+                                      M4_REASON_TEXT_CLASS[reasonParsed.reasonCategory] || 'text-indigo-800'
+                                    }`}
+                                  >
+                                    Reason
+                                  </span>
+                                  {reasonParsed.reasonCategory ? (
+                                    <span
+                                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] sm:text-xs font-black uppercase ring-1 ${
+                                        M4_BADGE_CLASS[reasonParsed.reasonCategory] ||
+                                        'bg-indigo-100 text-indigo-900 ring-indigo-300'
+                                      }`}
+                                    >
+                                      {reasonParsed.reasonCategory}
+                                    </span>
+                                  ) : null}
+                                  <span
+                                    className={`truncate font-extrabold ${
+                                      M4_REASON_TEXT_CLASS[reasonParsed.reasonCategory] || 'text-indigo-900'
+                                    }`}
+                                  >
+                                    {formatReasonDisplayLabel(reasonParsed.reason)}
+                                  </span>
+                                </span>
+                              ) : hasNetLoss ? (
+                                <span className="text-[10px] sm:text-xs font-semibold text-blue-700">
+                                  + Add time loss reason
+                                </span>
+                              ) : null}
+                            </div>
+                          </button>
+                        )}
                       </div>
                     );
                   })}

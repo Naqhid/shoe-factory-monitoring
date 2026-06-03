@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const { aggregateMachineCycleLosses } = require('../utils/cycleLossMins');
 
 class ProductionTrackerController {
   normalizeIssueKey(input) {
@@ -413,6 +414,99 @@ class ProductionTrackerController {
     } catch (error) {
       logger.error('Error escalating tracker alert:', error);
       res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getMachineTimeLossMeta(req, res) {
+    try {
+      const workCentreId = Number(req.query?.work_centre_id);
+      const rawDate = String(req.query?.date || '');
+      const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+
+      if (!Number.isFinite(workCentreId) || workCentreId <= 0) {
+        return res.status(400).json({ success: false, error: 'work_centre_id is required' });
+      }
+
+      const losses = await aggregateMachineCycleLosses(db, workCentreId, dateKey);
+      const [reasonRows] = await db.execute(
+        `SELECT machine_id, reason, updated_by, updated_at
+         FROM machine_time_loss_reasons
+         WHERE work_centre_id = ? AND prod_date = DATE(?)`,
+        [workCentreId, dateKey]
+      );
+
+      const reasonByMachine = new Map();
+      reasonRows.forEach((row) => {
+        reasonByMachine.set(String(row.machine_id), {
+          reason: row.reason,
+          updated_by: row.updated_by,
+          updated_at: row.updated_at,
+        });
+      });
+
+      const lossByMachine = new Map();
+      losses.forEach((row) => {
+        lossByMachine.set(String(row.machine_id), row);
+      });
+
+      const machineIds = new Set([...lossByMachine.keys(), ...reasonByMachine.keys()]);
+      const machines = Array.from(machineIds).map((machineId) => {
+        const loss = lossByMachine.get(machineId);
+        const meta = reasonByMachine.get(machineId);
+        return {
+          machine_id: machineId,
+          machine_name: loss?.machine_name || `Machine ${machineId}`,
+          net_mins: Number(loss?.net_mins ?? 0),
+          reason: meta?.reason || null,
+          updated_by: meta?.updated_by || null,
+          updated_at: meta?.updated_at || null,
+        };
+      });
+
+      return res.json({
+        success: true,
+        date: dateKey,
+        work_centre_id: workCentreId,
+        machines,
+      });
+    } catch (error) {
+      logger.error('Error getting machine time loss meta:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async saveMachineTimeLossReason(req, res) {
+    try {
+      const workCentreId = Number(req.body?.work_centre_id);
+      const machineId = String(req.body?.machine_id || '').trim();
+      const rawDate = String(req.body?.date || '');
+      const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+      const reason = String(req.body?.reason || '').trim();
+
+      if (!Number.isFinite(workCentreId) || workCentreId <= 0) {
+        return res.status(400).json({ success: false, error: 'work_centre_id is required' });
+      }
+      if (!machineId) {
+        return res.status(400).json({ success: false, error: 'machine_id is required' });
+      }
+      if (!reason) {
+        return res.status(400).json({ success: false, error: 'reason is required' });
+      }
+
+      const updatedBy =
+        String(req.user?.code || req.user?.name || req.user?.username || 'tracker').trim() || 'tracker';
+
+      await db.execute(
+        `INSERT INTO machine_time_loss_reasons (work_centre_id, machine_id, prod_date, reason, updated_by)
+         VALUES (?, ?, DATE(?), ?, ?)
+         ON DUPLICATE KEY UPDATE reason = VALUES(reason), updated_by = VALUES(updated_by), updated_at = NOW()`,
+        [workCentreId, machineId, dateKey, reason.slice(0, 255), updatedBy]
+      );
+
+      return res.json({ success: true, machine_id: machineId, reason, updated_by: updatedBy });
+    } catch (error) {
+      logger.error('Error saving machine time loss reason:', error);
+      return res.status(500).json({ success: false, error: error.message });
     }
   }
 }
