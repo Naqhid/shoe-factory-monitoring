@@ -1823,17 +1823,21 @@ export const MobileProduction: React.FC = () => {
         try {
             const today = new Date();
             const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const res = await apiFetch(`${API_BASE}/api/missed-actions/daily-report?date_from=${localDate}&date_to=${localDate}&startReminderMins=10`);
+            const params = new URLSearchParams({ date: localDate });
+            if (sessionToken) params.set('session', sessionToken);
+            const res = await apiFetch(
+                `${API_BASE}/api/mobile-production/machine/${encodeURIComponent(effectiveMachineId)}/daily-cycles?${params.toString()}`
+            );
             const json = await res.json();
-            if (!json.success || !Array.isArray(json.events)) return;
-            const activeWorkCentreId = Number(productionData?.work_centre_id || 0);
+            if (!res.ok || !json.success || !Array.isArray(json.events)) {
+                setTimingTotalCycles(0);
+                setTimingCycles([]);
+                if (!res.ok || json?.message) {
+                    console.warn('Late boxes fetch failed:', json?.message || res.status);
+                }
+                return;
+            }
             const allMachineCycles = json.events
-                .filter((e: any) => {
-                    const sameMachine = String(e.machine_id || '') === String(effectiveMachineId);
-                    if (!sameMachine) return false;
-                    if (activeWorkCentreId <= 0) return true;
-                    return Number(e.work_centre_id || 0) === activeWorkCentreId;
-                })
                 .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
             const mapped = allMachineCycles
                 .map((e: any, idx: number) => ({ ...e, cycleNumber: idx + 1 }))
@@ -1867,7 +1871,7 @@ export const MobileProduction: React.FC = () => {
         } catch { /* non-fatal */ } finally {
             setTimingLoading(false);
         }
-    }, [API_BASE, effectiveMachineId, productionData?.work_centre_id]);
+    }, [API_BASE, effectiveMachineId, sessionToken]);
 
     const getStatusText = () => {
         return calculateStatus().label;

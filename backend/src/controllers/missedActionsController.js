@@ -57,6 +57,111 @@ const computeShiftInactiveMinutes = ({ baselineTs, startTs, startReminderSecs })
 
 const formatShiftStartLabel = () => `${String(SHIFT_START_HOUR).padStart(2, '0')}:${String(SHIFT_START_MINUTE).padStart(2, '0')}`;
 
+const resolveMachineIdAliases = async (raw) => {
+  const key = String(raw || '').trim();
+  if (!key) return [];
+  const aliases = new Set([key]);
+  const [rows] = await db.query(
+    `SELECT machine_id, code, name
+     FROM machine_centres
+     WHERE machine_id = ? OR code = ? OR name = ?`,
+    [key, key, key]
+  );
+  rows.forEach((row) => {
+    if (row.machine_id != null) aliases.add(String(row.machine_id));
+    if (row.code) aliases.add(String(row.code));
+  });
+  return [...aliases];
+};
+
+const machineKeysMatch = (left, right) => {
+  const a = String(left ?? '').trim();
+  const b = String(right ?? '').trim();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const na = Number(a);
+  const nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb) && na === nb) return true;
+  return false;
+};
+
+const machineRowMatchesAliases = (rowMachineId, aliases) =>
+  aliases.some((alias) => machineKeysMatch(rowMachineId, alias));
+
+const queryDailyCycleEvents = async (dateFrom, dateTo) => {
+  const [rows] = await db.query(
+    `
+    SELECT
+      mcp.id,
+      mcp.work_centre_id,
+      wc.name AS work_centre_name,
+      mcp.machine_id,
+      mc.machine_name,
+      mcp.output_pairs,
+      mcp.emp_id,
+      e.code AS employee_code,
+      e.name AS employee_name,
+      mcp.start_time,
+      mcp.finish_time,
+      mcp.target_mins,
+      TIMESTAMPDIFF(MINUTE, mcp.start_time, mcp.finish_time) AS actual_mins,
+      LAG(mcp.finish_time) OVER (
+        PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
+        ORDER BY mcp.start_time
+      ) AS prev_finish_time,
+      mas.root_cause
+    FROM machine_centre_production mcp
+    LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+    LEFT JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+    LEFT JOIN employees e ON e.code = mcp.emp_id
+    LEFT JOIN missed_action_states mas ON mas.issue_key = CONCAT('daily__', mcp.id)
+    WHERE DATE(mcp.prod_date) BETWEEN ? AND ?
+      AND mcp.button_status = 2
+      AND mcp.start_time IS NOT NULL
+      AND mcp.finish_time IS NOT NULL
+    ORDER BY wc.name, mcp.machine_id, mcp.start_time
+    `,
+    [dateFrom, dateTo]
+  );
+
+  return rows.map((row) => {
+    const actualMins = toNumber(row.actual_mins, 0);
+    const targetMins = toNumber(row.target_mins, 0);
+    const extraMins = Math.max(0, actualMins - targetMins);
+    const startTs = new Date(row.start_time);
+    const shiftStart = new Date(startTs);
+    shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+    const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
+    const gapMins = Math.max(0, toNumber((startTs.getTime() - baselineTs.getTime()) / 60000, 0));
+    const inactiveMins = computeShiftInactiveMinutes({
+      baselineTs,
+      startTs,
+      startReminderSecs: LATE_CYCLE_GRACE_SECS,
+    });
+    const lostMins = computeCycleNetLostMins(inactiveMins, targetMins, actualMins);
+
+    return {
+      id: row.id,
+      work_centre_id: row.work_centre_id,
+      work_centre_name: row.work_centre_name || 'N/A',
+      machine_id: row.machine_id,
+      machine_name: row.machine_name || row.machine_id || 'N/A',
+      output_pairs: toNumber(row.output_pairs, 0),
+      employee_code: row.employee_code || 'N/A',
+      employee_name: row.employee_name || row.employee_code || 'N/A',
+      start_time: row.start_time,
+      finish_time: row.finish_time,
+      target_mins: targetMins,
+      actual_mins: actualMins,
+      extra_mins: extraMins,
+      start_gap_mins: gapMins,
+      inactive_mins: inactiveMins,
+      lost_mins: lostMins,
+      root_cause: row.root_cause || null,
+    };
+  });
+};
+
 const parseActionRows = (rows, settingsMap, defaultFinishGraceMins, now = new Date()) => {
   const data = [];
 
@@ -430,6 +535,8 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
     const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(rawFrom) ? rawFrom : new Date().toISOString().slice(0, 10);
     const dateTo   = /^\d{4}-\d{2}-\d{2}$/.test(rawTo)   ? rawTo   : dateFrom;
     const lineFilter = String(req.query?.line || 'all');
+    const requestedMachineId = String(req.query?.machine_id || '').trim();
+    const userRole = String(req.user?.role || '');
 
     const [rows] = await db.query(
       `
@@ -503,9 +610,31 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
       };
     });
 
+    let scoped = mapped;
+
+    if (userRole === 'Machine Centre User') {
+      const userAliases = await resolveMachineIdAliases(req.user?.machine_id);
+      if (userAliases.length === 0) {
+        return res.status(403).json({ success: false, message: 'No machine assigned to this user' });
+      }
+      if (requestedMachineId) {
+        const requestAliases = await resolveMachineIdAliases(requestedMachineId);
+        const allowed = requestAliases.some((alias) => userAliases.includes(alias));
+        if (!allowed) {
+          return res.status(403).json({ success: false, message: 'Access denied for this machine' });
+        }
+        scoped = mapped.filter((row) => machineRowMatchesAliases(row.machine_id, requestAliases));
+      } else {
+        scoped = mapped.filter((row) => machineRowMatchesAliases(row.machine_id, userAliases));
+      }
+    } else if (requestedMachineId) {
+      const requestAliases = await resolveMachineIdAliases(requestedMachineId);
+      scoped = mapped.filter((row) => machineRowMatchesAliases(row.machine_id, requestAliases));
+    }
+
     const filtered = lineFilter === 'all'
-      ? mapped
-      : mapped.filter((row) => String(row.work_centre_name) === lineFilter);
+      ? scoped
+      : scoped.filter((row) => String(row.work_centre_name) === lineFilter);
 
     const byLineMap = new Map();
     filtered.forEach((row) => {
@@ -551,6 +680,52 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
     });
   } catch (error) {
     logger.error('Error getting missed actions daily report:', error);
+    return next(error);
+  }
+};
+
+/** Public mobile floor endpoint — no JWT; scoped by machine (+ optional session). */
+exports.getMachineDailyCycles = async (req, res, next) => {
+  try {
+    const machineParam = String(req.params.machineId || '').trim();
+    if (!machineParam) {
+      return res.status(400).json({ success: false, message: 'machineId is required' });
+    }
+
+    const rawDate = String(req.query?.date || req.query?.date_from || '');
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+    const sessionId = String(req.query?.session || '').trim();
+
+    const requestAliases = await resolveMachineIdAliases(machineParam);
+    if (requestAliases.length === 0) {
+      return res.status(404).json({ success: false, message: 'Machine not found' });
+    }
+
+    if (sessionId) {
+      const [sessionRows] = await db.query(
+        `SELECT machine_id FROM mobile_sessions WHERE session_id = ? AND status = 'active' LIMIT 1`,
+        [sessionId]
+      );
+      if (sessionRows.length) {
+        const sessionAliases = await resolveMachineIdAliases(sessionRows[0].machine_id);
+        const sessionMatches = sessionAliases.some((alias) => requestAliases.includes(alias));
+        if (!sessionMatches) {
+          return res.status(403).json({ success: false, message: 'Session does not match this machine' });
+        }
+      }
+    }
+
+    const allEvents = await queryDailyCycleEvents(dateKey, dateKey);
+    const events = allEvents.filter((row) => machineRowMatchesAliases(row.machine_id, requestAliases));
+
+    return res.json({
+      success: true,
+      date: dateKey,
+      machine_id: machineParam,
+      events,
+    });
+  } catch (error) {
+    logger.error('Error getting machine daily cycles:', error);
     return next(error);
   }
 };

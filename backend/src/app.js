@@ -254,6 +254,7 @@ const initDb = async () => {
 const app = express();
 const PORT = process.env.PORT || 3001;
 const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
+const MISSED_ACTIONS_READ_ROLES = new Set([...LOGS_ALLOWED_ROLES, 'Machine Centre User']);
 const PRODUCTION_ROUTING_ALLOWED_ROLES = new Set(['Admin', 'IED']);
 const PRODUCTION_PLANNING_ALLOWED_ROLES = new Set(['Admin', 'Planner']);
 const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head', 'Production Manager', 'Quality']);
@@ -266,6 +267,14 @@ const requireLogsAccess = (req, res, next) => {
   const role = req.user?.role;
   if (!role || !LOGS_ALLOWED_ROLES.has(role)) {
     return res.status(403).json({ success: false, message: 'Access denied for logs' });
+  }
+  next();
+};
+
+const requireMissedActionsReadAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !MISSED_ACTIONS_READ_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for missed actions' });
   }
   next();
 };
@@ -667,6 +676,7 @@ app.get('/api/mobile-production', mobileProductionController.getAll);
 app.get('/api/mobile-production/records', authenticate, mobileProductionController.getPaginatedRecords);
 app.get('/api/mobile-production/init/:machineId/:empCode', mobileProductionController.getInitData);
 app.get('/api/mobile-production/machine/:machineId/latest-unfinished', mobileProductionController.getLatestUnfinishedByMachine);
+app.get('/api/mobile-production/machine/:machineId/daily-cycles', missedActionsController.getMachineDailyCycles);
 app.get('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntries);
 app.get('/api/mobile-production/manual-entry/audit-logs', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntryAuditLogs);
 app.post('/api/mobile-production/manual-entry/audit-logs/:logId/restore', authenticate, requireManualEntryAccess, mobileProductionController.restoreManualEntryFromAuditLog);
@@ -706,7 +716,7 @@ app.post('/api/tracker/alert-actions/query', authenticate, requireTrackerAccess,
 app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, productionTrackerController.acknowledgeAlert.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
 app.get('/api/missed-actions', authenticate, requireLogsAccess, missedActionsController.getMissedActions);
-app.get('/api/missed-actions/daily-report', authenticate, requireLogsAccess, missedActionsController.getMissedActionsDailyReport);
+app.get('/api/missed-actions/daily-report', authenticate, requireMissedActionsReadAccess, missedActionsController.getMissedActionsDailyReport);
 app.get('/api/missed-actions/weekly-trend', authenticate, requireLogsAccess, missedActionsController.getWeeklyTrend);
 app.post('/api/missed-actions/ack', authenticate, requireLogsAccess, missedActionsController.acknowledgeMissedAction);
 app.post('/api/missed-actions/snooze', authenticate, requireLogsAccess, missedActionsController.snoozeMissedAction);
