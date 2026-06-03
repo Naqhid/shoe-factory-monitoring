@@ -613,6 +613,7 @@ app.get('/api/reports/rework-rejection', authenticate, requireLogsAccess, valida
 app.get('/api/reports/machine-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getMachineOutputReport.bind(apiController));
 app.get('/api/reports/employee-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeeOutputReport.bind(apiController));
 app.get('/api/reports/employee-performance', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
+app.get('/api/reports/time-loss', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getTimeLossReport.bind(apiController));
 app.get('/api/reports/downtime', authenticate, requireLogsAccess, apiController.getDowntimeReport.bind(apiController));
 app.get('/api/reports/attendance-production', authenticate, requireLogsAccess, apiController.getAttendanceProductionReport.bind(apiController));
 app.get('/api/reports/shift-summary', authenticate, requireLogsAccess, apiController.getShiftSummaryReport.bind(apiController));
