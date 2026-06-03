@@ -68,7 +68,11 @@ const HEADER_MAP: Record<string, string> = {
   total_input: 'Input', input_percent: 'Input %', output_percent: 'Output %',
   line_eol_output: 'EOL Output',
   total_standard_mins_value: 'Std Mins', total_produced_mins_value: 'Actual Mins',
-  targeted_output_smv: 'Target @ SMV', efficiency_percent: 'Efficiency %',
+  targeted_output_smv: 'Target @ SMV',
+  efficiency_percent: 'Efficiency % (in progress)',
+  pace_in_progress_actual: 'Pace actual',
+  pace_in_progress_expected: 'Pace target so far',
+  pace_daily_target: 'Pace daily target',
   emp_id: 'Emp ID', emp_name: 'Employee Name', emp_code: 'Emp Code', status: 'Status', login_time: 'Login Time',
   machine: 'Machine', output: 'Output', bins_completed: 'Bins', rework_qty: 'Rework',
   rejection_qty: 'Rejection', rework_percent: 'Rework %', rejection_percent: 'Rejection %',
@@ -122,8 +126,17 @@ const EXPORT_OMIT_BY_REPORT: Partial<Record<ReportType, readonly string[]>> = {
   'shift-summary': ['shift_idle_mins'],
 };
 
+const INTERNAL_EXPORT_OMIT = [
+  'work_centre_id',
+  'machine_id',
+  'pace_in_progress_actual',
+  'pace_in_progress_expected',
+  'pace_daily_target',
+] as const;
+
 const stripExportFields = (row: Record<string, unknown>, report: ReportType) => {
   const out = { ...row };
+  for (const key of INTERNAL_EXPORT_OMIT) delete out[key];
   if (report !== 'hourly-production') {
     for (const key of HOURLY_ONLY_FIELDS) delete out[key];
   }
@@ -1010,7 +1023,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Machine','Customer','Article No','Color','Leather','Group','Planned','Output','Output %','Std Mins','Actual Mins','Target@SMV','Efficiency %'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Machine','Customer','Article No','Color','Leather','Group','Planned','Output','Output %','Std Mins','Actual Mins','Target@SMV','Efficiency % (in progress)'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (
@@ -1130,7 +1143,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Machine ID','Machine Name','Target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency %'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Machine ID','Machine Name','Target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency % (in progress)'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (
@@ -1212,7 +1225,7 @@ export const Reports: React.FC = () => {
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead><tr className="bg-gray-50">
-            {['Date','Line','Emp Code','Employee','Machine ID','Machine','Target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency %','Grade'].map(h => <Th key={h}>{h}</Th>)}
+            {['Date','Line','Emp Code','Employee','Machine ID','Machine','Target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency % (in progress)','Grade'].map(h => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {data!.map((row, i) => (

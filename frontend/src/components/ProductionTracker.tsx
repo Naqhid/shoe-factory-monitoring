@@ -16,6 +16,12 @@ import {
   X,
   Home,
   TrendingUp,
+  Loader2,
+  Calendar,
+  Cpu,
+  Gauge,
+  AlertTriangle,
+  BarChart2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -637,6 +643,19 @@ export const ProductionTracker: React.FC = () => {
     [machineLossMeta]
   );
 
+  const handleDetailRefresh = async () => {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([
+        loadDashboardData(),
+        loadDetailMachines(true),
+        loadMachineTimeLossMeta(),
+      ]);
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
+
   const saveTimeLossReason = async (reason: string) => {
     if (!reasonDialog || !Number.isFinite(detailWorkCentreId)) return;
     setReasonSaving(true);
@@ -717,9 +736,83 @@ export const ProductionTracker: React.FC = () => {
   if (isDetailRoute && selectedLineDetail) {
     const dialogMeta = reasonDialog ? findLossMetaForMachine(reasonDialog.machineId) : undefined;
     const dialogNetLabel = dialogMeta ? formatSignedNetBalance(dialogMeta.net_mins) : null;
+    const detailLinePace = getLineShiftPace(
+      Number(selectedLineDetail.target || 0),
+      Number(selectedLineDetail.output || 0),
+      currentTime
+    );
+    const lineWip = Number(selectedLineDetail.wip || 0);
+    const lineTarget = Number(selectedLineDetail.target || 0);
+    const lineStatusLabel =
+      lineOutputPercent >= 90 ? 'Strong' : lineOutputPercent >= 70 ? 'On track' : 'Needs attention';
+    const lineStatusClass =
+      lineOutputPercent >= 90
+        ? 'bg-emerald-500/25 text-emerald-100 ring-emerald-300/50'
+        : lineOutputPercent >= 70
+          ? 'bg-amber-500/25 text-amber-50 ring-amber-300/50'
+          : 'bg-rose-500/30 text-rose-50 ring-rose-300/50';
+    const machinesBehindCount = detailMachineSnapshots.filter((snap) => {
+      const pct = snap.expected > 0 ? Math.round((snap.actual / snap.expected) * 100) : null;
+      return pct != null && pct < 70;
+    }).length;
+    const machinesWithLoss = machineLossMeta.filter(
+      (m) => m.net_mins < 0 && Math.abs(m.net_mins) * 60 >= 1
+    ).length;
+    const formattedDate = selectedDate
+      ? new Date(`${selectedDate}T12:00:00`).toLocaleDateString(undefined, {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+        })
+      : '';
+
+    const kpiTiles = [
+      {
+        icon: Target,
+        iconClass: 'text-blue-600',
+        label: 'Target',
+        value: Number(selectedLineDetail.target || 0).toLocaleString(),
+        valueClass: 'text-blue-700',
+      },
+      {
+        icon: ArrowDownToLine,
+        iconClass: 'text-cyan-600',
+        label: 'Input',
+        value: formatInput(selectedLineDetail.input),
+        valueClass: 'text-cyan-700',
+      },
+      {
+        icon: TrendingUp,
+        iconClass: 'text-indigo-600',
+        label: 'Output',
+        value: Number(selectedLineDetail.output || 0).toLocaleString(),
+        valueClass: 'text-indigo-700',
+      },
+      {
+        icon: Gauge,
+        iconClass: 'text-sky-600',
+        label: 'Input %',
+        value: `${lineInputPercent}%`,
+        valueClass: efficiencyPctColor(lineInputPercent),
+      },
+      {
+        icon: Activity,
+        iconClass: 'text-violet-600',
+        label: 'Output %',
+        value: `${lineOutputPercent}%`,
+        valueClass: efficiencyPctColor(lineOutputPercent),
+      },
+      {
+        icon: PackageOpen,
+        iconClass: lineWip > 0 ? 'text-orange-600' : 'text-emerald-600',
+        label: 'WIP',
+        value: formatWip(lineWip),
+        valueClass: lineCardWipClass(lineWip, lineTarget),
+      },
+    ] as const;
 
     return (
-      <div className="min-h-full h-full bg-slate-100 p-1 sm:p-2 lg:p-3">
+      <div className="min-h-full h-full bg-gradient-to-b from-slate-100 via-blue-50/25 to-slate-100 p-2 sm:p-3 lg:p-4">
         <TimeLossReasonDialog
           open={!!reasonDialog}
           machineName={reasonDialog?.machineName || ''}
@@ -729,231 +822,350 @@ export const ProductionTracker: React.FC = () => {
           onSave={saveTimeLossReason}
           onClose={() => setReasonDialog(null)}
         />
-        <div className="w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-            <div className="flex items-baseline gap-2 min-w-0 flex-1 flex-wrap">
-              <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 truncate">
-                {selectedLineDetail.line_name || 'Line Details'}
-              </h3>
-              <span className="text-xs text-slate-500 shrink-0">
-                Last updated{' '}
-                <span className={`font-semibold ${isDashboardStale ? 'text-amber-700' : 'text-slate-600'}`}>
-                  {dashboardAgeLabel}
+
+        <div className="mx-auto w-full max-w-7xl space-y-3 sm:space-y-4">
+          {/* Hero header */}
+          <div className="overflow-hidden rounded-2xl border border-blue-900/30 bg-gradient-to-r from-[#0f2f78] via-[#1847be] to-[#1c3cb5] text-white shadow-lg shadow-blue-900/20">
+            <div className="flex flex-wrap items-start justify-between gap-3 p-4 sm:p-5">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/production_tracker')}
+                  className="mt-0.5 shrink-0 rounded-xl border border-white/20 bg-white/10 p-2.5 transition-colors hover:bg-white/20 touch-manipulation"
+                  aria-label="Back to all lines"
+                >
+                  <ArrowLeft className="h-5 w-5" aria-hidden />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-blue-200/90">
+                    Production line
+                  </p>
+                  <h1 className="truncate text-xl font-extrabold sm:text-2xl">
+                    {selectedLineDetail.line_name || 'Line details'}
+                  </h1>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {formattedDate && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold ring-1 ring-white/20">
+                        <Calendar className="h-3.5 w-3.5 shrink-0" />
+                        {formattedDate}
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ring-1 ${lineStatusClass}`}
+                    >
+                      {lineStatusLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <div className="hidden sm:flex flex-col items-end text-right text-xs text-blue-100/90">
+                  <span className="font-medium">Updated</span>
+                  <span className={`font-bold ${isDashboardStale ? 'text-amber-200' : 'text-white'}`}>
+                    {dashboardAgeLabel}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleDetailRefresh()}
+                  disabled={manualRefreshing}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/20 disabled:opacity-60 touch-manipulation"
+                  aria-label="Refresh line data"
+                >
+                  <RefreshCw className={`h-4 w-4 ${manualRefreshing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 border-t border-white/10 bg-black/10 px-4 py-2.5 sm:px-5">
+              <span className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold">
+                <Cpu className="mr-1 inline h-3.5 w-3.5" />
+                {detailMachineSnapshots.length} machine
+                {detailMachineSnapshots.length === 1 ? '' : 's'}
+              </span>
+              {machinesBehindCount > 0 && (
+                <span className="rounded-lg bg-amber-500/30 px-2.5 py-1 text-xs font-semibold text-amber-50">
+                  <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
+                  {machinesBehindCount} behind pace
                 </span>
+              )}
+              {machinesWithLoss > 0 && (
+                <span className="rounded-lg bg-rose-500/30 px-2.5 py-1 text-xs font-semibold text-rose-50">
+                  {machinesWithLoss} with time loss
+                </span>
+              )}
+              <span className="sm:hidden ml-auto text-xs font-medium text-blue-100/80">
+                {dashboardAgeLabel}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate('/production_tracker')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold shrink-0 shadow-sm"
-              aria-label="Back"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              Back
-            </button>
           </div>
 
-          <div className="px-2.5 py-2.5 sm:px-3 sm:py-3 lg:px-4 lg:py-4 space-y-3">
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-3">
-              <div className="bg-blue-50 rounded-xl p-2.5 border border-blue-100">
-                <p className="text-[11px] text-slate-500 font-semibold">Target</p>
-                <p className="text-2xl font-extrabold text-blue-700 tracking-tight">{Number(selectedLineDetail.target || 0)}</p>
-              </div>
-              <div className="bg-cyan-50 rounded-xl p-2.5 border border-cyan-100">
-                <p className="text-[11px] text-slate-500 font-semibold">Input</p>
-                <p className="text-2xl font-extrabold text-cyan-700 tracking-tight">{formatInput(selectedLineDetail.input)}</p>
-              </div>
-              <div className="bg-indigo-50 rounded-xl p-2.5 border border-indigo-100">
-                <p className="text-[11px] text-slate-500 font-semibold">Output</p>
-                <p className="text-2xl font-extrabold text-indigo-700 tracking-tight">{Number(selectedLineDetail.output || 0)}</p>
-              </div>
-              <div className="bg-sky-50 rounded-xl p-2.5 border border-sky-100">
-                <p className="text-[11px] text-slate-500 font-semibold">Input efficiency %</p>
-                <p className={`text-2xl font-extrabold tracking-tight ${efficiencyPctColor(lineInputPercent)}`}>
-                  {lineInputPercent}%
-                </p>
-              </div>
-              <div className="bg-violet-50 rounded-xl p-2.5 border border-violet-100">
-                <p className="text-[11px] text-slate-500 font-semibold">Output efficiency %</p>
-                <p className={`text-2xl font-extrabold tracking-tight ${efficiencyPctColor(lineOutputPercent)}`}>
-                  {lineOutputPercent}%
-                </p>
-              </div>
-              <div className="bg-orange-50 rounded-xl p-2.5 border border-orange-100">
-                <p className="text-[11px] text-slate-500 font-semibold">WIP</p>
-                <p className="text-2xl font-extrabold text-orange-700 tracking-tight">{Number(selectedLineDetail.wip || 0)}</p>
-              </div>
+          {!online && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">
+              <WifiOff className="h-4 w-4 shrink-0" />
+              Offline — showing last synced data
             </div>
+          )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3">
-              <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200">
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <p className="text-xs text-slate-600 font-semibold">Input in progress</p>
-                  <p className="text-sm font-bold text-slate-800">
-                    {lineInputPercent}%
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+            <div className="space-y-4 p-3 sm:p-4 lg:p-5">
+              {/* KPI tiles */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:gap-3">
+                {kpiTiles.map((tile) => {
+                  const Icon = tile.icon;
+                  return (
+                    <div
+                      key={tile.label}
+                      className="flex flex-col items-center justify-center rounded-xl border border-[#dbe5ff] bg-[#f7f9ff] p-2.5 text-center sm:p-3"
+                    >
+                      <Icon className={`mb-1 h-5 w-5 sm:h-6 sm:w-6 ${tile.iconClass}`} aria-hidden />
+                      <p className="text-[10px] font-semibold text-slate-500 sm:text-[11px]">{tile.label}</p>
+                      <p className={`text-xl font-extrabold tabular-nums leading-tight sm:text-2xl ${tile.valueClass}`}>
+                        {tile.value}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Line shift pace */}
+              <div className="rounded-xl border border-[#dbe5ff] bg-[#f7f9ff] p-3 sm:p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-extrabold text-slate-800 sm:text-base">Line pace today</h2>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-amber-800 bg-amber-100 px-2 py-0.5 rounded ring-1 ring-amber-200">
+                    Circle = efficiency %
+                  </span>
+                </div>
+                <LinePaceEodEffBlock
+                  actual={detailLinePace.actual}
+                  expected={detailLinePace.expected}
+                  projectedEod={detailLinePace.projectedEod}
+                  daily={detailLinePace.daily}
+                  pacePct={detailLinePace.pacePct}
+                />
+              </div>
+
+              {/* Progress bars */}
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Input progress</p>
+                    <span className={`text-sm font-extrabold tabular-nums ${efficiencyPctColor(lineInputPercent)}`}>
+                      {lineInputPercent}%
+                    </span>
+                  </div>
+                  <p className="mb-2 text-base font-extrabold text-slate-800 tabular-nums">
+                    {formatInput(selectedLineDetail.input)}{' '}
+                    <span className="text-slate-400 font-bold">/</span> {lineTarget.toLocaleString()}
                   </p>
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        lineInputPercent >= 90
+                          ? 'bg-emerald-500'
+                          : lineInputPercent >= 70
+                            ? 'bg-amber-400'
+                            : 'bg-red-500'
+                      }`}
+                      style={{ width: `${Math.min(lineInputPercent, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <p className="text-base font-extrabold text-slate-800 mb-2">
-                  {formatInput(selectedLineDetail.input)} / {Number(selectedLineDetail.target || 0)}
-                </p>
-                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      lineInputPercent >= 90 ? 'bg-green-500' :
-                      lineInputPercent >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${lineInputPercent}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200">
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <p className="text-xs text-slate-600 font-semibold">Output in progress</p>
-                  <p className="text-sm font-bold text-slate-800">
-                    {lineOutputPercent}%
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Output progress</p>
+                    <span className={`text-sm font-extrabold tabular-nums ${efficiencyPctColor(lineOutputPercent)}`}>
+                      {lineOutputPercent}%
+                    </span>
+                  </div>
+                  <p className="mb-2 text-base font-extrabold text-slate-800 tabular-nums">
+                    {Number(selectedLineDetail.output || 0).toLocaleString()}{' '}
+                    <span className="text-slate-400 font-bold">/</span> {lineTarget.toLocaleString()}
                   </p>
-                </div>
-                <p className="text-base font-extrabold text-slate-800 mb-2">
-                  {Number(selectedLineDetail.output || 0)} / {Number(selectedLineDetail.target || 0)}
-                </p>
-                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-blue-600"
-                    style={{ width: `${Math.min(Math.max(lineOutputPercent, 0), 100)}%` }}
-                  />
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all"
+                      style={{ width: `${Math.min(Math.max(lineOutputPercent, 0), 100)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-2">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                <span className="text-base sm:text-lg font-extrabold text-blue-800">Machine-level pace</span>
-                <span className="text-xs sm:text-sm font-bold text-amber-900 bg-amber-200/90 px-1.5 py-0.5 rounded ring-1 ring-amber-400/80 normal-case">
-                  Circle = Efficiency %
-                </span>
-              </div>
-              {detailMachinesLoading ? (
-                <p className="text-sm text-slate-500 py-1">Loading…</p>
-              ) : detailMachineSnapshots.length === 0 ? (
-                <p className="text-sm text-slate-500 py-1">No machines on this line.</p>
-              ) : (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-                  {detailMachineSnapshots.map((snap) => {
-                    const pacePct =
-                      snap.expected > 0 ? Math.round((snap.actual / snap.expected) * 100) : null;
-                    const cardTone =
-                      pacePct == null
-                        ? 'border-slate-200 bg-white'
-                        : pacePct >= 100
-                          ? 'border-emerald-200 bg-emerald-50/40'
-                          : pacePct >= 70
-                            ? 'border-amber-200 bg-amber-50/40'
-                            : 'border-rose-200 bg-rose-50/40';
-                    const lossMeta = findLossMetaForMachine(snap.machineId);
-                    const netMins = Number(lossMeta?.net_mins ?? 0);
-                    const hasNetLoss = netMins < 0 && Math.abs(netMins) * 60 >= 1;
-                    const hasNetGain = netMins > 0 && Math.abs(netMins) * 60 >= 1;
-                    const netBalanceLabel = formatSignedNetBalance(netMins);
-                    const netDurationLabel = formatNetBalanceDuration(netMins);
-                    const reasonParsed = lossMeta?.reason ? parseM4FromDetail(lossMeta.reason) : null;
-                    const showReasonRow = hasNetLoss || hasNetGain || !!lossMeta?.reason;
-                    return (
-                      <div key={snap.machineId} className={`rounded-xl border px-2 py-1.5 shadow-sm ${cardTone}`}>
-                        <p className="text-xs sm:text-sm font-bold text-slate-800 leading-tight mb-1 line-clamp-2">
-                          {snap.machineName}
-                        </p>
-                        <MachinePaceInlineRow
-                          actual={snap.actual}
-                          expected={snap.expected}
-                          projectedEod={snap.projectedEod}
-                          daily={snap.daily}
-                          pacePct={pacePct}
-                        />
-                        {showReasonRow && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setReasonDialog({
-                                machineId: snap.machineId,
-                                machineName: snap.machineName,
-                              })
-                            }
-                            className="mt-1.5 w-full text-left rounded-lg border border-slate-200 bg-white/80 px-2 py-1.5 hover:border-blue-300 hover:bg-blue-50/60 transition-colors"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              {netDurationLabel ? (
-                                <span
-                                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm sm:text-base font-black tabular-nums ring-1 ${
-                                    hasNetLoss
-                                      ? 'bg-red-100 text-red-800 ring-red-300'
-                                      : 'bg-emerald-100 text-emerald-800 ring-emerald-300'
-                                  }`}
-                                >
-                                  <span className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wide opacity-90">
-                                    {hasNetLoss ? 'Time loss' : 'Net balance'}
-                                  </span>
-                                  <span>{netDurationLabel}</span>
-                                </span>
-                              ) : null}
-                              {reasonParsed?.reason ? (
-                                <span
-                                  className={`inline-flex items-center gap-1.5 max-w-full min-w-0 rounded-md px-2 py-1 text-sm sm:text-base font-black ring-1 ${
-                                    M4_REASON_ROW_CLASS[reasonParsed.reasonCategory] ||
-                                    'bg-indigo-50 ring-indigo-200'
-                                  }`}
-                                >
+              {/* Machine pace */}
+              <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 p-3 sm:p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-base font-extrabold text-blue-900 sm:text-lg">Machine pace</h2>
+                    <p className="text-xs text-slate-600">Tap a card to view or add time loss reason</p>
+                  </div>
+                  {detailMachinesLoading && (
+                    <Loader2 className="h-5 w-5 animate-spin text-blue-600" aria-label="Loading machines" />
+                  )}
+                </div>
+
+                {detailMachinesLoading && detailMachineSnapshots.length === 0 ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white/60"
+                      />
+                    ))}
+                  </div>
+                ) : detailMachineSnapshots.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white/60 py-10 text-center">
+                    <Cpu className="mb-2 h-10 w-10 text-slate-300" />
+                    <p className="text-sm font-semibold text-slate-600">No machines on this line</p>
+                    <p className="mt-1 text-xs text-slate-500">Check machine centres are assigned to this work centre.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+                    {detailMachineSnapshots.map((snap) => {
+                      const pacePct =
+                        snap.expected > 0 ? Math.round((snap.actual / snap.expected) * 100) : null;
+                      const cardTone =
+                        pacePct == null
+                          ? 'border-slate-200 bg-white'
+                          : pacePct >= 100
+                            ? 'border-emerald-200 bg-emerald-50/50 shadow-sm shadow-emerald-100/50'
+                            : pacePct >= 70
+                              ? 'border-amber-200 bg-amber-50/40 shadow-sm shadow-amber-100/40'
+                              : 'border-rose-200 bg-rose-50/40 shadow-sm shadow-rose-100/40';
+                      const lossMeta = findLossMetaForMachine(snap.machineId);
+                      const netMins = Number(lossMeta?.net_mins ?? 0);
+                      const hasNetLoss = netMins < 0 && Math.abs(netMins) * 60 >= 1;
+                      const hasNetGain = netMins > 0 && Math.abs(netMins) * 60 >= 1;
+                      const netDurationLabel = formatNetBalanceDuration(netMins);
+                      const reasonParsed = lossMeta?.reason ? parseM4FromDetail(lossMeta.reason) : null;
+                      const showReasonRow = hasNetLoss || hasNetGain || !!lossMeta?.reason;
+                      const needsReason = hasNetLoss && !reasonParsed?.reason;
+
+                      return (
+                        <div
+                          key={snap.machineId}
+                          className={`rounded-xl border p-2.5 transition-shadow hover:shadow-md ${cardTone}`}
+                        >
+                          <div className="mb-1.5 flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="line-clamp-2 text-sm font-bold leading-tight text-slate-900">
+                                {snap.machineName}
+                              </p>
+                              <span className="mt-0.5 inline-block rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 tabular-nums">
+                                {snap.machineId}
+                              </span>
+                            </div>
+                            {pacePct != null && pacePct < 70 && (
+                              <span className="shrink-0 rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-rose-700">
+                                Behind
+                              </span>
+                            )}
+                          </div>
+                          <MachinePaceInlineRow
+                            actual={snap.actual}
+                            expected={snap.expected}
+                            projectedEod={snap.projectedEod}
+                            daily={snap.daily}
+                            pacePct={pacePct}
+                          />
+                          {showReasonRow ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReasonDialog({
+                                  machineId: snap.machineId,
+                                  machineName: snap.machineName,
+                                })
+                              }
+                              className="mt-2 w-full rounded-lg border border-slate-200/90 bg-white/90 px-2 py-2 text-left transition-colors hover:border-blue-300 hover:bg-blue-50/70 touch-manipulation"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                {netDurationLabel ? (
                                   <span
-                                    className={`text-[10px] sm:text-xs font-extrabold uppercase tracking-wide shrink-0 ${
-                                      M4_REASON_TEXT_CLASS[reasonParsed.reasonCategory] || 'text-indigo-800'
+                                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-black tabular-nums ring-1 ${
+                                      hasNetLoss
+                                        ? 'bg-red-100 text-red-800 ring-red-300'
+                                        : 'bg-emerald-100 text-emerald-800 ring-emerald-300'
                                     }`}
                                   >
-                                    Reason
+                                    <span className="text-[10px] font-extrabold uppercase tracking-wide opacity-90">
+                                      {hasNetLoss ? 'Time loss' : 'Net balance'}
+                                    </span>
+                                    <span>{netDurationLabel}</span>
                                   </span>
-                                  {reasonParsed.reasonCategory ? (
+                                ) : null}
+                                {reasonParsed?.reason ? (
+                                  <span
+                                    className={`inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-black ring-1 ${
+                                      M4_REASON_ROW_CLASS[reasonParsed.reasonCategory] ||
+                                      'bg-indigo-50 ring-indigo-200'
+                                    }`}
+                                  >
                                     <span
-                                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] sm:text-xs font-black uppercase ring-1 ${
-                                        M4_BADGE_CLASS[reasonParsed.reasonCategory] ||
-                                        'bg-indigo-100 text-indigo-900 ring-indigo-300'
+                                      className={`shrink-0 text-[10px] font-extrabold uppercase tracking-wide ${
+                                        M4_REASON_TEXT_CLASS[reasonParsed.reasonCategory] || 'text-indigo-800'
                                       }`}
                                     >
-                                      {reasonParsed.reasonCategory}
+                                      Reason
                                     </span>
-                                  ) : null}
-                                  <span
-                                    className={`truncate font-extrabold ${
-                                      M4_REASON_TEXT_CLASS[reasonParsed.reasonCategory] || 'text-indigo-900'
-                                    }`}
-                                  >
-                                    {formatReasonDisplayLabel(reasonParsed.reason)}
+                                    {reasonParsed.reasonCategory ? (
+                                      <span
+                                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black uppercase ring-1 ${
+                                          M4_BADGE_CLASS[reasonParsed.reasonCategory] ||
+                                          'bg-indigo-100 text-indigo-900 ring-indigo-300'
+                                        }`}
+                                      >
+                                        {reasonParsed.reasonCategory}
+                                      </span>
+                                    ) : null}
+                                    <span
+                                      className={`truncate font-extrabold ${
+                                        M4_REASON_TEXT_CLASS[reasonParsed.reasonCategory] || 'text-indigo-900'
+                                      }`}
+                                    >
+                                      {formatReasonDisplayLabel(reasonParsed.reason)}
+                                    </span>
                                   </span>
-                                </span>
-                              ) : hasNetLoss ? (
-                                <span className="text-[10px] sm:text-xs font-semibold text-blue-700">
-                                  + Add time loss reason
-                                </span>
-                              ) : null}
-                            </div>
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                                ) : needsReason ? (
+                                  <span className="text-xs font-bold text-blue-700">
+                                    + Add time loss reason
+                                  </span>
+                                ) : null}
+                              </div>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReasonDialog({
+                                  machineId: snap.machineId,
+                                  machineName: snap.machineName,
+                                })
+                              }
+                              className="mt-2 w-full rounded-lg border border-dashed border-slate-300 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-700 touch-manipulation"
+                            >
+                              Log time loss / reason
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMobileTab('trends');
-                navigate('/production_tracker');
-              }}
-              className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 shadow-sm"
-            >
-              View Hourly Trend
-            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMobileTab('trends');
+              navigate('/production_tracker');
+            }}
+            className="flex w-full min-h-[3rem] items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white py-3 font-bold text-blue-700 shadow-sm transition-colors hover:bg-blue-50 touch-manipulation"
+          >
+            <BarChart2 className="h-5 w-5" />
+            View hourly trend (all lines)
+          </button>
         </div>
       </div>
     );

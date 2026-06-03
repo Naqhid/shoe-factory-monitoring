@@ -1,6 +1,12 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
+const {
+  buildPaceSnapshot,
+  performanceGradeFromPaceEfficiency,
+  routingMapKey,
+  toLocalDateStr,
+} = require('../utils/shiftPaceEfficiency');
 
 /** EOL Final Inspection = line output (Line 2A / wc 5). */
 const EOL_MACHINE_ID = '07';
@@ -67,6 +73,62 @@ const stripStoppageDetail = (detail) => {
     .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
     .trim();
 };
+
+/**
+ * Routing mins per machine/day — SUM all routing lines (same as TV dashboard target_mins_per_box).
+ */
+async function loadRoutingMinsMap(fromDate, toDate, workCentreId) {
+  const routingMinsCol = await getRoutingMinsColumnName();
+  const pairsPerBin = await getPairsPerRoutingBin();
+  const routingParams = [fromDate, toDate];
+  if (workCentreId) routingParams.push(workCentreId);
+  const [routingRows] = await db.query(`
+    SELECT
+      pp2.work_centre_id,
+      DATE(pp2.plan_date) AS plan_date,
+      prl.machine_centre_id AS machine_id,
+      ROUND(SUM(prl.${routingMinsCol}), 2) AS routing_mins_per_box
+    FROM production_routing_lines prl
+    INNER JOIN production_routing_header prh
+      ON prl.routing_header_id = prh.id AND prh.deleted_at IS NULL
+    INNER JOIN production_plan pp2
+      ON prh.style_id = pp2.style_id AND pp2.deleted_at IS NULL
+    WHERE DATE(pp2.plan_date) BETWEEN ? AND ?
+      ${workCentreId ? 'AND pp2.work_centre_id = ?' : ''}
+    GROUP BY pp2.work_centre_id, DATE(pp2.plan_date), prl.machine_centre_id
+  `, routingParams);
+
+  const map = new Map();
+  for (const row of routingRows) {
+    const key = routingMapKey(row.work_centre_id, row.plan_date, row.machine_id);
+    map.set(key, Number(row.routing_mins_per_box) || 0);
+  }
+  return { map, pairsPerBin };
+}
+
+function enrichRowsWithPaceEfficiency(rows, routingCtx, { withGrade = false } = {}) {
+  const { map, pairsPerBin } = routingCtx;
+  const now = new Date();
+  return rows.map((row) => {
+    const dateStr = toLocalDateStr(row.date);
+    const wcId = row.work_centre_id;
+    const machineId = row.machine_id;
+    const output = Number(row.output ?? row.total_output ?? 0);
+    const routingMins = map.get(routingMapKey(wcId, dateStr, machineId)) || 0;
+    const pace = buildPaceSnapshot(output, routingMins, pairsPerBin, dateStr, now);
+    const enriched = {
+      ...row,
+      efficiency_percent: pace.pacePct,
+      pace_in_progress_actual: pace.actual,
+      pace_in_progress_expected: pace.expected,
+      pace_daily_target: pace.daily,
+    };
+    if (withGrade) {
+      enriched.performance_grade = performanceGradeFromPaceEfficiency(pace.pacePct);
+    }
+    return enriched;
+  });
+}
 
 const STOPPAGE_REPORT_WHERE = {
   bottleneck: `AND (
@@ -179,8 +241,9 @@ class ApiController {
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-      const [data] = await db.query(`
-        SELECT mcs.prod_date as date, wc.name as line, COALESCE(mc.machine_name, mc.name) as process,
+      const [rawRows] = await db.query(`
+        SELECT mcs.prod_date as date, mcs.work_centre_id, mcs.machine_id,
+          wc.name as line, COALESCE(mc.machine_name, mc.name) as process,
           c.name as customer, s.name as article_no, col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -188,9 +251,11 @@ class ApiController {
           mcs.total_output_pairs as total_output,
           ROUND((mcs.total_output_pairs/NULLIF(pp.total_target_per_day,0))*100,1) as output_percent,
           mcs.total_target_mins as total_standard_mins_value, mcs.total_actual_mins as total_produced_mins_value,
-          ROUND(pp.total_target_per_day*(mcs.total_target_mins/(8*60)),0) as targeted_output_smv,
-          ROUND(mcs.avg_efficiency_percent, 1) as efficiency_percent
+          ROUND(pp.total_target_per_day*(mcs.total_target_mins/(8*60)),0) as targeted_output_smv
         ${baseQuery} ORDER BY date, wc.name, process LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
+      const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -310,8 +375,9 @@ class ApiController {
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-      const [data] = await db.query(`
-        SELECT DATE(mcs.prod_date) as date, wc.name as line, mc.machine_id,
+      const [rawRows] = await db.query(`
+        SELECT DATE(mcs.prod_date) as date, mcs.work_centre_id, mc.machine_id,
+          wc.name as line,
           COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -320,9 +386,11 @@ class ApiController {
           COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
           mcs.total_target_mins as target_mins,
-          mcs.total_actual_mins as actual_mins, mcs.total_idle_mins as idle_mins,
-          ROUND(mcs.avg_efficiency_percent,1) as efficiency_percent
+          mcs.total_actual_mins as actual_mins, mcs.total_idle_mins as idle_mins
         ${baseQuery} ORDER BY date, wc.name, mc.machine_id LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
+      const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -401,9 +469,10 @@ class ApiController {
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-      const [data] = await db.query(`
-        SELECT DATE(mcs.prod_date) as date, wc.name as line, e.code as emp_code, e.name as emp_name,
-          mcs.machine_id, COALESCE(mc.machine_name, mc.name) as machine_name,
+      const [rawRows] = await db.query(`
+        SELECT DATE(mcs.prod_date) as date, mcs.work_centre_id, mcs.machine_id,
+          wc.name as line, e.code as emp_code, e.name as emp_name,
+          COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
           ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
@@ -411,12 +480,11 @@ class ApiController {
           COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
           mcs.total_target_mins as target_mins, mcs.total_actual_mins as actual_mins,
-          mcs.total_idle_mins as idle_mins, ROUND(mcs.avg_efficiency_percent,1) as efficiency_percent,
-          CASE WHEN mcs.avg_efficiency_percent>=90 THEN 'Excellent'
-               WHEN mcs.avg_efficiency_percent>=75 THEN 'Good'
-               WHEN mcs.avg_efficiency_percent>=60 THEN 'Average'
-               ELSE 'Below Target' END as performance_grade
+          mcs.total_idle_mins as idle_mins
         ${baseQuery} ORDER BY date, wc.name, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
+      const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx, { withGrade: true });
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
