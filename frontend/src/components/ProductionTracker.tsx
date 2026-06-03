@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -262,8 +262,8 @@ export const ProductionTracker: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
 
-  const loadAttendanceData = async () => {
-    setAttendanceLoading(true);
+  const loadAttendanceData = async (silent = false) => {
+    if (!silent) setAttendanceLoading(true);
     try {
       const workCentreId = selectedLine || workCentres[0]?.id || 1;
       // Get attendance directly from mobile sessions
@@ -368,7 +368,7 @@ export const ProductionTracker: React.FC = () => {
       const pollMs = refreshMode === '30s' ? 30000 : 10000;
       const interval = setInterval(() => {
         loadDashboardData();
-        loadAttendanceData();
+        loadAttendanceData(true);
       }, pollMs);
       return () => clearInterval(interval);
     }
@@ -518,41 +518,51 @@ export const ProductionTracker: React.FC = () => {
     }
     const detailLine = linePerformance.find((line: any) => Number(line.work_centre_id) === detailWorkCentreId) || null;
     if (detailLine) {
-      if (!selectedLineDetail || Number(selectedLineDetail.work_centre_id) !== detailWorkCentreId) {
-        setSelectedLineDetail(detailLine);
-      }
+      setSelectedLineDetail((prev: any) => {
+        if (!prev || Number(prev.work_centre_id) !== detailWorkCentreId) return detailLine;
+        return detailLine;
+      });
     } else if (selectedLineDetail) {
       setSelectedLineDetail(null);
     }
   }, [isDetailRoute, detailWorkCentreId, linePerformance, selectedLineDetail]);
+
+  const loadDetailMachines = useCallback(
+    async (silent = false) => {
+      if (!Number.isFinite(detailWorkCentreId)) return;
+      if (!silent) setDetailMachinesLoading(true);
+      try {
+        const res = await apiFetch(
+          `${API_BASE}/api/tv-dashboard/machine-centres/${detailWorkCentreId}?date=${selectedDate}`
+        );
+        const result = await res.json();
+        setDetailMachineRows(result.success ? result.data || [] : []);
+      } catch {
+        setDetailMachineRows([]);
+      } finally {
+        if (!silent) setDetailMachinesLoading(false);
+      }
+    },
+    [detailWorkCentreId, selectedDate]
+  );
 
   useEffect(() => {
     if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
       setDetailMachineRows([]);
       return;
     }
-    let cancelled = false;
-    const loadDetailMachines = async () => {
-      setDetailMachinesLoading(true);
-      try {
-        const res = await apiFetch(
-          `${API_BASE}/api/tv-dashboard/machine-centres/${detailWorkCentreId}?date=${selectedDate}`
-        );
-        const result = await res.json();
-        if (!cancelled) {
-          setDetailMachineRows(result.success ? result.data || [] : []);
-        }
-      } catch {
-        if (!cancelled) setDetailMachineRows([]);
-      } finally {
-        if (!cancelled) setDetailMachinesLoading(false);
-      }
-    };
-    loadDetailMachines();
-    return () => {
-      cancelled = true;
-    };
-  }, [isDetailRoute, detailWorkCentreId, selectedDate, dashboardLastUpdated]);
+    loadDetailMachines(false);
+  }, [isDetailRoute, detailWorkCentreId, selectedDate, loadDetailMachines]);
+
+  useEffect(() => {
+    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) return;
+    if (refreshMode === 'manual') return;
+    const pollMs = refreshMode === '30s' ? 30000 : 10000;
+    const interval = setInterval(() => {
+      loadDetailMachines(true);
+    }, pollMs);
+    return () => clearInterval(interval);
+  }, [isDetailRoute, detailWorkCentreId, selectedDate, refreshMode, loadDetailMachines]);
 
   const detailMachineSnapshots = useMemo(
     () =>
