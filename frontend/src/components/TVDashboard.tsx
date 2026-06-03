@@ -950,15 +950,15 @@ export const TVDashboard: React.FC = () => {
 
             <div className="col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
                 <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-gradient-to-b from-white to-slate-50 ring-1 ring-slate-200/60 overflow-hidden">
-                    <div className="flex-shrink-0 mb-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="inline-flex items-center rounded-md bg-orange-100 px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold text-orange-900 ring-1 ring-orange-300 tabular-nums shadow-sm">
+                    <div className="flex-shrink-0 mb-2 min-w-0">
+                        <div className="grid grid-cols-3 gap-1 min-w-0">
+                            <span className="inline-flex items-center justify-center rounded-md bg-orange-100 px-1 py-1 text-[9px] sm:text-[10px] font-extrabold text-orange-900 ring-1 ring-orange-300 tabular-nums shadow-sm whitespace-nowrap min-w-0">
                                 Time loss
                             </span>
-                            <span className="inline-flex items-center rounded-md bg-amber-100 px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold text-amber-900 ring-1 ring-amber-300 tabular-nums shadow-sm">
+                            <span className="inline-flex items-center justify-center rounded-md bg-amber-100 px-1 py-1 text-[9px] sm:text-[10px] font-extrabold text-amber-900 ring-1 ring-amber-300 tabular-nums shadow-sm whitespace-nowrap min-w-0">
                                 Rework {reworkRejectionCount}
                             </span>
-                            <span className="inline-flex items-center rounded-md bg-rose-100 px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold text-rose-900 ring-1 ring-rose-300 tabular-nums shadow-sm">
+                            <span className="inline-flex items-center justify-center rounded-md bg-rose-100 px-1 py-1 text-[9px] sm:text-[10px] font-extrabold text-rose-900 ring-1 ring-rose-300 tabular-nums shadow-sm whitespace-nowrap min-w-0">
                                 Breakdown {breakdownList.length}
                             </span>
                         </div>
