@@ -191,11 +191,144 @@ async function aggregateMachineCycleLosses(pool, workCentreId, date) {
     .sort((a, b) => b.abs_net_mins - a.abs_net_mins);
 }
 
+const netStatusFromMins = (netMins) => {
+  const net = Number(netMins) || 0;
+  if (Math.abs(net) * 60 < 1) return 'neutral';
+  return net > 0 ? 'gain' : 'loss';
+};
+
+/**
+ * Machine/day net time loss rows for Reports — same cycle math as TV dashboard machineTimeLosses.
+ */
+async function buildMachineTimeLossReportRows(pool, { fromDate, toDate, workCentreId = null, search = '' }) {
+  let wcClause = '';
+  const params = [fromDate, toDate];
+  if (workCentreId) {
+    wcClause = ' AND mcp.work_centre_id = ?';
+    params.push(Number(workCentreId));
+  }
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      DATE(mcp.prod_date) AS date,
+      mcp.work_centre_id,
+      wc.name AS line,
+      mcp.machine_id,
+      COALESCE(mc.name, mc.machine_name, CONCAT('Machine ', mcp.machine_id)) AS machine_name,
+      mcp.start_time,
+      mcp.finish_time,
+      mcp.target_mins,
+      LAG(mcp.finish_time) OVER (
+        PARTITION BY mcp.machine_id, mcp.work_centre_id, DATE(mcp.prod_date)
+        ORDER BY mcp.start_time
+      ) AS prev_finish_time,
+      mtlr.reason AS time_loss_reason
+    FROM machine_centre_production mcp
+    LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+    LEFT JOIN machine_centres mc
+      ON mc.machine_id = mcp.machine_id
+      AND mc.work_centre_id = mcp.work_centre_id
+    LEFT JOIN machine_time_loss_reasons mtlr
+      ON mtlr.work_centre_id = mcp.work_centre_id
+      AND mtlr.machine_id = mcp.machine_id
+      AND mtlr.prod_date = DATE(mcp.prod_date)
+    WHERE DATE(mcp.prod_date) BETWEEN ? AND ?
+      ${wcClause}
+      AND mcp.button_status = 2
+      AND mcp.start_time IS NOT NULL
+      AND mcp.finish_time IS NOT NULL
+    ORDER BY date DESC, line, mcp.machine_id, mcp.start_time
+    `,
+    params
+  );
+
+  const byKey = new Map();
+  rows.forEach((row) => {
+    const dateKey = row.date ? String(row.date).slice(0, 10) : '';
+    const machineId = String(row.machine_id || '');
+    const wcId = row.work_centre_id;
+    if (!dateKey || !machineId || wcId == null) return;
+
+    const key = `${dateKey}|${wcId}|${machineId}`;
+    const startMs = row.start_time ? new Date(row.start_time).getTime() : NaN;
+    const finishMs = row.finish_time ? new Date(row.finish_time).getTime() : NaN;
+    const actualMins =
+      Number.isFinite(startMs) && Number.isFinite(finishMs)
+        ? Math.max(0, (finishMs - startMs) / 60000)
+        : 0;
+    const targetMins = Math.max(0, Number(row.target_mins) || 0);
+    const startTs = new Date(row.start_time);
+    const shiftStart = new Date(startTs);
+    shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+    const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
+    const inactiveMins = computeShiftInactiveMinutes({
+      baselineTs,
+      startTs,
+      startReminderMins: LATE_CYCLE_GRACE_MINS,
+    });
+    const earlySaveMins = Math.max(0, targetMins - actualMins);
+    const slowExtraMins = Math.max(0, actualMins - targetMins);
+    const netDeltaMins = earlySaveMins - inactiveMins - slowExtraMins;
+
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        date: dateKey,
+        work_centre_id: wcId,
+        line: row.line || 'N/A',
+        machine_id: machineId,
+        machine_name: row.machine_name || `Machine ${machineId}`,
+        net_mins: 0,
+        time_loss_reason: row.time_loss_reason || '',
+      });
+    }
+    const agg = byKey.get(key);
+    agg.net_mins += netDeltaMins;
+    if (row.time_loss_reason && !agg.time_loss_reason) {
+      agg.time_loss_reason = row.time_loss_reason;
+    }
+  });
+
+  let out = Array.from(byKey.values())
+    .map((m) => {
+      const net_mins = Math.round((Number(m.net_mins) || 0) * 100) / 100;
+      const abs_net_mins = Math.abs(net_mins);
+      return {
+        ...m,
+        net_mins,
+        abs_net_mins,
+        net_status: netStatusFromMins(net_mins),
+      };
+    })
+    .filter((m) => m.abs_net_mins * 60 >= 1);
+
+  const q = String(search || '').trim().toLowerCase();
+  if (q) {
+    out = out.filter(
+      (m) =>
+        String(m.line || '').toLowerCase().includes(q) ||
+        String(m.machine_id || '').toLowerCase().includes(q) ||
+        String(m.machine_name || '').toLowerCase().includes(q) ||
+        String(m.time_loss_reason || '').toLowerCase().includes(q)
+    );
+  }
+
+  out.sort((a, b) => {
+    if (b.abs_net_mins !== a.abs_net_mins) return b.abs_net_mins - a.abs_net_mins;
+    if (a.date !== b.date) return String(b.date).localeCompare(String(a.date));
+    return String(a.line || '').localeCompare(String(b.line || ''));
+  });
+
+  return out;
+}
+
 module.exports = {
   computeShiftInactiveMinutes,
   computeCycleNetLostMins,
   aggregateWorkCentreCycleLoss,
   aggregateMachineCycleLosses,
+  buildMachineTimeLossReportRows,
+  netStatusFromMins,
   LATE_CYCLE_GRACE_SECS,
   LATE_CYCLE_GRACE_MINS,
 };

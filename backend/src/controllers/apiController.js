@@ -1,6 +1,14 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
+const {
+  buildPaceSnapshot,
+  performanceGradeFromPaceEfficiency,
+  routingMapKey,
+  toLocalDateStr,
+} = require('../utils/shiftPaceEfficiency');
+const wipStateService = require('../services/wipStateService');
+const { buildMachineTimeLossReportRows } = require('../utils/cycleLossMins');
 
 /** EOL Final Inspection = line output (Line 2A / wc 5). */
 const EOL_MACHINE_ID = '07';
@@ -52,6 +60,23 @@ const SQL_MACHINE_EFFICIENCY_FROM = `
     GROUP BY DATE(prod_date), work_centre_id, machine_id
   ) mcs`;
 
+/** Per employee + machine/day from production (summary table is often empty for past dates). */
+const SQL_EMPLOYEE_PERF_FROM = `
+  FROM (
+    SELECT
+      DATE(prod_date) AS prod_date,
+      work_centre_id,
+      machine_id,
+      emp_id,
+      SUM(output_pairs) AS total_output_pairs,
+      SUM(target_mins) AS total_target_mins,
+      SUM(COALESCE(TIMESTAMPDIFF(MINUTE, start_time, finish_time), 0)) AS total_actual_mins,
+      SUM(COALESCE(idle_mins, 0)) AS total_idle_mins
+    FROM machine_centre_production
+    WHERE button_status = 2 AND DATE(prod_date) BETWEEN ? AND ?
+    GROUP BY DATE(prod_date), work_centre_id, machine_id, emp_id
+  ) mcs`;
+
 // Shared pagination helper — wraps any query with COUNT + LIMIT/OFFSET
 const paginate = (page, limit) => {
   const p = Math.max(1, parseInt(page) || 1);
@@ -67,6 +92,95 @@ const stripStoppageDetail = (detail) => {
     .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
     .trim();
 };
+
+/**
+ * Routing mins per machine/day — SUM all routing lines (same as TV dashboard target_mins_per_box).
+ */
+async function loadRoutingMinsMap(fromDate, toDate, workCentreId) {
+  const routingMinsCol = await getRoutingMinsColumnName();
+  const pairsPerBin = await getPairsPerRoutingBin();
+  const routingParams = [fromDate, toDate];
+  if (workCentreId) routingParams.push(workCentreId);
+  const [routingRows] = await db.query(`
+    SELECT
+      pp2.work_centre_id,
+      DATE(pp2.plan_date) AS plan_date,
+      prl.machine_centre_id AS machine_id,
+      ROUND(SUM(prl.${routingMinsCol}), 2) AS routing_mins_per_box
+    FROM production_routing_lines prl
+    INNER JOIN production_routing_header prh
+      ON prl.routing_header_id = prh.id AND prh.deleted_at IS NULL
+    INNER JOIN production_plan pp2
+      ON prh.style_id = pp2.style_id AND pp2.deleted_at IS NULL
+    WHERE DATE(pp2.plan_date) BETWEEN ? AND ?
+      ${workCentreId ? 'AND pp2.work_centre_id = ?' : ''}
+    GROUP BY pp2.work_centre_id, DATE(pp2.plan_date), prl.machine_centre_id
+  `, routingParams);
+
+  const map = new Map();
+  for (const row of routingRows) {
+    const key = routingMapKey(row.work_centre_id, row.plan_date, row.machine_id);
+    map.set(key, Number(row.routing_mins_per_box) || 0);
+  }
+  return { map, pairsPerBin };
+}
+
+/** MES WIP per line/day — same as TV dashboard (Opening + Input − EOL output). */
+async function enrichRowsWithMesWip(rows) {
+  const cache = new Map();
+  const out = [];
+  for (const row of rows) {
+    const wcId = Number(row.work_centre_id);
+    const dateStr = toLocalDateStr(row.date);
+    const key = `${wcId}|${dateStr}`;
+    if (!cache.has(key)) {
+      let wip = 0;
+      if (Number.isFinite(wcId) && wcId > 0 && dateStr) {
+        const snap = await wipStateService.computeAndPersistWip(wcId, dateStr);
+        wip = Math.round(Number(snap.currentWip) || 0);
+      }
+      cache.set(key, wip);
+    }
+    out.push({ ...row, wip: cache.get(key) });
+  }
+  return out;
+}
+
+function enrichRowsWithPaceEfficiency(rows, routingCtx, { withGrade = false, machinePaceTargets = false, usePaceDailyForPlannedQty = false } = {}) {
+  const { map, pairsPerBin } = routingCtx;
+  const now = new Date();
+  return rows.map((row) => {
+    const dateStr = toLocalDateStr(row.date);
+    const wcId = row.work_centre_id;
+    const machineId = row.machine_id;
+    const output = Number(row.output ?? row.total_output ?? 0);
+    const routingMins = map.get(routingMapKey(wcId, dateStr, machineId)) || 0;
+    const pace = buildPaceSnapshot(output, routingMins, pairsPerBin, dateStr, now);
+    const enriched = {
+      ...row,
+      efficiency_percent: pace.pacePct,
+      pace_in_progress_actual: pace.actual,
+      pace_in_progress_expected: pace.expected,
+      pace_daily_target: pace.daily,
+    };
+    if (machinePaceTargets) {
+      if (pace.daily > 0) {
+        enriched.line_plan_target = Number(row.target) || 0;
+        enriched.target = pace.daily;
+        enriched.output_percent = Math.round((output / pace.daily) * 100);
+      }
+    }
+    if (usePaceDailyForPlannedQty && pace.daily > 0) {
+      enriched.line_plan_planned_qty = Number(row.total_planned_qty) || 0;
+      enriched.total_planned_qty = pace.daily;
+      enriched.output_percent = Math.round((output / pace.daily) * 100);
+    }
+    if (withGrade) {
+      enriched.performance_grade = performanceGradeFromPaceEfficiency(pace.pacePct);
+    }
+    return enriched;
+  });
+}
 
 const STOPPAGE_REPORT_WHERE = {
   bottleneck: `AND (
@@ -123,11 +237,11 @@ class ApiController {
         LEFT JOIN groups_master g ON pp.group_id = g.id
         ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${where}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
-      const [data] = await db.query(`
-        SELECT DATE(mcp.prod_date) as date, wc.name as line, c.name as customer, s.name as article_no,
+      const [rawRows] = await db.query(`
+        SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, wc.name as line, c.name as customer, s.name as article_no,
           col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -145,6 +259,8 @@ class ApiController {
           SUM(CASE WHEN HOUR(mcp.start_time)=17 THEN mcp.output_pairs ELSE 0 END) as \`5_6\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=18 THEN mcp.output_pairs ELSE 0 END) as \`6_7\`
         ${baseQuery} ORDER BY date, wc.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const data = await enrichRowsWithMesWip(rawRows);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -179,8 +295,9 @@ class ApiController {
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-      const [data] = await db.query(`
-        SELECT mcs.prod_date as date, wc.name as line, COALESCE(mc.machine_name, mc.name) as process,
+      const [rawRows] = await db.query(`
+        SELECT mcs.prod_date as date, mcs.work_centre_id, mcs.machine_id,
+          wc.name as line, COALESCE(mc.machine_name, mc.name) as process,
           c.name as customer, s.name as article_no, col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -188,9 +305,11 @@ class ApiController {
           mcs.total_output_pairs as total_output,
           ROUND((mcs.total_output_pairs/NULLIF(pp.total_target_per_day,0))*100,1) as output_percent,
           mcs.total_target_mins as total_standard_mins_value, mcs.total_actual_mins as total_produced_mins_value,
-          ROUND(pp.total_target_per_day*(mcs.total_target_mins/(8*60)),0) as targeted_output_smv,
-          ROUND(mcs.avg_efficiency_percent, 1) as efficiency_percent
+          ROUND(pp.total_target_per_day*(mcs.total_target_mins/(8*60)),0) as targeted_output_smv
         ${baseQuery} ORDER BY date, wc.name, process LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
+      const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx, { usePaceDailyForPlannedQty: true });
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -295,23 +414,24 @@ class ApiController {
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
-      let where = 'WHERE DATE(mcs.prod_date) BETWEEN ? AND ?';
+      let where = 'WHERE 1=1';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcs.work_centre_id = ?'; params.push(workCentreId); }
-      if (search) { where += ' AND (wc.name LIKE ? OR mc.machine_id LIKE ? OR mc.machine_name LIKE ? OR mc.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
+      if (search) { where += ' AND (wc.name LIKE ? OR mcs.machine_id LIKE ? OR mc.machine_name LIKE ? OR mc.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
 
       const baseQuery = `
-        FROM machine_centre_summary mcs
+        ${SQL_MACHINE_EFFICIENCY_FROM}
         LEFT JOIN work_centres wc ON mcs.work_centre_id = wc.id
-        LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
-        LEFT JOIN production_plan pp ON pp.work_centre_id = mcs.work_centre_id AND DATE(mcs.prod_date) = pp.plan_date
-        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
-        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
+        LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id AND mc.work_centre_id = mcs.work_centre_id
+        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND mcs.prod_date = pp.plan_date AND pp.deleted_at IS NULL
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'mcs.prod_date')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'mcs.prod_date')}
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-      const [data] = await db.query(`
-        SELECT DATE(mcs.prod_date) as date, wc.name as line, mc.machine_id,
+      const [rawRows] = await db.query(`
+        SELECT mcs.prod_date as date, mcs.work_centre_id, mcs.machine_id,
+          wc.name as line,
           COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -320,9 +440,12 @@ class ApiController {
           COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
           mcs.total_target_mins as target_mins,
-          mcs.total_actual_mins as actual_mins, mcs.total_idle_mins as idle_mins,
-          ROUND(mcs.avg_efficiency_percent,1) as efficiency_percent
-        ${baseQuery} ORDER BY date, wc.name, mc.machine_id LIMIT ? OFFSET ?`, [...params, l, offset]);
+          mcs.total_actual_mins as actual_mins,
+          mcs.total_idle_mins as idle_mins
+        ${baseQuery} ORDER BY date, wc.name, mcs.machine_id LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
+      const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx, { machinePaceTargets: true });
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -385,25 +508,26 @@ class ApiController {
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
-      let where = 'WHERE DATE(mcs.prod_date) BETWEEN ? AND ?';
+      let where = 'WHERE 1=1';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcs.work_centre_id = ?'; params.push(workCentreId); }
-      if (search) { where += ' AND (e.name LIKE ? OR e.code LIKE ? OR wc.name LIKE ? OR mc.machine_name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
+      if (search) { where += ' AND (e.name LIKE ? OR e.code LIKE ? OR wc.name LIKE ? OR mc.machine_name LIKE ? OR mc.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s,s); }
 
       const baseQuery = `
-        FROM machine_centre_summary mcs
+        ${SQL_EMPLOYEE_PERF_FROM}
         JOIN employees e ON mcs.emp_id = e.code
         JOIN work_centres wc ON mcs.work_centre_id = wc.id
-        LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id
-        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND DATE(mcs.prod_date) = DATE(pp.plan_date)
-        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
-        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'DATE(mcs.prod_date)')}
+        LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id AND mc.work_centre_id = mcs.work_centre_id
+        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND mcs.prod_date = pp.plan_date AND pp.deleted_at IS NULL
+        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'mcs.prod_date')}
+        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'mcs.prod_date')}
         ${where}`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-      const [data] = await db.query(`
-        SELECT DATE(mcs.prod_date) as date, wc.name as line, e.code as emp_code, e.name as emp_name,
-          mcs.machine_id, COALESCE(mc.machine_name, mc.name) as machine_name,
+      const [rawRows] = await db.query(`
+        SELECT mcs.prod_date as date, mcs.work_centre_id, mcs.machine_id,
+          wc.name as line, e.code as emp_code, e.name as emp_name,
+          COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
           ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
@@ -411,12 +535,14 @@ class ApiController {
           COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
           mcs.total_target_mins as target_mins, mcs.total_actual_mins as actual_mins,
-          mcs.total_idle_mins as idle_mins, ROUND(mcs.avg_efficiency_percent,1) as efficiency_percent,
-          CASE WHEN mcs.avg_efficiency_percent>=90 THEN 'Excellent'
-               WHEN mcs.avg_efficiency_percent>=75 THEN 'Good'
-               WHEN mcs.avg_efficiency_percent>=60 THEN 'Average'
-               ELSE 'Below Target' END as performance_grade
+          mcs.total_idle_mins as idle_mins
         ${baseQuery} ORDER BY date, wc.name, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
+      const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx, {
+        withGrade: true,
+        machinePaceTargets: true,
+      });
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -432,7 +558,34 @@ class ApiController {
   static get SHIFT_END_M() { return 35; }
   static get SHIFT_MINS() { return (17 * 60 + 35) - (9 * 60 + 5); } // 510 mins
 
-  // #3 Downtime report — idle events with reasons per machine per day
+  /** Time loss by machine/day — same cycle net balance as TV dashboard machineTimeLosses. */
+  async getTimeLossReport(req, res, next) {
+    try {
+      const { fromDate, toDate, workCentreId, search, page, limit } = req.query;
+      if (!fromDate || !toDate) {
+        return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
+      }
+      const { page: p, limit: l, offset } = paginate(page, limit);
+      const allRows = await buildMachineTimeLossReportRows(db, {
+        fromDate,
+        toDate,
+        workCentreId: workCentreId || null,
+        search: search || '',
+      });
+      const total = allRows.length;
+      const data = allRows.slice(offset, offset + l);
+      res.json({
+        success: true,
+        data,
+        pagination: { total, page: p, limit: l, totalPages: Math.max(1, Math.ceil(total / l)) },
+      });
+    } catch (error) {
+      logger.error('Error getting time loss report:', error);
+      return next(error);
+    }
+  }
+
+  // Legacy: idle events with reasons (replaced in UI by time-loss report)
   async getDowntimeReport(req, res, next) {
     try {
       const { fromDate, toDate, date, work_centre_id = null, workCentreId, page, limit } = req.query;
