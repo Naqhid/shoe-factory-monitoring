@@ -1,11 +1,23 @@
 import React from 'react';
-import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, Cpu, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy, Wrench, Calendar, Filter, X, Sparkles } from 'lucide-react';
+import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy, Wrench, Calendar, Filter, X, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import * as XLSX from 'xlsx';
 import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import {
+  addDaysToDateKey,
+  computeCompareDelta,
+  type CompareDelta,
+  type ReportCompareMode,
+  hourlyCompareKey,
+  indexCompareRows,
+  lineEffCompareKey,
+  comparePeriodLabel,
+  comparePeriodHeaderLabel,
+  numCompare,
+} from '../utils/reportCompareUtils';
 
 /** UI tabs (8). Legacy API slugs kept for fetch/export via resolveApiReportType. */
 type ReportType =
@@ -13,7 +25,6 @@ type ReportType =
   | 'line-efficiency'
   | 'attendance'
   | 'rework-rejection'
-  | 'machine-output'
   | 'employee'
   | 'idle-stoppages'
   | 'shift-summary';
@@ -23,7 +34,6 @@ type ApiReportType =
   | 'line-efficiency'
   | 'attendance'
   | 'rework-rejection'
-  | 'machine-output'
   | 'employee-output'
   | 'employee-performance'
   | 'time-loss'
@@ -80,6 +90,7 @@ const migrateReportTab = (raw: string): { tab: ReportType; subView: ReportSubVie
     stoppages: { tab: 'idle-stoppages', subView: 'bottleneck' },
     bottleneck: { tab: 'idle-stoppages', subView: 'bottleneck' },
     breakdown: { tab: 'idle-stoppages', subView: 'breakdown' },
+    'machine-output': { tab: 'line-efficiency', subView: '' },
   };
   if (legacy[raw]) return legacy[raw];
   const tab = raw as ReportType;
@@ -91,7 +102,6 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
   { value: 'line-efficiency', label: 'Line & Process Efficiency', icon: <BarChart2 className="h-5 w-5" />, color: 'green' },
   { value: 'attendance', label: 'Attendance', icon: <Users className="h-5 w-5" />, color: 'purple', keywords: 'register vs output production' },
   { value: 'rework-rejection', label: 'Rework & Rejection', icon: <AlertTriangle className="h-5 w-5" />, color: 'yellow' },
-  { value: 'machine-output', label: 'Machine-wise Output', icon: <Cpu className="h-5 w-5" />, color: 'indigo' },
   { value: 'employee', label: 'Employee Reports', icon: <UserCheck className="h-5 w-5" />, color: 'teal', keywords: 'output performance efficiency grade' },
   { value: 'idle-stoppages', label: 'Time Loss & Stoppages', icon: <Wrench className="h-5 w-5" />, color: 'orange', keywords: 'time loss cycle late start bottleneck breakdown M4 stoppage' },
   { value: 'shift-summary', label: 'Shift Summary', icon: <BarChart2 className="h-5 w-5" />, color: 'slate' },
@@ -148,6 +158,59 @@ const effBadge = (val: number) => (
   </span>
 );
 
+/** Period compare: this row first, comparison day second, then the gap. */
+const CompareDeltaCell: React.FC<{
+  current: unknown;
+  previous: unknown;
+  isPercent?: boolean;
+  comparePeriod?: 'yesterday' | 'last_week';
+}> = ({ current, previous, isPercent, comparePeriod = 'yesterday' }) => {
+  const { delta, pct, hasPrevious } = computeCompareDelta(current, previous);
+  if (!hasPrevious) return <span className="text-slate-400 text-xs">No prior day</span>;
+
+  const cur = Math.round(numCompare(current));
+  const prev = Math.round(numCompare(previous));
+  const points = Math.abs(Math.round(delta));
+  const improved = delta >= 0;
+  const tone = improved ? 'text-emerald-700' : 'text-red-600';
+  const unit = isPercent ? '%' : '';
+
+  const tip = isPercent
+    ? `This period: ${cur}%. Comparison day: ${prev}%. ${points} percentage point${points === 1 ? '' : 's'} ${improved ? 'higher' : 'lower'}.`
+    : `This period: ${cur} pairs. Comparison day: ${prev} pairs. ${points} ${improved ? 'more' : 'fewer'}${pct !== null ? ` (${improved ? '+' : ''}${pct}% vs comparison day)` : ''}.`;
+
+  return (
+    <span className="inline-flex flex-col items-center gap-0.5 text-xs leading-snug max-w-[10rem]" title={tip}>
+      <span className="text-slate-700 tabular-nums font-semibold whitespace-nowrap">
+        {cur}
+        {unit}
+        <span className="text-slate-400 font-normal mx-0.5">vs</span>
+        <span className="text-slate-500 font-medium">
+          {prev}
+          {unit}
+        </span>
+        <span className="text-[10px] text-slate-400 font-normal ml-0.5">
+          {comparePeriodLabel(comparePeriod)}
+        </span>
+      </span>
+      <span className={`font-semibold tabular-nums whitespace-nowrap ${tone}`}>
+        {isPercent ? (
+          <>
+            {points} point{points === 1 ? '' : 's'} {improved ? 'up' : 'down'}
+          </>
+        ) : (
+          <>
+            {points} {improved ? 'more' : 'fewer'}
+            {pct !== null && pct !== 0 && (
+              <span className="text-slate-500 font-normal"> ({improved ? '+' : ''}{pct}%)</span>
+            )}
+          </>
+        )}
+      </span>
+    </span>
+  );
+};
+
 const formatNetBalanceLabel = (netMins: number) => {
   const parts = minutesToDurationParts(Math.abs(netMins));
   const status = Math.abs(netMins) * 60 < 1 ? 'neutral' : netMins > 0 ? 'gain' : 'loss';
@@ -181,9 +244,9 @@ const HEADER_MAP: Record<string, string> = {
   total_standard_mins_value: 'Std Mins', total_produced_mins_value: 'Actual Mins',
   targeted_output_smv: 'Target @ SMV',
   efficiency_percent: 'Efficiency % (in progress)',
-  pace_in_progress_actual: 'Pace actual',
-  pace_in_progress_expected: 'Pace target so far',
-  pace_daily_target: 'Pace daily target',
+  pace_in_progress_actual: 'Speed actual',
+  pace_in_progress_expected: 'Speed target so far',
+  pace_daily_target: 'Speed daily target',
   emp_id: 'Emp ID', emp_name: 'Employee Name', emp_code: 'Emp Code', status: 'Status', login_time: 'Login Time',
   machine: 'Machine', output: 'Output', bins_completed: 'Bins', rework_qty: 'Rework',
   rejection_qty: 'Rejection', rework_percent: 'Rework %', rejection_percent: 'Rejection %',
@@ -237,6 +300,20 @@ const FILTER_STORAGE_KEY = 'reports_filters_v1';
 
 /** Shown only on Hourly Production report (table + export). */
 const HOURLY_ONLY_FIELDS = ['total_input', 'input_percent'] as const;
+
+const HOURLY_HOUR_KEYS = ['9_10', '10_11', '11_12', '12_1', '2_3', '3_4', '4_5', '5_6', '6_7'] as const;
+const HOURLY_HOUR_LABELS: Record<(typeof HOURLY_HOUR_KEYS)[number], string> = {
+  '9_10': '9-10',
+  '10_11': '10-11',
+  '11_12': '11-12',
+  '12_1': '12-1',
+  '2_3': '2-3',
+  '3_4': '3-4',
+  '4_5': '4-5',
+  '5_6': '5-6',
+  '6_7': '6-7',
+};
+const HOURLY_PRODUCT_HEADERS = ['Customer', 'Article No', 'Color', 'Leather', 'Group'] as const;
 
 const EXPORT_OMIT_BY_REPORT: Partial<Record<ApiReportType, readonly string[]>> = {
   'shift-summary': ['shift_idle_mins'],
@@ -333,7 +410,17 @@ export const Reports: React.FC = () => {
   const [isShareLoading, setIsShareLoading] = React.useState(false);
   const [reportTypeQuery, setReportTypeQuery] = React.useState('');
   const [showExportMenu, setShowExportMenu] = React.useState(false);
+  /** Hourly report: hide Customer/Article/etc. by default to reduce horizontal scroll. */
+  const [hourlyShowProductDetails, setHourlyShowProductDetails] = React.useState(false);
+  const [compareMode, setCompareMode] = React.useState<ReportCompareMode>('none');
+  const [compareMaps, setCompareMaps] = React.useState<{
+    yesterday?: Map<string, any>;
+    lastWeek?: Map<string, any>;
+  } | null>(null);
+  const [compareLoading, setCompareLoading] = React.useState(false);
   const reportTableRef = React.useRef<HTMLDivElement>(null);
+  const supportsPeriodCompare =
+    reportType === 'hourly-production' || reportType === 'line-efficiency';
   const generatedFilterSnapshotRef = React.useRef<string | null>(null);
   const currentFilterSnapshot = React.useMemo(() => JSON.stringify({
     fromDate,
@@ -400,6 +487,7 @@ export const Reports: React.FC = () => {
       if (saved.search) setSearch(saved.search);
       if (saved.limit) setLimit(saved.limit);
       if (saved.datePreset) setDatePreset(saved.datePreset);
+      if (saved.compareMode) setCompareMode(saved.compareMode);
     } catch {
       // ignore invalid stored state
     }
@@ -425,6 +513,7 @@ export const Reports: React.FC = () => {
         search,
         limit,
         datePreset,
+        compareMode,
       })
     );
 
@@ -518,10 +607,16 @@ export const Reports: React.FC = () => {
     setData(null);
   };
 
-  const buildReportParams = React.useCallback((opts?: { page?: number; limit?: number; search?: string }) => {
+  const buildReportParams = React.useCallback((opts?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    fromDate?: string;
+    toDate?: string;
+  }) => {
     const params = new URLSearchParams({
-      fromDate,
-      toDate,
+      fromDate: opts?.fromDate ?? fromDate,
+      toDate: opts?.toDate ?? toDate,
       page: String(opts?.page ?? page),
       limit: String(opts?.limit ?? limit),
     });
@@ -531,6 +626,77 @@ export const Reports: React.FC = () => {
     if (s.trim()) params.set('search', s.trim());
     return params;
   }, [fromDate, toDate, page, limit, selectedLine, reportType, selectedMachine, search]);
+
+  const fetchAllRowsForDateRange = React.useCallback(
+    async (rangeFrom: string, rangeTo: string, searchVal: string) => {
+      const exportLimit = 500;
+      const firstParams = buildReportParams({
+        page: 1,
+        limit: exportLimit,
+        search: searchVal,
+        fromDate: rangeFrom,
+        toDate: rangeTo,
+      });
+      const firstRes = await apiFetch(`${API_BASE}/api/reports/${apiReportType}?${firstParams}`);
+      const first = await firstRes.json();
+      if (!first.success) throw new Error(first.error || 'Failed to load compare period');
+      let allRows = [...(first.data || [])];
+      const totalPages = first.pagination?.totalPages || 1;
+      for (let p = 2; p <= totalPages; p++) {
+        const params = buildReportParams({
+          page: p,
+          limit: exportLimit,
+          search: searchVal,
+          fromDate: rangeFrom,
+          toDate: rangeTo,
+        });
+        const res = await apiFetch(`${API_BASE}/api/reports/${apiReportType}?${params}`);
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || `Failed on compare page ${p}`);
+        allRows = allRows.concat(json.data || []);
+      }
+      return normalizeReportRows(allRows, apiReportType);
+    },
+    [apiReportType, buildReportParams]
+  );
+
+  const loadCompareMaps = React.useCallback(
+    async (mode: ReportCompareMode, searchVal: string) => {
+      if (mode === 'none' || !supportsPeriodCompare) {
+        setCompareMaps(null);
+        return;
+      }
+      setCompareLoading(true);
+      try {
+        const keyFn =
+          apiReportType === 'hourly-production' ? hourlyCompareKey : lineEffCompareKey;
+        const maps: { yesterday?: Map<string, any>; lastWeek?: Map<string, any> } = {};
+        if (mode === 'yesterday' || mode === 'both') {
+          const rows = await fetchAllRowsForDateRange(
+            addDaysToDateKey(fromDate, -1),
+            addDaysToDateKey(toDate, -1),
+            searchVal
+          );
+          maps.yesterday = indexCompareRows(rows, keyFn, 1);
+        }
+        if (mode === 'last_week' || mode === 'both') {
+          const rows = await fetchAllRowsForDateRange(
+            addDaysToDateKey(fromDate, -7),
+            addDaysToDateKey(toDate, -7),
+            searchVal
+          );
+          maps.lastWeek = indexCompareRows(rows, keyFn, 7);
+        }
+        setCompareMaps(maps);
+      } catch (e: any) {
+        setCompareMaps(null);
+        toast.error(e?.message || 'Could not load comparison period');
+      } finally {
+        setCompareLoading(false);
+      }
+    },
+    [supportsPeriodCompare, apiReportType, fetchAllRowsForDateRange, fromDate, toDate]
+  );
 
   const fetchReport = async (overridePage?: number, overrideSearch?: string) => {
     if (!validateDateRange()) return;
@@ -556,6 +722,11 @@ export const Reports: React.FC = () => {
         datePreset,
       });
       if (result.pagination) setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
+      if (compareMode !== 'none' && supportsPeriodCompare) {
+        void loadCompareMaps(compareMode, currentSearch.trim());
+      } else {
+        setCompareMaps(null);
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -592,10 +763,23 @@ export const Reports: React.FC = () => {
           datePreset,
         });
         if (result.pagination) setPagination({ total: result.pagination.total, totalPages: result.pagination.totalPages });
+        if (compareMode !== 'none' && supportsPeriodCompare) {
+          void loadCompareMaps(compareMode, search.trim());
+        } else {
+          setCompareMaps(null);
+        }
       })
       .catch((e: any) => setError(e.message))
       .finally(() => setIsLoading(false));
   };
+
+  React.useEffect(() => {
+    if (compareMode === 'none' || !data?.length || !supportsPeriodCompare) {
+      if (compareMode === 'none') setCompareMaps(null);
+      return;
+    }
+    void loadCompareMaps(compareMode, search.trim());
+  }, [compareMode, data?.length, supportsPeriodCompare, loadCompareMaps, search]);
 
   const fetchAllRowsForExport = async () => {
     const exportLimit = 500;
@@ -814,7 +998,25 @@ export const Reports: React.FC = () => {
     setError(null);
     setPage(1);
     setSearch('');
+    if (tab !== 'hourly-production' && tab !== 'line-efficiency') {
+      setCompareMode('none');
+      setCompareMaps(null);
+    }
   };
+
+  const comparePeriods = React.useMemo((): ('yesterday' | 'last_week')[] => {
+    if (compareMode === 'both') return ['yesterday', 'last_week'];
+    if (compareMode === 'yesterday') return ['yesterday'];
+    if (compareMode === 'last_week') return ['last_week'];
+    return [];
+  }, [compareMode]);
+
+  const showPeriodCompare = compareMode !== 'none' && comparePeriods.length > 0;
+
+  const rowCompareKey = React.useCallback(
+    (row: any) => (apiReportType === 'hourly-production' ? hourlyCompareKey(row) : lineEffCompareKey(row)),
+    [apiReportType]
+  );
 
   const selectReportSubView = (sub: ReportSubView) => {
     setReportSubView(sub);
@@ -865,12 +1067,6 @@ export const Reports: React.FC = () => {
           { label: 'Rejection qty', value: sum('rejection_qty') },
           { label: 'Output', value: sum('output') },
         ];
-      case 'machine-output':
-        return [
-          { label: 'Total output', value: sum('output') },
-          { label: 'Avg efficiency', value: `${avg('efficiency_percent')}%` },
-          { label: 'Machines', value: data.length },
-        ];
       case 'employee-output':
         return [{ label: 'Total output', value: sum('total_output') }, { label: 'Employees', value: data.length }];
       case 'employee-performance':
@@ -916,17 +1112,104 @@ export const Reports: React.FC = () => {
     <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ring-inset ${lineBadgeClass}`}>{name}</span>
   );
 
-  const Th = ({ children, center }: { children: React.ReactNode; center?: boolean }) => (
-    <th className={`px-3 py-3 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap bg-slate-50/90 border-b border-slate-200 sticky top-0 z-10 backdrop-blur-sm ${center ? 'text-center' : 'text-left'}`}>
+  const Th = ({
+    children,
+    center,
+    stickyLeft,
+    stickyZ = 20,
+  }: {
+    children: React.ReactNode;
+    center?: boolean;
+    stickyLeft?: number;
+    stickyZ?: number;
+  }) => (
+    <th
+      style={stickyLeft != null ? { left: stickyLeft } : undefined}
+      className={`px-3 py-3 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap bg-slate-50/95 border-b border-slate-200 sticky top-0 backdrop-blur-sm ${
+        center ? 'text-center' : 'text-left'
+      } ${stickyLeft != null ? `${stickyZ >= 30 ? 'z-30' : 'z-20'} border-r border-slate-200/80 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]` : 'z-10'}`}
+    >
       {children}
     </th>
   );
-  const Td = ({ children, center, muted, title }: { children: React.ReactNode; center?: boolean; muted?: boolean; title?: string }) => (
-    <td title={title} className={`px-3 py-2.5 text-sm whitespace-nowrap ${center ? 'text-center' : ''} ${muted ? 'text-slate-400' : 'text-slate-700'}`}>{children}</td>
+  const Td = ({
+    children,
+    center,
+    muted,
+    title,
+    stickyLeft,
+    stickyZ = 10,
+    rowShade,
+  }: {
+    children: React.ReactNode;
+    center?: boolean;
+    muted?: boolean;
+    title?: string;
+    stickyLeft?: number;
+    stickyZ?: number;
+    rowShade?: boolean;
+  }) => (
+    <td
+      title={title}
+      style={stickyLeft != null ? { left: stickyLeft } : undefined}
+      className={`px-3 py-2.5 text-sm whitespace-nowrap ${center ? 'text-center' : ''} ${muted ? 'text-slate-400' : 'text-slate-700'} ${
+        stickyLeft != null
+          ? `sticky ${stickyZ >= 20 ? 'z-20' : 'z-10'} border-r border-slate-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] ${rowShade ? 'bg-slate-50/90' : 'bg-white'}`
+          : ''
+      }`}
+    >
+      {children}
+    </td>
   );
-  const TableWrap = ({ children }: { children: React.ReactNode }) => (
-    <div className="overflow-x-auto scroll-smooth [scrollbar-width:thin]">{children}</div>
-  );
+
+  const TableWrap = ({ children }: { children: React.ReactNode }) => {
+    const scrollRef = React.useRef<HTMLDivElement>(null);
+    const [scrollHint, setScrollHint] = React.useState({ canScroll: false, atStart: true, atEnd: true });
+
+    const updateScrollHint = React.useCallback(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const canScroll = el.scrollWidth > el.clientWidth + 2;
+      setScrollHint({
+        canScroll,
+        atStart: el.scrollLeft <= 2,
+        atEnd: el.scrollLeft + el.clientWidth >= el.scrollWidth - 2,
+      });
+    }, []);
+
+    React.useEffect(() => {
+      updateScrollHint();
+      const el = scrollRef.current;
+      if (!el) return;
+      const ro = new ResizeObserver(() => updateScrollHint());
+      ro.observe(el);
+      return () => ro.disconnect();
+    }, [data, updateScrollHint, hourlyShowProductDetails]);
+
+    return (
+      <div className="relative">
+        {scrollHint.canScroll && !scrollHint.atStart && (
+          <div
+            className="pointer-events-none absolute left-0 top-0 bottom-0 z-[25] w-10 bg-gradient-to-r from-white via-white/80 to-transparent"
+            aria-hidden
+          />
+        )}
+        {scrollHint.canScroll && !scrollHint.atEnd && (
+          <div
+            className="pointer-events-none absolute right-0 top-0 bottom-0 z-[25] w-10 bg-gradient-to-l from-white via-white/80 to-transparent"
+            aria-hidden
+          />
+        )}
+        <div
+          ref={scrollRef}
+          onScroll={updateScrollHint}
+          className="overflow-x-auto scroll-smooth [scrollbar-width:thin]"
+        >
+          {children}
+        </div>
+      </div>
+    );
+  };
 
   const renderReportKpis = () => {
     if (!reportSummaryStats.length) return null;
@@ -951,17 +1234,35 @@ export const Reports: React.FC = () => {
       chips.push(selectedMachine ? `Machine: ${selectedMachine}` : 'Machine: End-of-line (07)');
     }
     if (search.trim()) chips.push(`Search: ${search.trim()}`);
+    if (supportsPeriodCompare && compareMode !== 'none') {
+      const labels: Record<ReportCompareMode, string> = {
+        none: '',
+        yesterday: 'vs Yesterday',
+        last_week: 'vs Same day last week',
+        both: 'vs Yesterday & last week',
+      };
+      chips.push(`Compare: ${labels[compareMode]}`);
+    }
     return chips;
-  }, [selectedLine, selectedMachine, search, reportType, workCentres]);
+  }, [selectedLine, selectedMachine, search, reportType, workCentres, supportsPeriodCompare, compareMode]);
 
   const renderMobileCards = () => {
     if (!data || data.length === 0) return null;
     const columnsByType: Partial<Record<ApiReportType, string[]>> = {
-      'hourly-production': ['date', 'line', 'customer', 'total_planned_qty', 'total_input', 'input_percent', 'total_output', 'output_percent'],
+      'hourly-production': [
+        'date',
+        'line',
+        'customer',
+        'total_planned_qty',
+        'total_input',
+        'input_percent',
+        'total_output',
+        'output_percent',
+        ...HOURLY_HOUR_KEYS,
+      ],
       'line-efficiency': ['date', 'line', 'process', 'total_planned_qty', 'total_output', 'output_percent', 'efficiency_percent'],
       'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'login_time'],
       'rework-rejection': ['date', 'line', 'machine', 'target', 'output', 'output_percent', 'rework_qty', 'rejection_qty'],
-      'machine-output': ['date', 'line', 'machine_id', 'target', 'output', 'output_percent', 'efficiency_percent'],
       'employee-output': ['date', 'line', 'emp_code', 'target', 'total_output', 'output_percent'],
       'employee-performance': ['date', 'line', 'emp_code', 'target', 'output', 'output_percent', 'efficiency_percent'],
       bottleneck: ['date', 'line', 'machine_id', 'emp_id', 'status', 'duration_mins', 'm4_category', 'm4_reason'],
@@ -970,7 +1271,21 @@ export const Reports: React.FC = () => {
       'attendance-production': ['date', 'emp_code', 'work_centre_name', 'target', 'output_percent', 'total_output', 'status'],
       'shift-summary': ['date', 'machine_id', 'shift_target_output', 'total_output', 'shift_efficiency_pct'],
     };
-    const keys = columnsByType[apiReportType] || Object.keys(data[0] || {}).slice(0, 8);
+    const baseKeys = columnsByType[apiReportType] || Object.keys(data[0] || {}).slice(0, 8);
+    const keys: string[] = [];
+    baseKeys.forEach((k) => {
+      keys.push(k);
+      if (!showPeriodCompare) return;
+      if (k === 'total_output') {
+        comparePeriods.forEach((p) => keys.push(`__cmp_out_${p}`));
+      }
+      if (k === 'output_percent') {
+        comparePeriods.forEach((p) => keys.push(`__cmp_outpct_${p}`));
+      }
+      if (k === 'efficiency_percent') {
+        comparePeriods.forEach((p) => keys.push(`__cmp_eff_${p}`));
+      }
+    });
     return (
       <div className="space-y-3 p-3">
         {data.map((row, i) => (
@@ -988,8 +1303,33 @@ export const Reports: React.FC = () => {
             </div>
             <div className="p-3 space-y-0">
               {keys.filter((k) => k !== 'date' && k !== 'line' && k !== 'work_centre_name').map((key) => {
+                if (key.startsWith('__cmp_')) {
+                  const [, metric, period] = key.match(/^__cmp_(out|outpct|eff)_(yesterday|last_week)$/) || [];
+                  const metricKey =
+                    metric === 'out' ? 'total_output' : metric === 'outpct' ? 'output_percent' : 'efficiency_percent';
+                  const map =
+                    period === 'yesterday' ? compareMaps?.yesterday : compareMaps?.lastWeek;
+                  const prev = map?.get(rowCompareKey(row))?.[metricKey];
+                  return (
+                    <div key={key} className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0 bg-slate-50/60 -mx-1 px-1 rounded">
+                      <span className="text-xs font-semibold text-slate-500">
+                        {metricKey === 'total_output' ? 'Output' : metricKey === 'output_percent' ? 'Out %' : 'Eff %'} vs{' '}
+                        {comparePeriodHeaderLabel(period as 'yesterday' | 'last_week')}
+                      </span>
+                      <CompareDeltaCell
+                        current={row[metricKey]}
+                        previous={prev}
+                        isPercent={metricKey !== 'total_output'}
+                        comparePeriod={period as 'yesterday' | 'last_week'}
+                      />
+                    </div>
+                  );
+                }
                 let value: any = row[key];
                 if (key === 'login_time') value = fmtTime(value);
+                if (HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])) {
+                  value = r(value) || '—';
+                }
                 if (key === 'input_percent' || key === 'output_percent' || key === 'shift_efficiency_pct') {
                   value = key === 'shift_efficiency_pct' ? effBadge(r(value)) : `${r(value)}%`;
                 }
@@ -1001,7 +1341,11 @@ export const Reports: React.FC = () => {
                 if (value === null || value === undefined || value === '') value = '—';
                 return (
                   <div key={key} className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0">
-                    <span className="text-xs font-semibold text-slate-500">{reportColumnLabel(key, apiReportType)}</span>
+                    <span className="text-xs font-semibold text-slate-500">
+                      {HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])
+                        ? HOURLY_HOUR_LABELS[key as (typeof HOURLY_HOUR_KEYS)[number]]
+                        : reportColumnLabel(key, apiReportType)}
+                    </span>
                     <span className="text-sm font-medium text-slate-800 text-right">{typeof value === 'object' ? value : String(value)}</span>
                   </div>
                 );
@@ -1267,7 +1611,6 @@ export const Reports: React.FC = () => {
       case 'line-efficiency':      return renderLineEfficiency();
       case 'attendance':           return renderAttendance();
       case 'rework-rejection':     return renderRework();
-      case 'machine-output':       return renderMachineOutput();
       case 'employee-output':      return renderEmployeeOutput();
       case 'employee-performance': return renderEmployeePerformance();
       case 'time-loss':            return renderTimeLoss();
@@ -1278,34 +1621,106 @@ export const Reports: React.FC = () => {
     }
   };
 
+  const renderCompareMetricCells = (
+    row: any,
+    metric: 'total_output' | 'output_percent' | 'efficiency_percent',
+    shaded: boolean
+  ) =>
+    comparePeriods.map((period) => {
+      const map = period === 'yesterday' ? compareMaps?.yesterday : compareMaps?.lastWeek;
+      const prev = map?.get(rowCompareKey(row))?.[metric];
+      return (
+        <Td key={`${period}-${metric}`} center rowShade={shaded}>
+          <CompareDeltaCell
+            current={row[metric]}
+            previous={prev}
+            isPercent={metric !== 'total_output'}
+            comparePeriod={period}
+          />
+        </Td>
+      );
+    });
+
   const renderHourly = () => {
     const totalOutput = data!.reduce((s, row) => s + r(row.total_output), 0);
     const totalPlanned = data!.reduce((s, row) => s + r(row.total_planned_qty), 0);
     const totalInput = data!.reduce((s, row) => s + r(row.total_input), 0);
     const totalWip = data!.reduce((s, row) => s + r(row.wip), 0);
+    const metricHeaders: string[] = ['Planned', 'Input', 'Input %', 'Output'];
+    if (showPeriodCompare) {
+      comparePeriods.forEach((p) => metricHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
+    }
+    metricHeaders.push('Output %');
+    if (showPeriodCompare) {
+      comparePeriods.forEach((p) => metricHeaders.push(`Out % vs ${comparePeriodHeaderLabel(p)}`));
+    }
+    metricHeaders.push('WIP', 'Avg/Hr');
+    const hourHeaders = HOURLY_HOUR_KEYS.map((k) => HOURLY_HOUR_LABELS[k]);
+    const productHeaders = hourlyShowProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
+    const allHeaders = ['Date', 'Line', ...productHeaders, ...metricHeaders, ...hourHeaders];
+    const leftAlign = new Set(['Date', 'Line', ...HOURLY_PRODUCT_HEADERS]);
+    const labelColSpan = 2 + productHeaders.length;
+    const stickyLineLeft = 96;
+
     return (
       <TableWrap>
-        <table className="min-w-full">
-          <thead><tr>
-            {['Date','Line','Customer','Article No','Color','Leather','Group','Planned','Input','Input %','Output','Output %','WIP','Avg/Hr','9-10','10-11','11-12','12-1','2-3','3-4','4-5','5-6','6-7'].map(h => <Th key={h} center={!['Date','Line','Customer','Article No','Color','Leather','Group'].includes(h)}>{h}</Th>)}
-          </tr></thead>
+        <table className="min-w-full border-separate border-spacing-0">
+          <thead>
+            <tr>
+              {allHeaders.map((h) => (
+                <Th
+                  key={h}
+                  center={!leftAlign.has(h)}
+                  stickyLeft={h === 'Date' ? 0 : h === 'Line' ? stickyLineLeft : undefined}
+                  stickyZ={h === 'Date' || h === 'Line' ? 30 : 10}
+                >
+                  {h}
+                </Th>
+              ))}
+            </tr>
+          </thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => {
               const wip = r(row.wip);
+              const shaded = i % 2 === 1;
               return (
                 <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
-                  <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
-                  <Td><LineBadge name={row.line} /></Td>
-                  <Td>{row.customer}</Td><Td>{row.article_no}</Td><Td>{row.color}</Td><Td>{row.leather}</Td><Td>{row.group}</Td>
-                  <Td center><span className="font-semibold text-gray-700">{r(row.total_planned_qty)}</span></Td>
-                  <Td center><span className="font-semibold text-blue-700">{r(row.total_input)}</span></Td>
+                  <Td stickyLeft={0} rowShade={shaded}>
+                    <span className="font-medium text-slate-600">{fmtDate(row.date)}</span>
+                  </Td>
+                  <Td stickyLeft={stickyLineLeft} rowShade={shaded}>
+                    <LineBadge name={row.line} />
+                  </Td>
+                  {hourlyShowProductDetails && (
+                    <>
+                      <Td>{row.customer}</Td>
+                      <Td>{row.article_no}</Td>
+                      <Td>{row.color}</Td>
+                      <Td>{row.leather}</Td>
+                      <Td>{row.group}</Td>
+                    </>
+                  )}
+                  <Td center>
+                    <span className="font-semibold text-gray-700">{r(row.total_planned_qty)}</span>
+                  </Td>
+                  <Td center>
+                    <span className="font-semibold text-blue-700">{r(row.total_input)}</span>
+                  </Td>
                   <Td center>{effBadge(r(row.input_percent))}</Td>
-                  <Td center><span className="font-bold text-green-600">{r(row.total_output)}</span></Td>
+                  <Td center>
+                    <span className="font-bold text-green-600">{r(row.total_output)}</span>
+                  </Td>
+                  {showPeriodCompare && renderCompareMetricCells(row, 'total_output', shaded)}
                   <Td center>{effBadge(r(row.output_percent))}</Td>
-                  <Td center><span className={`font-semibold ${wip > 0 ? 'text-red-500' : 'text-gray-400'}`}>{wip}</span></Td>
+                  {showPeriodCompare && renderCompareMetricCells(row, 'output_percent', shaded)}
+                  <Td center>
+                    <span className={`font-semibold ${wip > 0 ? 'text-red-500' : 'text-gray-400'}`}>{wip}</span>
+                  </Td>
                   <Td center>{r(row.avg_hourly_output)}</Td>
-                  {['9_10','10_11','11_12','12_1','2_3','3_4','4_5','5_6','6_7'].map(k => (
-                    <Td key={k} center><span className={row[k] > 0 ? 'text-gray-700' : 'text-gray-300'}>{ r(row[k]) || '—'}</span></Td>
+                  {HOURLY_HOUR_KEYS.map((k) => (
+                    <Td key={k} center>
+                      <span className={row[k] > 0 ? 'text-gray-700' : 'text-gray-300'}>{r(row[k]) || '—'}</span>
+                    </Td>
                   ))}
                 </tr>
               );
@@ -1313,18 +1728,26 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-blue-600 text-white">
-              <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">TOTAL — {data!.length} rows</td>
+              <td colSpan={labelColSpan} className="sticky left-0 z-20 px-3 py-2.5 text-sm font-bold bg-blue-600 border-r border-blue-500">
+                TOTAL — {data!.length} rows
+              </td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalPlanned}</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalInput}</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">
                 {totalPlanned > 0 ? effBadge(Math.round((totalInput / totalPlanned) * 100)) : '—'}
               </td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput}</td>
+              {showPeriodCompare && comparePeriods.map((p) => (
+                <td key={p} className="px-3 py-2.5 text-sm text-center text-blue-100/80">—</td>
+              ))}
               <td className="px-3 py-2.5 text-sm font-bold text-center">
                 {totalPlanned > 0 ? effBadge(Math.round((totalOutput / totalPlanned) * 100)) : '—'}
               </td>
+              {showPeriodCompare && comparePeriods.map((p) => (
+                <td key={`pct-${p}`} className="px-3 py-2.5 text-sm text-center text-blue-100/80">—</td>
+              ))}
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalWip}</td>
-              <td colSpan={9}></td>
+              <td colSpan={HOURLY_HOUR_KEYS.length + 1} />
             </tr>
           </tfoot>
         </table>
@@ -1334,14 +1757,31 @@ export const Reports: React.FC = () => {
 
   const renderLineEfficiency = () => {
     const avgEff = data!.length ? Math.round(data!.reduce((s, row) => s + (parseFloat(row.efficiency_percent) || 0), 0) / data!.length) : 0;
+    const baseHeaders = ['Date', 'Line', 'Machine', 'Customer', 'Article No', 'Color', 'Leather', 'Group', 'EOD target', 'Output'];
+    const lineHeaders: string[] = [...baseHeaders];
+    if (showPeriodCompare) {
+      comparePeriods.forEach((p) => lineHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
+    }
+    lineHeaders.push('Output %');
+    if (showPeriodCompare) {
+      comparePeriods.forEach((p) => lineHeaders.push(`Out % vs ${comparePeriodHeaderLabel(p)}`));
+    }
+    lineHeaders.push('Std Mins', 'Actual Mins', 'Target@SMV', 'Efficiency % (in progress)');
+    if (showPeriodCompare) {
+      comparePeriods.forEach((p) => lineHeaders.push(`Eff % vs ${comparePeriodHeaderLabel(p)}`));
+    }
+    const leftCols = new Set(['Date', 'Line', 'Machine', 'Customer', 'Article No', 'Color', 'Leather', 'Group']);
+    const trailingCompareCols = showPeriodCompare ? comparePeriods.length : 0;
     return (
       <TableWrap>
         <table className="min-w-full">
           <thead><tr>
-            {['Date','Line','Machine','Customer','Article No','Color','Leather','Group','EOD target','Output','Output %','Std Mins','Actual Mins','Target@SMV','Efficiency % (in progress)'].map(h => <Th key={h} center={!['Date','Line','Machine','Customer','Article No','Color','Leather','Group'].includes(h)}>{h}</Th>)}
+            {lineHeaders.map((h) => <Th key={h} center={!leftCols.has(h)}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {data!.map((row, i) => (
+            {data!.map((row, i) => {
+              const rowShade = i % 2 === 1;
+              return (
               <tr key={i} className="hover:bg-green-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
@@ -1349,18 +1789,24 @@ export const Reports: React.FC = () => {
                 <Td>{row.customer}</Td><Td>{row.article_no}</Td><Td>{row.color}</Td><Td>{row.leather}</Td><Td>{row.group}</Td>
                 <Td center>{r(row.total_planned_qty)}</Td>
                 <Td center><span className="font-bold text-green-600">{r(row.total_output)}</span></Td>
+                {showPeriodCompare && renderCompareMetricCells(row, 'total_output', rowShade)}
                 <Td center>{effBadge(r(row.output_percent))}</Td>
+                {showPeriodCompare && renderCompareMetricCells(row, 'output_percent', rowShade)}
                 <Td center>{r(row.total_standard_mins_value)}</Td>
                 <Td center>{r(row.total_produced_mins_value)}</Td>
                 <Td center>{r(row.targeted_output_smv)}</Td>
                 <Td center>{effBadge(r(row.efficiency_percent))}</Td>
+                {showPeriodCompare && renderCompareMetricCells(row, 'efficiency_percent', rowShade)}
               </tr>
-            ))}
+            );})}
           </tbody>
           <tfoot>
             <tr className="bg-green-600 text-white">
-              <td colSpan={14} className="px-3 py-2.5 text-sm font-bold">AVG EFFICIENCY — {data!.length} rows</td>
+              <td colSpan={lineHeaders.length - 1 - trailingCompareCols} className="px-3 py-2.5 text-sm font-bold">AVG EFFICIENCY — {data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{avgEff}%</td>
+              {showPeriodCompare && comparePeriods.map((p) => (
+                <td key={p} className="px-3 py-2.5 text-sm text-center text-green-100/80">—</td>
+              ))}
             </tr>
           </tfoot>
         </table>
@@ -1442,45 +1888,6 @@ export const Reports: React.FC = () => {
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRework} rework</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRejection} rejection</td>
               <td colSpan={4}></td>
-            </tr>
-          </tfoot>
-        </table>
-      </TableWrap>
-    );
-  };
-
-  const renderMachineOutput = () => {
-    const totalOutput = data!.reduce((s, row) => s + r(row.output), 0);
-    const avgEff = data!.length ? Math.round(data!.reduce((s, row) => s + (parseFloat(row.efficiency_percent) || 0), 0) / data!.length) : 0;
-    return (
-      <TableWrap>
-        <table className="min-w-full">
-          <thead><tr>
-            {['Date','Line','Machine ID','Machine Name','EOD target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency % (in progress)'].map(h => <Th key={h} center={!['Date','Line','Machine Name'].includes(h)}>{h}</Th>)}
-          </tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {data!.map((row, i) => (
-              <tr key={i} className="hover:bg-indigo-50/30 even:bg-slate-50/30 transition-colors">
-                <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
-                <Td><LineBadge name={row.line} /></Td>
-                <Td center><span className="font-mono font-bold text-gray-600">{row.machine_id}</span></Td>
-                <Td><span className="font-medium">{row.machine_name}</span></Td>
-                <Td center>{r(row.target)}</Td>
-                <Td center><span className="font-bold text-green-600">{r(row.output)}</span></Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
-                <Td center>{r(row.target_mins)}</Td>
-                <Td center>{r(row.actual_mins)}</Td>
-                <Td center><span className={r(row.idle_mins) > 0 ? 'text-orange-500 font-semibold' : 'text-gray-400'}>{r(row.idle_mins)}</span></Td>
-                <Td center>{effBadge(r(row.efficiency_percent))}</Td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-indigo-600 text-white">
-              <td colSpan={6} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
-              <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput} total output</td>
-              <td colSpan={3}></td>
-              <td className="px-3 py-2.5 text-sm font-bold text-center">{avgEff}% avg eff.</td>
             </tr>
           </tfoot>
         </table>
@@ -1766,6 +2173,23 @@ export const Reports: React.FC = () => {
               <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setDatePreset('custom'); }}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
             </div>
+            {supportsPeriodCompare && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" /> Compare period
+                </label>
+                <select
+                  value={compareMode}
+                  onChange={(e) => setCompareMode(e.target.value as ReportCompareMode)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                >
+                  <option value="none">None</option>
+                  <option value="yesterday">vs Yesterday</option>
+                  <option value="last_week">vs Same day last week</option>
+                  <option value="both">vs Both</option>
+                </select>
+              </div>
+            )}
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Search</label>
               <div className="relative">
@@ -1937,6 +2361,24 @@ export const Reports: React.FC = () => {
               </span>
             </div>
             {renderReportKpis()}
+            {showPeriodCompare && (compareLoading || compareMaps) && (
+              <div className="px-4 py-2 text-xs border-b border-slate-100 bg-amber-50/80 text-amber-900 flex items-center gap-2">
+                {compareLoading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    Loading comparison periods…
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+                    Compare vs{' '}
+                    {compareMode === 'both' ? 'yesterday and last week' : compareMode === 'yesterday' ? 'yesterday' : 'same day last week'}
+                    : top line is <strong>today vs comparison day</strong> (e.g. 134 vs 170 yest); bottom line is the gap. On % columns,{' '}
+                    <strong>points</strong> = simple % difference (54% vs 68% = 14 points down).
+                  </>
+                )}
+              </div>
+            )}
             {isMobile ? (
               <>
                 <div className="px-4 py-2 text-xs text-slate-500 border-b border-slate-100 bg-slate-50/50">
@@ -1946,8 +2388,24 @@ export const Reports: React.FC = () => {
               </>
             ) : (
               <>
-                <div className="px-4 py-1.5 text-[11px] text-slate-400 border-b border-slate-50 flex items-center gap-1">
-                  <ChevronRight className="h-3 w-3 rotate-90" /> Scroll horizontally for all columns
+                <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/60 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                    <ChevronRight className="h-3 w-3 rotate-90 shrink-0" />
+                    {reportType === 'hourly-production'
+                      ? 'Scroll for hour columns · Date & Line stay fixed on the left'
+                      : 'Scroll horizontally for all columns'}
+                  </p>
+                  {reportType === 'hourly-production' && (
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={hourlyShowProductDetails}
+                        onChange={(e) => setHourlyShowProductDetails(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-[11px] font-semibold text-slate-600">Show product columns</span>
+                    </label>
+                  )}
                 </div>
                 {renderTable()}
               </>

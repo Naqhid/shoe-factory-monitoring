@@ -207,6 +207,28 @@ async function getEolOutput(workCentreId, date) {
 }
 
 /**
+ * EOL output for a line up to a wall-clock moment (finished cycles only).
+ * @param {number} workCentreId
+ * @param {string} date  YYYY-MM-DD (prod_date)
+ * @param {string} asOfLocal  YYYY-MM-DD HH:mm:ss
+ */
+async function getEolOutputUpTo(workCentreId, date, asOfLocal) {
+    const eolMachineId = await resolveEolMachineId(workCentreId);
+    const [rows] = await pool.query(
+        `SELECT COALESCE(SUM(output_pairs), 0) AS total_output
+         FROM machine_centre_production
+         WHERE work_centre_id = ?
+           AND DATE(prod_date) = DATE(?)
+           AND button_status = 2
+           AND machine_id = ?
+           AND finish_time IS NOT NULL
+           AND finish_time <= ?`,
+        [workCentreId, date, eolMachineId, asOfLocal]
+    );
+    return Math.round(Number(rows[0]?.total_output || 0));
+}
+
+/**
  * Opening WIP to carry into `beforeDate` from the most recent prior wip_daily_state row.
  *
  * @param {number} workCentreId
@@ -561,6 +583,7 @@ module.exports = {
     getTodayInput,
     getEolOutputFromProduction,
     getEolOutput,
+    getEolOutputUpTo,
     refreshWipAfterProductionChange,
     getWipBreakdown,
     isLiveWipDate,

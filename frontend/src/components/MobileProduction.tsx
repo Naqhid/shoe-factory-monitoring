@@ -2134,7 +2134,7 @@ export const MobileProduction: React.FC = () => {
                                 </div>
                                 {loadingSummary && !dailyPaceSnapshot ? (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/80 py-1">
-                                        Loading daily pace…
+                                        Loading daily speed…
                                     </div>
                                 ) : dailyPaceSnapshot ? (
                                     <div className="col-span-2 md:col-span-6 grid w-full min-w-0 grid-cols-1 gap-2 md:grid-cols-2 md:gap-2 text-center">
@@ -2147,7 +2147,7 @@ export const MobileProduction: React.FC = () => {
                                             title={`Actual output vs expected by now at routing standard (${dailyPaceSnapshot.totalProductiveMins} productive mins, lunch excluded). Projected EOD = (actual ÷ elapsed productive mins) × shift productive mins.`}
                                         >
                                             <p className="text-[11px] sm:text-xs uppercase opacity-90 font-semibold tracking-wide text-white">
-                                                Actual vs pace
+                                                Actual vs speed
                                             </p>
                                             <div
                                                 className="mt-1.5 md:mt-1 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1"
@@ -2180,7 +2180,7 @@ export const MobileProduction: React.FC = () => {
                                                 </div>
                                             </div>
                                             <p className="text-[10px] sm:text-[11px] opacity-80 mt-1 md:mt-0.5 max-w-full mx-auto break-words px-0.5 leading-snug">
-                                                pairs now · EOD proj. {dailyPaceSnapshot.projectedEod} · {dailyPaceSnapshot.remainingMins}m left
+                                                pairs now · EOD projection {dailyPaceSnapshot.projectedEod} · {dailyPaceSnapshot.remainingMins}m left
                                             </p>
                                         </div>
                                         <div className="w-full min-w-0 rounded-xl bg-white/10 px-3 py-2.5 sm:px-3 sm:py-2 md:px-2 md:py-2 border border-white/25 shadow-md ring-1 ring-white/10">
@@ -2195,7 +2195,7 @@ export const MobileProduction: React.FC = () => {
                                     </div>
                                 ) : (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/70 px-2 py-2 rounded-lg bg-white/5 border border-white/10">
-                                        No routing target time for this machine — shift target and pace are unavailable.
+                                        No routing target time for this machine — shift target and speed are unavailable.
                                     </div>
                                 )}
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
@@ -2359,7 +2359,7 @@ export const MobileProduction: React.FC = () => {
                                             <span className="text-xl md:text-3xl font-semibold text-orange-400">/</span>
                                             <span className="text-3xl md:text-5xl font-bold text-orange-900">{outputExpectedNow}</span>
                                         </div>
-                                        <p className="text-xs text-orange-600 mt-1">pairs (actual / pace)</p>
+                                        <p className="text-xs text-orange-600 mt-1">pairs (actual / speed)</p>
                                     </>
                                 )}
                                 {/* Refresh button for manual update */}
@@ -2391,7 +2391,7 @@ export const MobileProduction: React.FC = () => {
                                                 {formatBoxesDisplay(boxesExpectedNow)}
                                             </span>
                                         </div>
-                                        <p className="text-xs text-cyan-700 mt-1">boxes (actual / pace)</p>
+                                        <p className="text-xs text-cyan-700 mt-1">boxes (actual / speed)</p>
                                     </>
                                 )}
                             </div>

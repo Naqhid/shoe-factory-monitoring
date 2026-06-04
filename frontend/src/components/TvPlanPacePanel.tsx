@@ -61,7 +61,7 @@ export const TvPlanPacePanel: React.FC<TvPlanPacePanelProps> = ({ snapshot, line
             <div className="h-full min-h-0 flex flex-col rounded-xl overflow-hidden shadow-lg ring-1 ring-slate-200/80 bg-white">
                 <div className="flex-shrink-0 flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2 py-1">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 truncate">
-                        Actual vs plan pace
+                        Actual vs plan speed
                         {lineName ? (
                             <span className="font-semibold text-slate-500 normal-case tracking-normal">
                                 {' '}
@@ -117,7 +117,7 @@ export const TvPlanPacePanel: React.FC<TvPlanPacePanelProps> = ({ snapshot, line
 
                     <div className="min-h-0 flex flex-col justify-center rounded-lg bg-white border border-slate-200 px-2 py-1">
                         <div className="flex justify-between items-center gap-2 text-[9px] font-bold text-slate-600 mb-0.5">
-                            <span>Pace now</span>
+                            <span>Speed now</span>
                             <span className={pacePct >= 100 ? 'text-emerald-600' : 'text-amber-700'} tabular-nums>
                                 {pacePct}% expected
                             </span>
@@ -135,13 +135,13 @@ export const TvPlanPacePanel: React.FC<TvPlanPacePanelProps> = ({ snapshot, line
                         >
                             {behindPaceNow > 0
                                 ? `Behind ${behindPaceNow} pairs (${expected}−${actual})`
-                                : 'On pace'}
+                                : 'On speed'}
                         </p>
                     </div>
 
                     <div className="min-h-0 h-full grid grid-cols-3 gap-1.5">
                         {bottomTile(
-                            'Forecast EOD',
+                            'EOD projection',
                             <span className="text-[clamp(1.1rem,4.5vh,1.75rem)] font-black text-blue-700 tabular-nums leading-none">
                                 {projectedEod}
                             </span>,

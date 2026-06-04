@@ -408,52 +408,6 @@ class ApiController {
     }
   }
 
-  async getMachineOutputReport(req, res) {
-    try {
-      const { fromDate, toDate, workCentreId, search, page, limit } = req.query;
-      if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
-
-      const { page: p, limit: l, offset } = paginate(page, limit);
-      let where = 'WHERE 1=1';
-      const params = [fromDate, toDate];
-      if (workCentreId) { where += ' AND mcs.work_centre_id = ?'; params.push(workCentreId); }
-      if (search) { where += ' AND (wc.name LIKE ? OR mcs.machine_id LIKE ? OR mc.machine_name LIKE ? OR mc.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
-
-      const baseQuery = `
-        ${SQL_MACHINE_EFFICIENCY_FROM}
-        LEFT JOIN work_centres wc ON mcs.work_centre_id = wc.id
-        LEFT JOIN machine_centres mc ON mcs.machine_id = mc.machine_id AND mc.work_centre_id = mcs.work_centre_id
-        LEFT JOIN production_plan pp ON mcs.work_centre_id = pp.work_centre_id AND mcs.prod_date = pp.plan_date AND pp.deleted_at IS NULL
-        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'mcs.prod_date')}
-        ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcs.work_centre_id').replace(/%DATE%/g, 'mcs.prod_date')}
-        ${where}`;
-
-      const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
-      const [rawRows] = await db.query(`
-        SELECT mcs.prod_date as date, mcs.work_centre_id, mcs.machine_id,
-          wc.name as line,
-          COALESCE(mc.machine_name, mc.name) as machine_name,
-          COALESCE(pp.total_target_per_day, 0) as target,
-          COALESCE(line_input.total_input, 0) as total_input,
-          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
-          mcs.total_output_pairs as output,
-          COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
-          ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
-          mcs.total_target_mins as target_mins,
-          mcs.total_actual_mins as actual_mins,
-          mcs.total_idle_mins as idle_mins
-        ${baseQuery} ORDER BY date, wc.name, mcs.machine_id LIMIT ? OFFSET ?`, [...params, l, offset]);
-
-      const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
-      const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx, { machinePaceTargets: true });
-
-      res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
-    } catch (error) {
-      logger.error('Error getting machine output report:', error);
-      res.status(500).json({ success: false, error: 'Internal server error' });
-    }
-  }
-
   async getEmployeeOutputReport(req, res) {
     try {
       const { fromDate, toDate, workCentreId, search, page, limit } = req.query;
