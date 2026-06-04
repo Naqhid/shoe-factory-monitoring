@@ -10,6 +10,8 @@ const certFile = path.join(certPath, 'cert.pem')
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  /** Factory LAN without internet: set VITE_DISABLE_PWA=true so Chrome is not blocked by a service worker. */
+  const disablePwa = env.VITE_DISABLE_PWA === 'true'
   /** Split-dev proxy — set VITE_DEV_API_PROXY in frontend/.env.local (develop: 3001, feature: 3101). */
   const devApiProxyTarget = env.VITE_DEV_API_PROXY?.trim()
   const devApiProxy = devApiProxyTarget
@@ -52,15 +54,12 @@ export default defineConfig(({ mode }) => {
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api/, /^\/health/],
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/.*\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
-              networkTimeoutSeconds: 10,
-            },
+            handler: 'NetworkOnly',
           },
         ],
       },

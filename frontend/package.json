@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
+    "build:lan": "tsc && vite build --mode lan",
     "preview": "vite preview",
     "generate-cert": "node generate-cert.js"
   },

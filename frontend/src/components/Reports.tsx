@@ -194,12 +194,11 @@ const HEADER_MAP: Record<string, string> = {
   line_plan_target: 'Line plan target',
   line_plan_planned_qty: 'Line plan target',
   wip: 'WIP',
-  performance_grade: 'Grade', boxes: 'Box', cycles: 'Cycles', total_output: 'Output',
+  performance_grade: 'Grade', boxes: 'Box', cycles: 'Cycles',
   routing_mins_per_box: 'Routing Mins/6 prs', shift_target_output: 'Shift Target (pairs)', shift_efficiency_pct: 'Shift Efficiency %',
-  line_plan_target: 'Line Plan Target', line_output_percent: 'Line Output %',
-  line: 'Line', machine_name: 'Machine Name', emp_name: 'Employee Name',
+  line_output_percent: 'Line Output %',
   start_time: 'Start', finish_time: 'Finish', duration_mins: 'Duration (mins)',
-  status: 'Status', m4_category: 'M4 Category', m4_reason: 'Reason', m4_notes: 'Notes', detail: 'Detail',
+  m4_category: 'M4 Category', m4_reason: 'Reason', m4_notes: 'Notes', detail: 'Detail',
   net_mins: 'Net balance (mins)', abs_net_mins: 'Abs balance (mins)', net_status: 'Balance',
   time_loss_reason: 'Time loss reason',
 };
@@ -922,8 +921,8 @@ export const Reports: React.FC = () => {
       {children}
     </th>
   );
-  const Td = ({ children, center, muted }: { children: React.ReactNode; center?: boolean; muted?: boolean }) => (
-    <td className={`px-3 py-2.5 text-sm whitespace-nowrap ${center ? 'text-center' : ''} ${muted ? 'text-slate-400' : 'text-slate-700'}`}>{children}</td>
+  const Td = ({ children, center, muted, title }: { children: React.ReactNode; center?: boolean; muted?: boolean; title?: string }) => (
+    <td title={title} className={`px-3 py-2.5 text-sm whitespace-nowrap ${center ? 'text-center' : ''} ${muted ? 'text-slate-400' : 'text-slate-700'}`}>{children}</td>
   );
   const TableWrap = ({ children }: { children: React.ReactNode }) => (
     <div className="overflow-x-auto scroll-smooth [scrollbar-width:thin]">{children}</div>

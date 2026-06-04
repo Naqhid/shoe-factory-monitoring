@@ -1,5 +1,11 @@
 import React from 'react';
 import { Languages } from 'lucide-react';
+import toast from 'react-hot-toast';
+import {
+  applyGoogleTranslateLang,
+  getTranslateLangFromCookie,
+  loadGoogleTranslate,
+} from '../utils/googleTranslateLoader';
 
 const LANGUAGES = [
   { code: 'en', label: 'English', flag: '🇬🇧' },
@@ -19,29 +25,24 @@ function setGoogleTranslateCookie(langCode: string) {
   window.location.reload();
 }
 
-function getCurrentLang(): string {
-  const match = document.cookie.match(/googtrans=\/en\/([a-z]+)/);
-  return match ? match[1] : 'en';
-}
-
 export const LanguageSwitcher: React.FC = () => {
-  const [current, setCurrent] = React.useState(getCurrentLang);
+  const [current, setCurrent] = React.useState(getTranslateLangFromCookie);
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
-  // Re-trigger Google Translate after React renders dynamic content
+  // Apply Tamil only after widget loads — never fetch Google on English / offline startup
   React.useEffect(() => {
     if (current === 'en') return;
-    const timer = setTimeout(() => {
-      try {
-        const select = document.querySelector('.goog-te-combo') as HTMLSelectElement;
-        if (select) {
-          select.value = current;
-          select.dispatchEvent(new Event('change'));
-        }
-      } catch { /* silent */ }
-    }, 800);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+    let timer: number | undefined;
+    loadGoogleTranslate().then((ok) => {
+      if (cancelled || !ok) return;
+      timer = window.setTimeout(() => applyGoogleTranslateLang(current), 800);
+    });
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [current]);
 
   React.useEffect(() => {
@@ -52,20 +53,29 @@ export const LanguageSwitcher: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const currentLang = LANGUAGES.find(l => l.code === current) || LANGUAGES[0];
+  const currentLang = LANGUAGES.find((l) => l.code === current) || LANGUAGES[0];
 
-  const select = (code: string) => {
-    setCurrent(code);
+  const select = async (code: string) => {
     setOpen(false);
+    if (code === 'en') {
+      setCurrent('en');
+      setGoogleTranslateCookie('en');
+      return;
+    }
+    if (!navigator.onLine) {
+      toast.error('Tamil translation needs internet. App works in English on Wi‑Fi only.');
+      return;
+    }
+    setCurrent(code);
     setGoogleTranslateCookie(code);
   };
 
   return (
     <div className="flex items-center gap-1" ref={ref}>
-      {/* Language dropdown */}
       <div className="relative flex-1">
         <button
-          onClick={() => setOpen(o => !o)}
+          type="button"
+          onClick={() => setOpen((o) => !o)}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors text-sm w-full"
           title="Select language"
         >
@@ -76,9 +86,10 @@ export const LanguageSwitcher: React.FC = () => {
 
         {open && (
           <div className="absolute right-0 top-10 bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[140px] overflow-hidden">
-            {LANGUAGES.map(lang => (
+            {LANGUAGES.map((lang) => (
               <button
                 key={lang.code}
+                type="button"
                 onClick={() => select(lang.code)}
                 className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${
                   current === lang.code ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
