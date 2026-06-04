@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -16,6 +16,11 @@ import {
   X,
   Home,
   TrendingUp,
+  TrendingDown,
+  Minus,
+  Clock,
+  User,
+  Wrench,
   Loader2,
   Calendar,
   Cpu,
@@ -30,6 +35,7 @@ import { Reports } from './Reports';
 import { formatInput, formatWip } from '../utils/wipUtils';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals, SHIFT_END_MINUTES, SHIFT_START_MINUTES } from '../utils/shiftPaceUtils';
 import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import { formatSinceTimeHHMM } from '../utils/dateTimeFormat';
 import { TimeLossReasonDialog } from './TimeLossReasonDialog';
 import {
   formatReasonDisplayLabel,
@@ -72,6 +78,15 @@ const formatNetBalanceDuration = (netMins: number) => {
   return `${parts.wholeMinutes}m ${parts.seconds}s`;
 };
 
+/** Shift time remaining — whole minutes and seconds, no decimals. */
+const formatShiftTimeLeft = (minutes: number) => {
+  const parts = minutesToDurationParts(Math.max(0, minutes));
+  if (parts.wholeMinutes <= 0 && parts.seconds <= 0) return '0s left';
+  if (parts.wholeMinutes <= 0) return `${parts.seconds}s left`;
+  if (parts.seconds <= 0) return `${parts.wholeMinutes}m left`;
+  return `${parts.wholeMinutes}m ${parts.seconds}s left`;
+};
+
 const lineCardWipClass = (wip: number, target: number): string => {
   if (target <= 0) return 'text-slate-600';
   const ratio = wip / target;
@@ -95,6 +110,41 @@ const getLineShiftPace = (target: number, output: number, now: Date) => {
       : 0;
   const pacePct = expected > 0 ? Math.round((actual / expected) * 100) : null;
   return { expected, projectedEod, pacePct, daily, actual };
+};
+
+const getLineRecoveryStats = (target: number, output: number, projectedEod: number, now: Date) => {
+  const { remainingProductiveMins, elapsedProductiveMins } = getProductiveShiftTotals(now);
+  const daily = Math.round(target);
+  const actual = Math.round(output);
+  const shortfall = Math.max(0, daily - projectedEod);
+  const gapToTarget = Math.max(0, daily - actual);
+  const eodBehind = daily > 0 && projectedEod < daily;
+  const pairsPerHrNeeded =
+    remainingProductiveMins > 0 && gapToTarget > 0
+      ? Math.round((gapToTarget / remainingProductiveMins) * 60 * 10) / 10
+      : null;
+  const currentPairsPerHr =
+    elapsedProductiveMins > 0
+      ? Math.round((actual / elapsedProductiveMins) * 60 * 10) / 10
+      : null;
+  return {
+    shortfall,
+    gapToTarget,
+    eodBehind,
+    pairsPerHrNeeded,
+    currentPairsPerHr,
+    remainingProductiveMins,
+  };
+};
+
+const addDaysToDateKey = (dateKey: string, deltaDays: number) => {
+  const base = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return dateKey;
+  base.setDate(base.getDate() + deltaDays);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 const paceEfficiencyCircleClass = (pct: number | null): string => {
@@ -237,6 +287,26 @@ const MachinePaceInlineRow: React.FC<{
   );
 };
 
+const resolveTrackerWorkCentreId = (
+  pathname: string,
+  selectedLine: string,
+  workCentres: { id: number }[]
+) => {
+  const detailMatch = pathname.match(/^\/production_tracker\/line\/([^/]+)$/);
+  const routeWcId = detailMatch ? Number(detailMatch[1]) : NaN;
+  if (Number.isFinite(routeWcId)) return routeWcId;
+  return parseInt(selectedLine, 10) || workCentres[0]?.id || 1;
+};
+
+const formatStoppageDetail = (detail?: string | null) => {
+  if (!detail) return '';
+  return String(detail)
+    .replace(/^BOTTLENECK:/i, '')
+    .replace(/^BREAKDOWN:/i, '')
+    .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
+    .trim();
+};
+
 const getTodayDate = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -272,6 +342,9 @@ export const ProductionTracker: React.FC = () => {
   const [machineLossMeta, setMachineLossMeta] = useState<MachineTimeLossMeta[]>([]);
   const [reasonDialog, setReasonDialog] = useState<{ machineId: string; machineName: string } | null>(null);
   const [reasonSaving, setReasonSaving] = useState(false);
+  const [yesterdayLineOutput, setYesterdayLineOutput] = useState<number | null>(null);
+  const machinePaceTrendRef = useRef<Map<string, number>>(new Map());
+  const linePaceTrendRef = useRef<number | null>(null);
 
   const logAuditEvent = (event: string, payload: Record<string, any> = {}) => {
     try {
@@ -316,7 +389,7 @@ export const ProductionTracker: React.FC = () => {
   const loadAttendanceData = async (silent = false) => {
     if (!silent) setAttendanceLoading(true);
     try {
-      const workCentreId = selectedLine || workCentres[0]?.id || 1;
+      const workCentreId = resolveTrackerWorkCentreId(location.pathname, selectedLine, workCentres);
       // Get attendance directly from mobile sessions
       const attendanceResponse = await apiFetch(`${API_BASE}/api/mobile-sessions/attendance/${workCentreId}?date=${selectedDate}`);
       if (attendanceResponse.ok) {
@@ -350,7 +423,7 @@ export const ProductionTracker: React.FC = () => {
     if (!dashboardData) setLoading(true);
     if (!dashboardData) setError(null);
     try {
-      const workCentreId = selectedLine || workCentres[0]?.id || 1;
+      const workCentreId = resolveTrackerWorkCentreId(location.pathname, selectedLine, workCentres);
       const res = await apiFetch(`${API_BASE}/api/tv-dashboard/dashboard/${workCentreId}?date=${selectedDate}`);
       const result = await res.json();
       if (result.success) {
@@ -423,7 +496,7 @@ export const ProductionTracker: React.FC = () => {
       }, pollMs);
       return () => clearInterval(interval);
     }
-  }, [selectedDate, selectedLine, workCentres, refreshMode]);
+  }, [selectedDate, selectedLine, workCentres, refreshMode, location.pathname]);
 
   // Keep alert-card count fresh, but lighter than dashboard polling.
   useEffect(() => {
@@ -628,6 +701,15 @@ export const ProductionTracker: React.FC = () => {
 
   useEffect(() => {
     if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) return;
+    loadAttendanceData(true);
+    if (refreshMode === 'manual') return;
+    const pollMs = refreshMode === '30s' ? 30000 : 10000;
+    const interval = setInterval(() => loadAttendanceData(true), pollMs);
+    return () => clearInterval(interval);
+  }, [isDetailRoute, detailWorkCentreId, selectedDate, refreshMode, location.pathname]);
+
+  useEffect(() => {
+    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) return;
     if (refreshMode === 'manual') return;
     const pollMs = refreshMode === '30s' ? 30000 : 10000;
     const interval = setInterval(() => {
@@ -650,6 +732,8 @@ export const ProductionTracker: React.FC = () => {
         loadDashboardData(),
         loadDetailMachines(true),
         loadMachineTimeLossMeta(),
+        loadYesterdayLineOutput(),
+        loadAttendanceData(true),
       ]);
     } finally {
       setManualRefreshing(false);
@@ -688,20 +772,104 @@ export const ProductionTracker: React.FC = () => {
   const detailMachineSnapshots = useMemo(
     () =>
       [...detailMachineRows]
-        .map((row: any) =>
-          buildMachinePaceSnapshot(
+        .map((row: any) => {
+          const pace = buildMachinePaceSnapshot(
             String(row.machine_id),
             row.machine_name || row.machine_centre_name || String(row.machine_id),
             Number(row.total_output_pairs || 0),
             Number(row.target_mins_per_box || 0),
             currentTime
-          )
-        )
+          );
+          const pacePct =
+            pace.expected > 0 ? Math.round((pace.actual / pace.expected) * 100) : null;
+          const isStall = pace.hasRouting && pace.actual <= 0 && pace.expected > 0;
+          return {
+            ...pace,
+            pacePct,
+            isStall,
+            empName: row.emp_name ? String(row.emp_name).trim() : '',
+            empCode: row.emp_code ? String(row.emp_code).trim() : '',
+          };
+        })
         .sort((a, b) =>
           String(a.machineId).localeCompare(String(b.machineId), undefined, { numeric: true })
         ),
     [detailMachineRows, currentTime]
   );
+
+  const getMachinePaceTrend = useCallback((machineId: string, pacePct: number | null) => {
+    if (pacePct == null) return null;
+    const prev = machinePaceTrendRef.current.get(machineId);
+    machinePaceTrendRef.current.set(machineId, pacePct);
+    if (prev == null) return null;
+    if (pacePct > prev + 2) return 'up' as const;
+    if (pacePct < prev - 2) return 'down' as const;
+    return 'flat' as const;
+  }, []);
+
+  const loadYesterdayLineOutput = useCallback(async () => {
+    if (!Number.isFinite(detailWorkCentreId)) return;
+    const yesterdayKey = addDaysToDateKey(selectedDate, -1);
+    try {
+      const res = await apiFetch(
+        `${API_BASE}/api/tv-dashboard/dashboard/${detailWorkCentreId}?date=${yesterdayKey}`
+      );
+      const json = await res.json();
+      if (!json.success) {
+        setYesterdayLineOutput(null);
+        return;
+      }
+      const line = (json.data?.lowerSection?.linePerformance || []).find(
+        (row: any) => Number(row.work_centre_id) === detailWorkCentreId
+      );
+      setYesterdayLineOutput(line != null ? Math.round(Number(line.output || 0)) : null);
+    } catch {
+      setYesterdayLineOutput(null);
+    }
+  }, [detailWorkCentreId, selectedDate]);
+
+  useEffect(() => {
+    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
+      setYesterdayLineOutput(null);
+      return;
+    }
+    loadYesterdayLineOutput();
+  }, [isDetailRoute, detailWorkCentreId, selectedDate, loadYesterdayLineOutput]);
+
+  const fixFirstMachines = useMemo(() => {
+    const losses = machineLossMeta
+      .filter((m) => m.net_mins < 0 && Math.abs(m.net_mins) * 60 >= 1)
+      .map((m) => {
+        const snap = detailMachineSnapshots.find((s) => machineKeysMatch(s.machineId, m.machine_id));
+        return {
+          machineId: m.machine_id,
+          machineName: snap?.machineName || m.machine_name || m.machine_id,
+          lossMins: Math.abs(m.net_mins),
+          pacePct: snap?.pacePct ?? null,
+        };
+      })
+      .sort((a, b) => b.lossMins - a.lossMins);
+    const totalLoss = losses.reduce((sum, row) => sum + row.lossMins, 0);
+    return losses.slice(0, 3).map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      pctOfTotal: totalLoss > 0 ? Math.round((row.lossMins / totalLoss) * 100) : 0,
+    }));
+  }, [machineLossMeta, detailMachineSnapshots]);
+
+  const totalLineLossMins = useMemo(
+    () =>
+      machineLossMeta
+        .filter((m) => m.net_mins < 0 && Math.abs(m.net_mins) * 60 >= 1)
+        .reduce((sum, m) => sum + Math.abs(m.net_mins), 0),
+    [machineLossMeta]
+  );
+
+  const fixFirstRankByMachineId = useMemo(() => {
+    const map = new Map<string, number>();
+    fixFirstMachines.forEach((row) => map.set(String(row.machineId), row.rank));
+    return map;
+  }, [fixFirstMachines]);
 
   if (error && !dashboardData) {
     return (
@@ -741,8 +909,46 @@ export const ProductionTracker: React.FC = () => {
       Number(selectedLineDetail.output || 0),
       currentTime
     );
-    const lineWip = Number(selectedLineDetail.wip || 0);
+    const lineRecovery = getLineRecoveryStats(
+      Number(selectedLineDetail.target || 0),
+      Number(selectedLineDetail.output || 0),
+      detailLinePace.projectedEod,
+      currentTime
+    );
+    const totalLossLabel = formatNetBalanceDuration(-totalLineLossMins);
+    const yesterdayCompare =
+      yesterdayLineOutput != null
+        ? detailLinePace.actual - yesterdayLineOutput
+        : null;
+    const shiftTotals = getProductiveShiftTotals(currentTime);
+    const paceGapPairs = Math.max(0, detailLinePace.expected - detailLinePace.actual);
+    let linePaceTrend: 'up' | 'down' | 'flat' | null = null;
+    if (detailLinePace.pacePct != null) {
+      const prevLinePace = linePaceTrendRef.current;
+      linePaceTrendRef.current = detailLinePace.pacePct;
+      if (prevLinePace != null) {
+        if (detailLinePace.pacePct > prevLinePace + 2) linePaceTrend = 'up';
+        else if (detailLinePace.pacePct < prevLinePace - 2) linePaceTrend = 'down';
+        else linePaceTrend = 'flat';
+      }
+    }
+    const detailLower = dashboardData?.lowerSection || {};
+    const liveBottlenecks = (detailLower.bottlenecks || []).filter(
+      (row: any) => Number(row.button_status) === 1
+    );
+    const liveBreakdowns = (detailLower.breakdowns || []).filter(
+      (row: any) => Number(row.button_status) === 1
+    );
+    const liveIssueCount = liveBottlenecks.length + liveBreakdowns.length;
+    const stalledMachines = detailMachineSnapshots.filter((s) => s.isStall);
     const lineTarget = Number(selectedLineDetail.target || 0);
+    const lineWip = Number(selectedLineDetail.wip || 0);
+    const wipRatio = lineTarget > 0 ? lineWip / lineTarget : 0;
+    const attendancePresent = Number(attendanceData.present || 0);
+    const attendanceTarget = Number(attendanceData.target_employees || 0);
+    const attendanceShort = Math.max(0, attendanceTarget - attendancePresent);
+    const shiftStartLabel = `${String(Math.floor(SHIFT_START_MINUTES / 60)).padStart(2, '0')}:${String(SHIFT_START_MINUTES % 60).padStart(2, '0')}`;
+    const shiftEndLabel = `${String(Math.floor(SHIFT_END_MINUTES / 60)).padStart(2, '0')}:${String(SHIFT_END_MINUTES % 60).padStart(2, '0')}`;
     const lineStatusLabel =
       lineOutputPercent >= 90 ? 'Strong' : lineOutputPercent >= 70 ? 'On track' : 'Needs attention';
     const lineStatusClass =
@@ -894,6 +1100,28 @@ export const ProductionTracker: React.FC = () => {
                   {machinesWithLoss} with time loss
                 </span>
               )}
+              {totalLossLabel && (
+                <span className="rounded-lg bg-violet-500/30 px-2.5 py-1 text-xs font-semibold text-violet-50">
+                  <Clock className="mr-1 inline h-3.5 w-3.5" />
+                  {totalLossLabel} lost today
+                </span>
+              )}
+              {lineRecovery.remainingProductiveMins > 0 && (
+                <span className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-blue-50">
+                  {formatShiftTimeLeft(lineRecovery.remainingProductiveMins)} in shift
+                </span>
+              )}
+              {liveIssueCount > 0 && (
+                <span className="rounded-lg bg-orange-500/40 px-2.5 py-1 text-xs font-semibold text-orange-50">
+                  <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
+                  {liveIssueCount} live issue{liveIssueCount === 1 ? '' : 's'}
+                </span>
+              )}
+              {stalledMachines.length > 0 && (
+                <span className="rounded-lg bg-slate-700/50 px-2.5 py-1 text-xs font-semibold text-amber-100">
+                  {stalledMachines.length} stalled
+                </span>
+              )}
               <span className="sm:hidden ml-auto text-xs font-medium text-blue-100/80">
                 {dashboardAgeLabel}
               </span>
@@ -928,13 +1156,191 @@ export const ProductionTracker: React.FC = () => {
                 })}
               </div>
 
+              {/* Line insights — shift recovery + fix first */}
+              {detailLinePace.daily > 0 && (
+                <div className="space-y-2.5 rounded-xl border-2 border-indigo-200 bg-indigo-50/40 p-2.5 sm:p-3">
+                  <p className="text-center text-[11px] font-extrabold uppercase tracking-wider text-indigo-900">
+                    Line insights
+                  </p>
+                  <div
+                    className={`rounded-xl border px-3 py-3 ${
+                      lineRecovery.eodBehind
+                        ? 'border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50'
+                        : 'border-emerald-200 bg-emerald-50'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start gap-3">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-xs font-extrabold uppercase tracking-wide text-amber-900">
+                          Shift recovery
+                        </p>
+                        {lineRecovery.eodBehind ? (
+                          <p className="text-sm font-bold text-rose-800">
+                            EOD forecast {detailLinePace.projectedEod} / {detailLinePace.daily}
+                            <span className="font-extrabold">
+                              {' '}
+                              — short by ~{lineRecovery.shortfall} pairs
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="text-sm font-bold text-emerald-800">
+                            On track for EOD ({detailLinePace.projectedEod} / {detailLinePace.daily})
+                          </p>
+                        )}
+                        {lineRecovery.pairsPerHrNeeded != null && lineRecovery.gapToTarget > 0 && (
+                          <p className="text-xs sm:text-sm text-slate-700">
+                            Need ~<span className="font-black tabular-nums">{lineRecovery.pairsPerHrNeeded}</span>{' '}
+                            pairs/hr for rest of shift
+                            {lineRecovery.currentPairsPerHr != null && (
+                              <>
+                                {' '}
+                                (now ~<span className="font-bold tabular-nums">{lineRecovery.currentPairsPerHr}</span>
+                                /hr)
+                              </>
+                            )}
+                          </p>
+                        )}
+                        {yesterdayCompare != null && (
+                          <p className="text-xs text-slate-600">
+                            vs yesterday: output{' '}
+                            <span
+                              className={`font-bold tabular-nums ${
+                                yesterdayCompare >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                              }`}
+                            >
+                              {yesterdayCompare >= 0 ? '+' : ''}
+                              {yesterdayCompare}
+                            </span>{' '}
+                            pairs (was {yesterdayLineOutput})
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right text-xs font-semibold text-slate-600">
+                        <p className="tabular-nums">{formatShiftTimeLeft(lineRecovery.remainingProductiveMins)}</p>
+                        <p className="text-slate-500">productive</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {fixFirstMachines.length > 0 ? (
+                    <div className="rounded-xl border border-rose-200 bg-white">
+                      <div className="border-b border-rose-100 bg-rose-50 px-3 py-2">
+                        <p className="text-xs font-extrabold uppercase tracking-wide text-rose-800">
+                          Fix first — time loss
+                        </p>
+                      </div>
+                      <ul className="divide-y divide-slate-100">
+                        {fixFirstMachines.map((row) => (
+                          <li
+                            key={row.machineId}
+                            className="flex flex-wrap items-center gap-2 px-3 py-2"
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-600 text-xs font-black text-white">
+                              {row.rank}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-bold text-slate-900">{row.machineName}</p>
+                              <p className="text-xs text-slate-500 tabular-nums">
+                                {formatNetBalanceDuration(-row.lossMins)}
+                                {row.pctOfTotal > 0 ? ` · ${row.pctOfTotal}% of line loss` : ''}
+                                {row.pacePct != null ? ` · ${row.pacePct}% pace` : ''}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : machinesWithLoss > 0 ? (
+                    <p className="text-center text-xs font-semibold text-rose-700">
+                      {machinesWithLoss} machine(s) with time loss — see cards below
+                    </p>
+                  ) : null}
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="rounded-lg border border-white bg-white/90 px-2 py-2 text-center">
+                      <p className="text-[9px] font-bold uppercase text-slate-500">Attendance</p>
+                      <p className="text-sm font-black tabular-nums text-slate-900">
+                        {attendancePresent}/{attendanceTarget || '—'}
+                      </p>
+                      {attendanceShort > 0 && (
+                        <p className="text-[10px] font-semibold text-rose-600">−{attendanceShort} short</p>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-white bg-white/90 px-2 py-2 text-center">
+                      <p className="text-[9px] font-bold uppercase text-slate-500">Behind pace</p>
+                      <p className="text-sm font-black tabular-nums text-rose-700">
+                        {paceGapPairs > 0 ? `−${paceGapPairs}` : '0'} pairs
+                      </p>
+                      <p className="text-[10px] text-slate-500">vs expected now</p>
+                    </div>
+                    <div className="rounded-lg border border-white bg-white/90 px-2 py-2 text-center">
+                      <p className="text-[9px] font-bold uppercase text-slate-500">Line pace</p>
+                      <p className="text-sm font-black tabular-nums">
+                        {detailLinePace.pacePct != null ? `${detailLinePace.pacePct}%` : '—'}
+                      </p>
+                      {linePaceTrend === 'up' && (
+                        <p className="text-[10px] font-bold text-emerald-600 inline-flex items-center justify-center gap-0.5">
+                          <TrendingUp className="h-3 w-3" /> Improving
+                        </p>
+                      )}
+                      {linePaceTrend === 'down' && (
+                        <p className="text-[10px] font-bold text-rose-600 inline-flex items-center justify-center gap-0.5">
+                          <TrendingDown className="h-3 w-3" /> Slipping
+                        </p>
+                      )}
+                      {linePaceTrend === 'flat' && (
+                        <p className="text-[10px] font-semibold text-slate-500">Steady</p>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-white bg-white/90 px-2 py-2 text-center">
+                      <p className="text-[9px] font-bold uppercase text-slate-500">WIP</p>
+                      <p className={`text-sm font-black tabular-nums ${lineCardWipClass(lineWip, lineTarget)}`}>
+                        {formatWip(lineWip)}
+                      </p>
+                      {wipRatio > 0.25 && (
+                        <p className="text-[10px] font-semibold text-orange-600">High vs target</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Shift timeline */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-600">
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    Shift {shiftStartLabel}–{shiftEndLabel}
+                  </span>
+                  <span className="tabular-nums">
+                    {shiftTotals.elapsedPct}% elapsed · {formatShiftTimeLeft(shiftTotals.remainingProductiveMins)}
+                  </span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all"
+                    style={{ width: `${Math.min(100, Math.max(0, shiftTotals.elapsedPct))}%` }}
+                  />
+                </div>
+                <p className="mt-1.5 text-center text-[10px] text-slate-500">
+                  Now {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+
               {/* Line shift pace */}
               <div className="rounded-xl border border-[#dbe5ff] bg-[#f7f9ff] p-3 sm:p-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-sm font-extrabold text-slate-800 sm:text-base">Line pace today</h2>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-amber-800 bg-amber-100 px-2 py-0.5 rounded ring-1 ring-amber-200">
-                    Circle = efficiency %
-                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {paceGapPairs > 0 && (
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded ring-1 ring-rose-200">
+                        −{paceGapPairs} pairs vs now
+                      </span>
+                    )}
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-amber-800 bg-amber-100 px-2 py-0.5 rounded ring-1 ring-amber-200">
+                      Circle = efficiency %
+                    </span>
+                  </div>
                 </div>
                 <LinePaceEodEffBlock
                   actual={detailLinePace.actual}
@@ -943,6 +1349,12 @@ export const ProductionTracker: React.FC = () => {
                   daily={detailLinePace.daily}
                   pacePct={detailLinePace.pacePct}
                 />
+                {totalLossLabel && (
+                  <p className="mt-2 text-center text-xs font-semibold text-violet-800">
+                    Line time loss today: {totalLossLabel}
+                    {lineOutputPercent < 70 ? ' — likely dragging output' : ''}
+                  </p>
+                )}
               </div>
 
               {/* Progress bars */}
@@ -991,12 +1403,93 @@ export const ProductionTracker: React.FC = () => {
                 </div>
               </div>
 
+              {/* Live bottlenecks / breakdowns */}
+              {liveIssueCount > 0 && (
+                <div className="rounded-xl border-2 border-orange-300 bg-orange-50/80 p-3">
+                  <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-orange-900">
+                    Live on floor — needs attention
+                  </p>
+                  <ul className="space-y-2">
+                    {liveBreakdowns.slice(0, 3).map((row: any, idx: number) => (
+                      <li
+                        key={`bd-${idx}-${row.machine_centre_name}`}
+                        className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2"
+                      >
+                        <Wrench className="h-4 w-4 shrink-0 text-red-700 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-red-900">{row.machine_centre_name}</p>
+                          <p className="text-xs text-red-800 line-clamp-2">
+                            {formatStoppageDetail(row.detail) || 'Breakdown'}
+                          </p>
+                          <p className="text-[10px] font-semibold text-red-700">
+                            {formatSinceTimeHHMM(row.idle_start_time || row.start_time)}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                    {liveBottlenecks.slice(0, 3).map((row: any, idx: number) => (
+                      <li
+                        key={`bn-${idx}-${row.machine_centre_name}`}
+                        className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2"
+                      >
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-amber-900">{row.machine_centre_name}</p>
+                          <p className="text-xs text-amber-900 line-clamp-2">
+                            {formatStoppageDetail(row.detail) || 'Bottleneck'}
+                          </p>
+                          <p className="text-[10px] font-semibold text-amber-800">
+                            {formatSinceTimeHHMM(row.idle_start_time || row.start_time)}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Stalled machines */}
+              {stalledMachines.length > 0 && (
+                <div className="rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5">
+                  <p className="text-xs font-extrabold uppercase text-slate-800 mb-1.5">
+                    Stalled — routing set, no output yet
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {stalledMachines.map((s) => (
+                      <span
+                        key={s.machineId}
+                        className="rounded-md bg-slate-800 px-2 py-1 text-[11px] font-bold text-amber-100"
+                      >
+                        {s.machineName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Hourly output for this line */}
+              <div className="rounded-xl border border-slate-200 bg-white p-2 sm:p-3 min-h-[220px]">
+                <h2 className="mb-1 text-sm font-extrabold text-slate-800">Hourly output (this line)</h2>
+                <div className="h-[200px] sm:h-[220px]">
+                  <HourlyOutputChart
+                    workCentreId={detailWorkCentreId}
+                    workCentreName={selectedLineDetail.line_name}
+                    date={selectedDate}
+                    hideTitle
+                    fitContainer
+                  />
+                </div>
+              </div>
+
               {/* Machine pace */}
               <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 p-3 sm:p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="text-base font-extrabold text-blue-900 sm:text-lg">Machine pace</h2>
-                    <p className="text-xs text-slate-600">Tap a card to view or add time loss reason</p>
+                    <p className="text-xs text-slate-600">
+                      Tap a card for time loss reason · {attendancePresent} operator
+                      {attendancePresent === 1 ? '' : 's'} logged in
+                    </p>
                   </div>
                   {detailMachinesLoading && (
                     <Loader2 className="h-5 w-5 animate-spin text-blue-600" aria-label="Loading machines" />
@@ -1020,9 +1513,19 @@ export const ProductionTracker: React.FC = () => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
-                    {detailMachineSnapshots.map((snap) => {
-                      const pacePct =
-                        snap.expected > 0 ? Math.round((snap.actual / snap.expected) * 100) : null;
+                    {[...detailMachineSnapshots]
+                      .sort((a, b) => {
+                        const rankA = fixFirstRankByMachineId.get(String(a.machineId)) ?? 99;
+                        const rankB = fixFirstRankByMachineId.get(String(b.machineId)) ?? 99;
+                        if (rankA !== rankB) return rankA - rankB;
+                        return String(a.machineId).localeCompare(String(b.machineId), undefined, {
+                          numeric: true,
+                        });
+                      })
+                      .map((snap) => {
+                      const pacePct = snap.pacePct;
+                      const paceTrend = getMachinePaceTrend(String(snap.machineId), pacePct);
+                      const fixRank = fixFirstRankByMachineId.get(String(snap.machineId));
                       const cardTone =
                         pacePct == null
                           ? 'border-slate-200 bg-white'
@@ -1036,6 +1539,10 @@ export const ProductionTracker: React.FC = () => {
                       const hasNetLoss = netMins < 0 && Math.abs(netMins) * 60 >= 1;
                       const hasNetGain = netMins > 0 && Math.abs(netMins) * 60 >= 1;
                       const netDurationLabel = formatNetBalanceDuration(netMins);
+                      const lossSharePct =
+                        hasNetLoss && totalLineLossMins > 0
+                          ? Math.round((Math.abs(netMins) / totalLineLossMins) * 100)
+                          : 0;
                       const reasonParsed = lossMeta?.reason ? parseM4FromDetail(lossMeta.reason) : null;
                       const showReasonRow = hasNetLoss || hasNetGain || !!lossMeta?.reason;
                       const needsReason = hasNetLoss && !reasonParsed?.reason;
@@ -1054,12 +1561,54 @@ export const ProductionTracker: React.FC = () => {
                                 {snap.machineId}
                               </span>
                             </div>
-                            {pacePct != null && pacePct < 70 && (
-                              <span className="shrink-0 rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-rose-700">
-                                Behind
-                              </span>
-                            )}
+                            <div className="flex shrink-0 flex-col items-end gap-0.5">
+                              {fixRank != null && (
+                                <span className="rounded-md bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
+                                  #{fixRank} fix
+                                </span>
+                              )}
+                              {snap.isStall && (
+                                <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-200">
+                                  Stall
+                                </span>
+                              )}
+                              {pacePct != null && pacePct < 70 && !snap.isStall && (
+                                <span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-rose-700">
+                                  Behind
+                                </span>
+                              )}
+                              {paceTrend === 'up' && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700">
+                                  <TrendingUp className="h-3 w-3" /> Pace
+                                </span>
+                              )}
+                              {paceTrend === 'down' && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-700">
+                                  <TrendingDown className="h-3 w-3" /> Pace
+                                </span>
+                              )}
+                              {paceTrend === 'flat' && pacePct != null && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500">
+                                  <Minus className="h-3 w-3" /> Pace
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          {(snap.empName || snap.empCode) && (
+                            <p className="mb-1 flex flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-600">
+                              <User className="h-3 w-3 shrink-0" />
+                              <span className="truncate">
+                                {snap.empName || 'Operator'}
+                                {snap.empCode ? ` (${snap.empCode})` : ''}
+                              </span>
+                              <span className={snap.isStall ? 'text-amber-700' : 'text-emerald-700'}>
+                                {snap.isStall ? '· no output yet' : '· active'}
+                              </span>
+                            </p>
+                          )}
+                          {!snap.empName && !snap.empCode && snap.isStall && (
+                            <p className="mb-1 text-[10px] font-semibold text-amber-800">No operator session — check mobile</p>
+                          )}
                           <MachinePaceInlineRow
                             actual={snap.actual}
                             expected={snap.expected}
@@ -1090,7 +1639,10 @@ export const ProductionTracker: React.FC = () => {
                                     <span className="text-[10px] font-extrabold uppercase tracking-wide opacity-90">
                                       {hasNetLoss ? 'Time loss' : 'Net balance'}
                                     </span>
-                                    <span>{netDurationLabel}</span>
+                                    <span>
+                                      {netDurationLabel}
+                                      {lossSharePct > 0 ? ` (${lossSharePct}% of line)` : ''}
+                                    </span>
                                   </span>
                                 ) : null}
                                 {reasonParsed?.reason ? (
