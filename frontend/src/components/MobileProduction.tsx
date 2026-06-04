@@ -1648,12 +1648,10 @@ export const MobileProduction: React.FC = () => {
                     });
                     const data = await response.json();
                     if (!data.success) {
-                        // Ghost cycle or validation error - store message and stop retrying
-                        if (data.message?.includes('Cannot finish') || data.message?.includes('Minimum cycle time')) {
-                            validationErrorMsg = data.message;
-                            throw new Error('VALIDATION_ERROR'); // Stop retrying
-                        }
-                        throw new Error(data.message || 'Failed');
+                        // Business rule / validation — show API message, do not retry
+                        validationErrorMsg =
+                            data.message || data.error || 'Could not finish this cycle.';
+                        throw new Error('VALIDATION_ERROR');
                     }
                     return data;
                 }, 3);
@@ -1690,12 +1688,11 @@ export const MobileProduction: React.FC = () => {
         if (!finishSuccess) {
             // Check if it was a validation error (ghost cycle, etc.)
             if (validationErrorMsg) {
-                // Show simple toast for validation errors
-                toast.error(validationErrorMsg, { duration: 5000, id: 'validation-error' });
+                toast.error(validationErrorMsg, { duration: 8000, id: 'validation-error' });
                 setLoading(false);
                 return;
             }
-            
+
             // CRITICAL FAILURE: DB may not have the finished record
             // Block user from starting new cycle until resolved
             toast.error(
