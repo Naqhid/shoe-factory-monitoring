@@ -610,7 +610,6 @@ app.get('/api/reports/hourly-production', authenticate, requireLogsAccess, valid
 app.get('/api/reports/line-efficiency', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency.bind(apiController));
 app.get('/api/reports/attendance', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getAttendanceReport.bind(apiController));
 app.get('/api/reports/rework-rejection', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getReworkRejectionReport.bind(apiController));
-app.get('/api/reports/machine-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getMachineOutputReport.bind(apiController));
 app.get('/api/reports/employee-output', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeeOutputReport.bind(apiController));
 app.get('/api/reports/employee-performance', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getEmployeePerformanceReport.bind(apiController));
 app.get('/api/reports/time-loss', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getTimeLossReport.bind(apiController));
@@ -731,6 +730,7 @@ app.post('/api/tracker/alert-actions/query', authenticate, requireTrackerAccess,
 app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, productionTrackerController.acknowledgeAlert.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
 app.get('/api/tracker/machine-time-loss', authenticate, requireTrackerAccess, productionTrackerController.getMachineTimeLossMeta.bind(productionTrackerController));
+app.get('/api/tracker/line-yesterday-compare', authenticate, requireTrackerAccess, productionTrackerController.getLineYesterdayCompare.bind(productionTrackerController));
 app.post('/api/tracker/time-loss-reason', authenticate, requireTrackerAccess, productionTrackerController.saveMachineTimeLossReason.bind(productionTrackerController));
 app.get('/api/missed-actions', authenticate, requireLogsAccess, missedActionsController.getMissedActions);
 app.get('/api/missed-actions/daily-report', authenticate, requireMissedActionsReadAccess, missedActionsController.getMissedActionsDailyReport);

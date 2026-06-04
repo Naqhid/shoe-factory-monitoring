@@ -11,6 +11,32 @@ const LUNCH_END_MINUTE = parseInt(process.env.LUNCH_END_MINUTE || '0', 10);
 const LATE_CYCLE_GRACE_SECS = Math.max(1, parseInt(process.env.LATE_CYCLE_GRACE_SECS || '40', 10));
 const LATE_CYCLE_GRACE_MINS = LATE_CYCLE_GRACE_SECS / 60;
 
+const dateKeyLocal = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+/** Shift window on a calendar day (local server time, same as existing cycle logic). */
+const shiftBoundsForDateKey = (dateKey) => {
+  const anchor = new Date(`${dateKey}T12:00:00`);
+  const shiftStart = new Date(anchor);
+  shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+  const shiftEnd = new Date(anchor);
+  shiftEnd.setHours(SHIFT_END_HOUR, SHIFT_END_MINUTE, 0, 0);
+  return { shiftStart, shiftEnd };
+};
+
+/** As-of timestamp for open-gap loss: now (capped at shift end) on today, else shift end for past days. */
+const effectiveAsOfForDateKey = (dateKey, now = new Date()) => {
+  const { shiftStart, shiftEnd } = shiftBoundsForDateKey(dateKey);
+  const todayKey = dateKeyLocal(now);
+  if (dateKey < todayKey) return shiftEnd;
+  if (dateKey > todayKey) return shiftStart;
+  return new Date(Math.min(now.getTime(), shiftEnd.getTime()));
+};
+
 const overlapMinutes = (aStart, aEnd, bStart, bEnd) => {
   const start = Math.max(aStart.getTime(), bStart.getTime());
   const end = Math.min(aEnd.getTime(), bEnd.getTime());
@@ -116,10 +142,96 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date) {
 }
 
 /**
+ * Add open idle loss: last finish → as-of (or shift start → as-of if no finished cycles).
+ * Skips machines with a cycle in progress (status 1, no finish) to avoid counting active work as idle.
+ */
+async function applyOpenTailMachineLoss(pool, workCentreId, dateKey, byMachine, now = new Date()) {
+  const asOf = effectiveAsOfForDateKey(dateKey, now);
+  const { shiftStart } = shiftBoundsForDateKey(dateKey);
+  if (asOf.getTime() <= shiftStart.getTime()) return;
+
+  const [wcMachines] = await pool.query(
+    `
+    SELECT
+      mc.machine_id,
+      COALESCE(mc.name, mc.machine_name, CONCAT('Machine ', mc.machine_id)) AS machine_name
+    FROM machine_centres mc
+    WHERE mc.work_centre_id = ?
+    `,
+    [workCentreId]
+  );
+
+  const [lastFinishRows] = await pool.query(
+    `
+    SELECT machine_id, MAX(finish_time) AS last_finish_time
+    FROM machine_centre_production
+    WHERE work_centre_id = ?
+      AND DATE(prod_date) = DATE(?)
+      AND button_status = 2
+      AND finish_time IS NOT NULL
+    GROUP BY machine_id
+    `,
+    [workCentreId, dateKey]
+  );
+
+  const [inProgressRows] = await pool.query(
+    `
+    SELECT DISTINCT machine_id
+    FROM machine_centre_production
+    WHERE work_centre_id = ?
+      AND DATE(prod_date) = DATE(?)
+      AND button_status = 1
+      AND start_time IS NOT NULL
+      AND finish_time IS NULL
+    `,
+    [workCentreId, dateKey]
+  );
+
+  const lastFinishByMachine = new Map();
+  lastFinishRows.forEach((row) => {
+    const id = String(row.machine_id || '');
+    if (!id || !row.last_finish_time) return;
+    lastFinishByMachine.set(id, new Date(row.last_finish_time));
+  });
+
+  const inProgressSet = new Set(inProgressRows.map((row) => String(row.machine_id || '')));
+
+  const ensureMachine = (machineId, machineName) => {
+    if (!byMachine.has(machineId)) {
+      byMachine.set(machineId, {
+        machine_id: machineId,
+        machine_name: machineName || `Machine ${machineId}`,
+        net_mins: 0,
+      });
+    }
+  };
+
+  wcMachines.forEach((row) => {
+    const machineId = String(row.machine_id || '');
+    if (!machineId) return;
+    ensureMachine(machineId, row.machine_name);
+    if (inProgressSet.has(machineId)) return;
+
+    const baselineTs = lastFinishByMachine.get(machineId) || shiftStart;
+    if (asOf.getTime() <= baselineTs.getTime()) return;
+
+    const openInactive = computeShiftInactiveMinutes({
+      baselineTs,
+      startTs: asOf,
+      startReminderMins: LATE_CYCLE_GRACE_MINS,
+    });
+    if (openInactive <= 0) return;
+
+    const entry = byMachine.get(machineId);
+    entry.net_mins -= openInactive;
+  });
+}
+
+/**
  * Machine-wise net time loss for one work centre/day.
  * Returns sorted rows with machine id/name and rounded minutes.
  */
-async function aggregateMachineCycleLosses(pool, workCentreId, date) {
+async function aggregateMachineCycleLosses(pool, workCentreId, date, now = new Date()) {
   const [rows] = await pool.query(
     `
     SELECT
@@ -180,6 +292,8 @@ async function aggregateMachineCycleLosses(pool, workCentreId, date) {
     }
     byMachine.get(machineId).net_mins += netDeltaMins;
   });
+
+  await applyOpenTailMachineLoss(pool, workCentreId, date, byMachine, now);
 
   return Array.from(byMachine.values())
     .map((m) => ({
@@ -289,6 +403,19 @@ async function buildMachineTimeLossReportRows(pool, { fromDate, toDate, workCent
     }
   });
 
+  const datesInRange = [...new Set(Array.from(byKey.values()).map((row) => row.date))];
+  for (const dayKey of datesInRange) {
+    const dayMap = new Map();
+    byKey.forEach((agg, key) => {
+      if (agg.date !== dayKey) return;
+      dayMap.set(agg.machine_id, agg);
+    });
+    const wcIdForDay = workCentreId || Array.from(byKey.values()).find((r) => r.date === dayKey)?.work_centre_id;
+    if (wcIdForDay != null) {
+      await applyOpenTailMachineLoss(pool, Number(wcIdForDay), dayKey, dayMap);
+    }
+  }
+
   let out = Array.from(byKey.values())
     .map((m) => {
       const net_mins = Math.round((Number(m.net_mins) || 0) * 100) / 100;
@@ -327,8 +454,10 @@ module.exports = {
   computeCycleNetLostMins,
   aggregateWorkCentreCycleLoss,
   aggregateMachineCycleLosses,
+  applyOpenTailMachineLoss,
   buildMachineTimeLossReportRows,
   netStatusFromMins,
+  effectiveAsOfForDateKey,
   LATE_CYCLE_GRACE_SECS,
   LATE_CYCLE_GRACE_MINS,
 };

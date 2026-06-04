@@ -95,7 +95,7 @@ const PaceEfficiencyBadge: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) 
   const label =
     pct != null
       ? `In progress ${pct}% (${snap.actual} / ${snap.expected} target so far)`
-      : 'No pace target set';
+      : 'No speed target set';
   const pctLabel = pct != null ? `${pct}%` : '—';
   const textClass =
     pct != null && pct >= 100

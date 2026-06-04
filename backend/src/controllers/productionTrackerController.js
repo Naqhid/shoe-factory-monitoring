@@ -1,6 +1,26 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { aggregateMachineCycleLosses } = require('../utils/cycleLossMins');
+const wipStateService = require('../services/wipStateService');
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const AS_OF_LOCAL_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+
+function addDaysToDateKey(dateKey, deltaDays) {
+  const base = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return dateKey;
+  base.setDate(base.getDate() + deltaDays);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function shiftAsOfToPreviousDay(asOfLocal) {
+  const m = String(asOfLocal || '').match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/);
+  if (!m) return null;
+  return `${addDaysToDateKey(m[1], -1)} ${m[2]}`;
+}
 
 class ProductionTrackerController {
   normalizeIssueKey(input) {
@@ -471,6 +491,52 @@ class ProductionTrackerController {
       });
     } catch (error) {
       logger.error('Error getting machine time loss meta:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /** EOL output: yesterday at same clock time vs yesterday full day (for line detail). */
+  async getLineYesterdayCompare(req, res) {
+    try {
+      const workCentreId = Number(req.query?.work_centre_id);
+      const rawDate = String(req.query?.date || '');
+      const dateKey = DATE_ONLY_RE.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+      const asOfLocal = String(req.query?.as_of || '').trim();
+
+      if (!Number.isFinite(workCentreId) || workCentreId <= 0) {
+        return res.status(400).json({ success: false, error: 'work_centre_id is required' });
+      }
+      if (!AS_OF_LOCAL_RE.test(asOfLocal)) {
+        return res.status(400).json({
+          success: false,
+          error: 'as_of is required (YYYY-MM-DD HH:mm:ss)',
+        });
+      }
+
+      const yesterdayKey = addDaysToDateKey(dateKey, -1);
+      const yesterdayAsOf = shiftAsOfToPreviousDay(asOfLocal);
+      if (!yesterdayAsOf) {
+        return res.status(400).json({ success: false, error: 'Invalid as_of value' });
+      }
+
+      const [yesterdaySameTime, yesterdayFullDay] = await Promise.all([
+        wipStateService.getEolOutputUpTo(workCentreId, yesterdayKey, yesterdayAsOf),
+        wipStateService.getEolOutput(workCentreId, yesterdayKey),
+      ]);
+
+      const asOfTimeLabel = asOfLocal.slice(11, 16);
+
+      return res.json({
+        success: true,
+        date: dateKey,
+        yesterday_date: yesterdayKey,
+        as_of: asOfLocal,
+        as_of_time_label: asOfTimeLabel,
+        yesterday_same_time_output: yesterdaySameTime,
+        yesterday_full_day_output: yesterdayFullDay,
+      });
+    } catch (error) {
+      logger.error('Error getting line yesterday compare:', error);
       return res.status(500).json({ success: false, error: error.message });
     }
   }

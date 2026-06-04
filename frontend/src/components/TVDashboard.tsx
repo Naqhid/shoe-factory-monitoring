@@ -896,7 +896,7 @@ export const TVDashboard: React.FC = () => {
                                 />
                             ) : (
                                 <div className="flex-1 flex items-center justify-center p-6 text-center text-slate-500 text-sm sm:text-base font-medium">
-                                    No production plan target set for today — add planning to show pace vs plan.
+                                    No production plan target set for today — add planning to show speed vs plan.
                                 </div>
                             )}
                         </div> */}
