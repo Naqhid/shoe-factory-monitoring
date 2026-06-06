@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock } from 'lucide-react';
+import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock, ClipboardList, RotateCcw, XCircle } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 // import { TvPlanPacePanel } from './TvPlanPacePanel';
@@ -9,6 +9,7 @@ import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shi
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
 import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import { M4_BADGE_CLASS, M4_REASON_ROW_CLASS, M4_REASON_TEXT_CLASS } from '../utils/m4ReasonUtils';
 
 export const TVDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -27,16 +28,6 @@ export const TVDashboard: React.FC = () => {
             .replace(/\s*\[Approved By:[^\]]+\]\s*$/i, '')
             .trim();
     };
-
-    const getStoppageSortTime = (item: { idle_start_time?: string | null; start_time?: string | null }) => {
-        const raw = item.idle_start_time || item.start_time;
-        if (!raw) return 0;
-        const t = new Date(raw).getTime();
-        return Number.isNaN(t) ? 0 : t;
-    };
-
-    const isStoppageLive = (item: { button_status?: number; finish_time?: string | null }) =>
-        Number(item.button_status) === 1 || !item.finish_time;
 
     const renderStoppageCard = (
         item: any,
@@ -151,10 +142,94 @@ export const TVDashboard: React.FC = () => {
             </div>
         );
     };
+
+    const M4_LEFT_BORDER_CLASS: Record<string, string> = {
+        MAN: 'border-l-blue-500',
+        MACHINE: 'border-l-violet-500',
+        MATERIAL: 'border-l-emerald-500',
+        METHOD: 'border-l-indigo-500',
+    };
+
+    const renderReworkCard = (row: any, index: number, soloOnSlide = false) => {
+        const reworkQty = Number(row.rework_qty || 0);
+        const rejectionQty = Number(row.rejection_qty || 0);
+        const category = String(row.reason_category || '').trim();
+        const reasonLabel = String(row.reason || '').trim() || '—';
+        const reasonRowClass = M4_REASON_ROW_CLASS[category] || 'bg-amber-50/90 ring-amber-200/70';
+        const reasonTextClass = M4_REASON_TEXT_CLASS[category] || 'text-slate-800';
+        const leftBorderClass = M4_LEFT_BORDER_CLASS[category] || 'border-l-amber-500';
+
+        return (
+            <div
+                key={`rework-${index}-${row.machine_centre_name}`}
+                className={[
+                    'w-full max-w-full rounded-xl border-2 border-l-[6px] bg-gradient-to-br from-white via-amber-50/40 to-orange-50/60',
+                    'ring-1 shadow-md flex flex-col min-h-0',
+                    leftBorderClass,
+                    'border-amber-200/90 ring-amber-200/60',
+                    soloOnSlide ? 'flex-1 justify-center px-3 py-3' : 'px-2.5 py-2.5',
+                ].join(' ')}
+            >
+                <div className={`flex items-start gap-2 ${soloOnSlide ? 'mb-3' : 'mb-2'}`}>
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-sm">
+                        <ClipboardList className="h-3.5 w-3.5" aria-hidden />
+                    </div>
+                    <p
+                        className={`font-extrabold text-slate-900 leading-snug line-clamp-2 flex-1 text-left ${
+                            soloOnSlide ? 'text-sm sm:text-base' : 'text-[11px] sm:text-xs'
+                        }`}
+                        title={row.machine_centre_name}
+                    >
+                        {row.machine_centre_name}
+                    </p>
+                </div>
+
+                <div className={`grid grid-cols-2 gap-1.5 ${soloOnSlide ? 'mb-3' : 'mb-2'}`}>
+                    <div className="rounded-lg border border-yellow-200 bg-gradient-to-b from-yellow-50 to-yellow-100/80 px-2 py-1.5 text-center shadow-sm">
+                        <div className="flex items-center justify-center gap-1 text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-yellow-800/90">
+                            <RotateCcw className="h-2.5 w-2.5" aria-hidden />
+                            Rework
+                        </div>
+                        <p className={`font-black tabular-nums text-yellow-900 ${soloOnSlide ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'}`}>
+                            {reworkQty}
+                        </p>
+                    </div>
+                    <div className="rounded-lg border border-red-200 bg-gradient-to-b from-red-50 to-red-100/80 px-2 py-1.5 text-center shadow-sm">
+                        <div className="flex items-center justify-center gap-1 text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-red-800/90">
+                            <XCircle className="h-2.5 w-2.5" aria-hidden />
+                            Reject
+                        </div>
+                        <p className={`font-black tabular-nums text-red-900 ${soloOnSlide ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'}`}>
+                            {rejectionQty}
+                        </p>
+                    </div>
+                </div>
+
+                <div className={`rounded-lg border px-2 py-1.5 ring-1 text-left ${reasonRowClass}`}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        {category ? (
+                            <span
+                                className={`inline-flex px-1.5 py-0.5 rounded-md text-[8px] sm:text-[9px] font-extrabold uppercase tracking-wide ring-1 ${
+                                    M4_BADGE_CLASS[category] || 'bg-gray-100 text-gray-700 ring-gray-200'
+                                }`}
+                            >
+                                {category}
+                            </span>
+                        ) : (
+                            <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-slate-500">Reason</span>
+                        )}
+                        <span className={`text-[10px] sm:text-[11px] font-bold leading-snug line-clamp-2 ${reasonTextClass}`}>
+                            {reasonLabel}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
     const [currentDate, setCurrentDate] = useState('');
-    const [reworkSummary, setReworkSummary] = useState<Record<number, { total_rework: number; total_rejection: number }>>({});
     const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
     const [isOffline, setIsOffline] = useState<boolean>(typeof navigator !== 'undefined' ? !navigator.onLine : false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -162,55 +237,36 @@ export const TVDashboard: React.FC = () => {
     const [partialWarning, setPartialWarning] = useState<string | null>(null);
     const [pinnedWorkCentreId, setPinnedWorkCentreId] = useState<number | null>(null);
     const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<Date | null>(null);
-    const [reworkUpdatedAt, setReworkUpdatedAt] = useState<Date | null>(null);
     const staleReloadTimerRef = React.useRef<number | null>(null);
     const [showStatusBar, setShowStatusBar] = useState(false);
     const [detailCarouselIndex, setDetailCarouselIndex] = useState(0);
     const [detailCarouselProgress, setDetailCarouselProgress] = useState(0);
-    const [stoppageCarouselIndex, setStoppageCarouselIndex] = useState(0);
-    const [stoppageCarouselProgress, setStoppageCarouselProgress] = useState(0);
+    const [insightCarouselIndex, setInsightCarouselIndex] = useState(0);
+    const [insightCarouselProgress, setInsightCarouselProgress] = useState(0);
     const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
 
     const DETAIL_CAROUSEL_SLIDES = 3;
     const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Machines'];
     const DETAIL_CAROUSEL_MS = 60000;
-    const STOPPAGE_CAROUSEL_MS = 15000;
+    const INSIGHT_CAROUSEL_MS = 15000;
 
-    const bottleneckList = dashboardData?.lowerSection?.bottlenecks ?? [];
-    const breakdownList = dashboardData?.lowerSection?.breakdowns ?? [];
+    type InsightSlideKind = 'time_loss' | 'rework' | 'breakdown';
 
-    const mergedStoppageEvents = useMemo(() => {
-        const bn = bottleneckList.map((item: any) => ({ ...item, kind: 'bottleneck' as const }));
-        const bd = breakdownList.map((item: any) => ({ ...item, kind: 'breakdown' as const }));
-        return [...bn, ...bd].sort((a, b) => {
-            const aLive = isStoppageLive(a);
-            const bLive = isStoppageLive(b);
-            if (aLive !== bLive) return aLive ? -1 : 1;
-            return getStoppageSortTime(b) - getStoppageSortTime(a);
-        });
+    const insightSlides = useMemo((): InsightSlideKind[] => {
+        const slides: InsightSlideKind[] = ['time_loss'];
+        const rework = Array.isArray(dashboardData?.lowerSection?.reworkEntries)
+            ? dashboardData.lowerSection.reworkEntries
+            : [];
+        const breakdowns = Array.isArray(dashboardData?.lowerSection?.breakdowns)
+            ? dashboardData.lowerSection.breakdowns
+            : [];
+        if (rework.length > 0) slides.push('rework');
+        if (breakdowns.length > 0) slides.push('breakdown');
+        return slides;
     }, [dashboardData]);
 
-    const stoppageItemsPerSlide = useMemo(() => {
-        if (mergedStoppageEvents.length === 0) return 2;
-        const maxDetailLen = Math.max(
-            0,
-            ...mergedStoppageEvents.map((e) => formatStoppageDetail(e.detail).length)
-        );
-        return maxDetailLen > 22 ? 1 : 2;
-    }, [mergedStoppageEvents]);
-
-    const stoppageSlideCount = mergedStoppageEvents.length === 0
-        ? 1
-        : Math.ceil(mergedStoppageEvents.length / stoppageItemsPerSlide);
-
-    const stoppageSlides = useMemo(() => {
-        if (mergedStoppageEvents.length === 0) return [];
-        const slides: typeof mergedStoppageEvents[] = [];
-        for (let i = 0; i < mergedStoppageEvents.length; i += stoppageItemsPerSlide) {
-            slides.push(mergedStoppageEvents.slice(i, i + stoppageItemsPerSlide));
-        }
-        return slides;
-    }, [mergedStoppageEvents, stoppageItemsPerSlide]);
+    const insightSlideCount = insightSlides.length;
+    const breakdownList = dashboardData?.lowerSection?.breakdowns ?? [];
 
     useEffect(() => {
         const now = new Date();
@@ -278,7 +334,6 @@ export const TVDashboard: React.FC = () => {
                 const workCentreId = workCentres[currentIndex].id;
                 const [dashRes] = await Promise.allSettled([
                     apiFetch(`${API_BASE_URL}/api/tv-dashboard/dashboard/${workCentreId}?date=${currentDate}`),
-                    // apiFetch(`${API_BASE_URL}/api/rework-rejection/summary?date=${currentDate}`),
                 ]);
 
                 let dashboardUpdated = false;
@@ -301,20 +356,6 @@ export const TVDashboard: React.FC = () => {
                 } else {
                     warnings.push('Live dashboard feed is unreachable.');
                 }
-
-                // if (reworkRes.status === 'fulfilled') {
-                //     const reworkResult = await reworkRes.value.json();
-                //     if (reworkResult.success && Array.isArray(reworkResult.data)) {
-                //         setReworkUpdatedAt(new Date());
-                //         const map: Record<number, { total_rework: number; total_rejection: number }> = {};
-                //         reworkResult.data.forEach((r: any) => { map[r.work_centre_id] = r; });
-                //         setReworkSummary(map);
-                //     } else {
-                //         warnings.push('Rework/rejection summary is unavailable.');
-                //     }
-                // } else {
-                //     warnings.push('Rework/rejection feed is unreachable.');
-                // }
 
                 if (!dashboardUpdated) {
                     setRetryAttempts((prev) => prev + 1);
@@ -390,18 +431,9 @@ export const TVDashboard: React.FC = () => {
     useEffect(() => {
         setDetailCarouselIndex(0);
         setDetailCarouselProgress(0);
-        setStoppageCarouselIndex(0);
-        setStoppageCarouselProgress(0);
+        setInsightCarouselIndex(0);
+        setInsightCarouselProgress(0);
     }, [currentIndex]);
-
-    useEffect(() => {
-        setStoppageCarouselIndex(0);
-        setStoppageCarouselProgress(0);
-    }, [stoppageSlideCount]);
-
-    useEffect(() => {
-        setStoppageCarouselIndex((prev) => (prev >= stoppageSlideCount ? 0 : prev));
-    }, [stoppageSlideCount]);
 
     useEffect(() => {
         setDetailCarouselProgress(0);
@@ -422,33 +454,39 @@ export const TVDashboard: React.FC = () => {
     }, [detailCarouselIndex, currentIndex]);
 
     useEffect(() => {
-        if (stoppageSlideCount <= 1 || mergedStoppageEvents.length === 0) return;
-
-        const rotateInterval = setInterval(() => {
-            setStoppageCarouselIndex((prev) => (prev + 1) % stoppageSlideCount);
-            setStoppageCarouselProgress(0);
-        }, STOPPAGE_CAROUSEL_MS);
-
-        return () => clearInterval(rotateInterval);
-    }, [currentIndex, stoppageSlideCount]);
+        setInsightCarouselIndex((prev) => Math.min(prev, Math.max(0, insightSlideCount - 1)));
+    }, [insightSlideCount]);
 
     useEffect(() => {
-        if (stoppageSlideCount <= 1 || mergedStoppageEvents.length === 0) return;
+        if (insightSlideCount <= 1) return;
+
+        const rotateInterval = setInterval(() => {
+            setInsightCarouselIndex((prev) => (prev + 1) % insightSlideCount);
+            setInsightCarouselProgress(0);
+        }, INSIGHT_CAROUSEL_MS);
+
+        return () => clearInterval(rotateInterval);
+    }, [currentIndex, insightSlideCount]);
+
+    useEffect(() => {
+        if (insightSlideCount <= 1) {
+            setInsightCarouselProgress(0);
+            return;
+        }
 
         const tickMs = 100;
-        const increment = (tickMs / STOPPAGE_CAROUSEL_MS) * 100;
+        const increment = (tickMs / INSIGHT_CAROUSEL_MS) * 100;
         const interval = setInterval(() => {
-            setStoppageCarouselProgress((prev) => Math.min(prev + increment, 100));
+            setInsightCarouselProgress((prev) => Math.min(prev + increment, 100));
         }, tickMs);
 
         return () => clearInterval(interval);
-    }, [stoppageCarouselIndex, currentIndex, stoppageSlideCount]);
+    }, [insightCarouselIndex, currentIndex, insightSlideCount]);
 
     const secondsSinceLastSuccess = lastUpdatedAt ? Math.floor((currentTime.getTime() - lastUpdatedAt.getTime()) / 1000) : null;
     const isCriticalStaleNow = secondsSinceLastSuccess !== null && secondsSinceLastSuccess > 120;
     const sectionAge = (ts: Date | null) => ts ? Math.floor((currentTime.getTime() - ts.getTime()) / 1000) : null;
     const dashboardAgeSec = sectionAge(dashboardUpdatedAt);
-    const reworkAgeSec = sectionAge(reworkUpdatedAt);
 
     // Escalation: if stale remains critical for 5+ minutes, trigger hard reload.
     useEffect(() => {
@@ -521,6 +559,10 @@ export const TVDashboard: React.FC = () => {
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
     const linePerformanceRows = Array.isArray(lowerSection?.linePerformance) ? lowerSection.linePerformance : [];
     const machineTimeLossRows = Array.isArray(lowerSection?.machineTimeLosses) ? lowerSection.machineTimeLosses : [];
+    const reworkEntries = Array.isArray(lowerSection?.reworkEntries) ? lowerSection.reworkEntries : [];
+    const reworkTotals = lowerSection?.reworkTotals ?? { total_rework: 0, total_rejection: 0 };
+    const totalReworkQty = Number(reworkTotals.total_rework || 0);
+    const totalRejectionQty = Number(reworkTotals.total_rejection || 0);
     const netMachineDeltaMins = machineTimeLossRows.reduce((sum: number, row: any) => sum + Number(row.net_mins || 0), 0);
     const netMachineDeltaParts = minutesToDurationParts(Math.abs(netMachineDeltaMins));
     const netMachineDeltaLabel =
@@ -544,12 +586,24 @@ export const TVDashboard: React.FC = () => {
     })();
     const targetGap = Math.max(0, Number(topSection.target || 0) - Number(topSection.output || 0));
     const timeLossMins = Math.max(0, Math.round(Number(topSection.lossOfMinutes || 0)));
-    const reworkRejectionCount = Math.max(
-        0,
-        Math.round(
-            Number(reworkSummary[Number(currentWorkCentreId)]?.total_rejection || 0)
-        )
-    );
+    const reworkRejectionCount = Math.max(0, totalReworkQty + totalRejectionQty);
+    const insightSlideLabels: Record<InsightSlideKind, string> = {
+        time_loss: 'Time loss',
+        rework: 'Rework',
+        breakdown: 'Breakdown',
+    };
+    const insightTabStyles: Record<InsightSlideKind, { base: string; active: string }> = {
+        time_loss: { base: 'bg-orange-100 text-orange-900 ring-orange-300', active: 'ring-orange-500' },
+        rework: { base: 'bg-amber-100 text-amber-900 ring-amber-300', active: 'ring-amber-500' },
+        breakdown: { base: 'bg-rose-100 text-rose-900 ring-rose-300', active: 'ring-rose-500' },
+    };
+    const insightTabCount = (kind: InsightSlideKind) => {
+        if (kind === 'rework') return reworkRejectionCount;
+        if (kind === 'breakdown') return breakdownList.length;
+        return null;
+    };
+    const insightGridCols =
+        insightSlides.length === 1 ? 'grid-cols-1' : insightSlides.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
     const recoveryLabel =
         targetGap > 0
             ? `Gap: ${targetGap}`
@@ -951,143 +1005,176 @@ export const TVDashboard: React.FC = () => {
             <div className="col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
                 <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-gradient-to-b from-white to-slate-50 ring-1 ring-slate-200/60 overflow-hidden">
                     <div className="flex-shrink-0 mb-2 min-w-0">
-                        <div className="grid grid-cols-3 gap-1 min-w-0">
-                            <span className="inline-flex items-center justify-center rounded-md bg-orange-100 px-1 py-1 text-[9px] sm:text-[10px] font-extrabold text-orange-900 ring-1 ring-orange-300 tabular-nums shadow-sm whitespace-nowrap min-w-0">
-                                Time loss
-                            </span>
-                            <span className="inline-flex items-center justify-center rounded-md bg-amber-100 px-1 py-1 text-[9px] sm:text-[10px] font-extrabold text-amber-900 ring-1 ring-amber-300 tabular-nums shadow-sm whitespace-nowrap min-w-0">
-                                Rework {reworkRejectionCount}
-                            </span>
-                            <span className="inline-flex items-center justify-center rounded-md bg-rose-100 px-1 py-1 text-[9px] sm:text-[10px] font-extrabold text-rose-900 ring-1 ring-rose-300 tabular-nums shadow-sm whitespace-nowrap min-w-0">
-                                Breakdown {breakdownList.length}
-                            </span>
+                        <div className={`grid ${insightGridCols} gap-1 min-w-0`} role="tablist" aria-label="Time loss, rework, and breakdown">
+                            {insightSlides.map((kind, index) => {
+                                const tabStyle = insightTabStyles[kind];
+                                const count = insightTabCount(kind);
+                                const label = insightSlideLabels[kind];
+                                return (
+                                    <button
+                                        key={kind}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={insightCarouselIndex === index}
+                                        aria-label={label}
+                                        onClick={() => {
+                                            setInsightCarouselIndex(index);
+                                            setInsightCarouselProgress(0);
+                                        }}
+                                        className={`inline-flex items-center justify-center rounded-md px-1 py-1 text-[9px] sm:text-[10px] font-extrabold ring-1 tabular-nums shadow-sm whitespace-nowrap min-w-0 transition-all ${
+                                            tabStyle.base
+                                        } ${insightCarouselIndex === index ? `ring-2 ${tabStyle.active} ring-offset-1` : 'opacity-75 hover:opacity-100'}`}
+                                    >
+                                        {count === null ? label : `${label} ${count}`}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                         <div className="relative flex-1 min-h-0 w-full overflow-hidden">
-                            {mergedStoppageEvents.length === 0 ? (
-                                <div className="h-full flex flex-col text-center px-1 py-0.5">
+                            <div
+                                className="flex h-full w-full transition-transform duration-500 ease-in-out motion-reduce:transition-none"
+                                style={{ transform: `translateX(-${insightCarouselIndex * 100}%)` }}
+                            >
+                                {insightSlides.map((kind) => (
+                                <div key={kind} className="flex-[0_0_100%] w-full h-full min-h-0 flex flex-col text-center px-1 py-0.5">
+                                {kind === 'time_loss' && (<>
+                                    <div className="mb-1.5 flex items-center justify-center gap-1.5 text-center flex-wrap shrink-0">
+                                        <p className="text-[11px] sm:text-xs font-bold text-blue-700 tracking-wide">{currentLineName}</p>
+                                        <span className="text-[10px] sm:text-xs text-slate-300">|</span>
+                                        <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">Time loss</p>
+                                    </div>
                                     {machineTimeLossRows.length > 0 ? (
-                                        <>
-                                            <div className="mb-1.5 flex items-center justify-center gap-1.5 text-center flex-wrap">
-                                                <p className="text-[11px] sm:text-xs font-bold text-blue-700 tracking-wide">
-                                                    {currentLineName}
-                                                </p>
-                                                <span className="text-[10px] sm:text-xs text-slate-300">|</span>
-                                                <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                                   Time loss
-                                                </p>
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-1 overflow-auto pr-0.5">
-                                                {machineTimeLossRows.slice(0, 8).map((row: any) => (
-                                                    <div
-                                                        key={`${row.machine_id}-${row.machine_name}`}
-                                                        className={`rounded-lg px-2 py-1.5 flex items-center justify-between shadow-sm ${
+                                        <div className="grid grid-cols-1 gap-1 overflow-auto pr-0.5 min-h-0 flex-1">
+                                            {machineTimeLossRows.slice(0, 8).map((row: any) => (
+                                                <div
+                                                    key={`${row.machine_id}-${row.machine_name}`}
+                                                    className={`rounded-lg px-2 py-1.5 flex items-center justify-between shadow-sm ${
+                                                        Number(row.net_mins || 0) > 0
+                                                            ? 'border border-emerald-200 bg-emerald-50/70'
+                                                            : 'border border-red-200 bg-white'
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`text-[10px] sm:text-[11px] font-bold truncate pr-2 text-left rounded px-1.5 py-0.5 ${
                                                             Number(row.net_mins || 0) > 0
-                                                                ? 'border border-emerald-200 bg-emerald-50/70'
-                                                                : 'border border-red-200 bg-white'
+                                                                ? 'text-emerald-900 bg-emerald-100 border border-emerald-300'
+                                                                : 'text-slate-900 bg-amber-50/60 border border-amber-100'
                                                         }`}
                                                     >
-                                                        <span
-                                                            className={`text-[10px] sm:text-[11px] font-bold truncate pr-2 text-left rounded px-1.5 py-0.5 ${
-                                                                Number(row.net_mins || 0) > 0
-                                                                    ? 'text-emerald-900 bg-emerald-100 border border-emerald-300'
-                                                                    : 'text-slate-900 bg-amber-50/60 border border-amber-100'
-                                                            }`}
-                                                        >
-                                                            {row.machine_name || `Machine ${row.machine_id}`}
-                                                        </span>
-                                                        {(() => {
-                                                            const net = Number(row.net_mins || 0);
-                                                            const parts = minutesToDurationParts(Math.abs(net));
-                                                            const tone =
-                                                                net > 0
-                                                                    ? 'text-emerald-800 bg-emerald-100 border border-emerald-300'
-                                                                    : 'text-red-700 bg-red-50 border border-red-200';
-                                                            const status = net > 0 ? 'gain' : 'loss';
-                                                            return (
-                                                                <span className={`text-[10px] sm:text-[11px] font-black tabular-nums shrink-0 px-1.5 py-0.5 rounded ${tone}`}>
-                                                                    {parts.wholeMinutes}m {parts.seconds}s {status}
-                                                                </span>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                ))}
-                                                <div className="rounded-lg border border-red-300 bg-gradient-to-r from-red-50 to-red-100 px-2 py-1.5 flex items-center justify-between shadow-sm">
-                                                    <span className="text-[10px] sm:text-[11px] font-extrabold text-red-900 uppercase tracking-wide">
-                                                        Total
+                                                        {row.machine_name || `Machine ${row.machine_id}`}
                                                     </span>
-                                                    <span className={`text-[10px] sm:text-[11px] font-black tabular-nums bg-white/80 px-1.5 py-0.5 rounded ${
+                                                    {(() => {
+                                                        const net = Number(row.net_mins || 0);
+                                                        const parts = minutesToDurationParts(Math.abs(net));
+                                                        const tone =
+                                                            net > 0
+                                                                ? 'text-emerald-800 bg-emerald-100 border border-emerald-300'
+                                                                : 'text-red-700 bg-red-50 border border-red-200';
+                                                        const status = net > 0 ? 'gain' : 'loss';
+                                                        return (
+                                                            <span className={`text-[10px] sm:text-[11px] font-black tabular-nums shrink-0 px-1.5 py-0.5 rounded ${tone}`}>
+                                                                {parts.wholeMinutes}m {parts.seconds}s {status}
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            ))}
+                                            <div className="rounded-lg border border-red-300 bg-gradient-to-r from-red-50 to-red-100 px-2 py-1.5 flex items-center justify-between shadow-sm">
+                                                <span className="text-[10px] sm:text-[11px] font-extrabold text-red-900 uppercase tracking-wide">Total</span>
+                                                <span
+                                                    className={`text-[10px] sm:text-[11px] font-black tabular-nums bg-white/80 px-1.5 py-0.5 rounded ${
                                                         netMachineDeltaLabel === 'gain'
                                                             ? 'text-emerald-800'
                                                             : netMachineDeltaLabel === 'loss'
                                                               ? 'text-red-800'
                                                               : 'text-gray-700'
-                                                    }`}>
-                                                        {netMachineDeltaParts.wholeMinutes}m {netMachineDeltaParts.seconds}s {netMachineDeltaLabel}
+                                                    }`}
+                                                >
+                                                    {netMachineDeltaParts.wholeMinutes}m {netMachineDeltaParts.seconds}s {netMachineDeltaLabel}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center">
+                                            <p className="text-[10px] sm:text-xs text-gray-400">No time loss data today</p>
+                                        </div>
+                                    )}
+                                </>)}
+
+                                {kind === 'rework' && (
+                                    <div className="h-full min-h-0 flex flex-col overflow-hidden">
+                                        <div className="mb-2 shrink-0 rounded-lg bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 px-2.5 py-1.5 text-white shadow-sm">
+                                            <div className="flex items-center justify-center gap-1.5 flex-wrap text-center">
+                                                <p className="text-[11px] sm:text-xs font-extrabold tracking-wide">{currentLineName}</p>
+                                                <span className="text-[10px] text-white/50">|</span>
+                                                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-50">Rework / Rejection</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 min-h-0 flex flex-col gap-1.5 overflow-auto pr-0.5">
+                                            {reworkEntries.slice(0, 6).map((row: any, index: number) =>
+                                                renderReworkCard(row, index, reworkEntries.length === 1)
+                                            )}
+                                        </div>
+                                        <div className="shrink-0 mt-1.5 rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-100 via-amber-50 to-orange-100 px-2.5 py-2 shadow-sm">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-[10px] sm:text-[11px] font-extrabold text-amber-950 uppercase tracking-wide">Line total</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="inline-flex items-center gap-1 rounded-md bg-yellow-200/90 px-2 py-0.5 text-[10px] sm:text-[11px] font-black tabular-nums text-yellow-950 ring-1 ring-yellow-300">
+                                                        <RotateCcw className="h-3 w-3" aria-hidden />
+                                                        {totalReworkQty}
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1 rounded-md bg-red-200/90 px-2 py-0.5 text-[10px] sm:text-[11px] font-black tabular-nums text-red-950 ring-1 ring-red-300">
+                                                        <XCircle className="h-3 w-3" aria-hidden />
+                                                        {totalRejectionQty}
                                                     </span>
                                                 </div>
                                             </div>
-                                        </>
-                                    ) : (
-                                        <div className="h-full flex flex-col items-center justify-center">
-                                            <p className="text-[10px] sm:text-xs text-gray-400">No stoppage events today</p>
                                         </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div
-                                    className="flex h-full w-full transition-transform duration-500 ease-in-out motion-reduce:transition-none"
-                                    style={{ transform: `translateX(-${stoppageCarouselIndex * 100}%)` }}
-                                >
-                                    {stoppageSlides.map((slide, slideIdx) => (
-                                        <div
-                                            key={`stoppage-slide-${slideIdx}`}
-                                            className="flex-[0_0_100%] w-full h-full min-h-0 flex flex-col gap-1.5 overflow-hidden"
-                                        >
-                                            {slide.map((item, itemIdx) =>
-                                                renderStoppageCard(
-                                                    item,
-                                                    item.kind,
-                                                    slideIdx * stoppageItemsPerSlide + itemIdx,
-                                                    slide.length === 1,
-                                                    slide.length > 1
-                                                )
+                                    </div>
+                                )}
+
+                                {kind === 'breakdown' && (
+                                        <div className="h-full min-h-0 flex flex-col gap-1.5 overflow-auto px-0.5">
+                                            {breakdownList.slice(0, 4).map((item: any, index: number) =>
+                                                renderStoppageCard(item, 'breakdown', index, breakdownList.length === 1, breakdownList.length > 1)
                                             )}
                                         </div>
-                                    ))}
+                                )}
                                 </div>
-                            )}
+                                ))}
+                            </div>
                         </div>
-                        {mergedStoppageEvents.length > 0 && stoppageSlideCount > 1 && (
+                        {insightSlideCount > 1 && (
                             <div className="flex-shrink-0 pt-1 pb-0.5 border-t border-gray-100 mt-1">
-                                <div className="flex items-center justify-center gap-1.5 mb-1" role="tablist" aria-label="Stoppage events">
-                                    {stoppageSlides.map((_, i) => (
+                                <div className="flex items-center justify-center gap-1.5 mb-1" role="tablist" aria-label="Insight carousel">
+                                    {insightSlides.map((kind, i) => (
                                         <button
-                                            key={`stoppage-dot-${i}`}
+                                            key={kind}
                                             type="button"
                                             role="tab"
-                                            aria-selected={stoppageCarouselIndex === i}
-                                            aria-label={`Stoppage page ${i + 1}`}
+                                            aria-selected={insightCarouselIndex === i}
+                                            aria-label={insightSlideLabels[kind]}
                                             onClick={() => {
-                                                setStoppageCarouselIndex(i);
-                                                setStoppageCarouselProgress(0);
+                                                setInsightCarouselIndex(i);
+                                                setInsightCarouselProgress(0);
                                             }}
                                             className={`h-1.5 rounded-full transition-all duration-300 ${
-                                                stoppageCarouselIndex === i ? 'w-5 bg-red-500' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
+                                                insightCarouselIndex === i ? 'w-5 bg-blue-500' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
                                             }`}
                                         />
                                     ))}
                                 </div>
                                 <div className="w-full rounded-full h-1 bg-gray-200 overflow-hidden">
                                     <div
-                                        className="h-full rounded-full bg-red-500 transition-[width] duration-100 motion-reduce:transition-none"
-                                        style={{ width: `${stoppageCarouselProgress}%` }}
+                                        className="h-full rounded-full bg-blue-500 transition-[width] duration-100 motion-reduce:transition-none"
+                                        style={{ width: `${insightCarouselProgress}%` }}
                                     />
                                 </div>
-                                <p className="text-[9px] sm:text-[10px] text-red-500 font-semibold text-center mt-0.5 tabular-nums">
-                                    {stoppageCarouselIndex + 1}/{stoppageSlideCount} · Auto-switch in{' '}
-                                    {Math.max(0, Math.ceil((STOPPAGE_CAROUSEL_MS / 1000) * (1 - stoppageCarouselProgress / 100)))}s
+                                <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold text-center mt-0.5 tabular-nums">
+                                    {insightSlideLabels[insightSlides[insightCarouselIndex]]} · {insightCarouselIndex + 1}/{insightSlideCount} · Auto-switch in{' '}
+                                    {Math.max(0, Math.ceil((INSIGHT_CAROUSEL_MS / 1000) * (1 - insightCarouselProgress / 100)))}s
                                 </p>
                             </div>
                         )}

@@ -46,14 +46,15 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
         const date = req.query.date || new Date().toISOString().split('T')[0];
         const routingMinsExpr = await getRoutingMinsSqlExpr('prl');
 
+        // Summary is keyed by (date, line, machine, employee); aggregate to one row per machine.
         const [rows] = await pool.query(`
             SELECT
                 mc.id              AS machine_centre_id,
                 mc.name            AS machine_centre_name,
                 COALESCE(mc.machine_name, mc.name) AS machine_name,
                 mc.machine_id,
-                COALESCE(mcs.total_output_pairs, 0) AS total_output_pairs,
-                COALESCE(ROUND(mcs.avg_efficiency_percent, 1), 0) AS avg_efficiency_percent,
+                COALESCE(mcs_agg.total_output_pairs, 0) AS total_output_pairs,
+                COALESCE(ROUND(mcs_agg.avg_efficiency_percent, 1), 0) AS avg_efficiency_percent,
                 COALESCE(
                     (SELECT ROUND(SUM(${routingMinsExpr}), 2)
                      FROM production_routing_lines prl
@@ -67,17 +68,32 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                 ms.emp_code,
                 e.name AS emp_name
             FROM machine_centres mc
-            LEFT JOIN machine_centre_summary mcs
-                ON mcs.machine_id = mc.machine_id
-                AND DATE(mcs.prod_date) = ?
-                AND mcs.work_centre_id = ?
+            LEFT JOIN (
+                SELECT
+                    machine_id,
+                    work_centre_id,
+                    SUM(total_output_pairs) AS total_output_pairs,
+                    CASE
+                        WHEN SUM(total_actual_mins + total_idle_mins) > 0
+                        THEN LEAST(
+                            (SUM(total_target_mins) / SUM(total_actual_mins + total_idle_mins)) * 100,
+                            9999.99
+                        )
+                        ELSE 0
+                    END AS avg_efficiency_percent
+                FROM machine_centre_summary
+                WHERE DATE(prod_date) = ?
+                  AND work_centre_id = ?
+                GROUP BY machine_id, work_centre_id
+            ) mcs_agg
+                ON mcs_agg.machine_id = mc.machine_id
             LEFT JOIN mobile_sessions ms
                 ON ms.machine_id = mc.machine_id
                 AND ms.work_centre_id = ?
                 AND ms.status = 'active'
                 AND DATE(ms.activated_at) = ?
             LEFT JOIN employees e ON e.id = ms.emp_id
-            WHERE (mc.work_centre_id = ? OR mcs.work_centre_id = ?)
+            WHERE (mc.work_centre_id = ? OR mcs_agg.work_centre_id = ?)
               AND mc.deleted_at IS NULL
               AND COALESCE(mc.is_active, 1) = 1
             ORDER BY mc.machine_id
@@ -258,6 +274,23 @@ exports.getDashboard = async (req, res) => {
             ORDER BY COALESCE(mb.idle_start_time, mb.start_time) DESC
         `, [workCentreId, today]);
 
+        const [reworkRows] = await pool.query(`
+            SELECT machine_centre_name, rework_qty, rejection_qty, reason_category, reason
+            FROM rework_rejection
+            WHERE work_centre_id = ?
+              AND DATE(production_date) = DATE(?)
+              AND (rework_qty > 0 OR rejection_qty > 0)
+            ORDER BY (rework_qty + rejection_qty) DESC, machine_centre_name ASC
+        `, [workCentreId, today]);
+
+        const reworkTotals = reworkRows.reduce(
+            (acc, row) => ({
+                total_rework: acc.total_rework + Number(row.rework_qty || 0),
+                total_rejection: acc.total_rejection + Number(row.rejection_qty || 0),
+            }),
+            { total_rework: 0, total_rejection: 0 }
+        );
+
         // ── 9. Line Performance with MES WIP ─────────────────────────────────
         // Fetch raw line data first, then enrich with MES WIP per line.
         const [linePerformanceRaw] = await pool.query(`
@@ -371,6 +404,8 @@ exports.getDashboard = async (req, res) => {
                     bottlenecks: bottlenecks,
                     breakdowns: breakdowns,
                     machineTimeLosses,
+                    reworkEntries: reworkRows,
+                    reworkTotals,
                     linePerformance,
                     workCentreName: wcData[0]?.name || 'N/A'
                 }

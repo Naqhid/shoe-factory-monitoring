@@ -269,6 +269,7 @@ export const MobileProduction: React.FC = () => {
     const hasUserInteractedRef = React.useRef(false);
     const alertAudioContextRef = React.useRef<AudioContext | null>(null);
     const alertSoundTimeoutsRef = React.useRef<number[]>([]);
+    const activeAlertModeRef = React.useRef<'start' | 'finish' | null>(null);
     const startReminderAnchorRef = React.useRef<number | null>(null);
     const lastFinishedCycleMsRef = React.useRef<number | null>(null);
     const previousButtonStatusRef = React.useRef<number | null>(null);
@@ -580,7 +581,9 @@ export const MobileProduction: React.FC = () => {
     }, [recomputeActualTimeCounter]);
 
     // One-time toast when target time is first exceeded (red progress bar) — reminds operator to tap FINISH
-    const stopAlertSound = React.useCallback(() => {
+    const stopAlertSound = React.useCallback((onlyMode?: 'start' | 'finish') => {
+        if (onlyMode && activeAlertModeRef.current !== onlyMode) return;
+        activeAlertModeRef.current = null;
         if (alertSoundTimeoutsRef.current.length > 0) {
             alertSoundTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
             alertSoundTimeoutsRef.current = [];
@@ -687,6 +690,7 @@ export const MobileProduction: React.FC = () => {
                 if (alertAudioContextRef.current === audioCtx) {
                     audioCtx.close().catch(() => {});
                     alertAudioContextRef.current = null;
+                    activeAlertModeRef.current = null;
                 }
             }, durationMs + 300);
             alertSoundTimeoutsRef.current.push(closeId);
@@ -695,12 +699,14 @@ export const MobileProduction: React.FC = () => {
         }
     }, []);
 
-    const playAlertSound = React.useCallback((_mode: 'start' | 'finish') => {
+    const playAlertSound = React.useCallback((mode: 'start' | 'finish') => {
         try {
             stopAlertSound();
+            activeAlertModeRef.current = mode;
             const ALARM_DURATION_MS = idleReminderConfigRef.current.alarm_duration_secs * 1000;
             playAlarmReminderBackground(ALARM_DURATION_MS);
         } catch (error) {
+            activeAlertModeRef.current = null;
             console.warn('Alert sound playback blocked or unavailable:', error);
         }
     }, [playAlarmReminderBackground, stopAlertSound]);
@@ -792,19 +798,20 @@ export const MobileProduction: React.FC = () => {
     useEffect(() => {
         if (!isWithinShiftHours(new Date())) {
             pendingOverTargetAlarmRef.current = false;
-            stopAlertSound();
+            stopAlertSound('finish');
             return;
         }
         if (!productionData || productionData.button_status !== 1 || productionData.is_paused) {
             overTargetToastShownRef.current = false;
             pendingOverTargetAlarmRef.current = false;
-            stopAlertSound();
+            // Idle state: do not stop the start-idle reminder alarm (only clear over-target finish alarm).
+            stopAlertSound('finish');
             return;
         }
         const targetMins = Number(productionData.target_mins || 0);
         if (targetMins <= 0) {
             pendingOverTargetAlarmRef.current = false;
-            stopAlertSound();
+            stopAlertSound('finish');
             return;
         }
         const actualMins = actualTimeCounter / 60;
@@ -812,7 +819,7 @@ export const MobileProduction: React.FC = () => {
         if (!exceeded) {
             overTargetToastShownRef.current = false;
             pendingOverTargetAlarmRef.current = false;
-            stopAlertSound();
+            stopAlertSound('finish');
             return;
         }
         if (overTargetToastShownRef.current) return;
@@ -918,6 +925,7 @@ export const MobileProduction: React.FC = () => {
             pendingStartReminderAlarmRef.current = false;
             lastStartReminderBucketRef.current = 0;
             setStartReminderDue(false);
+            stopAlertSound('start');
             return;
         }
 
@@ -993,6 +1001,7 @@ export const MobileProduction: React.FC = () => {
         idleReminderEnabled,
         idleReminderConfig,
         playAlertSound,
+        stopAlertSound,
     ]);
 
     const toggleIdleReminder = React.useCallback(() => {

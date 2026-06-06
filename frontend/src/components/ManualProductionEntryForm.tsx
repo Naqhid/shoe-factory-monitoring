@@ -1,10 +1,55 @@
 import React from 'react';
 import toast from 'react-hot-toast';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  Building2,
+  ChevronRight,
+  ClipboardList,
+  Clock,
+  Copy,
+  Cpu,
+  Edit,
+  FileText,
+  History,
+  Loader2,
+  Package,
+  Trash2,
+  User,
+  X,
+} from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { SearchableSelect } from './SearchableSelect';
 import { WipDailyStateTab } from './WipDailyStateTab';
+import {
+  buildManualEntryNeededHints,
+  MANUAL_ENTRY_HINT_GRACE_MINS,
+  type ManualEntryNeededHint,
+} from '../utils/manualEntryNeededHints';
+import {
+  buildMissingSlotHints,
+  FACTORY_HOURLY_SLOTS,
+  getMesOutputForHourlySlot,
+  getNextFactoryHourlySlot,
+  isManualProductionRow,
+  type MissingSlotHint,
+} from '../utils/manualEntrySlotUtils';
+import {
+  buildEndOfShiftChecklist,
+  buildLineReconciliation,
+  buildSlotCoverageHeatmap,
+  computeExpectedSlotOutput,
+  countOverlapSlots,
+  detectSlotOverlapConflict,
+  type SlotHeatmapRow,
+} from '../utils/manualEntryCoverageUtils';
+import {
+  ManualEntryReconciliationStrip,
+  ManualEntryShiftChecklist,
+  ManualEntrySlotHeatmap,
+} from './ManualEntryInsights';
 
 interface WorkCentre {
   id: number;
@@ -65,6 +110,16 @@ interface AuditChangeRow {
   beforeValue: string;
   afterValue: string;
 }
+
+const MANUAL_ENTRY_FIELD_CLS =
+  'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400';
+
+const MANUAL_REASON_CHIPS = [
+  'Mobile app down / no capture',
+  'Operator forgot to submit',
+  'MES output incorrect',
+  'Late correction for missed slot',
+];
 
 const getNowLocalDateTime = () => {
   const now = new Date();
@@ -132,7 +187,6 @@ const buildSlotOptions = (slotMinutes: number) => {
 
 export const ManualProductionEntryForm: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Role guard — read once on mount
   const currentUser = React.useMemo(() => {
@@ -147,20 +201,30 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [machines, setMachines] = React.useState<MachineCentre[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [activeSessions, setActiveSessions] = React.useState<ActiveSession[]>([]);
+  const [entryNeededHints, setEntryNeededHints] = React.useState<ManualEntryNeededHint[]>([]);
+  const [entryHintsLoading, setEntryHintsLoading] = React.useState(false);
+  const [allMissingSlotHints, setAllMissingSlotHints] = React.useState<MissingSlotHint[]>([]);
+  const [showAllMissingSlots, setShowAllMissingSlots] = React.useState(false);
+  const [todayCoverageManual, setTodayCoverageManual] = React.useState<ManualEntryRow[]>([]);
+  const [todayCoverageCycles, setTodayCoverageCycles] = React.useState<any[]>([]);
+  const [mesSlotOutput, setMesSlotOutput] = React.useState<number | null>(null);
+  const [continueNextHour, setContinueNextHour] = React.useState(true);
+  const [coveragePlanTargets, setCoveragePlanTargets] = React.useState<Record<number, number>>({});
+  const heatmapRef = React.useRef<HTMLDivElement>(null);
+  const entriesTableRef = React.useRef<HTMLDivElement>(null);
+  const [mesCompare, setMesCompare] = React.useState<{
+    mesOutput: number;
+    enteredOutput: number;
+    payload: Record<string, unknown>;
+    slotLabel: string;
+    hourlySlot: string;
+    entryDate: string;
+  } | null>(null);
   const [manualEntries, setManualEntries] = React.useState<ManualEntryRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [loadingEntries, setLoadingEntries] = React.useState(false);
   const [editingId, setEditingId] = React.useState<number | null>(null);
-  const [entryMode, setEntryMode] = React.useState<'production' | 'bottleneck'>('production');
   const [showForm, setShowForm] = React.useState(false);
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('mode') === 'bottleneck') {
-      setEntryMode('bottleneck');
-      setShowForm(true);
-    }
-  }, [location.search]);
   const [tableDateFilter, setTableDateFilter] = React.useState(getNowLocalDateTime().split('T')[0]);
   const [tableToDateFilter, setTableToDateFilter] = React.useState(getNowLocalDateTime().split('T')[0]);
   const [tableWorkCentreFilter, setTableWorkCentreFilter] = React.useState('');
@@ -173,7 +237,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [tableTotal, setTableTotal] = React.useState(0);
   const [tableTotalPages, setTableTotalPages] = React.useState(1);
   const [tableFilteredOutputTotal, setTableFilteredOutputTotal] = React.useState(0);
-  const [activeTab, setActiveTab] = React.useState<'entries' | 'audit' | 'production' | 'summary' | 'wip'>('entries');
+  const [activeTab, setActiveTab] = React.useState<'entries' | 'coverage' | 'audit' | 'production' | 'summary' | 'wip'>('entries');
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
@@ -208,6 +272,11 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodTargetMins, setProdTargetMins] = React.useState('0');
   const [showProdEditForm, setShowProdEditForm] = React.useState(false);
   const [prodDeleteCandidate, setProdDeleteCandidate] = React.useState<any | null>(null);
+  const [prodLastRefreshedAt, setProdLastRefreshedAt] = React.useState<Date | null>(null);
+  const [prodLiveNow, setProdLiveNow] = React.useState(() => new Date());
+  const [coverageLastRefreshedAt, setCoverageLastRefreshedAt] = React.useState<Date | null>(null);
+  const [coverageAutoRefresh, setCoverageAutoRefresh] = React.useState(true);
+  const [coverageLiveTick, setCoverageLiveTick] = React.useState(0);
   const [summaryDate, setSummaryDate] = React.useState(getTodayLocalDate());
   const [summaryData, setSummaryData] = React.useState<any[]>([]);
   const [summaryLoading, setSummaryLoading] = React.useState(false);
@@ -256,10 +325,9 @@ export const ManualProductionEntryForm: React.FC = () => {
       manualFinishTime ||
       Number(outputPairs || 0) > 0 ||
       (stoppageReason || '').trim() ||
-      (editReason || '').trim() ||
-      entryMode === 'bottleneck'
+      (editReason || '').trim()
     );
-  }, [showForm, workCentreId, machineId, empId, hourlySlot, manualStartTime, manualFinishTime, outputPairs, stoppageReason, editReason, entryMode]);
+  }, [showForm, workCentreId, machineId, empId, hourlySlot, manualStartTime, manualFinishTime, outputPairs, stoppageReason, editReason]);
 
   React.useEffect(() => {
     const loadMasters = async () => {
@@ -322,13 +390,16 @@ export const ManualProductionEntryForm: React.FC = () => {
     [filteredEmployees]
   );
 
-  const hasSlotSelection = entryMode === 'bottleneck'
-    ? !!manualStartTime && !!manualFinishTime
-    : slotType === 'manual'
-      ? !!manualStartTime && !!manualFinishTime
-      : !!hourlySlot;
+  const hasSlotSelection =
+    slotType === 'manual' ? !!manualStartTime && !!manualFinishTime : !!hourlySlot;
   const canSubmit =
-    !!workCentreId && !!machineId && !!empId && hasSlotSelection && !!stoppageReason.trim() && !loading;
+    !!workCentreId &&
+    !!machineId &&
+    !!empId &&
+    hasSlotSelection &&
+    !!stoppageReason.trim() &&
+    !loading &&
+    !slotConflictWarning;
 
   const selectedSlotMinutes = React.useMemo(() => {
     const match = SLOT_TYPES.find((slot) => slot.value === slotType);
@@ -369,6 +440,22 @@ export const ManualProductionEntryForm: React.FC = () => {
   };
 
   const formatDisplayDate = (value?: string | null) => formatProdDateKey(parseProdDateKey(value));
+
+  const formatShortTime = (value?: string | null) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
+  const appendReasonChip = (chip: string) => {
+    setStoppageReason((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed) return chip;
+      if (trimmed.includes(chip)) return prev;
+      return `${trimmed}${trimmed.endsWith('.') ? ' ' : '. '}${chip}`;
+    });
+  };
 
   const getAuditActionBadgeClass = (action: string) => {
     if (action === 'CREATE') return 'bg-green-100 text-green-700';
@@ -457,7 +544,6 @@ export const ManualProductionEntryForm: React.FC = () => {
     setOutputPairs('0');
     setStoppageReason('');
     setEditReason('');
-    setEntryMode('production');
     setEditingId(null);
     setShowForm(false);
     setSlotConflictWarning('');
@@ -548,6 +634,407 @@ export const ManualProductionEntryForm: React.FC = () => {
     }
   }, [tableDateFilter, tableToDateFilter, tableWorkCentreFilter, tableSearch, tablePage, tableLimit, tableSortBy, tableSortOrder, handleUnauthorized]);
 
+  const isSingleDayEntriesView = React.useMemo(
+    () => tableDateFilter === tableToDateFilter,
+    [tableDateFilter, tableToDateFilter]
+  );
+
+  const isTodayEntriesView = React.useMemo(
+    () => isSingleDayEntriesView && tableDateFilter === getTodayLocalDate(),
+    [isSingleDayEntriesView, tableDateFilter]
+  );
+
+  const loadTodayCoverage = React.useCallback(async () => {
+    if (!isSingleDayEntriesView) {
+      setEntryNeededHints([]);
+      setAllMissingSlotHints([]);
+      setTodayCoverageManual([]);
+      setTodayCoverageCycles([]);
+      setCoveragePlanTargets({});
+      return;
+    }
+    setEntryHintsLoading(true);
+    try {
+      const coverageDate = tableDateFilter;
+      const [manualRes, prodRes, activeRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry?date=${coverageDate}&limit=all`),
+        apiFetch(`${API_BASE_URL}/api/mobile-production`),
+        apiFetch(`${API_BASE_URL}/api/mobile-sessions/active-snapshot`),
+      ]);
+      const manualJson = await manualRes.json();
+      const prodJson = await prodRes.json();
+      const activeJson = await activeRes.json();
+
+      if (activeRes.status === 401) {
+        handleUnauthorized(activeJson.message);
+        return;
+      }
+
+      const sessions = activeJson.success ? activeJson.data || [] : [];
+      if (activeJson.success) setActiveSessions(sessions);
+
+      const manualRows = manualJson.success && Array.isArray(manualJson.data) ? manualJson.data : [];
+      const cyclesToday = (prodJson.success && Array.isArray(prodJson.data) ? prodJson.data : []).filter(
+        (r: { start_time?: string }) => parseProdDateKey(r.start_time) === coverageDate
+      );
+
+      setTodayCoverageManual(manualRows);
+      setTodayCoverageCycles(cyclesToday);
+
+      const wcsToFetch = tableWorkCentreFilter
+        ? workCentres.filter((wc) => String(wc.id) === String(tableWorkCentreFilter))
+        : workCentres;
+      const planTargets: Record<number, number> = {};
+      await Promise.all(
+        wcsToFetch.map(async (wc) => {
+          try {
+            const dashRes = await apiFetch(
+              `${API_BASE_URL}/api/tv-dashboard/dashboard/${wc.id}?date=${coverageDate}`
+            );
+            const dashJson = await dashRes.json();
+            if (dashJson.success) {
+              planTargets[wc.id] = Number(dashJson.data?.middleSection?.target || 0);
+            }
+          } catch {
+            planTargets[wc.id] = 0;
+          }
+        })
+      );
+      setCoveragePlanTargets(planTargets);
+
+      setEntryNeededHints(
+        isTodayEntriesView
+          ? buildManualEntryNeededHints({
+              todayKey: coverageDate,
+              sessions,
+              machines,
+              employees,
+              workCentres,
+              manualEntriesToday: manualRows,
+              productionCyclesToday: cyclesToday,
+              lineFilter: tableWorkCentreFilter || undefined,
+            })
+          : []
+      );
+
+      setAllMissingSlotHints(
+        buildMissingSlotHints({
+          dateKey: coverageDate,
+          machines,
+          workCentres,
+          manualEntries: manualRows,
+          cycles: cyclesToday,
+          activeSessions: sessions,
+          employees,
+          lineFilter: tableWorkCentreFilter || undefined,
+          limit: 500,
+        })
+      );
+    } catch (error) {
+      console.warn('Failed to load today coverage:', error);
+      setEntryNeededHints([]);
+      setAllMissingSlotHints([]);
+      setCoveragePlanTargets({});
+    } finally {
+      setEntryHintsLoading(false);
+      setCoverageLastRefreshedAt(new Date());
+    }
+  }, [
+    isSingleDayEntriesView,
+    isTodayEntriesView,
+    tableDateFilter,
+    machines,
+    employees,
+    workCentres,
+    tableWorkCentreFilter,
+    handleUnauthorized,
+  ]);
+
+  const visibleMissingSlotHints = React.useMemo(
+    () => (showAllMissingSlots ? allMissingSlotHints : allMissingSlotHints.slice(0, 24)),
+    [allMissingSlotHints, showAllMissingSlots]
+  );
+
+  React.useEffect(() => {
+    const onCoverageTab = activeTab === 'entries' || activeTab === 'coverage';
+    if (!onCoverageTab || !isSingleDayEntriesView) {
+      if (!onCoverageTab) {
+        setEntryNeededHints([]);
+        setAllMissingSlotHints([]);
+        setCoveragePlanTargets({});
+      }
+      return;
+    }
+    void loadTodayCoverage();
+  }, [activeTab, isSingleDayEntriesView, tableDateFilter, tableWorkCentreFilter, loadTodayCoverage]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'coverage' || !coverageAutoRefresh || !isSingleDayEntriesView) return undefined;
+    const timer = window.setInterval(() => void loadTodayCoverage(), 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, coverageAutoRefresh, isSingleDayEntriesView, loadTodayCoverage]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'coverage') return undefined;
+    const timer = window.setInterval(() => setCoverageLiveTick((t) => t + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeTab]);
+
+  const coverageInProgressCount = React.useMemo(() => {
+    let cycles = todayCoverageCycles.filter((r) => !isManualProductionRow(r));
+    if (tableWorkCentreFilter) {
+      cycles = cycles.filter((r) => String(r.work_centre_id) === tableWorkCentreFilter);
+    }
+    return cycles.filter((r) => {
+      const status = Number(r.button_status);
+      return status === 0 || status === 1;
+    }).length;
+  }, [todayCoverageCycles, tableWorkCentreFilter]);
+
+  const coverageSecondsSinceRefresh = React.useMemo(() => {
+    if (!coverageLastRefreshedAt) return null;
+    void coverageLiveTick;
+    return Math.max(0, Math.floor((Date.now() - coverageLastRefreshedAt.getTime()) / 1000));
+  }, [coverageLastRefreshedAt, coverageLiveTick]);
+
+  const slotHeatmapRows = React.useMemo(
+    () =>
+      isSingleDayEntriesView
+        ? buildSlotCoverageHeatmap({
+            dateKey: tableDateFilter,
+            machines,
+            workCentres,
+            manualEntries: todayCoverageManual,
+            cycles: todayCoverageCycles,
+            activeSessions,
+            lineFilter: tableWorkCentreFilter || undefined,
+          })
+        : [],
+    [
+      isSingleDayEntriesView,
+      tableDateFilter,
+      machines,
+      workCentres,
+      todayCoverageManual,
+      todayCoverageCycles,
+      activeSessions,
+      tableWorkCentreFilter,
+    ]
+  );
+
+  const reconciliationRows = React.useMemo(
+    () =>
+      isSingleDayEntriesView
+        ? buildLineReconciliation({
+            dateKey: tableDateFilter,
+            workCentres,
+            machines,
+            manualEntries: todayCoverageManual,
+            cycles: todayCoverageCycles,
+            planTargets: coveragePlanTargets,
+            lineFilter: tableWorkCentreFilter || undefined,
+          })
+        : [],
+    [
+      isSingleDayEntriesView,
+      tableDateFilter,
+      workCentres,
+      machines,
+      todayCoverageManual,
+      todayCoverageCycles,
+      coveragePlanTargets,
+      tableWorkCentreFilter,
+    ]
+  );
+
+  const shiftChecklistItems = React.useMemo(
+    () =>
+      buildEndOfShiftChecklist({
+        missingSlots: allMissingSlotHints,
+        entryNeeded: entryNeededHints,
+        reconciliations: reconciliationRows,
+        overlapSlotCount: countOverlapSlots(slotHeatmapRows),
+        conflictEntryCount: conflictIds.size,
+      }),
+    [
+      allMissingSlotHints,
+      entryNeededHints,
+      reconciliationRows,
+      slotHeatmapRows,
+      conflictIds,
+    ]
+  );
+
+  const expectedSlotOutput = React.useMemo(() => {
+    if (slotType !== 'hourly' || !hourlySlot) return null;
+    return computeExpectedSlotOutput(Number(targetMins || 0), selectedSlotMinutes);
+  }, [targetMins, slotType, hourlySlot, selectedSlotMinutes]);
+
+  const openQuickEntryForm = (opts: {
+    work_centre_id: number | string;
+    machine_id: string;
+    emp_id?: string;
+    slot_value?: string;
+    copy_from_row?: ManualEntryRow | null;
+  }) => {
+    setShowForm(true);
+    setEditingId(null);
+    setEntryDate(getTodayLocalDate());
+    setWorkCentreId(String(opts.work_centre_id));
+    setMachineId(opts.machine_id);
+    setEmpId(opts.emp_id || '');
+    setSlotType('hourly');
+    setStoppageReason('');
+    setEditReason('');
+    setSlotConflictWarning('');
+    setHourlySlot(opts.slot_value || '');
+    setManualStartTime('');
+    setManualFinishTime('');
+    if (opts.copy_from_row) {
+      const row = opts.copy_from_row;
+      const start = new Date(row.start_time);
+      if (!Number.isNaN(start.getTime())) {
+        setHourlySlot(`${pad2(start.getHours())}:${pad2(start.getMinutes())}`);
+      }
+      setOutputPairs(String(Number(row.output_pairs || 0)));
+      setTargetMins(String(Number(row.target_mins || 0)));
+    } else {
+      setOutputPairs('0');
+    }
+  };
+
+  const startEntryFromHint = (hint: ManualEntryNeededHint) => {
+    withDiscardCheck(() => {
+      openQuickEntryForm({
+        work_centre_id: hint.work_centre_id,
+        machine_id: hint.machine_id,
+        emp_id: hint.emp_code,
+      });
+    });
+  };
+
+  const startEntryFromMissingSlot = (hint: MissingSlotHint) => {
+    withDiscardCheck(() => {
+      openQuickEntryForm({
+        work_centre_id: hint.work_centre_id,
+        machine_id: hint.machine_id,
+        emp_id: hint.emp_code,
+        slot_value: hint.slot_value,
+      });
+    });
+  };
+
+  const startEntryFromHeatmap = (row: SlotHeatmapRow, slotValue: string) => {
+    const session = activeSessions.find((s) => String(s.machine_id) === String(row.machine_id));
+    withDiscardCheck(() => {
+      openQuickEntryForm({
+        work_centre_id: row.work_centre_id,
+        machine_id: row.machine_id,
+        emp_id: session?.emp_code,
+        slot_value: slotValue,
+      });
+    });
+  };
+
+  const handleChecklistAction = (item: { id: string }) => {
+    if (item.id === 'missing-slots' || item.id === 'overlap-slots' || item.id === 'plan-gap') {
+      setActiveTab('coverage');
+      window.requestAnimationFrame(() => {
+        heatmapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      return;
+    }
+    if (item.id === 'entry-needed' && entryNeededHints[0]) {
+      startEntryFromHint(entryNeededHints[0]);
+      return;
+    }
+    if (item.id === 'table-conflicts') {
+      setActiveTab('entries');
+      window.requestAnimationFrame(() => {
+        entriesTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  };
+
+  const copyLastEntryOnMachine = () => {
+    if (!machineId || !entryDate) {
+      toast.error('Select a machine first');
+      return;
+    }
+    const rows = todayCoverageManual.filter(
+      (r) => String(r.machine_id) === String(machineId) && parseProdDateKey(r.prod_date) === entryDate
+    );
+    if (!rows.length) {
+      toast.error('No earlier manual entry for this machine today');
+      return;
+    }
+    const last = [...rows].sort(
+      (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
+    )[0];
+    const start = new Date(last.start_time);
+    if (!Number.isNaN(start.getTime())) {
+      setHourlySlot(`${pad2(start.getHours())}:${pad2(start.getMinutes())}`);
+    }
+    setOutputPairs(String(Number(last.output_pairs || 0)));
+    setEmpId(last.emp_id || empId);
+    toast.success('Copied last entry on this machine — pick the next hour slot if needed');
+  };
+
+  React.useEffect(() => {
+    if (!machineId || slotType !== 'hourly' || !hourlySlot || !entryDate) {
+      setMesSlotOutput(null);
+      return;
+    }
+    setMesSlotOutput(getMesOutputForHourlySlot(todayCoverageCycles, machineId, entryDate, hourlySlot));
+  }, [machineId, slotType, hourlySlot, entryDate, todayCoverageCycles]);
+
+  React.useEffect(() => {
+    if (!showForm || slotType === 'manual' || !hourlySlot || !machineId || !entryDate) {
+      setSlotConflictWarning('');
+      return;
+    }
+    const slot = FACTORY_HOURLY_SLOTS.find((s) => s.value === hourlySlot);
+    if (!slot) {
+      setSlotConflictWarning('');
+      return;
+    }
+    const manualRows =
+      entryDate === tableDateFilter && todayCoverageManual.length > 0
+        ? todayCoverageManual
+        : manualEntries;
+    const cycles =
+      entryDate === tableDateFilter && todayCoverageCycles.length > 0
+        ? todayCoverageCycles
+        : [];
+    const conflict = detectSlotOverlapConflict({
+      machineId,
+      dateKey: entryDate,
+      slotStartMinutes: slot.startMinutes,
+      slotEndMinutes: slot.endMinutes,
+      manualEntries: manualRows,
+      cycles,
+      editingId,
+    });
+    setSlotConflictWarning(conflict.blocked && !editingId ? conflict.message : '');
+  }, [
+    showForm,
+    slotType,
+    hourlySlot,
+    machineId,
+    entryDate,
+    editingId,
+    tableDateFilter,
+    todayCoverageManual,
+    todayCoverageCycles,
+    manualEntries,
+  ]);
+
+  React.useEffect(() => {
+    if (showForm && isSingleDayEntriesView && todayCoverageCycles.length === 0 && !entryHintsLoading) {
+      void loadTodayCoverage();
+    }
+  }, [showForm, isSingleDayEntriesView, todayCoverageCycles.length, entryHintsLoading, loadTodayCoverage]);
+
   React.useEffect(() => {
     const loadTargetMins = async () => {
       if (!machineId || !empId) {
@@ -624,8 +1111,26 @@ export const ManualProductionEntryForm: React.FC = () => {
     return Number.isFinite(mins) && mins >= 0 ? mins : null;
   };
 
-  const calcEfficiency = (targetMins: number, start: string, finish: string) => {
-    const actual = calcDuration(start, finish);
+  const isProdCycleActive = (status: number) => status === 0 || status === 1;
+
+  const calcLiveDuration = (start: string, finish: string, status: number, now = prodLiveNow) => {
+    if (!start) return null;
+    const startMs = new Date(start).getTime();
+    if (Number.isNaN(startMs)) return null;
+    const endMs = isProdCycleActive(status)
+      ? now.getTime()
+      : finish
+        ? new Date(finish).getTime()
+        : NaN;
+    if (Number.isNaN(endMs)) return null;
+    const mins = Math.round(((endMs - startMs) / 60000) * 10) / 10;
+    return Number.isFinite(mins) && mins >= 0 ? mins : null;
+  };
+
+  const calcEfficiency = (targetMins: number, start: string, finish: string, status = 2) => {
+    const actual = isProdCycleActive(status)
+      ? calcLiveDuration(start, finish, status)
+      : calcDuration(start, finish);
     if (!actual || actual === 0 || !targetMins) return null;
     return Math.round((targetMins / actual) * 100);
   };
@@ -637,19 +1142,40 @@ export const ManualProductionEntryForm: React.FC = () => {
   };
 
   const prodStatusBadge = (status: number) => {
+    const pulse = isProdCycleActive(status) ? (
+      <span className="relative flex h-2 w-2 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+      </span>
+    ) : null;
     if (status === 2) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Finished</span>;
-    if (status === 1) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">In Progress</span>;
-    if (status === 0) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">Started</span>;
+    if (status === 1) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 ring-1 ring-amber-200">
+          {pulse}
+          In progress
+        </span>
+      );
+    }
+    if (status === 0) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 ring-1 ring-orange-200">
+          {pulse}
+          Started
+        </span>
+      );
+    }
     if (status === 3) return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">Idle</span>;
     return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">Status {status}</span>;
   };
 
-  const loadProdRecords = React.useCallback(async () => {
-    setProdLoading(true);
+  const loadProdRecords = React.useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setProdLoading(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production`);
       const json = await res.json();
       if (!json.success) return;
+
       let rows = (json.data || []).filter((r: any) => {
         const isManual = r.stoppage_reason && String(r.stoppage_reason).startsWith('MANUAL:');
         if (isManual) return false;
@@ -680,7 +1206,6 @@ export const ManualProductionEntryForm: React.FC = () => {
           rows.forEach((row: any) => {
             const key = String(row.machine_id);
             if (!lastByMachine.has(key)) {
-              // rows are already sorted by latest finish first
               lastByMachine.set(key, row);
             }
           });
@@ -688,9 +1213,31 @@ export const ManualProductionEntryForm: React.FC = () => {
         }
       }
       setProdRecords(rows);
-      setProdPage(0);
+      if (!opts?.silent) setProdPage(0);
+      setProdLastRefreshedAt(new Date());
     } catch { toast.error('Failed to load production records'); }
     finally { setProdLoading(false); }
+  }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter, prodIncludeInProgress, prodFinishedView]);
+
+  const prodInProgressCount = React.useMemo(
+    () => prodRecords.filter((r) => {
+      const status = Number(r.button_status);
+      return status === 0 || status === 1;
+    }).length,
+    [prodRecords]
+  );
+
+  React.useEffect(() => {
+    if (activeTab !== 'production') return undefined;
+    const timer = window.setInterval(() => {
+      if (prodInProgressCount > 0) setProdLiveNow(new Date());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, prodInProgressCount]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'production') return;
+    void loadProdRecords({ silent: true });
   }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter, prodIncludeInProgress, prodFinishedView]);
 
   // Detect conflicts: manual entries that overlap real cycles
@@ -851,9 +1398,68 @@ export const ManualProductionEntryForm: React.FC = () => {
     }
   };
 
+  const performSave = async (
+    payload: Record<string, unknown>,
+    opts: { slotLabel: string; hourlySlotValue: string; isNewEntry: boolean }
+  ) => {
+    setLoading(true);
+    try {
+      const method = editingId ? 'PUT' : 'POST';
+      const url = editingId
+        ? `${API_BASE_URL}/api/mobile-production/manual-entry/${editingId}`
+        : `${API_BASE_URL}/api/mobile-production/manual-entry`;
+      const res = await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (res.status === 401) {
+        handleUnauthorized(result.message);
+        return;
+      }
+      if (!result.success) {
+        toast.error(result.message || 'Failed to save manual entry');
+        return;
+      }
+
+      await loadManualEntries();
+      void loadTodayCoverage();
+
+      const nextSlot =
+        opts.isNewEntry && continueNextHour && slotType === 'hourly' && opts.hourlySlotValue
+          ? getNextFactoryHourlySlot(opts.hourlySlotValue, entryDate, new Date())
+          : null;
+
+      if (nextSlot) {
+        const nextLabel = FACTORY_HOURLY_SLOTS.find((s) => s.value === nextSlot)?.label || nextSlot;
+        toast.success(`Saved ${opts.slotLabel}. Next: ${nextLabel}`);
+        setEditingId(null);
+        setHourlySlot(nextSlot);
+        setStoppageReason('');
+        setEditReason('');
+        setSlotConflictWarning('');
+        setShowForm(true);
+        return;
+      }
+
+      toast.success(
+        editingId
+          ? `Updated. Total output today: ${result.data?.total_output_pairs ?? '-'}`
+          : `Saved. Total output today: ${result.data?.total_output_pairs ?? '-'}`
+      );
+      clearForm();
+    } catch (error) {
+      console.error('Manual entry save failed:', error);
+      toast.error('Failed to save manual entry');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const usingManualSlot = entryMode === 'bottleneck' || slotType === 'manual';
+    const usingManualSlot = slotType === 'manual';
     if (!workCentreId || !machineId || !empId || (!usingManualSlot && !hourlySlot) || (usingManualSlot && (!manualStartTime || !manualFinishTime))) {
       toast.error('Please fill required fields');
       return;
@@ -905,26 +1511,36 @@ export const ManualProductionEntryForm: React.FC = () => {
     }
     // Reason required
     if (!stoppageReason.trim()) {
-      toast.error(entryMode === 'bottleneck' ? 'M4 analysis is required for bottleneck entries.' : 'Reason is required for manual entries.');
+      toast.error('Reason is required for manual entries.');
       return;
     }
-    // Duplicate slot warning check
-    const existingSlot = manualEntries.find(e => {
-      if (e.machine_id !== machineId || e.emp_id !== empId) return false;
-      const start = new Date(e.start_time);
-      if (Number.isNaN(start.getTime())) return false;
-      return start.getHours() === slotHour && start.getMinutes() === slotMinute;
+    const entriesForDupCheck =
+      entryDate === tableDateFilter && todayCoverageManual.length > 0
+        ? todayCoverageManual
+        : manualEntries;
+    const cyclesForDupCheck =
+      entryDate === tableDateFilter && todayCoverageCycles.length > 0
+        ? todayCoverageCycles
+        : [];
+    const overlapConflict = detectSlotOverlapConflict({
+      machineId,
+      dateKey: entryDate,
+      slotStartMinutes,
+      slotEndMinutes,
+      manualEntries: entriesForDupCheck,
+      cycles: cyclesForDupCheck,
+      editingId,
     });
-    if (existingSlot && !editingId) {
-      setSlotConflictWarning(`A manual entry already exists for ${slotStartLabel}-${slotEndLabel} on this machine/employee. Duplicate saves are blocked.`);
-      toast.error('Duplicate time slot entry is not allowed.');
+    if (!editingId && overlapConflict.blocked) {
+      setSlotConflictWarning(overlapConflict.message);
+      toast.error(overlapConflict.message);
       return;
     }
     if (editingId && !editReason.trim()) {
       toast.error('Please provide an edit reason.');
       return;
     }
-    const outputValue = entryMode === 'bottleneck' ? 0 : Math.round(Number(outputPairs || 0));
+    const outputValue = Math.round(Number(outputPairs || 0));
     if (Number.isNaN(outputValue) || outputValue < 0) {
       toast.error('Output pairs must be 0 or greater');
       return;
@@ -945,43 +1561,59 @@ export const ManualProductionEntryForm: React.FC = () => {
       output_pairs: outputValue,
       stoppage_reason: stoppageReason.trim() || null,
       approved_by: currentUser?.username || currentUser?.name || currentUser?.email || currentUser?.id || null,
-      entry_type: entryMode,
+      entry_type: 'production',
       audit_reason: editingId ? editReason.trim() : undefined,
     };
 
-    setLoading(true);
-    try {
-      const method = editingId ? 'PUT' : 'POST';
-      const url = editingId
-        ? `${API_BASE_URL}/api/mobile-production/manual-entry/${editingId}`
-        : `${API_BASE_URL}/api/mobile-production/manual-entry`;
-      const res = await apiFetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+    const hourlySlotValue = usingManualSlot ? '' : hourlySlot;
+    const mesOutput =
+      !usingManualSlot && hourlySlotValue
+        ? getMesOutputForHourlySlot(todayCoverageCycles, machineId, entryDate, hourlySlotValue)
+        : 0;
+
+    if (!editingId && mesOutput > 0) {
+      if (mesOutput === outputValue) {
+        toast.error('Mobile already recorded this slot with the same output. No duplicate manual entry needed.');
+        return;
+      }
+      setMesCompare({
+        mesOutput,
+        enteredOutput: outputValue,
+        payload,
+        slotLabel: `${slotStartLabel}-${slotEndLabel}`,
+        hourlySlot: hourlySlotValue,
+        entryDate,
       });
-      const result = await res.json();
-      if (res.status === 401) {
-        handleUnauthorized(result.message);
-        return;
-      }
-      if (!result.success) {
-        toast.error(result.message || 'Failed to save manual entry');
-        return;
-      }
-      toast.success(
-        editingId
-          ? `Updated. Total output today: ${result.data?.total_output_pairs ?? '-'}`
-          : `Saved. Total output today: ${result.data?.total_output_pairs ?? '-'}`
-      );
-      await loadManualEntries();
-      clearForm();
-    } catch (error) {
-      console.error('Manual entry save failed:', error);
-      toast.error('Failed to save manual entry');
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    await performSave(payload, {
+      slotLabel: `${slotStartLabel}-${slotEndLabel}`,
+      hourlySlotValue,
+      isNewEntry: !editingId,
+    });
+  };
+
+  const resolveMesCompare = async (action: 'use_mes' | 'keep_mine' | 'cancel') => {
+    if (!mesCompare) return;
+    if (action === 'cancel') {
+      setMesCompare(null);
+      return;
+    }
+    const payload = { ...mesCompare.payload };
+    if (action === 'use_mes') {
+      payload.output_pairs = mesCompare.mesOutput;
+    } else {
+      const note = `(Manual override: mobile showed ${mesCompare.mesOutput}, entered ${mesCompare.enteredOutput})`;
+      const reason = String(payload.stoppage_reason || '').trim();
+      payload.stoppage_reason = reason.includes('Manual override:') ? reason : `${reason} ${note}`.trim();
+    }
+    setMesCompare(null);
+    await performSave(payload, {
+      slotLabel: mesCompare.slotLabel,
+      hourlySlotValue: mesCompare.hourlySlot,
+      isNewEntry: true,
+    });
   };
 
   const handleEdit = (row: ManualEntryRow) => {
@@ -989,7 +1621,6 @@ export const ManualProductionEntryForm: React.FC = () => {
     const derivedHour = Number.isNaN(start.getTime()) ? 0 : start.getHours();
     const derivedMinute = Number.isNaN(start.getTime()) ? 0 : start.getMinutes();
     setShowForm(true);
-    setEntryMode('production');
     setEditingId(row.id);
     setEntryDate(parseProdDateKey(row.prod_date) || getTodayLocalDate());
     setWorkCentreId(String(row.work_centre_id));
@@ -1030,6 +1661,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       }
       toast.success('Manual entry deleted');
       await loadManualEntries();
+      void loadTodayCoverage();
       if (editingId === row.id) clearForm();
       setDeleteCandidate(null);
       setDeleteReason('');
@@ -1102,6 +1734,7 @@ export const ManualProductionEntryForm: React.FC = () => {
       }
       toast.success('Manual entry restored');
       await Promise.all([loadManualEntries(), handleOpenAudit(auditEntryId || undefined)]);
+      void loadTodayCoverage();
       setRestoreCandidate(null);
       setActiveTab('entries');
     } catch (error) {
@@ -1224,10 +1857,13 @@ export const ManualProductionEntryForm: React.FC = () => {
     <button
       type="button"
       onClick={() => handleSort(field)}
-      className="font-semibold hover:text-blue-700"
+      className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-blue-700 transition-colors"
       title={`Sort by ${label}`}
     >
-      {label}{tableSortBy === field ? (tableSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+      {label}
+      {tableSortBy === field ? (
+        <span className="text-blue-600">{tableSortOrder === 'asc' ? '▲' : '▼'}</span>
+      ) : null}
     </button>
   );
 
@@ -1242,314 +1878,429 @@ export const ManualProductionEntryForm: React.FC = () => {
       {isAuthenticated && (
       <>
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEntryMode('production');
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${entryMode === 'production' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                  >
-                    Manual Production
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEntryMode('bottleneck');
-                      setSlotType('manual');
-                      setOutputPairs('0');
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${entryMode === 'bottleneck' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                  >
-                    Bottleneck Entry
-                  </button>
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="manual-entry-modal-title"
+        >
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden ring-1 ring-blue-200/60 flex flex-col max-h-[96dvh] sm:max-h-[92vh]">
+            <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-4 py-4 sm:px-6 text-white shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                    <ClipboardList className="h-5 w-5" aria-hidden />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 id="manual-entry-modal-title" className="text-base sm:text-xl font-bold leading-snug break-words">
+                      {editingId ? 'Edit Manual Entry' : 'New Manual Production Entry'}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-white/90 mt-1 leading-relaxed">
+                      {editingId
+                        ? 'Update saved cycle — production date stays as recorded'
+                        : 'Supervisor entry for a completed cycle not captured on mobile'}
+                    </p>
+                  </div>
                 </div>
-                <h2 className="text-xl font-bold text-gray-900">
-                  {editingId ? 'Edit Manual Entry' : entryMode === 'bottleneck' ? 'Bottleneck Entry' : 'Manual Production Entry'}
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  {editingId
-                    ? 'Editing the saved production date for this record (not auto-set to today).'
-                    : entryMode === 'bottleneck'
-                      ? 'Record a bottleneck event with explicit start/finish timing and M4 analysis for the TV dashboard.'
-                      : 'Use this when supervisor/admin needs to enter a completed cycle manually.'}
-                </p>
+                <button
+                  type="button"
+                  onClick={clearForm}
+                  className="shrink-0 rounded-full p-1.5 text-white/90 hover:bg-white/20 transition-colors -mr-1"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <div className="text-right mr-2">
-                <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">Date</label>
+              <div className="mt-3 pt-3 border-t border-white/20 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                <label
+                  htmlFor="manual-entry-prod-date"
+                  className="text-[10px] sm:text-xs uppercase tracking-wider text-white/80 font-semibold"
+                >
+                  Production date
+                </label>
                 <input
+                  id="manual-entry-prod-date"
                   type="date"
                   value={entryDate}
                   onChange={(e) => setEntryDate(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                  className="w-full sm:w-auto sm:min-w-[10.5rem] border border-white/40 bg-white text-gray-900 rounded-lg px-3 py-2 text-sm shadow-sm disabled:opacity-60"
                   disabled={loading}
                 />
-                {editingId && parseProdDateKey(entryDate) !== getTodayLocalDate() && (
-                  <p className="text-[11px] text-amber-700 mt-1 max-w-[11rem] ml-auto leading-snug">
-                    This entry is for {formatProdDateKey(entryDate)}. Use Add New Entry for today.
-                  </p>
-                )}
               </div>
-              <button
-                type="button"
-                onClick={clearForm}
-                className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2"
-                aria-label="Close"
-              >
-                ×
-              </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Line Name *</label>
-              <select
-                value={workCentreId}
-                onChange={(e) => setWorkCentreId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
-                required
-                disabled={loading}
-              >
-                <option value="">Select line</option>
-                {workCentres.map((wc) => (
-                  <option key={wc.id} value={wc.id}>{wc.name}</option>
-                ))}
-              </select>
-            </div>
+            <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 min-h-0 px-4 py-4 sm:px-6 sm:py-5 space-y-4 sm:space-y-5">
+              {editingId && parseProdDateKey(entryDate) !== getTodayLocalDate() && (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  This entry is for <span className="font-semibold">{formatProdDateKey(entryDate)}</span>. Use Add New Entry for today.
+                </p>
+              )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Machine Name *</label>
-              <select
-                value={machineId}
-                onChange={(e) => setMachineId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
-                required
-                disabled={loading || !workCentreId}
-              >
-                <option value="">Select machine</option>
-                {filteredMachines.map((m) => (
-                  <option key={m.machine_id} value={m.machine_id}>
-                    {m.machine_id} - {m.machine_name || m.name || 'Machine'}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="manual-entry-employee">
-                Employee *
-              </label>
-              <SearchableSelect
-                id="manual-entry-employee"
-                value={empId}
-                onChange={setEmpId}
-                options={employeeSelectOptions}
-                placeholder="Select employee"
-                searchPlaceholder="Search by code or name..."
-                required
-                disabled={loading || !workCentreId}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target Time
-                {loadingTargetMins ? <span className="ml-2 text-xs text-gray-500">(loading...)</span> : null}
-                <span className="ml-2 text-xs text-gray-400">(scaled to output)</span>
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                value={(() => {
-                  const base = Number(targetMins || 0);
-                  const pairs = Math.max(1, Number(outputPairs || 12));
-                  return (Math.round((base * (pairs / 6)) * 10) / 10).toFixed(1);
-                })()}
-                readOnly
-                className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-600"
-              />
-            </div>
-
-            {entryMode === 'bottleneck' ? (
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bottleneck Timing *</label>
-                <div className="grid grid-cols-2 gap-2">
+              <section className="rounded-xl border border-blue-100 bg-blue-50/30 p-3 sm:p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Line &amp; team</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start *</label>
-                    <input
-                      type="time"
-                      value={manualStartTime}
-                      onChange={(e) => setManualStartTime(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2.5"
-                      required
-                      disabled={loading}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Finish *</label>
-                    <input
-                      type="time"
-                      value={manualFinishTime}
-                      onChange={(e) => setManualFinishTime(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2.5"
-                      required
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Enter the exact interval for the bottleneck event, for example 10:00 to 10:20.</p>
-              </div>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Slot Type *</label>
-                <select
-                  value={slotType}
-                  onChange={(e) => {
-                    setSlotType(e.target.value as SlotType);
-                    setHourlySlot('');
-                    setManualStartTime('');
-                    setManualFinishTime('');
-                  }}
-                  className="w-full border border-gray-300 rounded-lg p-2.5 mb-2"
-                  required
-                  disabled={loading}
-                >
-                  {SLOT_TYPES.map((slot) => (
-                    <option key={slot.value} value={slot.value}>
-                      {slot.label}
-                    </option>
-                  ))}
-                </select>
-                {slotType === 'manual' ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start *</label>
-                      <input
-                        type="time"
-                        value={manualStartTime}
-                        onChange={(e) => setManualStartTime(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg p-2.5"
-                        required
-                        disabled={loading}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Finish *</label>
-                      <input
-                        type="time"
-                        value={manualFinishTime}
-                        onChange={(e) => setManualFinishTime(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg p-2.5"
-                        required
-                        disabled={loading}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot *</label>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
+                      <Building2 className="h-4 w-4 text-gray-400" aria-hidden />
+                      Line <span className="text-red-500">*</span>
+                    </label>
                     <select
-                      value={hourlySlot}
-                      onChange={(e) => setHourlySlot(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2.5"
+                      value={workCentreId}
+                      onChange={(e) => setWorkCentreId(e.target.value)}
+                      className={MANUAL_ENTRY_FIELD_CLS}
                       required
                       disabled={loading}
                     >
-                      <option value="">Select time slot</option>
-                      {slotOptions.map((slot) => (
-                        <option key={slot.value} value={slot.value}>
-                          {slot.label}
+                      <option value="">Select line</option>
+                      {workCentres.map((wc) => (
+                        <option key={wc.id} value={wc.id}>{wc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
+                      <Cpu className="h-4 w-4 text-gray-400" aria-hidden />
+                      Machine <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={machineId}
+                      onChange={(e) => setMachineId(e.target.value)}
+                      className={MANUAL_ENTRY_FIELD_CLS}
+                      required
+                      disabled={loading || !workCentreId}
+                    >
+                      <option value="">Select machine</option>
+                      {filteredMachines.map((m) => (
+                        <option key={m.machine_id} value={m.machine_id}>
+                          {m.machine_id} - {m.machine_name || m.name || 'Machine'}
                         </option>
                       ))}
                     </select>
-                  </>
-                )}
+                    {!editingId && canEdit && machineId ? (
+                      <button
+                        type="button"
+                        onClick={copyLastEntryOnMachine}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 transition-colors"
+                      >
+                        <Copy className="h-3.5 w-3.5" aria-hidden />
+                        Copy last entry on this machine
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5" htmlFor="manual-entry-employee">
+                      <User className="h-4 w-4 text-gray-400" aria-hidden />
+                      Employee <span className="text-red-500">*</span>
+                    </label>
+                    <SearchableSelect
+                      id="manual-entry-employee"
+                      value={empId}
+                      onChange={setEmpId}
+                      options={employeeSelectOptions}
+                      placeholder="Select employee"
+                      searchPlaceholder="Search by code or name..."
+                      required
+                      disabled={loading || !workCentreId}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-indigo-100 bg-indigo-50/20 p-3 sm:p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Slot &amp; output</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
+                      <Clock className="h-4 w-4 text-gray-400" aria-hidden />
+                      Slot type <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {SLOT_TYPES.map((slot) => (
+                        <button
+                          key={slot.value}
+                          type="button"
+                          onClick={() => {
+                            setSlotType(slot.value as SlotType);
+                            setHourlySlot('');
+                            setManualStartTime('');
+                            setManualFinishTime('');
+                          }}
+                          disabled={loading}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all disabled:opacity-50 ${
+                            slotType === slot.value
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                              : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300'
+                          }`}
+                        >
+                          {slot.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {slotType === 'manual' ? (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Start <span className="text-red-500">*</span></label>
+                        <input
+                          type="time"
+                          value={manualStartTime}
+                          onChange={(e) => setManualStartTime(e.target.value)}
+                          className={MANUAL_ENTRY_FIELD_CLS}
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Finish <span className="text-red-500">*</span></label>
+                        <input
+                          type="time"
+                          value={manualFinishTime}
+                          onChange={(e) => setManualFinishTime(e.target.value)}
+                          className={MANUAL_ENTRY_FIELD_CLS}
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Time slot <span className="text-red-500">*</span></label>
+                      <select
+                        value={hourlySlot}
+                        onChange={(e) => setHourlySlot(e.target.value)}
+                        className={MANUAL_ENTRY_FIELD_CLS}
+                        required
+                        disabled={loading}
+                      >
+                        <option value="">Select time slot</option>
+                        {slotOptions.map((slot) => (
+                          <option key={slot.value} value={slot.value}>
+                            {slot.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
+                      <Package className="h-4 w-4 text-gray-400" aria-hidden />
+                      Output pairs <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={outputPairs}
+                      onChange={(e) => setOutputPairs(e.target.value)}
+                      className={MANUAL_ENTRY_FIELD_CLS}
+                      required
+                      disabled={loading}
+                    />
+                    {expectedSlotOutput !== null && slotType === 'hourly' && (
+                      <p className="text-xs text-blue-800 mt-1.5 bg-blue-50 border border-blue-100 rounded-md px-2 py-1">
+                        Expected (routing pace): <span className="font-bold">{expectedSlotOutput}</span> pairs
+                        {Number(outputPairs || 0) > 0 && expectedSlotOutput > 0 && (
+                          <span
+                            className={`ml-1 font-semibold ${
+                              Number(outputPairs) >= expectedSlotOutput ? 'text-emerald-700' : 'text-amber-700'
+                            }`}
+                          >
+                            ({Number(outputPairs) >= expectedSlotOutput ? 'on pace' : `${expectedSlotOutput - Number(outputPairs)} below`})
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    {mesSlotOutput !== null && mesSlotOutput > 0 && slotType === 'hourly' && (
+                      <p className="text-xs text-indigo-700 mt-1.5 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1">
+                        Mobile recorded <span className="font-bold">{mesSlotOutput}</span> pairs for this hour.
+                      </p>
+                    )}
+                    {slotConflictWarning && (
+                      <p className="text-xs text-red-800 mt-1.5 bg-red-50 border border-red-200 rounded-md px-2 py-1 font-medium">
+                        {slotConflictWarning}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Target time (mins)
+                      {loadingTargetMins ? <Loader2 className="inline h-3.5 w-3.5 animate-spin text-blue-500 ml-1" /> : null}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={(() => {
+                        const base = Number(targetMins || 0);
+                        const pairs = Math.max(1, Number(outputPairs || 12));
+                        return (Math.round((base * (pairs / 6)) * 10) / 10).toFixed(1);
+                      })()}
+                      readOnly
+                      className={`${MANUAL_ENTRY_FIELD_CLS} bg-gray-50 text-gray-600`}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Scaled to output pairs</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Reason &amp; approval</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
+                      <FileText className="h-4 w-4 text-gray-400" aria-hidden />
+                      Reason <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {MANUAL_REASON_CHIPS.map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => appendReasonChip(chip)}
+                          disabled={loading}
+                          className="text-xs px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-700 transition-colors disabled:opacity-50"
+                        >
+                          + {chip}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      value={stoppageReason}
+                      onChange={(e) => setStoppageReason(e.target.value)}
+                      className={`${MANUAL_ENTRY_FIELD_CLS} min-h-[88px] resize-y ${!stoppageReason.trim() ? 'border-red-300 bg-red-50' : ''}`}
+                      placeholder="Required: explain why this cycle was entered manually"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Approved by</label>
+                      <input
+                        type="text"
+                        value={String(currentUser?.username || currentUser?.name || currentUser?.email || currentUser?.id || 'Current user')}
+                        className={`${MANUAL_ENTRY_FIELD_CLS} bg-gray-50 text-gray-600`}
+                        disabled
+                        readOnly
+                      />
+                    </div>
+                    {editingId ? (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Edit reason <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editReason}
+                          onChange={(e) => setEditReason(e.target.value)}
+                          className={`${MANUAL_ENTRY_FIELD_CLS} ${!editReason.trim() ? 'border-red-300 bg-red-50' : ''}`}
+                          placeholder="Why are you changing this entry?"
+                          disabled={loading}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex flex-col gap-3 pt-2 sm:pt-1 border-t border-gray-100 pb-[env(safe-area-inset-bottom,0px)]">
+                {!editingId && slotType === 'hourly' ? (
+                  <label className="inline-flex items-start sm:items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={continueNextHour}
+                      onChange={(e) => setContinueNextHour(e.target.checked)}
+                      className="h-4 w-4 mt-0.5 sm:mt-0 shrink-0 rounded border-gray-300 text-blue-600"
+                    />
+                    After save, open next hour slot
+                  </label>
+                ) : null}
+                <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!requestDiscardManualFormChanges()) return;
+                      clearForm();
+                    }}
+                    disabled={loading}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg transition-all disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+                  >
+                    {loading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        Saving…
+                      </span>
+                    ) : editingId ? (
+                      'Update entry'
+                    ) : (
+                      'Save entry'
+                    )}
+                  </button>
+                </div>
               </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Output Pairs *</label>
-              <input
-                type="number"
-                min="0"
-                value={entryMode === 'bottleneck' ? '0' : outputPairs}
-                onChange={(e) => setOutputPairs(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2.5"
-                required
-                disabled={loading || entryMode === 'bottleneck'}
-              />
-              {entryMode === 'bottleneck' && (
-                <p className="text-xs text-gray-500 mt-1">Bottleneck entries are recorded with zero output pairs.</p>
-              )}
+            </form>
+          </div>
+        </div>
+      )}
+      {mesCompare && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-indigo-200/60"
+          >
+            <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-4 text-white">
+              <h2 className="text-lg font-bold">Mobile vs manual output</h2>
+              <p className="text-sm text-white/90 mt-1">Choose which value to save for this slot.</p>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {entryMode === 'bottleneck' ? 'M4 Analysis' : 'Reason'} <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                value={stoppageReason}
-                onChange={(e) => setStoppageReason(e.target.value)}
-                className={`w-full border rounded-lg p-2.5 min-h-[100px] ${!stoppageReason.trim() ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
-                placeholder={entryMode === 'bottleneck'
-                  ? 'Enter M4 analysis details for the bottleneck event'
-                  : 'Required: explain why this cycle was entered manually'}
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Approved By</label>
-              <input
-                type="text"
-                value={String(currentUser?.username || currentUser?.name || currentUser?.email || currentUser?.id || 'Current user')}
-                className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-600"
-                disabled
-                readOnly
-              />
-              <p className="text-xs text-gray-500 mt-1">Auto-captured from the logged-in account.</p>
-            </div>
-
-            {editingId ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Edit Reason <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={editReason}
-                  onChange={(e) => setEditReason(e.target.value)}
-                  className={`w-full border rounded-lg p-2.5 ${!editReason.trim() ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
-                  placeholder="Required: why are you changing this entry?"
-                  disabled={loading}
-                />
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-700">
+                Slot <span className="font-semibold text-gray-900">{mesCompare.slotLabel}</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-center">
+                  <p className="text-xs uppercase tracking-wider text-indigo-600 font-semibold">Mobile</p>
+                  <p className="text-2xl font-bold text-indigo-700 mt-1">{mesCompare.mesOutput}</p>
+                  <p className="text-xs text-gray-500">pairs</p>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
+                  <p className="text-xs uppercase tracking-wider text-amber-700 font-semibold">Your entry</p>
+                  <p className="text-2xl font-bold text-amber-800 mt-1">{mesCompare.enteredOutput}</p>
+                  <p className="text-xs text-gray-500">pairs</p>
+                </div>
               </div>
-            ) : null}
-
-              <div className="md:col-span-2 flex gap-3 mt-2">
-                <button
-                  type="submit"
-                  disabled={!canSubmit}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-lg font-semibold"
-                >
-                  {loading ? 'Saving...' : editingId ? 'Update Manual Entry' : 'Save Manual Entry'}
-                </button>
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2 justify-end pt-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!requestDiscardManualFormChanges()) return;
-                    clearForm();
-                  }}
+                  onClick={() => resolveMesCompare('cancel')}
                   disabled={loading}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-2.5 rounded-lg font-semibold"
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
                 >
                   Cancel
                 </button>
+                <button
+                  type="button"
+                  onClick={() => resolveMesCompare('keep_mine')}
+                  disabled={loading}
+                  className="bg-amber-100 hover:bg-amber-200 text-amber-900 px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                >
+                  Keep {mesCompare.enteredOutput}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveMesCompare('use_mes')}
+                  disabled={loading}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                >
+                  Use mobile ({mesCompare.mesOutput})
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -1610,6 +2361,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 setSelectedEntryIds(new Set());
                 toast[failed ? 'error' : 'success'](failed ? `${failed} deletions failed` : `${selectedEntryIds.size} entries deleted`);
                 await loadManualEntries();
+                void loadTodayCoverage();
               }} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-60">{loading ? 'Deleting...' : 'Delete All'}</button>
             </div>
           </div>
@@ -1689,6 +2441,18 @@ export const ManualProductionEntryForm: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => withDiscardCheck(() => { setActiveTab('coverage'); void loadTodayCoverage(); })}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5 ${activeTab === 'coverage' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100'}`}
+            >
+              Coverage &amp; insights
+              {shiftChecklistItems.length > 0 ? (
+                <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1">
+                  {shiftChecklistItems.length}
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
               onClick={() => handleOpenAudit()}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'audit' ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
             >
@@ -1751,14 +2515,15 @@ export const ManualProductionEntryForm: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-9 gap-2">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <select
               value={tableWorkCentreFilter}
               onChange={(e) => {
                 setTableWorkCentreFilter(e.target.value);
                 setTablePage(1);
+                setShowAllMissingSlots(false);
               }}
-              className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-full col-span-2 sm:col-span-1"
+              className="border border-gray-300 rounded-lg px-2 py-2 text-sm min-w-[140px]"
               title="Filter by line"
             >
               <option value="">All lines</option>
@@ -1766,12 +2531,14 @@ export const ManualProductionEntryForm: React.FC = () => {
                 <option key={wc.id} value={wc.id}>{wc.name}</option>
               ))}
             </select>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8 gap-2 mb-3">
             <button
               type="button"
               onClick={() => withDiscardCheck(() => {
                 setShowForm(true);
                 setEditingId(null);
-                setEntryMode('production');
                 setEntryDate(getTodayLocalDate());
               })}
               className={`bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full ${!canEdit ? 'hidden' : ''}`}
@@ -1862,6 +2629,58 @@ export const ManualProductionEntryForm: React.FC = () => {
               className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap w-full"
             >
               Save Filters
+            </button>
+          </div>
+          </>
+          ) : activeTab === 'coverage' ? (
+          <>
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-3">
+            <h3 className="text-lg font-bold text-gray-900">Coverage &amp; insights</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full lg:w-auto">
+              <label className="text-xs text-gray-600 flex flex-col items-start gap-1 min-w-0">
+                <span className="leading-none text-[11px] font-medium tracking-wide uppercase text-gray-500">From</span>
+                <input
+                  type="date"
+                  value={tableDateFilter}
+                  onChange={(e) => setTableDateFilter(e.target.value)}
+                  className="h-9 w-full border border-gray-300 rounded-lg px-2 text-sm shadow-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 bg-white"
+                  title="From date"
+                />
+              </label>
+              <label className="text-xs text-gray-600 flex flex-col items-start gap-1 min-w-0">
+                <span className="leading-none text-[11px] font-medium tracking-wide uppercase text-gray-500">To</span>
+                <input
+                  type="date"
+                  value={tableToDateFilter}
+                  onChange={(e) => setTableToDateFilter(e.target.value)}
+                  className="h-9 w-full border border-gray-300 rounded-lg px-2 text-sm shadow-sm focus:ring-2 focus:ring-teal-200 focus:border-teal-400 bg-white"
+                  title="To date"
+                />
+              </label>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <select
+              value={tableWorkCentreFilter}
+              onChange={(e) => {
+                setTableWorkCentreFilter(e.target.value);
+                setShowAllMissingSlots(false);
+              }}
+              className="border border-gray-300 rounded-lg px-2 py-2 text-sm min-w-[140px]"
+              title="Filter by line"
+            >
+              <option value="">All lines</option>
+              {workCentres.map((wc) => (
+                <option key={wc.id} value={wc.id}>{wc.name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void loadTodayCoverage()}
+              disabled={entryHintsLoading || !isSingleDayEntriesView}
+              className="text-sm font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg px-3 py-2 disabled:opacity-60"
+            >
+              {entryHintsLoading ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
           </>
@@ -2058,78 +2877,217 @@ export const ManualProductionEntryForm: React.FC = () => {
 
         {activeTab === 'entries' ? (
         <>
-        <div className="overflow-x-auto -mx-1 sm:-mx-2 md:mx-0">
-          <table className="min-w-[900px] w-full text-sm border border-gray-200 rounded-lg">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-2 border-b w-8">
-                  {canEdit && <input type="checkbox" checked={manualEntries.length > 0 && manualEntries.every(r => selectedEntryIds.has(r.id))} onChange={e => setSelectedEntryIds(e.target.checked ? new Set(manualEntries.map(r => r.id)) : new Set())} />}
-                </th>
-                <th className="text-left p-2 border-b">{sortLabel('created_at', 'Date')}</th>
-                <th className="text-left p-2 border-b">Line</th>
-                <th className="text-left p-2 border-b">{sortLabel('machine_id', 'Machine')}</th>
-                <th className="text-left p-2 border-b">Employee</th>
-                <th className="text-left p-2 border-b">{sortLabel('start_time', 'Start')}</th>
-                <th className="text-left p-2 border-b">{sortLabel('finish_time', 'End')}</th>
-                <th className="text-left p-2 border-b">{sortLabel('target_mins', 'Target')}</th>
-                <th className="text-left p-2 border-b">{sortLabel('output_pairs', 'Output')}</th>
-                <th className="text-left p-2 border-b">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {manualEntries.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="p-3 text-center text-gray-500">
-                    {tableSearch.trim() || tableWorkCentreFilter || tableDateFilter
-                      ? 'No manual entries found for selected filters.'
-                      : 'No manual entries found.'}
-                  </td>
-                </tr>
-              ) : (
-                manualEntries.map((row) => (
-                  <tr key={row.id} className={`border-b ${conflictIds.has(row.id) ? 'bg-red-50' : ''}`}>
-                    <td className="p-2">{canEdit && <input type="checkbox" checked={selectedEntryIds.has(row.id)} onChange={e => setSelectedEntryIds(prev => { const n = new Set(prev); e.target.checked ? n.add(row.id) : n.delete(row.id); return n; })} />}</td>
-                    <td className="p-2">
-                      {formatDisplayDate(row.prod_date)}
-                      {conflictIds.has(row.id) && <span className="ml-1 text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold" title="Overlaps a real production cycle">⚠ Conflict</span>}
-                    </td>
-                    <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
-                    <td className="p-2">{row.machine_id}{row.machine_name ? ` - ${row.machine_name}` : ''}</td>
-                    <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
-                    <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
-                    <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
-                    <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
-                    <td className="p-2">{Number(row.output_pairs || 0)}</td>
-                    <td className="p-2">
-                      <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
-                        {canEdit && <button type="button" onClick={() => handleEdit(row)} className="px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Edit</button>}
-                        <button type="button" onClick={() => handleOpenAudit(row.id)} className="px-2 py-1 rounded bg-purple-100 text-purple-700 hover:bg-purple-200">History</button>
-                        {canEdit && <button type="button" onClick={() => { setDeleteCandidate(row); setDeleteReason(''); }} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Delete</button>}
-                      </div>
-                    </td>
+        <div ref={entriesTableRef} className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-blue-50/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Saved manual entries</h3>
+              <p className="text-sm text-gray-600">
+                {tableDateFilter && tableToDateFilter
+                  ? `${formatProdDateKey(tableDateFilter)}${tableDateFilter !== tableToDateFilter ? ` – ${formatProdDateKey(tableToDateFilter)}` : ''}`
+                  : 'All dates'}
+                {tableWorkCentreFilter
+                  ? ` · ${workCentres.find((wc) => String(wc.id) === tableWorkCentreFilter)?.name || 'Line filter'}`
+                  : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {conflictIds.size > 0 ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-full px-2.5 py-1">
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                  {conflictIds.size} conflict{conflictIds.size !== 1 ? 's' : ''}
+                </span>
+              ) : null}
+              <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-full px-2.5 py-1">
+                {tableTotal} total · {totalManualOutput} pairs this page
+              </span>
+            </div>
+          </div>
+          {loadingEntries ? (
+            <div className="flex items-center justify-center py-14">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" aria-hidden />
+              <span className="ml-3 text-gray-600">Loading entries…</span>
+            </div>
+          ) : manualEntries.length === 0 ? (
+            <div className="text-center py-14 px-4">
+              <ClipboardList className="h-10 w-10 text-gray-300 mx-auto mb-3" aria-hidden />
+              <p className="text-gray-600 font-medium">
+                {tableSearch.trim() || tableWorkCentreFilter || tableDateFilter
+                  ? 'No entries match your filters'
+                  : 'No manual entries yet'}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                {canEdit ? 'Use Add New Entry to record a completed cycle.' : 'Try adjusting the date range or search.'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-[960px] w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-3 w-10">
+                      {canEdit ? (
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-blue-600"
+                          checked={manualEntries.length > 0 && manualEntries.every((r) => selectedEntryIds.has(r.id))}
+                          onChange={(e) =>
+                            setSelectedEntryIds(
+                              e.target.checked ? new Set(manualEntries.map((r) => r.id)) : new Set()
+                            )
+                          }
+                          aria-label="Select all on page"
+                        />
+                      ) : null}
+                    </th>
+                    <th className="px-4 py-3 text-left">{sortLabel('created_at', 'Date')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Line</th>
+                    <th className="px-4 py-3 text-left">{sortLabel('machine_id', 'Machine')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Employee</th>
+                    <th className="px-4 py-3 text-left">{sortLabel('start_time', 'Time')}</th>
+                    <th className="px-4 py-3 text-center">{sortLabel('target_mins', 'Target')}</th>
+                    <th className="px-4 py-3 text-center">{sortLabel('output_pairs', 'Output')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-            {manualEntries.length > 0 ? (
-              <tfoot>
-                <tr className="bg-gray-50 font-semibold">
-                  <td className="p-2 border-t" colSpan={8}>Page Total (manual outputs)</td>
-                  <td className="p-2 border-t">{totalManualOutput}</td>
-                  <td className="p-2 border-t"></td>
-                </tr>
-                <tr className="bg-gray-50 font-semibold">
-                  <td className="p-2 border-t" colSpan={8}>Filtered Total (all pages)</td>
-                  <td className="p-2 border-t">{tableFilteredOutputTotal}</td>
-                  <td className="p-2 border-t"></td>
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {manualEntries.map((row) => (
+                    <tr
+                      key={row.id}
+                      className={`transition-colors hover:bg-blue-50/40 ${
+                        conflictIds.has(row.id) ? 'bg-red-50/60 hover:bg-red-50' : ''
+                      }`}
+                    >
+                      <td className="px-3 py-3">
+                        {canEdit ? (
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-blue-600"
+                            checked={selectedEntryIds.has(row.id)}
+                            onChange={(e) =>
+                              setSelectedEntryIds((prev) => {
+                                const n = new Set(prev);
+                                if (e.target.checked) n.add(row.id);
+                                else n.delete(row.id);
+                                return n;
+                              })
+                            }
+                            aria-label={`Select entry ${row.id}`}
+                          />
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{formatDisplayDate(row.prod_date)}</div>
+                        {conflictIds.has(row.id) ? (
+                          <span
+                            className="mt-1 inline-flex items-center gap-0.5 text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold ring-1 ring-red-200"
+                            title="Overlaps a real production cycle"
+                          >
+                            <AlertTriangle className="h-3 w-3" aria-hidden />
+                            Conflict
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{row.work_centre_name || row.work_centre_id}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 text-sm">
+                          <span className="font-mono text-xs font-bold text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded ring-1 ring-blue-100">
+                            {row.machine_id}
+                          </span>
+                          {row.machine_name ? (
+                            <span className="text-gray-600 truncate max-w-[8rem]" title={row.machine_name}>
+                              {row.machine_name}
+                            </span>
+                          ) : null}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        <span className="font-medium text-gray-900">{row.emp_id}</span>
+                        {row.employee_name ? (
+                          <span className="text-gray-500 text-xs block truncate max-w-[9rem]" title={row.employee_name}>
+                            {row.employee_name}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        <span className="font-medium text-gray-800">{formatShortTime(row.start_time)}</span>
+                        <span className="text-gray-400 mx-1">→</span>
+                        <span className="font-medium text-gray-800">{formatShortTime(row.finish_time)}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-center text-gray-600 tabular-nums">
+                        {Number(row.target_mins || 0).toFixed(1)}
+                        <span className="text-gray-400 text-xs ml-0.5">m</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex min-w-[2.5rem] justify-center text-sm font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md ring-1 ring-blue-100 tabular-nums">
+                          {Number(row.output_pairs || 0)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(row)}
+                              className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit className="h-4 w-4" aria-hidden />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAudit(row.id)}
+                            className="p-1.5 rounded-md text-purple-600 hover:bg-purple-50 hover:text-purple-800 transition-colors"
+                            title="History"
+                          >
+                            <History className="h-4 w-4" aria-hidden />
+                          </button>
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteCandidate(row);
+                                setDeleteReason('');
+                              }}
+                              className="p-1.5 rounded-md text-red-600 hover:bg-red-50 hover:text-red-800 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden />
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gradient-to-r from-gray-50 to-blue-50/30">
+                  <tr>
+                    <td colSpan={7} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right">
+                      Page total
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm font-bold text-blue-700 tabular-nums">{totalManualOutput}</td>
+                    <td />
+                  </tr>
+                  <tr className="border-t border-gray-200">
+                    <td colSpan={7} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right">
+                      Filtered total (all pages)
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm font-bold text-indigo-700 tabular-nums">
+                      {tableFilteredOutputTotal}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </div>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-3 text-sm text-gray-600">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-4 px-1 text-sm text-gray-600">
           <div className="text-xs sm:text-sm">
-            Showing page {tablePage} of {tableTotalPages} ({manualEntries.length} rows on this page, {tableTotal} total)
+            Page <span className="font-semibold text-gray-800">{tablePage}</span> of{' '}
+            <span className="font-semibold text-gray-800">{tableTotalPages}</span>
+            <span className="text-gray-400 mx-1">·</span>
+            {manualEntries.length} on this page, {tableTotal} total
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -2138,7 +3096,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 setTableLimit(e.target.value);
                 setTablePage(1);
               }}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"
+              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white shadow-sm"
               title="Rows per page"
             >
               <option value="5">5 / page</option>
@@ -2151,11 +3109,10 @@ export const ManualProductionEntryForm: React.FC = () => {
               type="button"
               onClick={() => setTablePage((p) => Math.max(1, p - 1))}
               disabled={tableLimit === 'all' || tablePage <= 1 || loadingEntries}
-              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
+              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-xs sm:text-sm shadow-sm"
             >
               Previous
             </button>
-            <span className="min-w-[70px] sm:min-w-[90px] text-center text-xs sm:text-sm">Page {tablePage}</span>
             <input
               type="number"
               min={1}
@@ -2173,20 +3130,198 @@ export const ManualProductionEntryForm: React.FC = () => {
                 }
               }}
               disabled={tableLimit === 'all' || loadingEntries}
-              className="w-14 sm:w-16 px-2 py-1.5 rounded border border-gray-300 text-center disabled:opacity-50 text-xs sm:text-sm"
+              className="w-14 sm:w-16 px-2 py-1.5 rounded-lg border border-gray-200 text-center disabled:opacity-50 text-xs sm:text-sm bg-white shadow-sm"
               title="Go to page"
+              aria-label="Page number"
             />
+            <span className="text-xs text-gray-400">/ {tableTotalPages}</span>
             <button
               type="button"
               onClick={() => setTablePage((p) => Math.min(tableTotalPages, p + 1))}
               disabled={tableLimit === 'all' || tablePage >= tableTotalPages || loadingEntries}
-              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
+              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-xs sm:text-sm shadow-sm"
             >
               Next
             </button>
           </div>
         </div>
         </>
+        ) : null}
+
+        {activeTab === 'coverage' ? (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-sky-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                </span>
+                <Activity className="h-4 w-4 text-emerald-600" aria-hidden />
+                Live production
+              </span>
+              {isTodayEntriesView && coverageInProgressCount > 0 ? (
+                <span className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+                  {coverageInProgressCount} cycle{coverageInProgressCount !== 1 ? 's' : ''} running
+                </span>
+              ) : (
+                <span className="text-xs text-gray-600">
+                  {isTodayEntriesView ? 'No active cycles for selected line' : 'Live status shown for today only'}
+                </span>
+              )}
+              {coverageSecondsSinceRefresh !== null ? (
+                <span className="text-xs text-gray-500">Updated {coverageSecondsSinceRefresh}s ago</span>
+              ) : null}
+            </div>
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={coverageAutoRefresh}
+                onChange={(e) => setCoverageAutoRefresh(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-emerald-600"
+              />
+              Auto-refresh every 30s
+            </label>
+          </div>
+
+          {!isSingleDayEntriesView ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Set <strong>From</strong> and <strong>To</strong> to the same date to view reconciliation, checklist, and slot heatmap.
+            </div>
+          ) : null}
+
+          {isSingleDayEntriesView && (
+            <>
+              <ManualEntryReconciliationStrip
+                rows={reconciliationRows}
+                loading={entryHintsLoading && reconciliationRows.length === 0}
+              />
+              <ManualEntryShiftChecklist items={shiftChecklistItems} onAction={handleChecklistAction} />
+              <div ref={heatmapRef}>
+                <ManualEntrySlotHeatmap
+                  rows={slotHeatmapRows}
+                  loading={entryHintsLoading && slotHeatmapRows.length === 0}
+                  canEdit={canEdit && isTodayEntriesView}
+                  onCellClick={startEntryFromHeatmap}
+                  title="Hourly slot coverage (MES + manual)"
+                  hint={
+                    isTodayEntriesView
+                      ? 'Green = mobile capture · Yellow = manual · Red = missing · Click red cells on live machines to add a manual entry.'
+                      : 'Green = mobile capture · Yellow = manual · Red = missing for this date.'
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          {isTodayEntriesView && (entryHintsLoading || entryNeededHints.length > 0) && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">Manual entry may be needed</p>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    Operator logged in on these machines for {MANUAL_ENTRY_HINT_GRACE_MINS}+ minutes with no mobile cycle and no manual entry yet today.
+                    Hint clears after the first entry or a real cycle.
+                  </p>
+                  {entryHintsLoading && entryNeededHints.length === 0 ? (
+                    <p className="text-xs text-amber-700 mt-2">Checking active sessions…</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1.5">
+                      {entryNeededHints.map((hint) => (
+                        <li key={`${hint.work_centre_id}-${hint.machine_id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-xs sm:text-sm">
+                            <span className="font-medium">{hint.line_name}</span>
+                            {' · '}
+                            <span className="font-mono">{hint.machine_id}</span>
+                            {hint.machine_name ? ` ${hint.machine_name}` : ''}
+                            {' — '}
+                            {hint.emp_code} {hint.emp_name}
+                            <span className="text-amber-700"> ({hint.mins_waiting}m logged in)</span>
+                          </span>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => startEntryFromHint(hint)}
+                              className="text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md px-2 py-0.5"
+                            >
+                              Add entry
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isTodayEntriesView && activeSessions.length > 0 && (
+            <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-950">
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div>
+                  <p className="font-semibold">Missing hourly slots (logged-in machines)</p>
+                  <p className="text-xs text-sky-800 mt-0.5">
+                    Only operators logged in on mobile today — no cycle and no manual entry for that hour (9–10 … 1–2 … 5–6).
+                    {tableWorkCentreFilter ? ' Filtered to selected line.' : ''}
+                  </p>
+                </div>
+                {allMissingSlotHints.length > 24 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllMissingSlots((v) => !v)}
+                    className="text-xs font-semibold text-sky-800 underline hover:text-sky-950"
+                  >
+                    {showAllMissingSlots ? 'Show fewer' : `Show all ${allMissingSlotHints.length}`}
+                  </button>
+                )}
+              </div>
+              {entryHintsLoading && allMissingSlotHints.length === 0 ? (
+                <p className="text-xs text-sky-700 mt-2">Scanning coverage…</p>
+              ) : allMissingSlotHints.length === 0 ? (
+                <p className="text-xs text-emerald-700 mt-2 font-medium">
+                  All due hourly slots are covered for logged-in machines.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto pr-1">
+                  {visibleMissingSlotHints.map((slot) => (
+                    <li
+                      key={`${slot.work_centre_id}-${slot.machine_id}-${slot.slot_value}`}
+                      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm"
+                    >
+                      <span>
+                        <span className="font-medium">{slot.line_name}</span>
+                        {' · '}
+                        <span className="font-mono">{slot.machine_id}</span>
+                        {slot.machine_name ? ` ${slot.machine_name}` : ''}
+                        {' · '}
+                        <span className="font-semibold text-sky-900">{slot.slot_label}</span>
+                        {slot.emp_code ? (
+                          <span className="text-sky-700">
+                            {' '}
+                            — {slot.emp_code}
+                            {slot.emp_name ? ` ${slot.emp_name}` : ''}
+                          </span>
+                        ) : null}
+                      </span>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => startEntryFromMissingSlot(slot)}
+                          className="text-xs font-semibold text-sky-900 bg-sky-100 hover:bg-sky-200 border border-sky-300 rounded-md px-2 py-0.5"
+                        >
+                          Add entry
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+        </div>
         ) : null}
         {activeTab === 'production' && (
           <div className="space-y-3">
@@ -2386,7 +3521,13 @@ export const ManualProductionEntryForm: React.FC = () => {
                   })
                 : prodRecords;
               const totalOutput = visibleRows.reduce((s: number, r: any) => s + Number(r.output_pairs || 0), 0);
-              const effValues = visibleRows.map((r: any) => calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time)).filter((v): v is number => v !== null);
+              const effValues = visibleRows
+                .map((r: any) => {
+                  const st = Number(r.button_status || 0);
+                  if (isProdCycleActive(st)) return null;
+                  return calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time, st);
+                })
+                .filter((v): v is number => v !== null);
               const avgEff = effValues.length ? Math.round(effValues.reduce((a, b) => a + b, 0) / effValues.length) : null;
               // One accordion per machine; paginate machines (not raw rows)
               const machineKeys = Array.from(new Set(visibleRows.map((r: any) => String(r.machine_id)))).sort((a, b) => a.localeCompare(b));
@@ -2416,9 +3557,14 @@ export const ManualProductionEntryForm: React.FC = () => {
                       const mName = getProdMachineName(mid);
                       const sectionOutput = machineRows.reduce((s: number, r: any) => s + Number(r.output_pairs || 0), 0);
                       const sectionEff = machineRows
-                        .map((r: any) => calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time))
+                        .map((r: any) => {
+                          const st = Number(r.button_status || 0);
+                          if (isProdCycleActive(st)) return null;
+                          return calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time, st);
+                        })
                         .filter((v): v is number => v !== null);
                       const sectionAvgEff = sectionEff.length ? Math.round(sectionEff.reduce((a, b) => a + b, 0) / sectionEff.length) : null;
+                      const machineHasLive = machineRows.some((r: any) => isProdCycleActive(Number(r.button_status || 0)));
                       const accOpen = prodMachineAccordionOpen[mid] ?? false;
                       return (
                         <details
@@ -2449,6 +3595,15 @@ export const ManualProductionEntryForm: React.FC = () => {
                               </span>
                             </span>
                             <span className="flex flex-wrap items-center gap-3 text-xs font-normal">
+                              {machineHasLive ? (
+                                <span className="inline-flex items-center gap-1 text-amber-800 font-semibold">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                                  </span>
+                                  Live
+                                </span>
+                              ) : null}
                               <span>Output: <strong className="text-gray-900">{sectionOutput}</strong></span>
                               <span>Avg eff: {effBadge(sectionAvgEff)}</span>
                             </span>
@@ -2472,21 +3627,46 @@ export const ManualProductionEntryForm: React.FC = () => {
                               </thead>
                               <tbody>
                                 {machineRows.map((row: any) => {
-                                  const dur = calcDuration(row.start_time, row.finish_time);
-                                  const eff = calcEfficiency(Number(row.target_mins || 0), row.start_time, row.finish_time);
-                                  const isAnomaly = (eff !== null && eff < 50) || (dur !== null && dur < 2);
+                                  const rowStatus = Number(row.button_status || 0);
+                                  const isActive = isProdCycleActive(rowStatus);
+                                  const dur = calcLiveDuration(row.start_time, row.finish_time, rowStatus);
+                                  const eff = isActive
+                                    ? null
+                                    : calcEfficiency(Number(row.target_mins || 0), row.start_time, row.finish_time, rowStatus);
+                                  const isAnomaly = !isActive && ((eff !== null && eff < 50) || (dur !== null && dur < 2));
                                   return (
-                                    <tr key={row.id} className={`border-b border-gray-100 ${isAnomaly ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                                    <tr
+                                      key={row.id}
+                                      className={`border-b border-gray-100 ${
+                                        isActive ? 'bg-amber-50/70' : isAnomaly ? 'bg-red-50' : 'hover:bg-gray-50'
+                                      }`}
+                                    >
                                       <td className="p-2">{formatDisplayDate(row.prod_date)}</td>
                                       <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
                                       <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
                                       <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
-                                      <td className="p-2">{formatDisplayDateTime(row.finish_time)}</td>
-                                      <td className={`p-2 ${dur !== null && dur < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{dur !== null ? `${dur.toFixed(1)} m` : '-'}</td>
-                                      <td className="p-2">{prodStatusBadge(Number(row.button_status || 0))}</td>
+                                      <td className="p-2">
+                                        {isActive ? (
+                                          <span className="text-amber-700 text-xs font-medium">Running…</span>
+                                        ) : (
+                                          formatDisplayDateTime(row.finish_time)
+                                        )}
+                                      </td>
+                                      <td
+                                        className={`p-2 tabular-nums ${
+                                          isActive
+                                            ? 'text-amber-800 font-bold'
+                                            : dur !== null && dur < 2
+                                              ? 'text-red-600 font-semibold'
+                                              : 'text-gray-600'
+                                        }`}
+                                      >
+                                        {dur !== null ? `${dur.toFixed(1)} m${isActive ? ' +' : ''}` : '-'}
+                                      </td>
+                                      <td className="p-2">{prodStatusBadge(rowStatus)}</td>
                                       <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
                                       <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>
-                                      <td className="p-2">{effBadge(eff)}</td>
+                                      <td className="p-2">{isActive ? <span className="text-xs text-amber-700 font-medium">Live</span> : effBadge(eff)}</td>
                                       <td className="p-2">
                                         <div className="flex items-center gap-2">
                                           <button
