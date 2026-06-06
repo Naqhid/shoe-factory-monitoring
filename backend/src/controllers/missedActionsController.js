@@ -1,7 +1,12 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const idleReminderSettings = require('../services/idleReminderSettingsService');
-const { computeCycleNetLostMins } = require('../utils/cycleLossMins');
+const {
+  computeCycleNetLostMins,
+  aggregateMachineCycleLosses,
+  aggregateWorkCentreCycleLoss,
+  effectiveAsOfForDateKey,
+} = require('../utils/cycleLossMins');
 
 const getIssueKey = (row, actionType) => `${row.session_id}__${row.machine_id}__${row.emp_code || 'NA'}__${actionType}`;
 
@@ -21,6 +26,36 @@ const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
 const LUNCH_START_MINUTE = parseInt(process.env.LUNCH_START_MINUTE || '30', 10);
 const LUNCH_END_HOUR = parseInt(process.env.LUNCH_END_HOUR || '14', 10);
 const LUNCH_END_MINUTE = parseInt(process.env.LUNCH_END_MINUTE || '0', 10);
+
+const enumerateDateKeys = (fromKey, toKey) => {
+  const keys = [];
+  const cursor = new Date(`${fromKey}T12:00:00`);
+  const end = new Date(`${toKey}T12:00:00`);
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return [fromKey];
+  while (cursor <= end) {
+    const y = cursor.getFullYear();
+    const m = String(cursor.getMonth() + 1).padStart(2, '0');
+    const d = String(cursor.getDate()).padStart(2, '0');
+    keys.push(`${y}-${m}-${d}`);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys.length ? keys : [fromKey];
+};
+
+const machineLossMins = (netMins) => {
+  const net = Number(netMins) || 0;
+  return net < 0 ? Math.abs(net) : 0;
+};
+
+const localDateKeyFromTimestamp = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 const overlapMinutes = (aStart, aEnd, bStart, bEnd) => {
   const start = Math.max(aStart.getTime(), bStart.getTime());
@@ -235,6 +270,7 @@ const parseActionRows = (rows, settingsMap, defaultFinishGraceMins, now = new Da
         employee_code: row.emp_code,
         employee_name: row.employee_name || row.emp_code || 'N/A',
         work_centre_name: row.work_centre_name || 'N/A',
+        work_centre_id: row.work_centre_id != null ? Number(row.work_centre_id) : null,
         action_type: actionType,
         action_label: actionType === 'START_PENDING' ? 'Start not clicked' : 'Finish not clicked',
         overdue_mins: Math.max(0, overdueMins),
@@ -265,6 +301,7 @@ exports.getMissedActions = async (req, res, next) => {
         ms.emp_code,
         ms.activated_at,
         wc.name AS work_centre_name,
+        COALESCE(ms.work_centre_id, lr.work_centre_id, mc.work_centre_id) AS work_centre_id,
         mc.machine_name,
         e.name AS employee_name,
         lr.id AS production_id,
@@ -636,9 +673,22 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
       ? scoped
       : scoped.filter((row) => String(row.work_centre_name) === lineFilter);
 
+    const dateKeys = enumerateDateKeys(dateFrom, dateTo);
+    let workCentres = [];
+    if (lineFilter === 'all') {
+      const [wcRows] = await db.query('SELECT id, name FROM work_centres ORDER BY id');
+      workCentres = wcRows;
+    } else {
+      const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE name = ? LIMIT 1', [lineFilter]);
+      workCentres = wcRows;
+    }
+
     const byLineMap = new Map();
-    filtered.forEach((row) => {
-      const key = row.work_centre_name || 'N/A';
+    const syntheticEvents = [];
+    let syntheticId = -1;
+
+    const ensureLineAgg = (lineName) => {
+      const key = lineName || 'N/A';
       if (!byLineMap.has(key)) {
         byLineMap.set(key, {
           work_centre_name: key,
@@ -648,17 +698,86 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
           lost_mins: 0,
         });
       }
-      const agg = byLineMap.get(key);
-      agg.cycles += 1;
-      agg.inactive_mins += row.inactive_mins;
-      agg.extra_mins += row.extra_mins;
-      agg.lost_mins += row.lost_mins;
-    });
+      return byLineMap.get(key);
+    };
+
+    for (const wc of workCentres) {
+      for (const dayKey of dateKeys) {
+        const machineLosses = await aggregateMachineCycleLosses(db, Number(wc.id), dayKey);
+        const cycleLoss = await aggregateWorkCentreCycleLoss(db, Number(wc.id), dayKey);
+
+        const [[{ cycle_count: cycleCountRaw }]] = await db.query(
+          `
+          SELECT COUNT(*) AS cycle_count
+          FROM machine_centre_production
+          WHERE work_centre_id = ?
+            AND DATE(prod_date) = DATE(?)
+            AND button_status = 2
+            AND start_time IS NOT NULL
+            AND finish_time IS NOT NULL
+          `,
+          [wc.id, dayKey]
+        );
+        const cycleCount = Number(cycleCountRaw) || 0;
+
+        const dashboardLost = machineLosses.reduce((sum, row) => sum + machineLossMins(row.net_mins), 0);
+        const openTailInactive = Math.max(0, Math.round(dashboardLost - Number(cycleLoss.lossOfMinutes || 0)));
+
+        const lineAgg = ensureLineAgg(wc.name);
+        lineAgg.cycles += cycleCount;
+        lineAgg.inactive_mins += Number(cycleLoss.inactiveMins || 0) + openTailInactive;
+        lineAgg.extra_mins += Number(cycleLoss.extraMins || 0);
+        lineAgg.lost_mins += Math.round(dashboardLost);
+
+        const cycleLostByMachine = new Map();
+        filtered
+          .filter((row) => String(row.work_centre_name) === String(wc.name))
+          .filter((row) => localDateKeyFromTimestamp(row.start_time) === dayKey)
+          .forEach((row) => {
+            const mid = String(row.machine_id || '');
+            cycleLostByMachine.set(mid, (cycleLostByMachine.get(mid) || 0) + Number(row.lost_mins || 0));
+          });
+
+        const asOf = effectiveAsOfForDateKey(dayKey);
+        machineLosses.forEach((machineRow) => {
+          const totalMachineLoss = machineLossMins(machineRow.net_mins);
+          if (totalMachineLoss < 1) return;
+          const mid = String(machineRow.machine_id || '');
+          const cyclePart = cycleLostByMachine.get(mid) || 0;
+          const openPart = Math.max(0, Math.round(totalMachineLoss - cyclePart));
+          if (openPart < 1) return;
+
+          syntheticEvents.push({
+            id: syntheticId,
+            event_type: 'open_idle',
+            work_centre_id: wc.id,
+            work_centre_name: wc.name,
+            machine_id: mid,
+            machine_name: machineRow.machine_name || mid,
+            output_pairs: 0,
+            employee_code: '—',
+            employee_name: 'Idle — no production yet',
+            start_time: null,
+            finish_time: asOf.toISOString(),
+            target_mins: 0,
+            actual_mins: 0,
+            extra_mins: 0,
+            start_gap_mins: openPart,
+            inactive_mins: openPart,
+            lost_mins: openPart,
+            root_cause: null,
+          });
+          syntheticId -= 1;
+        });
+      }
+    }
 
     const byLine = Array.from(byLineMap.values()).sort((a, b) => b.lost_mins - a.lost_mins);
-    const totalInactive = filtered.reduce((sum, r) => sum + r.inactive_mins, 0);
-    const totalExtra = filtered.reduce((sum, r) => sum + r.extra_mins, 0);
-    const totalLost = filtered.reduce((sum, r) => sum + r.lost_mins, 0);
+    const totalInactive = byLine.reduce((sum, row) => sum + Number(row.inactive_mins || 0), 0);
+    const totalExtra = byLine.reduce((sum, row) => sum + Number(row.extra_mins || 0), 0);
+    const totalLost = byLine.reduce((sum, row) => sum + Number(row.lost_mins || 0), 0);
+    const totalCycles = byLine.reduce((sum, row) => sum + Number(row.cycles || 0), 0);
+    const allEvents = [...filtered, ...syntheticEvents];
 
     return res.json({
       success: true,
@@ -670,13 +789,13 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         shift_start: formatShiftStartLabel(),
       },
       summary: {
-        total_cycles: filtered.length,
+        total_cycles: totalCycles,
         total_inactive_mins: totalInactive,
         total_extra_mins: totalExtra,
         total_lost_mins: totalLost,
       },
       by_line: byLine,
-      events: filtered,
+      events: allEvents,
     });
   } catch (error) {
     logger.error('Error getting missed actions daily report:', error);

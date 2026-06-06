@@ -1,8 +1,44 @@
 import React from 'react';
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Download, Loader2, RefreshCw, Save } from 'lucide-react';
+import {
+  AlertTriangle,
+  BellOff,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Cpu,
+  Download,
+  ExternalLink,
+  Loader2,
+  PlayCircle,
+  Radio,
+  RefreshCw,
+  Save,
+  Square,
+  TrendingUp,
+  User,
+  X,
+  Zap,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { computeCycleNetLostMins } from '../utils/cycleLostMins';
+import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import {
+  formatOverdueLabel,
+  formatRecoveryHint,
+  formatTimeLossLabel,
+  getFixFirstScore,
+  type MissedActionLike,
+} from '../utils/missedActionsLiveUtils';
+
+const LIVE_SORT_LABELS: Record<string, string> = {
+  fix_first: 'Fix first',
+  priority: 'Priority',
+  overdue: 'Overdue',
+  machine: 'Machine A–Z',
+};
 
 function eventLostMins(e: {
   lost_mins?: number;
@@ -28,9 +64,11 @@ type MissedAction = {
   employee_code: string;
   employee_name: string;
   work_centre_name: string;
+  work_centre_id?: number | null;
   action_type: 'START_PENDING' | 'FINISH_PENDING';
   action_label: string;
   overdue_mins: number;
+  target_mins?: number;
   details: string;
   state?: {
     acknowledged?: boolean;
@@ -195,16 +233,34 @@ const RootCauseSelect: React.FC<{
   );
 };
 
+type ResolvedIssueFlash = {
+  issue_key: string;
+  machine_name: string;
+  action_label: string;
+  resolved_at: string;
+};
+
 export const MissedActionsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder'>('live');
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isSilentRefreshing, setIsSilentRefreshing] = React.useState(false);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [items, setItems] = React.useState<MissedAction[]>([]);
   const [summary, setSummary] = React.useState({ total: 0, start_pending: 0, finish_pending: 0 });
   const [selectedLine, setSelectedLine] = React.useState<string>('all');
   const [issueFilter, setIssueFilter] = React.useState<'all' | 'START_PENDING' | 'FINISH_PENDING'>('all');
-  const [liveSort, setLiveSort] = React.useState<'priority' | 'overdue' | 'machine'>('priority');
+  const [liveSort, setLiveSort] = React.useState<'fix_first' | 'priority' | 'overdue' | 'machine'>('fix_first');
+  const [liveAutoRefresh, setLiveAutoRefresh] = React.useState(true);
+  const [liveLiveTick, setLiveLiveTick] = React.useState(0);
+  const [machineLossMinsMap, setMachineLossMinsMap] = React.useState<Record<string, number>>({});
+  const [recentlyResolved, setRecentlyResolved] = React.useState<ResolvedIssueFlash[]>([]);
+  const [contextItem, setContextItem] = React.useState<MissedAction | null>(null);
+  const [contextLoading, setContextLoading] = React.useState(false);
+  const [contextCycles, setContextCycles] = React.useState<DailyReportEvent[]>([]);
+  const [contextMachineOutput, setContextMachineOutput] = React.useState<number | null>(null);
+  const [contextMachineLoss, setContextMachineLoss] = React.useState<number | null>(null);
   const [showPriorityGuide, setShowPriorityGuide] = React.useState(false);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [showMuted, setShowMuted] = React.useState(false);
@@ -254,6 +310,8 @@ export const MissedActionsPage: React.FC = () => {
   /** Per operator: `__bulk__` or production row `id` for single-cycle root cause */
   const [operatorRootScope, setOperatorRootScope] = React.useState<Record<string, string>>({});
   const prevCriticalKeys = React.useRef<Set<string>>(new Set());
+  const prevIssueKeysRef = React.useRef<Set<string>>(new Set());
+  const prevIssueByKeyRef = React.useRef<Map<string, MissedAction>>(new Map());
   const isFirstFetch = React.useRef(true);
   const audioCtxRef = React.useRef<AudioContext | null>(null);
   const [reminderSettings, setReminderSettings] = React.useState<IdleReminderSettingRow[]>([]);
@@ -322,15 +380,63 @@ export const MissedActionsPage: React.FC = () => {
     }
   }, []);
 
-  const fetchData = React.useCallback(async () => {
-    setIsLoading(true);
+  const fetchData = React.useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) setIsLoading(true);
+    else setIsSilentRefreshing(true);
     setError(null);
     try {
       const response = await apiFetch(`${API_BASE}/api/missed-actions?startReminderMins=10&finishGraceMins=0`);
       const result = await response.json();
       if (!result.success) throw new Error(result.error || 'Failed to load missed actions');
       const incoming: MissedAction[] = result.data || [];
-      // Detect new critical issues (60+ min overdue, not acked/snoozed)
+      const incomingKeys = new Set(incoming.map((i) => i.issue_key));
+      const incomingMap = new Map(incoming.map((i) => [i.issue_key, i]));
+
+      if (!isFirstFetch.current && prevIssueKeysRef.current.size > 0) {
+        const resolved: ResolvedIssueFlash[] = [];
+        const resolvedAt = new Date().toISOString();
+        prevIssueByKeyRef.current.forEach((prevItem, key) => {
+          if (!incomingKeys.has(key)) {
+            resolved.push({
+              issue_key: key,
+              machine_name: prevItem.machine_name,
+              action_label: prevItem.action_label,
+              resolved_at: resolvedAt,
+            });
+          }
+        });
+        if (resolved.length > 0) {
+          setLocalMeta((meta) => {
+            const next = resolved.reduce(
+              (acc, r) => ({
+                ...acc,
+                [r.issue_key]: {
+                  ...(acc[r.issue_key] || {}),
+                  lastAction: 'Auto-resolved (mobile)',
+                  lastActionAt: resolvedAt,
+                  trail: [
+                    ...((acc[r.issue_key]?.trail) || []),
+                    { action: 'Auto-resolved (mobile)', at: resolvedAt },
+                  ],
+                },
+              }),
+              meta
+            );
+            try {
+              localStorage.setItem(LOCAL_META_KEY, JSON.stringify(next));
+            } catch {
+              // non-blocking
+            }
+            return next;
+          });
+          setRecentlyResolved((prev) => [...resolved, ...prev].slice(0, 8));
+          resolved.slice(0, 2).forEach((r) => {
+            toast.success(`${r.machine_name}: ${r.action_label} cleared on mobile`, { duration: 5000 });
+          });
+        }
+      }
+
       const newCriticalKeys = new Set(
         incoming
           .filter((i) => i.overdue_mins >= 60 && !i.state?.acknowledged && !i.state?.is_snoozed)
@@ -340,8 +446,10 @@ export const MissedActionsPage: React.FC = () => {
       if (hasNewCritical && !isFirstFetch.current) playAlert();
       isFirstFetch.current = false;
       prevCriticalKeys.current = newCriticalKeys;
+      prevIssueKeysRef.current = incomingKeys;
+      prevIssueByKeyRef.current = incomingMap;
+
       setItems((prev) => {
-        // Preserve root_cause edits made locally so auto-refresh doesn't wipe them
         const prevMap = new Map(prev.map((p) => [p.issue_key, p]));
         return incoming.map((item) => {
           const existing = prevMap.get(item.issue_key);
@@ -354,19 +462,145 @@ export const MissedActionsPage: React.FC = () => {
       setSummary(result.summary || { total: 0, start_pending: 0, finish_pending: 0 });
       setLastUpdated(new Date());
     } catch (e: any) {
-      setError(e.message || 'Failed to load missed actions');
+      if (!silent) setError(e.message || 'Failed to load missed actions');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
+      setIsSilentRefreshing(false);
     }
   }, [playAlert]);
 
   React.useEffect(() => {
-    fetchData();
+    if (activeTab !== 'live') return undefined;
+    void fetchData();
+    if (!liveAutoRefresh) return undefined;
     const id = window.setInterval(() => {
-      fetchData();
-    }, 10000);
+      void fetchData({ silent: true });
+    }, 15_000);
     return () => window.clearInterval(id);
-  }, [fetchData]);
+  }, [activeTab, liveAutoRefresh, fetchData]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'live') return undefined;
+    const id = window.setInterval(() => setLiveLiveTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    if (recentlyResolved.length === 0) return undefined;
+    const id = window.setTimeout(() => setRecentlyResolved([]), 90_000);
+    return () => window.clearInterval(id);
+  }, [recentlyResolved]);
+
+  const liveSecondsSinceRefresh = React.useMemo(() => {
+    if (!lastUpdated) return null;
+    void liveLiveTick;
+    return Math.max(0, Math.floor((Date.now() - lastUpdated.getTime()) / 1000));
+  }, [lastUpdated, liveLiveTick]);
+
+  React.useEffect(() => {
+    const wcIds = Array.from(
+      new Set(
+        items
+          .map((i) => Number(i.work_centre_id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      )
+    );
+    if (wcIds.length === 0) {
+      setMachineLossMinsMap({});
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    let cancelled = false;
+    (async () => {
+      const merged: Record<string, number> = {};
+      await Promise.all(
+        wcIds.map(async (wcId) => {
+          try {
+            const res = await apiFetch(
+              `${API_BASE}/api/tracker/machine-time-loss?work_centre_id=${wcId}&date=${today}`
+            );
+            const json = await res.json();
+            if (!json.success || !Array.isArray(json.machines)) return;
+            json.machines.forEach((row: { machine_id?: string; net_mins?: number }) => {
+              const mid = String(row.machine_id || '');
+              if (!mid) return;
+              const loss = Number(row.net_mins) || 0;
+              merged[`${wcId}:${mid}`] = loss < 0 ? Math.abs(loss) : 0;
+            });
+          } catch {
+            // non-fatal
+          }
+        })
+      );
+      if (!cancelled) setMachineLossMinsMap(merged);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
+
+  const getMachineLossForItem = React.useCallback(
+    (item: MissedActionLike) => {
+      const wcId = Number(item.work_centre_id);
+      const mid = String(item.machine_id || '');
+      if (!Number.isFinite(wcId) || !mid) return Number(item.overdue_mins) || 0;
+      return machineLossMinsMap[`${wcId}:${mid}`] ?? (Number(item.overdue_mins) || 0);
+    },
+    [machineLossMinsMap]
+  );
+
+  const openMachineContext = React.useCallback(async (item: MissedAction) => {
+    setContextItem(item);
+    setContextLoading(true);
+    setContextCycles([]);
+    setContextMachineOutput(null);
+    setContextMachineLoss(null);
+    const today = new Date().toISOString().slice(0, 10);
+    const wcId = Number(item.work_centre_id);
+    const machineId = encodeURIComponent(item.machine_id || '');
+    try {
+      const [cyclesRes, lossRes, machinesRes] = await Promise.all([
+        apiFetch(`${API_BASE}/api/mobile-production/machine/${machineId}/daily-cycles?date=${today}`),
+        Number.isFinite(wcId)
+          ? apiFetch(`${API_BASE}/api/tracker/machine-time-loss?work_centre_id=${wcId}&date=${today}`)
+          : Promise.resolve(null),
+        Number.isFinite(wcId)
+          ? apiFetch(`${API_BASE}/api/tv-dashboard/machine-centres/${wcId}?date=${today}`)
+          : Promise.resolve(null),
+      ]);
+      const cyclesJson = await cyclesRes.json();
+      if (cyclesJson.success) {
+        setContextCycles((cyclesJson.events || []).slice(-8).reverse());
+      }
+      if (lossRes) {
+        const lossJson = await lossRes.json();
+        const row = (lossJson.machines || []).find(
+          (m: { machine_id?: string }) => String(m.machine_id) === String(item.machine_id)
+        );
+        if (row) {
+          const net = Number(row.net_mins) || 0;
+          setContextMachineLoss(net < 0 ? Math.abs(net) : 0);
+        }
+      }
+      if (machinesRes) {
+        const machinesJson = await machinesRes.json();
+        const row = (machinesJson.data || []).find(
+          (m: { machine_id?: string }) => String(m.machine_id) === String(item.machine_id)
+        );
+        if (row) setContextMachineOutput(Number(row.total_output_pairs || 0));
+      }
+    } catch {
+      toast.error('Could not load machine context');
+    } finally {
+      setContextLoading(false);
+    }
+  }, []);
+
+  const productionTrackerHref = React.useCallback((item: MissedAction) => {
+    const wcId = Number(item.work_centre_id);
+    if (Number.isFinite(wcId) && wcId > 0) return `/production_tracker/line/${wcId}`;
+    return '/production_tracker';
+  }, []);
 
   const fetchDailyReport = React.useCallback(async (opts?: { skipLoading?: boolean }) => {
     const skipLoading = opts?.skipLoading === true;
@@ -612,7 +846,22 @@ export const MissedActionsPage: React.FC = () => {
   }, [items]);
 
   const sortedFilteredItems = React.useMemo(() => {
-    const base = [...filteredItems].sort((a, b) => {
+    const list = [...filteredItems];
+    if (liveSort === 'fix_first') {
+      return list.sort((a, b) => {
+        const scoreA = getFixFirstScore(a, getMachineLossForItem(a));
+        const scoreB = getFixFirstScore(b, getMachineLossForItem(b));
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(b.overdue_mins || 0) - Number(a.overdue_mins || 0);
+      });
+    }
+    if (liveSort === 'overdue') {
+      return list.sort((a, b) => Number(b.overdue_mins || 0) - Number(a.overdue_mins || 0));
+    }
+    if (liveSort === 'machine') {
+      return list.sort((a, b) => String(a.machine_name || '').localeCompare(String(b.machine_name || '')));
+    }
+    return list.sort((a, b) => {
       const recA = recurrenceMap.get(`${a.machine_id || a.machine_name}|${a.action_type}`) || 0;
       const recB = recurrenceMap.get(`${b.machine_id || b.machine_name}|${b.action_type}`) || 0;
       const priA = getPriorityScore(a, recA);
@@ -620,14 +869,19 @@ export const MissedActionsPage: React.FC = () => {
       if (priA !== priB) return priB - priA;
       return b.overdue_mins - a.overdue_mins;
     });
-    if (liveSort === 'overdue') {
-      return base.sort((a, b) => Number(b.overdue_mins || 0) - Number(a.overdue_mins || 0));
-    }
-    if (liveSort === 'machine') {
-      return base.sort((a, b) => String(a.machine_name || '').localeCompare(String(b.machine_name || '')));
-    }
-    return base;
-  }, [filteredItems, recurrenceMap, liveSort]);
+  }, [filteredItems, recurrenceMap, liveSort, getMachineLossForItem]);
+
+  const fixFirstTopItems = React.useMemo(
+    () =>
+      [...filteredItems]
+        .sort((a, b) => {
+          const scoreA = getFixFirstScore(a, getMachineLossForItem(a));
+          const scoreB = getFixFirstScore(b, getMachineLossForItem(b));
+          return scoreB - scoreA;
+        })
+        .slice(0, 3),
+    [filteredItems, getMachineLossForItem]
+  );
 
   const filteredSummary = React.useMemo(() => {
     return {
@@ -1364,8 +1618,172 @@ export const MissedActionsPage: React.FC = () => {
     [sortedFilteredItems]
   );
 
+  const liveTotalTimeLossMins = React.useMemo(
+    () =>
+      filteredItems.reduce((sum, item) => sum + getMachineLossForItem(item), 0),
+    [filteredItems, getMachineLossForItem]
+  );
+
+  const renderRecoveryPill = (item: MissedAction) => {
+    const hint = formatRecoveryHint(item);
+    if (!hint) return null;
+    const urgent = hint.includes('nearly closed');
+    return (
+      <span
+        className={`inline-flex items-start gap-1.5 mt-2 rounded-lg px-2.5 py-1.5 text-[11px] font-medium leading-snug ${
+          urgent
+            ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+            : 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200'
+        }`}
+      >
+        <TrendingUp className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden />
+        <span>{hint}</span>
+      </span>
+    );
+  };
+
+  const renderLiveQuickLinks = (item: MissedAction) => (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <button
+        type="button"
+        onClick={() => openMachineContext(item)}
+        className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200"
+      >
+        <Cpu className="h-3 w-3" aria-hidden />
+        Details
+      </button>
+      <button
+        type="button"
+        onClick={() => navigate(productionTrackerHref(item))}
+        className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+      >
+        <ExternalLink className="h-3 w-3" aria-hidden />
+        Tracker
+      </button>
+      <a
+        href={`/mobile/${encodeURIComponent(item.machine_id || item.machine_name || '')}`}
+        className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
+      >
+        Mobile
+      </a>
+    </div>
+  );
+
   return (
     <div className="bg-gray-100 px-2 py-4 sm:px-3 sm:py-6">
+      {contextItem && (
+        <div className="fixed inset-0 z-[60] flex justify-end bg-black/40 backdrop-blur-sm" onClick={() => setContextItem(null)}>
+          <div
+            className="h-full w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="machine-context-title"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white px-4 py-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Machine context</p>
+                <h2 id="machine-context-title" className="text-lg font-bold text-gray-900 truncate">
+                  {contextItem.machine_name}
+                </h2>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  {contextItem.work_centre_name} · {contextItem.employee_name} ({contextItem.employee_code})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContextItem(null)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {contextLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <p className="text-[10px] font-bold uppercase text-gray-500">Today output</p>
+                      <p className="text-2xl font-black text-gray-900 mt-1">{contextMachineOutput ?? '—'}</p>
+                    </div>
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+                      <p className="text-[10px] font-bold uppercase text-rose-700 flex items-center gap-1">
+                        <Clock className="h-3 w-3" aria-hidden />
+                        Time loss
+                      </p>
+                      <p className="text-2xl font-black text-rose-900 mt-1">
+                        {contextMachineLoss != null ? formatTimeLossLabel(contextMachineLoss) : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`rounded-lg border p-3 text-sm ${
+                    contextItem.action_type === 'START_PENDING'
+                      ? 'border-amber-200 bg-amber-50'
+                      : 'border-red-200 bg-red-50'
+                  }`}>
+                    <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                      {contextItem.action_type === 'START_PENDING' ? (
+                        <PlayCircle className="h-4 w-4 text-amber-700" aria-hidden />
+                      ) : (
+                        <Square className="h-4 w-4 text-red-700" aria-hidden />
+                      )}
+                      {contextItem.action_label}
+                    </p>
+                    <p className="text-gray-700 mt-1">{formatOverdueLabel(contextItem.overdue_mins)}</p>
+                    {renderRecoveryPill(contextItem)}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase text-gray-500 mb-2">Recent cycles today</p>
+                    {contextCycles.length === 0 ? (
+                      <p className="text-sm text-gray-500 rounded-lg border border-dashed border-gray-300 p-4 text-center">
+                        No finished cycles yet today
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {contextCycles.map((c) => (
+                          <div key={c.id} className="rounded-lg border border-gray-200 px-3 py-2 text-xs">
+                            <div className="flex justify-between gap-2 font-semibold text-gray-800">
+                              <span>{c.start_time ? new Date(c.start_time).toLocaleTimeString() : '—'}</span>
+                              <span>{Number(c.output_pairs || 0)} pairs</span>
+                            </div>
+                            <p className="text-gray-500 mt-0.5">
+                              {formatMinutes(Number(c.actual_mins || 0))}m actual · target {formatMinutes(Number(c.target_mins || 0))}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="border-t border-gray-200 p-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(productionTrackerHref(contextItem));
+                  setContextItem(null);
+                }}
+                className="inline-flex items-center justify-center gap-2 w-full rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-semibold"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden />
+                Open Production Tracker
+              </button>
+              <a
+                href={`/mobile/${encodeURIComponent(contextItem.machine_id || '')}`}
+                className="inline-flex items-center justify-center gap-2 w-full rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-800 px-4 py-2.5 text-sm font-semibold hover:bg-indigo-100"
+              >
+                Open mobile screen
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
       {operatorBulkOverwritePending && (
         <div
           className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1455,40 +1873,157 @@ export const MissedActionsPage: React.FC = () => {
 
         {activeTab === 'live' ? (
           <>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Missed Start / Finish</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Machines where operators likely forgot to click START or FINISH.
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Not updated yet'}
-            </p>
-            <p className="text-xs text-gray-400">Auto-refresh every 10s</p>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/50 p-4 sm:p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 ring-1 ring-emerald-200">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Live monitoring</span>
+              </div>
+              <h1 className="mt-3 text-xl sm:text-2xl font-bold text-gray-900">Missed Start / Finish</h1>
+              <p className="text-sm text-gray-600 mt-1 max-w-2xl">
+                Machines where operators likely forgot to click START or FINISH — sorted by time-loss impact.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                {liveSecondsSinceRefresh !== null ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">
+                    <Radio className={`h-3.5 w-3.5 ${isSilentRefreshing ? 'text-blue-600 animate-pulse' : 'text-gray-400'}`} aria-hidden />
+                    Updated {liveSecondsSinceRefresh}s ago
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">Not updated yet</span>
+                )}
+                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200 hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={liveAutoRefresh}
+                    onChange={(e) => setLiveAutoRefresh(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+                  />
+                  Auto-refresh every 15s
+                </label>
+              </div>
+            </div>
+            {filteredItems.length > 0 && (
+              <div className="shrink-0 rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Filtered time loss</p>
+                <p className="mt-1 text-2xl font-black text-rose-700">{formatTimeLossLabel(liveTotalTimeLossMins)}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{filteredItems.length} issue{filteredItems.length === 1 ? '' : 's'} in view</p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-indigo-100 rounded-xl border-2 border-indigo-300 p-4 shadow-sm">
-            <p className="text-xs text-gray-500 font-semibold uppercase">Total Alerts</p>
-            <p className="text-5xl font-black text-indigo-900 mt-1">{filteredSummary.total}</p>
+        {recentlyResolved.length > 0 && (
+          <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-3 shadow-sm">
+            <p className="text-sm font-bold text-emerald-900 mb-2 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" aria-hidden />
+              Recently fixed on mobile
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {recentlyResolved.slice(0, 5).map((r) => (
+                <span
+                  key={`${r.issue_key}-${r.resolved_at}`}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200 shadow-sm"
+                >
+                  <Zap className="h-3 w-3 text-emerald-600" aria-hidden />
+                  {r.machine_name} — {r.action_label}
+                </span>
+              ))}
+            </div>
           </div>
-          <div className="bg-amber-100 rounded-xl border-2 border-amber-400 p-4 shadow-sm">
-            <p className="text-xs text-amber-800 font-semibold uppercase">Start Not Clicked</p>
-            <p className="text-5xl font-black text-amber-900 mt-1">{filteredSummary.start_pending}</p>
+        )}
+
+        {fixFirstTopItems.length > 0 && (
+          <div className="rounded-2xl border border-rose-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-rose-700 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                Fix first — highest time-loss impact
+              </p>
+              <span className="text-[10px] font-semibold text-gray-500">Tap for machine details</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {fixFirstTopItems.map((item, idx) => {
+                const lossMins = getMachineLossForItem(item);
+                const isStart = item.action_type === 'START_PENDING';
+                return (
+                  <button
+                    key={item.issue_key}
+                    type="button"
+                    onClick={() => openMachineContext(item)}
+                    className="group text-left rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50/80 to-white p-4 shadow-sm hover:border-rose-300 hover:shadow-md transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 text-[11px] font-black text-white">
+                        {idx + 1}
+                      </span>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        isStart ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {isStart ? <PlayCircle className="h-3 w-3" aria-hidden /> : <Square className="h-3 w-3" aria-hidden />}
+                        {item.action_label}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-bold text-gray-900 line-clamp-2 group-hover:text-blue-900">{item.machine_name}</p>
+                    <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
+                      <Clock className="h-3 w-3 shrink-0" aria-hidden />
+                      {formatOverdueLabel(item.overdue_mins)}
+                    </p>
+                    <p className="text-xs font-bold text-rose-800 mt-2 flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3 rotate-180" aria-hidden />
+                      {formatTimeLossLabel(lossMins)} today
+                    </p>
+                    {renderRecoveryPill(item)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="bg-red-100 rounded-xl border-2 border-red-400 p-4 shadow-sm">
-            <p className="text-xs text-red-800 font-semibold uppercase">Finish Not Clicked</p>
-            <p className="text-5xl font-black text-red-900 mt-1">{filteredSummary.finish_pending}</p>
+        )}
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="col-span-2 lg:col-span-1 rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-indigo-700">
+              <AlertTriangle className="h-4 w-4" aria-hidden />
+              <p className="text-[11px] font-bold uppercase tracking-wide">Total alerts</p>
+            </div>
+            <p className="text-4xl sm:text-5xl font-black text-indigo-900 mt-2">{filteredSummary.total}</p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-amber-700">
+              <PlayCircle className="h-4 w-4" aria-hidden />
+              <p className="text-[11px] font-bold uppercase tracking-wide">Start pending</p>
+            </div>
+            <p className="text-4xl sm:text-5xl font-black text-amber-900 mt-2">{filteredSummary.start_pending}</p>
+          </div>
+          <div className="rounded-xl border border-red-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-red-700">
+              <Square className="h-4 w-4" aria-hidden />
+              <p className="text-[11px] font-bold uppercase tracking-wide">Finish pending</p>
+            </div>
+            <p className="text-4xl sm:text-5xl font-black text-red-900 mt-2">{filteredSummary.finish_pending}</p>
+          </div>
+          <div className="col-span-2 lg:col-span-1 rounded-xl border border-rose-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-rose-700">
+              <Clock className="h-4 w-4" aria-hidden />
+              <p className="text-[11px] font-bold uppercase tracking-wide">Time loss (filtered)</p>
+            </div>
+            <p className="text-2xl sm:text-3xl font-black text-rose-800 mt-2 leading-tight">{formatTimeLossLabel(liveTotalTimeLossMins)}</p>
           </div>
         </div>
         {criticalItemsCount > 0 && (
-          <div className="bg-red-100 border-2 border-red-300 rounded-xl px-4 py-3 shadow-sm flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-bold text-red-900">
-              Critical attention: {criticalItemsCount} issue(s) are 60m+ overdue
+          <div className="rounded-xl border border-red-300 bg-gradient-to-r from-red-50 to-rose-50 px-4 py-3 shadow-sm flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-bold text-red-900 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+              Critical: {criticalItemsCount} issue{criticalItemsCount === 1 ? '' : 's'} overdue 60m+
             </p>
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-red-200 text-red-900 text-xs font-bold animate-pulse">
-              Max overdue: {maxOverdueMins}m
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-200 text-red-900 text-xs font-bold">
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              Max {formatOverdueLabel(maxOverdueMins)}
             </span>
           </div>
         )}
@@ -1561,10 +2096,11 @@ export const MissedActionsPage: React.FC = () => {
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sort By</label>
               <select
                 value={liveSort}
-                onChange={(e) => setLiveSort(e.target.value as 'priority' | 'overdue' | 'machine')}
+                onChange={(e) => setLiveSort(e.target.value as 'fix_first' | 'priority' | 'overdue' | 'machine')}
                 className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
               >
-                <option value="priority">Priority (default)</option>
+                <option value="fix_first">Fix first (time loss)</option>
+                <option value="priority">Priority score</option>
                 <option value="overdue">Overdue (high to low)</option>
                 <option value="machine">Machine (A-Z)</option>
               </select>
@@ -1596,7 +2132,7 @@ export const MissedActionsPage: React.FC = () => {
                 Export CSV
               </button>
               <button
-                onClick={fetchData}
+                onClick={() => void fetchData()}
                 disabled={isLoading}
                 className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-60"
               >
@@ -1610,11 +2146,11 @@ export const MissedActionsPage: React.FC = () => {
             <div className="w-full flex flex-wrap gap-1.5">
               {selectedLine !== 'all' && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Line: {selectedLine}</span>}
               {issueFilter !== 'all' && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">Issue: {issueFilter === 'START_PENDING' ? 'Start Pending' : 'Finish Pending'}</span>}
-              {liveSort !== 'priority' && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">Sort: {liveSort}</span>}
+              {liveSort !== 'fix_first' && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">Sort: {LIVE_SORT_LABELS[liveSort] || liveSort}</span>}
             </div>
           </div>
 
-          {isLoading ? (
+          {isLoading && items.length === 0 ? (
             <div className="py-16 flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
             </div>
@@ -1624,16 +2160,25 @@ export const MissedActionsPage: React.FC = () => {
               <p className="text-red-600 font-medium">{error}</p>
             </div>
           ) : filteredItems.length === 0 ? (
-            <div className="py-10 px-6 text-center text-gray-500">
-              No records match current filters.
-            </div>
+            items.length === 0 ? (
+              <div className="py-16 px-6 text-center">
+                <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" aria-hidden />
+                <p className="text-lg font-bold text-gray-900">All clear</p>
+                <p className="text-sm text-gray-500 mt-1">No missed start or finish issues right now.</p>
+              </div>
+            ) : (
+              <div className="py-12 px-6 text-center">
+                <p className="text-sm font-semibold text-gray-700">No issues match current filters</p>
+                <p className="text-xs text-gray-500 mt-1">Try widening line or issue type filters.</p>
+              </div>
+            )
           ) : (
             <div className="space-y-4 p-3">
               {Object.entries(groupedItems).map(([lineName, lineItems]) => (
-                <div key={lineName} className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                    <p className="text-sm font-bold text-gray-700">{lineName}</p>
-                    <span className="text-xs text-gray-500">{lineItems.length} issue(s)</span>
+                <div key={lineName} className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  <div className="px-3 py-2.5 bg-slate-50 border-b border-gray-200 border-l-4 border-l-blue-500 flex items-center justify-between">
+                    <p className="text-sm font-bold text-gray-800">{lineName}</p>
+                    <span className="text-xs font-semibold text-gray-500 bg-white px-2 py-0.5 rounded-full ring-1 ring-gray-200">{lineItems.length} issue{lineItems.length === 1 ? '' : 's'}</span>
                   </div>
                   <div className="md:hidden divide-y divide-gray-100">
                     {lineItems.map((item) => {
@@ -1642,15 +2187,21 @@ export const MissedActionsPage: React.FC = () => {
                       const recurrence = recurrenceMap.get(`${item.machine_id || item.machine_name}|${item.action_type}`) || 0;
                       const priority = getPriorityScore(item, recurrence);
                       const meta = localMeta[item.issue_key] || {};
-                      const overdueMinsRounded = Math.round(Number(item.overdue_mins || 0));
+                      const lossMins = getMachineLossForItem(item);
                       return (
                         <div
                           key={`${item.session_id}-${item.machine_id}-${item.action_type}`}
-                          className={`p-3 sm:p-3.5 space-y-3 sm:space-y-3.5 ${Number(item.overdue_mins || 0) >= 60 ? 'bg-red-50/70 ring-1 ring-red-200' : ''}`}
+                          className={`p-3.5 sm:p-4 space-y-3 rounded-none ${Number(item.overdue_mins || 0) >= 60 ? 'bg-red-50/80' : 'bg-white'}`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="text-sm font-semibold text-gray-800">{item.machine_name}</p>
+                              <button
+                                type="button"
+                                onClick={() => openMachineContext(item)}
+                                className="text-sm font-semibold text-blue-800 hover:text-blue-900 hover:underline text-left"
+                              >
+                                {item.machine_name}
+                              </button>
                               <p className="text-xs text-gray-600">{item.employee_name} ({item.employee_code})</p>
                             </div>
                             <span className={`inline-flex items-center justify-center min-w-[118px] px-2.5 py-1 rounded-full text-[11px] leading-none font-semibold whitespace-nowrap ${
@@ -1662,32 +2213,33 @@ export const MissedActionsPage: React.FC = () => {
 
                           <div className="flex flex-wrap gap-2 items-center">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] leading-none font-semibold border whitespace-nowrap ${severity.cls}`}>
-                              {overdueMinsRounded}m overdue • {severity.label}
+                              {formatOverdueLabel(item.overdue_mins)}
+                            </span>
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${severity.cls}`}>
+                              {severity.label}
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-800 ring-1 ring-rose-200">
+                              <Clock className="h-3 w-3" aria-hidden />
+                              {formatTimeLossLabel(lossMins)}
                             </span>
                             {recurrence > 1 && (
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${recurrence >= 3 ? 'bg-red-200 text-red-900' : 'bg-purple-100 text-purple-700'}`}>
-                                Repeat x{recurrence}
+                                Repeat ×{recurrence}
                               </span>
                             )}
                             <div className="inline-flex items-center gap-1">
                               <SlaCircle overdueMins={item.overdue_mins} />
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${sla.cls}`}>{sla.label}</span>
                             </div>
+                            <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700">
+                              P{priority}
+                            </span>
                           </div>
 
-                          <div className="grid grid-cols-1 gap-1.5 sm:gap-2 text-xs">
-                            <div className="rounded-lg bg-gray-50 px-2 py-1.5">
-                              <p className="text-gray-500">Priority</p>
-                              <p className="font-bold text-gray-800">{priority}</p>
-                            </div>
-                          </div>
-
-                          <div className="text-xs text-gray-600">
+                          <div className="text-xs text-gray-600 rounded-lg bg-gray-50 px-3 py-2">
                             <p>{item.details}</p>
-                            <div className="mt-1 flex flex-wrap gap-2">
-                              <a className="font-semibold text-blue-600 hover:text-blue-700" href="/production_tracker">Open Tracker</a>
-                              <a className="font-semibold text-indigo-600 hover:text-indigo-700" href={`/mobile/${encodeURIComponent(item.machine_id || item.machine_name || '')}`}>Open Machine</a>
-                            </div>
+                            {renderRecoveryPill(item)}
+                            {renderLiveQuickLinks(item)}
                           </div>
 
                           <div className="space-y-2">
@@ -1747,19 +2299,20 @@ export const MissedActionsPage: React.FC = () => {
                   </div>
                   <div className="hidden md:block overflow-x-auto">
                     <table className="min-w-full">
-                      <thead className="bg-white border-b border-gray-100">
+                      <thead className="bg-slate-50 border-b border-gray-200 sticky top-0 z-10">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Machine</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Operator</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Issue</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Overdue</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Severity</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Priority</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">SLA</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Details</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Root Cause</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Trail</th>
-                          <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Machine</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Operator</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Issue</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Overdue</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Impact</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Severity</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">P</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">SLA</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Details</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Root Cause</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Trail</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -1769,22 +2322,43 @@ export const MissedActionsPage: React.FC = () => {
                           const recurrence = recurrenceMap.get(`${item.machine_id || item.machine_name}|${item.action_type}`) || 0;
                           const priority = getPriorityScore(item, recurrence);
                           const meta = localMeta[item.issue_key] || {};
+                          const lossMins = getMachineLossForItem(item);
                           return (
-                            <tr key={`${item.session_id}-${item.machine_id}-${item.action_type}`} className={Number(item.overdue_mins || 0) >= 60 ? 'bg-red-50' : ''}>
-                              <td className="px-3 py-3.5 text-sm font-semibold text-gray-800">{item.machine_name}</td>
-                              <td className="px-3 py-3.5 text-sm text-gray-700">{item.employee_name} ({item.employee_code})</td>
+                            <tr key={`${item.session_id}-${item.machine_id}-${item.action_type}`} className={`hover:bg-slate-50/80 ${Number(item.overdue_mins || 0) >= 60 ? 'bg-red-50/60' : ''}`}>
+                              <td className="px-3 py-3.5 text-sm font-semibold text-gray-800">
+                                <button
+                                  type="button"
+                                  onClick={() => openMachineContext(item)}
+                                  className="text-left text-blue-800 hover:text-blue-900 hover:underline font-semibold"
+                                >
+                                  {item.machine_name}
+                                </button>
+                              </td>
+                              <td className="px-3 py-3.5 text-sm text-gray-700">
+                                <span className="inline-flex items-center gap-1">
+                                  <User className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden />
+                                  {item.employee_name} ({item.employee_code})
+                                </span>
+                              </td>
                               <td className="px-3 py-3.5 text-sm">
-                                <span className={`inline-flex items-center justify-center min-w-[118px] px-2.5 py-1 rounded-full text-[11px] leading-none font-semibold whitespace-nowrap ${
+                                <span className={`inline-flex items-center gap-1 justify-center min-w-[118px] px-2.5 py-1 rounded-full text-[11px] leading-none font-semibold whitespace-nowrap ${
                                   item.action_type === 'START_PENDING'
                                     ? 'bg-amber-100 text-amber-700'
                                     : 'bg-red-100 text-red-700'
                                 }`}>
+                                  {item.action_type === 'START_PENDING' ? <PlayCircle className="h-3 w-3" aria-hidden /> : <Square className="h-3 w-3" aria-hidden />}
                                   {item.action_label}
                                 </span>
                               </td>
                               <td className="px-3 py-3.5 text-sm">
                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] leading-none font-semibold border whitespace-nowrap ${severity.cls}`}>
-                                  {Math.round(Number(item.overdue_mins || 0))}m overdue • {severity.label}
+                                  {formatOverdueLabel(item.overdue_mins)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3.5 text-sm">
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-800 ring-1 ring-rose-200 whitespace-nowrap">
+                                  <Clock className="h-3 w-3 shrink-0" aria-hidden />
+                                  {formatTimeLossLabel(lossMins)}
                                 </span>
                               </td>
                               <td className="px-3 py-3.5 text-sm">
@@ -1792,8 +2366,8 @@ export const MissedActionsPage: React.FC = () => {
                                   {severity.label}
                                 </span>
                                 {recurrence > 1 && (
-                                  <span className={`ml-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${recurrence >= 3 ? 'bg-red-200 text-red-900' : 'bg-purple-100 text-purple-700'}`}>
-                                    Repeat x{recurrence}
+                                  <span className={`ml-1.5 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${recurrence >= 3 ? 'bg-red-200 text-red-900' : 'bg-purple-100 text-purple-700'}`}>
+                                    ×{recurrence}
                                   </span>
                                 )}
                               </td>
@@ -1804,12 +2378,10 @@ export const MissedActionsPage: React.FC = () => {
                                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${sla.cls}`}>{sla.label}</span>
                                 </div>
                               </td>
-                              <td className="px-3 py-3.5 text-sm text-gray-600">
+                              <td className="px-3 py-3.5 text-sm text-gray-600 max-w-xs">
                                 <div>{item.details}</div>
-                                <div className="mt-1 flex gap-2">
-                                  <a className="text-[11px] font-semibold text-blue-600 hover:text-blue-700" href="/production_tracker">Open Tracker</a>
-                                  <a className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700" href={`/mobile/${encodeURIComponent(item.machine_id || item.machine_name || '')}`}>Open Machine</a>
-                                </div>
+                                {renderRecoveryPill(item)}
+                                {renderLiveQuickLinks(item)}
                               </td>
                               <td className="px-3 py-3.5 text-sm">
                                 <RootCauseSelect

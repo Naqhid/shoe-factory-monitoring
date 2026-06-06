@@ -13,9 +13,11 @@ import {
   Cpu,
   Edit,
   FileText,
+  Filter,
   History,
   Loader2,
   Package,
+  RefreshCw,
   Trash2,
   User,
   X,
@@ -50,6 +52,18 @@ import {
   ManualEntryShiftChecklist,
   ManualEntrySlotHeatmap,
 } from './ManualEntryInsights';
+import {
+  analyzeProdCycle,
+  buildProdCycleContextMap,
+  calcProdEfficiency,
+  formatFirstCycleShiftNote,
+  formatLossBreakdown,
+  getAnomalyLabel,
+  matchesProdQuickFilter,
+  PROD_QUICK_FILTERS,
+  type ProdCycleMetrics,
+  type ProdQuickFilter,
+} from '../utils/prodRecordInsights';
 
 interface WorkCentre {
   id: number;
@@ -274,6 +288,11 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodDeleteCandidate, setProdDeleteCandidate] = React.useState<any | null>(null);
   const [prodLastRefreshedAt, setProdLastRefreshedAt] = React.useState<Date | null>(null);
   const [prodLiveNow, setProdLiveNow] = React.useState(() => new Date());
+  const [prodAutoRefresh, setProdAutoRefresh] = React.useState(true);
+  const [prodLiveTick, setProdLiveTick] = React.useState(0);
+  const [prodQuickFilter, setProdQuickFilter] = React.useState<ProdQuickFilter>('all');
+  const [prodNewCycleIds, setProdNewCycleIds] = React.useState<Set<number>>(() => new Set());
+  const prodKnownIdsRef = React.useRef<Set<number>>(new Set());
   const [coverageLastRefreshedAt, setCoverageLastRefreshedAt] = React.useState<Date | null>(null);
   const [coverageAutoRefresh, setCoverageAutoRefresh] = React.useState(true);
   const [coverageLiveTick, setCoverageLiveTick] = React.useState(0);
@@ -1127,17 +1146,19 @@ export const ManualProductionEntryForm: React.FC = () => {
     return Number.isFinite(mins) && mins >= 0 ? mins : null;
   };
 
-  const calcEfficiency = (targetMins: number, start: string, finish: string, status = 2) => {
-    const actual = isProdCycleActive(status)
-      ? calcLiveDuration(start, finish, status)
-      : calcDuration(start, finish);
-    if (!actual || actual === 0 || !targetMins) return null;
-    return Math.round((targetMins / actual) * 100);
-  };
+  const calcEfficiency = (targetMins: number, start: string, finish: string, status = 2) =>
+    calcProdEfficiency(targetMins, start, finish, status, prodLiveNow);
 
   const effBadge = (pct: number | null) => {
     if (pct === null) return <span className="text-gray-400 text-xs">-</span>;
-    const cls = pct >= 90 ? 'bg-green-100 text-green-700' : pct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
+    const cls =
+      pct > 150
+        ? 'bg-orange-100 text-orange-800 ring-1 ring-orange-200'
+        : pct >= 90
+          ? 'bg-green-100 text-green-700'
+          : pct >= 70
+            ? 'bg-yellow-100 text-yellow-700'
+            : 'bg-red-100 text-red-700';
     return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{pct}%</span>;
   };
 
@@ -1212,6 +1233,19 @@ export const ManualProductionEntryForm: React.FC = () => {
           rows = Array.from(lastByMachine.values());
         }
       }
+      const prevIds = prodKnownIdsRef.current;
+      const incomingIds = new Set<number>(rows.map((r: any) => Number(r.id)));
+      if (prevIds.size > 0) {
+        const fresh = new Set<number>();
+        rows.forEach((r: any) => {
+          const id = Number(r.id);
+          if (!prevIds.has(id)) fresh.add(id);
+        });
+        if (fresh.size > 0) {
+          setProdNewCycleIds((prev) => new Set([...prev, ...fresh]));
+        }
+      }
+      prodKnownIdsRef.current = incomingIds;
       setProdRecords(rows);
       if (!opts?.silent) setProdPage(0);
       setProdLastRefreshedAt(new Date());
@@ -1227,6 +1261,14 @@ export const ManualProductionEntryForm: React.FC = () => {
     [prodRecords]
   );
 
+  const prodFlaggedCount = React.useMemo(() => {
+    const ctxMap = buildProdCycleContextMap(prodRecords);
+    return prodRecords.filter((r) => {
+      const ctx = ctxMap.get(Number(r.id)) ?? { prevFinishTime: null, cycleNumber: 1, operatorChanged: false };
+      return analyzeProdCycle(r, ctx, prodLiveNow).isSuspicious;
+    }).length;
+  }, [prodRecords, prodLiveNow]);
+
   React.useEffect(() => {
     if (activeTab !== 'production') return undefined;
     const timer = window.setInterval(() => {
@@ -1236,9 +1278,38 @@ export const ManualProductionEntryForm: React.FC = () => {
   }, [activeTab, prodInProgressCount]);
 
   React.useEffect(() => {
+    prodKnownIdsRef.current = new Set();
+    setProdNewCycleIds(new Set());
+  }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter, prodFinishedView]);
+
+  React.useEffect(() => {
     if (activeTab !== 'production') return;
     void loadProdRecords({ silent: true });
   }, [prodDateFilter, prodToDateFilter, prodLineFilter, prodMachineFilter, prodIncludeInProgress, prodFinishedView]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'production' || !prodAutoRefresh) return undefined;
+    const timer = window.setInterval(() => void loadProdRecords({ silent: true }), 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, prodAutoRefresh, loadProdRecords]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'production') return undefined;
+    const timer = window.setInterval(() => setProdLiveTick((t) => t + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    if (prodNewCycleIds.size === 0) return undefined;
+    const timer = window.setTimeout(() => setProdNewCycleIds(new Set()), 45_000);
+    return () => window.clearTimeout(timer);
+  }, [prodNewCycleIds]);
+
+  const prodSecondsSinceRefresh = React.useMemo(() => {
+    if (!prodLastRefreshedAt) return null;
+    void prodLiveTick;
+    return Math.max(0, Math.floor((Date.now() - prodLastRefreshedAt.getTime()) / 1000));
+  }, [prodLastRefreshedAt, prodLiveTick]);
 
   // Detect conflicts: manual entries that overlap real cycles
   const detectConflicts = React.useCallback(async () => {
@@ -3325,6 +3396,73 @@ export const ManualProductionEntryForm: React.FC = () => {
         ) : null}
         {activeTab === 'production' && (
           <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-orange-200/80 bg-gradient-to-r from-orange-50/80 to-white px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                {prodInProgressCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                    </span>
+                    {prodInProgressCount} running
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-600">No in-progress cycles</span>
+                )}
+                {prodSecondsSinceRefresh !== null ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                    <RefreshCw className={`h-3.5 w-3.5 ${prodLoading ? 'animate-spin text-blue-600' : ''}`} aria-hidden />
+                    Updated {prodSecondsSinceRefresh}s ago
+                  </span>
+                ) : null}
+                {prodNewCycleIds.size > 0 ? (
+                  <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800 ring-1 ring-sky-200">
+                    {prodNewCycleIds.size} new
+                  </span>
+                ) : null}
+                {prodFlaggedCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setProdQuickFilter('suspicious')}
+                    className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-800 ring-1 ring-red-200 hover:bg-red-200"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                    {prodFlaggedCount} flagged
+                  </button>
+                ) : null}
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={prodAutoRefresh}
+                  onChange={(e) => setProdAutoRefresh(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-orange-600"
+                />
+                Auto-refresh every 30s
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase text-gray-500">
+                <Filter className="h-3.5 w-3.5" aria-hidden />
+                Quick view
+              </span>
+              {PROD_QUICK_FILTERS.map((chip) => (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => { setProdQuickFilter(chip.id); setProdPage(0); }}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    prodQuickFilter === chip.id
+                      ? 'bg-orange-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
             {showProdEditForm && editingProdId && (() => {
               const row = prodRecords.find(r => r.id === editingProdId);
               return (
@@ -3455,8 +3593,8 @@ export const ManualProductionEntryForm: React.FC = () => {
                 Show in-progress cycles
               </label>
               <button type="button" onClick={() => {
-                const headers = ['Date','Line','Machine','Employee','Start','Finish','Duration(mins)','Target(mins)','Output','Efficiency%'];
-                const visibleRows = prodSearch.trim()
+                const headers = ['Cycle#','Date','Line','Machine','Employee','Start','Finish','Duration(mins)','Target(mins)','Output','Efficiency%','Cycle loss','Flags'];
+                const exportRows = prodSearch.trim()
                   ? prodRecords.filter(r => {
                       const q = prodSearch.trim().toLowerCase();
                       const mName = getProdMachineName(r.machine_id);
@@ -3464,13 +3602,19 @@ export const ManualProductionEntryForm: React.FC = () => {
                              `${r.emp_id} ${r.employee_name || ''}`.toLowerCase().includes(q);
                     })
                   : prodRecords;
+                const exportCtx = buildProdCycleContextMap(exportRows);
                 const csvBody = [
                   headers.join(','),
-                  ...visibleRows.map((r: any) => {
+                  ...exportRows.map((r: any) => {
                     const mName = getProdMachineName(r.machine_id);
-                    const dur = calcDuration(r.start_time, r.finish_time);
-                    const eff = calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time);
+                    const ctx = exportCtx.get(Number(r.id)) ?? { prevFinishTime: null, cycleNumber: 1, operatorChanged: false };
+                    const metrics = analyzeProdCycle(r, ctx);
+                    const st = Number(r.button_status || 0);
+                    const dur = metrics.durationMins;
+                    const eff = calcEfficiency(Number(r.target_mins || 0), r.start_time, r.finish_time, st);
+                    const flags = metrics.anomalies.map(getAnomalyLabel).join('; ');
                     return [
+                      metrics.cycleNumber,
                       formatDisplayDate(r.prod_date),
                       r.work_centre_name || r.work_centre_id,
                       `${r.machine_id}${mName ? ` - ${mName}` : ''}`,
@@ -3481,6 +3625,8 @@ export const ManualProductionEntryForm: React.FC = () => {
                       Number(r.target_mins || 0).toFixed(1),
                       Number(r.output_pairs || 0),
                       eff !== null ? `${eff}%` : '',
+                      formatLossBreakdown(metrics, isProdCycleActive(st)),
+                      flags,
                     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
                   }),
                 ].join('\n');
@@ -3504,6 +3650,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                   setProdSearch('');
                   setProdIncludeInProgress(true);
                   setProdFinishedView('all');
+                  setProdQuickFilter('all');
                 }}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-semibold"
               >
@@ -3512,7 +3659,7 @@ export const ManualProductionEntryForm: React.FC = () => {
             </div>
 
             {(() => {
-              const visibleRows = prodSearch.trim()
+              const searchFiltered = prodSearch.trim()
                 ? prodRecords.filter(r => {
                     const q = prodSearch.trim().toLowerCase();
                     const mName = getProdMachineName(r.machine_id);
@@ -3520,6 +3667,19 @@ export const ManualProductionEntryForm: React.FC = () => {
                            `${r.emp_id} ${r.employee_name || ''}`.toLowerCase().includes(q);
                   })
                 : prodRecords;
+              const cycleContextMap = buildProdCycleContextMap(searchFiltered);
+              const metricsForRow = (row: any): ProdCycleMetrics => {
+                const ctx = cycleContextMap.get(Number(row.id)) ?? {
+                  prevFinishTime: null,
+                  cycleNumber: 1,
+                  operatorChanged: false,
+                };
+                return analyzeProdCycle(row, ctx, prodLiveNow);
+              };
+              const visibleRows = prodQuickFilter === 'all'
+                ? searchFiltered
+                : searchFiltered.filter((r) => matchesProdQuickFilter(prodQuickFilter, r, metricsForRow(r)));
+              const flaggedCount = searchFiltered.filter((r) => metricsForRow(r).isSuspicious).length;
               const totalOutput = visibleRows.reduce((s: number, r: any) => s + Number(r.output_pairs || 0), 0);
               const effValues = visibleRows
                 .map((r: any) => {
@@ -3550,7 +3710,11 @@ export const ManualProductionEntryForm: React.FC = () => {
                 {prodLoading ? (
                   <div className="border border-gray-200 rounded-lg p-6 text-center text-gray-500 text-sm">Loading...</div>
                 ) : visibleRows.length === 0 ? (
-                  <div className="border border-gray-200 rounded-lg p-6 text-center text-gray-500 text-sm">No production records found for selected filters.</div>
+                  <div className="border border-gray-200 rounded-lg p-6 text-center text-gray-500 text-sm">
+                    {searchFiltered.length > 0 && prodQuickFilter !== 'all'
+                      ? `No cycles match "${PROD_QUICK_FILTERS.find((c) => c.id === prodQuickFilter)?.label}". Try another quick view or reset filters.`
+                      : 'No production records found for selected filters.'}
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     {groupedByMachine.map(({ machine_id: mid, rows: machineRows }) => {
@@ -3612,6 +3776,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                             <table className="min-w-full text-sm">
                               <thead className="bg-gray-50">
                                 <tr>
+                                  <th className="text-left p-2 border-b border-gray-200">#</th>
                                   <th className="text-left p-2 border-b border-gray-200">Date</th>
                                   <th className="text-left p-2 border-b border-gray-200">Line</th>
                                   <th className="text-left p-2 border-b border-gray-200">Employee</th>
@@ -3622,6 +3787,8 @@ export const ManualProductionEntryForm: React.FC = () => {
                                   <th className="text-left p-2 border-b border-gray-200">Target</th>
                                   <th className="text-left p-2 border-b border-gray-200">Output</th>
                                   <th className="text-left p-2 border-b border-gray-200">Efficiency</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Cycle loss</th>
+                                  <th className="text-left p-2 border-b border-gray-200">Flags</th>
                                   <th className="text-left p-2 border-b border-gray-200">Actions</th>
                                 </tr>
                               </thead>
@@ -3629,21 +3796,36 @@ export const ManualProductionEntryForm: React.FC = () => {
                                 {machineRows.map((row: any) => {
                                   const rowStatus = Number(row.button_status || 0);
                                   const isActive = isProdCycleActive(rowStatus);
-                                  const dur = calcLiveDuration(row.start_time, row.finish_time, rowStatus);
-                                  const eff = isActive
-                                    ? null
-                                    : calcEfficiency(Number(row.target_mins || 0), row.start_time, row.finish_time, rowStatus);
-                                  const isAnomaly = !isActive && ((eff !== null && eff < 50) || (dur !== null && dur < 2));
+                                  const ctx = cycleContextMap.get(Number(row.id)) ?? {
+                                    prevFinishTime: null,
+                                    cycleNumber: 1,
+                                    operatorChanged: false,
+                                  };
+                                  const metrics = analyzeProdCycle(row, ctx, prodLiveNow);
+                                  const dur = metrics.durationMins;
+                                  const eff = isActive ? null : metrics.efficiencyPct;
+                                  const isNew = prodNewCycleIds.has(Number(row.id));
+                                  const rowTone = isNew
+                                    ? 'bg-sky-50 ring-1 ring-inset ring-sky-300'
+                                    : isActive
+                                      ? 'bg-amber-50/70'
+                                      : metrics.isSuspicious
+                                        ? 'bg-red-50/80'
+                                        : 'hover:bg-gray-50';
                                   return (
                                     <tr
                                       key={row.id}
-                                      className={`border-b border-gray-100 ${
-                                        isActive ? 'bg-amber-50/70' : isAnomaly ? 'bg-red-50' : 'hover:bg-gray-50'
-                                      }`}
+                                      className={`border-b border-gray-100 ${rowTone}`}
                                     >
+                                      <td className="p-2 tabular-nums text-xs font-bold text-gray-500">{metrics.cycleNumber}</td>
                                       <td className="p-2">{formatDisplayDate(row.prod_date)}</td>
                                       <td className="p-2">{row.work_centre_name || row.work_centre_id}</td>
-                                      <td className="p-2">{row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}</td>
+                                      <td className="p-2">
+                                        {row.emp_id}{row.employee_name ? ` - ${row.employee_name}` : ''}
+                                        {metrics.operatorChanged ? (
+                                          <span className="ml-1 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-bold text-violet-800">Op. change</span>
+                                        ) : null}
+                                      </td>
                                       <td className="p-2">{formatDisplayDateTime(row.start_time)}</td>
                                       <td className="p-2">
                                         {isActive ? (
@@ -3656,7 +3838,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                                         className={`p-2 tabular-nums ${
                                           isActive
                                             ? 'text-amber-800 font-bold'
-                                            : dur !== null && dur < 2
+                                            : metrics.anomalies.includes('duration_short')
                                               ? 'text-red-600 font-semibold'
                                               : 'text-gray-600'
                                         }`}
@@ -3667,6 +3849,49 @@ export const ManualProductionEntryForm: React.FC = () => {
                                       <td className="p-2">{Number(row.target_mins || 0).toFixed(1)}</td>
                                       <td className="p-2 font-medium">{Number(row.output_pairs || 0)}</td>
                                       <td className="p-2">{isActive ? <span className="text-xs text-amber-700 font-medium">Live</span> : effBadge(eff)}</td>
+                                      <td className="p-2 text-xs max-w-[11rem]">
+                                        {isActive ? (
+                                          <span className="text-amber-700 font-medium">Running</span>
+                                        ) : (
+                                          <div className="space-y-0.5">
+                                            <span
+                                              className={
+                                                metrics.netLostMins >= 1
+                                                  ? 'font-semibold text-rose-700'
+                                                  : metrics.isFirstCycle
+                                                    ? 'font-medium text-slate-600'
+                                                    : 'font-medium text-emerald-700'
+                                              }
+                                            >
+                                              {formatLossBreakdown(metrics, false)}
+                                            </span>
+                                            {(() => {
+                                              const shiftNote = formatFirstCycleShiftNote(metrics);
+                                              return shiftNote ? (
+                                                <span className="block text-[10px] text-slate-500" title="Idle time before the first cycle on this machine today">
+                                                  {shiftNote}
+                                                </span>
+                                              ) : null;
+                                            })()}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="p-2">
+                                        <div className="flex flex-wrap gap-1 max-w-[9rem]">
+                                          {isNew ? (
+                                            <span className="rounded bg-sky-200 px-1.5 py-0.5 text-[10px] font-bold text-sky-900">New</span>
+                                          ) : null}
+                                          {metrics.anomalies.slice(0, 3).map((code) => (
+                                            <span
+                                              key={code}
+                                              className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-800"
+                                              title={getAnomalyLabel(code)}
+                                            >
+                                              {getAnomalyLabel(code)}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </td>
                                       <td className="p-2">
                                         <div className="flex items-center gap-2">
                                           <button
@@ -3700,10 +3925,20 @@ export const ManualProductionEntryForm: React.FC = () => {
                 )}
                 {visibleRows.length > 0 && !prodLoading && (
                   <div className="flex flex-wrap items-center justify-between gap-2 mt-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-900">
-                    <span>Total ({visibleRows.length} cycles)</span>
+                    <span>
+                      Total ({visibleRows.length} cycle{visibleRows.length !== 1 ? 's' : ''})
+                      {prodQuickFilter !== 'all' ? (
+                        <span className="ml-2 text-xs font-normal text-orange-700">
+                          · filtered: {PROD_QUICK_FILTERS.find((c) => c.id === prodQuickFilter)?.label}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="flex flex-wrap items-center gap-4 font-normal text-gray-700">
                       <span>Output: <strong className="text-gray-900">{totalOutput}</strong></span>
                       <span className="flex items-center gap-1">Avg efficiency: {effBadge(avgEff)}</span>
+                      {flaggedCount > 0 ? (
+                        <span className="text-red-700 text-xs font-semibold">{flaggedCount} flagged in view</span>
+                      ) : null}
                     </span>
                   </div>
                 )}
