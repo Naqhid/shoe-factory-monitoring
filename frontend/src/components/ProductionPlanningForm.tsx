@@ -47,6 +47,13 @@ interface LineItem {
   smv_per_pair: string;
 }
 
+const formatPlanDateLabel = (value: string | null | undefined) => {
+  const part = String(value || '').split('T')[0];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return part || '—';
+  const [y, m, d] = part.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString();
+};
+
 const emptyLine = (): LineItem => ({
   style_id: '',
   customer_id: '',
@@ -158,6 +165,11 @@ export const ProductionPlanningForm: React.FC = () => {
     try {
       const res = await apiFetch(`${API_BASE}/api/production-routing/style/${styleId}`);
       const result = await res.json();
+      if (res.status === 403) {
+        toast.error('You do not have permission to load routing for this style.');
+        updateLine(idx, { style_id: styleId });
+        return;
+      }
       if (result.success && result.data) {
         const r = result.data;
         // Calculate man hours: sum of (std_time_secs_pr * manpower) across all lines, converted to minutes
@@ -360,7 +372,7 @@ export const ProductionPlanningForm: React.FC = () => {
       }
       setLoading(false);
       if (ok > 0) {
-        toast.success(`Saved ${ok} line(s)`);
+        toast.success(`Saved ${ok} plan(s)`);
         setShowModal(false);
         fetchPlans();
       }
@@ -516,7 +528,9 @@ export const ProductionPlanningForm: React.FC = () => {
   const pageStats = React.useMemo(() => {
     const activeOnPage = plans.filter((p) => !p.is_deleted).length;
     const deletedOnPage = plans.filter((p) => p.is_deleted).length;
-    const targetOnPage = plans.reduce((sum, p) => sum + Number(p.total_target_per_day || 0), 0);
+    const targetOnPage = plans
+      .filter((p) => !p.is_deleted)
+      .reduce((sum, p) => sum + Number(p.total_target_per_day || 0), 0);
     return { activeOnPage, deletedOnPage, targetOnPage };
   }, [plans]);
 
@@ -626,7 +640,7 @@ export const ProductionPlanningForm: React.FC = () => {
         <div className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm col-span-2 lg:col-span-1">
           <div className="flex items-center gap-2 text-blue-700">
             <Target className="h-4 w-4" aria-hidden />
-            <p className="text-[11px] font-bold uppercase tracking-wide">Target sum (page)</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide">Target sum (active)</p>
           </div>
           <p className="text-3xl font-black text-blue-900 mt-2 tabular-nums">{pageStats.targetOnPage.toLocaleString()}</p>
         </div>
@@ -727,7 +741,7 @@ export const ProductionPlanningForm: React.FC = () => {
             </button>
             {filterDate && (
               <span className="text-xs font-semibold text-gray-500 ml-auto">
-                Filtering: {new Date(filterDate).toLocaleDateString()}
+                Filtering: {formatPlanDateLabel(filterDate)}
               </span>
             )}
           </div>
@@ -758,7 +772,7 @@ export const ProductionPlanningForm: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {plans.map((p) => (
                 <tr key={p.id} className={`hover:bg-slate-50/80 ${p.is_deleted ? 'bg-rose-50/40' : ''}`}>
-                  <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">{new Date(p.plan_date).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">{formatPlanDateLabel(p.plan_date)}</td>
                   <td className="px-4 py-3 text-sm font-semibold text-gray-900">{p.style_name}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     <span className="inline-flex items-center gap-1.5">
@@ -815,7 +829,7 @@ export const ProductionPlanningForm: React.FC = () => {
                   <td colSpan={7} className="px-4 py-16 text-center">
                     <ClipboardList className="h-10 w-10 text-gray-300 mx-auto mb-2" aria-hidden />
                     <p className="text-sm font-semibold text-gray-700">No planning records found</p>
-                    <p className="text-xs text-gray-500 mt-1">Add a plan or adjust filters for {filterDate ? new Date(filterDate).toLocaleDateString() : 'today'}.</p>
+                    <p className="text-xs text-gray-500 mt-1">Add a plan or adjust filters for {filterDate ? formatPlanDateLabel(filterDate) : 'today'}.</p>
                   </td>
                 </tr>
               )}

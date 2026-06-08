@@ -270,6 +270,8 @@ const PORT = process.env.PORT || 3001;
 const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
 const MISSED_ACTIONS_READ_ROLES = new Set([...LOGS_ALLOWED_ROLES, 'Machine Centre User']);
 const PRODUCTION_ROUTING_ALLOWED_ROLES = new Set(['Admin', 'IED']);
+/** Read-only routing lookup (e.g. style auto-fill on Production Planning) — Planner has planning access but not routing UI */
+const PRODUCTION_ROUTING_READ_ROLES = new Set(['Admin', 'IED', 'Planner']);
 const PRODUCTION_PLANNING_ALLOWED_ROLES = new Set(['Admin', 'Planner']);
 const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head', 'Production Manager', 'Quality']);
 const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
@@ -296,6 +298,14 @@ const requireMissedActionsReadAccess = (req, res, next) => {
 const requireProductionRoutingAccess = (req, res, next) => {
   const role = req.user?.role;
   if (!role || !PRODUCTION_ROUTING_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied for production routing' });
+  }
+  next();
+};
+
+const requireProductionRoutingReadAccess = (req, res, next) => {
+  const role = req.user?.role;
+  if (!role || !PRODUCTION_ROUTING_READ_ROLES.has(role)) {
     return res.status(403).json({ success: false, message: 'Access denied for production routing' });
   }
   next();
@@ -635,7 +645,7 @@ app.delete('/api/masters/:table/:id', validate.allowedTable, authenticate, requi
 // Production routing routes
 app.get('/api/production-routing', authenticate, requireProductionRoutingAccess, validate.pagination, productionRoutingController.getAll.bind(productionRoutingController));
 app.get('/api/production-routing/masters', authenticate, requireProductionRoutingAccess, productionRoutingController.getMastersData.bind(productionRoutingController));
-app.get('/api/production-routing/style/:styleId', authenticate, requireProductionRoutingAccess, productionRoutingController.getByStyleId.bind(productionRoutingController));
+app.get('/api/production-routing/style/:styleId', authenticate, requireProductionRoutingReadAccess, productionRoutingController.getByStyleId.bind(productionRoutingController));
 app.get('/api/production-routing/:id', authenticate, requireProductionRoutingAccess, validate.numericId, productionRoutingController.getById.bind(productionRoutingController));
 app.post('/api/production-routing', authenticate, requireProductionRoutingAccess, productionRoutingController.create.bind(productionRoutingController));
 app.post('/api/production-routing/bulk', authenticate, requireProductionRoutingAccess, productionRoutingController.createBulk.bind(productionRoutingController));

@@ -14,7 +14,8 @@ import { M4_BADGE_CLASS, M4_REASON_ROW_CLASS, M4_REASON_TEXT_CLASS } from '../ut
 const formatPairsPerHour = (value: number | null) => {
     if (value == null || !Number.isFinite(value)) return '—';
     const rounded = Math.round(value * 10) / 10;
-    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    const num = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    return `${num}/hr`;
 };
 
 export const TVDashboard: React.FC = () => {
@@ -1018,31 +1019,29 @@ export const TVDashboard: React.FC = () => {
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         {detailCarouselIndex === 2 && lineRecoveryStats && lineRecoveryStats.gapToTarget > 0 && lineRecoveryStats.pairsPerHrNeeded != null ? (
-                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
-                                <span className="text-[8px] sm:text-[9px] font-bold text-blue-700 whitespace-nowrap truncate max-w-[140px] sm:max-w-none" title={currentLineName}>
-                                    {currentLineName}
+                            <div className="inline-flex flex-wrap items-center gap-2 sm:gap-2.5 rounded-lg bg-gradient-to-r from-amber-100 via-amber-50 to-orange-50 px-2.5 sm:px-3 py-1.5 ring-2 ring-amber-400/80 shadow-md min-w-0">
+                                <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wide text-amber-950 whitespace-nowrap">
+                                    Speed to hit today’s plan (pairs/hr)
                                 </span>
-                                <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-slate-500 whitespace-nowrap">
-                                    · To hit target — pairs / hr
-                                </span>
-                                <div className="inline-flex items-center gap-1.5">
-                                    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 ring-1 ring-slate-200">
-                                        <span className="text-[8px] sm:text-[9px] font-semibold uppercase text-slate-500">Now</span>
-                                        <span className="text-[10px] sm:text-xs font-black tabular-nums text-slate-800">
+                                <span className="hidden sm:block h-5 w-px bg-amber-300/80 shrink-0" aria-hidden />
+                                <div className="inline-flex items-center gap-2">
+                                    <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 px-2 py-1 ring-1 ring-slate-300 shadow-sm">
+                                        <span className="text-[8px] sm:text-[9px] font-bold uppercase text-slate-600">Current</span>
+                                        <span className="text-xs sm:text-sm font-black tabular-nums text-slate-900">
                                             {formatPairsPerHour(lineRecoveryStats.currentPairsPerHr)}
                                         </span>
                                     </span>
-                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 ring-1 ring-amber-200">
-                                        <span className="text-[8px] sm:text-[9px] font-semibold uppercase text-amber-800">Need</span>
-                                        <span className="text-[10px] sm:text-xs font-black tabular-nums text-amber-950">
+                                    <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-2 py-1 ring-2 ring-amber-600 shadow-sm">
+                                        <span className="text-[8px] sm:text-[9px] font-bold uppercase text-amber-50">Required</span>
+                                        <span className="text-xs sm:text-sm font-black tabular-nums text-white">
                                             {formatPairsPerHour(lineRecoveryStats.pairsPerHrNeeded)}
                                         </span>
                                     </span>
                                 </div>
                             </div>
                         ) : detailCarouselIndex === 2 && linePaceTarget > 0 ? (
-                            <span className="text-[8px] sm:text-[9px] font-semibold text-emerald-700 truncate" title={currentLineName}>
-                                {currentLineName} · On track for today’s target
+                            <span className="inline-flex items-center rounded-lg bg-emerald-100 px-2.5 py-1 text-[9px] sm:text-[10px] font-bold text-emerald-800 ring-2 ring-emerald-300 shadow-sm">
+                                On track for today’s target
                             </span>
                         ) : (
                             <span className="text-[8px] sm:text-[9px] text-transparent select-none" aria-hidden>
