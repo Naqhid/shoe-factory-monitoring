@@ -283,6 +283,10 @@ export const MissedActionsPage: React.FC = () => {
   const [dailyTopOffendersOnly, setDailyTopOffendersOnly] = React.useState(false);
   const [dailyBreachedOnly, setDailyBreachedOnly] = React.useState(false);
   const [dailyMyLineOnly, setDailyMyLineOnly] = React.useState(false);
+  const [dailyAutoRefresh, setDailyAutoRefresh] = React.useState(true);
+  const [dailyLastUpdated, setDailyLastUpdated] = React.useState<Date | null>(null);
+  const [isDailySilentRefreshing, setIsDailySilentRefreshing] = React.useState(false);
+  const [dailyLiveTick, setDailyLiveTick] = React.useState(0);
   const [showAllLineRows, setShowAllLineRows] = React.useState(false);
   const [preferredDailyLine, setPreferredDailyLine] = React.useState<string>(() => {
     try {
@@ -603,8 +607,9 @@ export const MissedActionsPage: React.FC = () => {
   }, []);
 
   const fetchDailyReport = React.useCallback(async (opts?: { skipLoading?: boolean }) => {
-    const skipLoading = opts?.skipLoading === true;
-    if (!skipLoading) setDailyLoading(true);
+    const silent = opts?.skipLoading === true;
+    if (!silent) setDailyLoading(true);
+    if (silent) setIsDailySilentRefreshing(true);
     setDailyError(null);
     try {
       const params = new URLSearchParams();
@@ -623,17 +628,45 @@ export const MissedActionsPage: React.FC = () => {
         .then((r) => r.json())
         .then((r) => { if (r.success) setWeeklyTrend(r.trend || []); })
         .catch(() => {});
+      setDailyLastUpdated(new Date());
     } catch (e: any) {
-      setDailyError(e.message || 'Failed to load daily report');
+      if (!silent) setDailyError(e.message || 'Failed to load daily report');
     } finally {
-      if (!skipLoading) setDailyLoading(false);
+      if (!silent) setDailyLoading(false);
+      if (silent) setIsDailySilentRefreshing(false);
     }
   }, [dailyLine, dailyReportDate, dailyDateTo]);
 
+  const isViewingTodayDaily = React.useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return dailyReportDate <= today && dailyDateTo >= today;
+  }, [dailyReportDate, dailyDateTo]);
+
+  const dailySecondsSinceRefresh = React.useMemo(() => {
+    if (!dailyLastUpdated) return null;
+    void dailyLiveTick;
+    return Math.max(0, Math.floor((Date.now() - dailyLastUpdated.getTime()) / 1000));
+  }, [dailyLastUpdated, dailyLiveTick]);
+
   React.useEffect(() => {
-    if (activeTab !== 'daily') return;
-    fetchDailyReport();
+    if (activeTab !== 'daily') return undefined;
+    void fetchDailyReport();
+    return undefined;
   }, [activeTab, fetchDailyReport]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'daily' || !isViewingTodayDaily || !dailyAutoRefresh) return undefined;
+    const id = window.setInterval(() => {
+      void fetchDailyReport({ skipLoading: true });
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, [activeTab, isViewingTodayDaily, dailyAutoRefresh, fetchDailyReport]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'daily') return undefined;
+    const id = window.setInterval(() => setDailyLiveTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [activeTab]);
 
   React.useEffect(() => {
     if (activeTab !== 'discipline') return;
@@ -1046,36 +1079,34 @@ export const MissedActionsPage: React.FC = () => {
     return rows;
   }, [dailyEvents, dailyMyLineOnly, preferredDailyLine, dailyBreachedOnly]);
 
-  const dailyVisibleSummary = React.useMemo(() => {
-    const totalCycles = dailyFilteredEvents.length;
-    const inactive = dailyFilteredEvents.reduce((sum, e) => sum + Number(e.inactive_mins || 0), 0);
-    const extra = dailyFilteredEvents.reduce((sum, e) => sum + Number(e.extra_mins || 0), 0);
-    const lost = dailyFilteredEvents.reduce((sum, e) => sum + eventLostMins(e), 0);
-    return {
-      total_cycles: totalCycles,
-      total_inactive_mins: inactive,
-      total_extra_mins: extra,
-      total_lost_mins: lost,
-    };
-  }, [dailyFilteredEvents]);
+  const dailyVisibleLineRows = React.useMemo(() => {
+    let rows = lineLossRows;
+    if (dailyMyLineOnly && preferredDailyLine) {
+      rows = rows.filter((r) => r.work_centre_name === preferredDailyLine);
+    }
+    return rows;
+  }, [lineLossRows, dailyMyLineOnly, preferredDailyLine]);
+
+  const dailyVisibleSummary = React.useMemo(() => ({
+    total_cycles: dailyVisibleLineRows.reduce((sum, r) => sum + Number(r.cycles || 0), 0),
+    total_inactive_mins: dailyVisibleLineRows.reduce((sum, r) => sum + r.inactive, 0),
+    total_extra_mins: dailyVisibleLineRows.reduce((sum, r) => sum + r.extra, 0),
+    total_lost_mins: dailyVisibleLineRows.reduce((sum, r) => sum + r.lost, 0),
+  }), [dailyVisibleLineRows]);
 
   const dailyVisibleLineLossRows = React.useMemo(() => {
-    const byLine = new Map<string, { work_centre_name: string; cycles: number; inactive: number; extra: number; lost: number; perCycle: number }>();
-    dailyFilteredEvents.forEach((e) => {
-      const line = e.work_centre_name || 'N/A';
-      if (!byLine.has(line)) byLine.set(line, { work_centre_name: line, cycles: 0, inactive: 0, extra: 0, lost: 0, perCycle: 0 });
-      const row = byLine.get(line)!;
-      row.cycles += 1;
-      row.inactive += Number(e.inactive_mins || 0);
-      row.extra += Number(e.extra_mins || 0);
-      row.lost += eventLostMins(e);
-      row.perCycle = row.cycles > 0 ? row.lost / row.cycles : 0;
-    });
-    let rows = Array.from(byLine.values()).sort((a, b) => b.lost - a.lost);
+    let rows = [...dailyVisibleLineRows].sort((a, b) => b.lost - a.lost);
     if (dailyTopOffendersOnly) rows = rows.slice(0, 5);
     if (!showAllLineRows) rows = rows.slice(0, 8);
-    return rows;
-  }, [dailyFilteredEvents, dailyTopOffendersOnly, showAllLineRows]);
+    return rows.map((row) => ({
+      work_centre_name: row.work_centre_name,
+      cycles: row.cycles,
+      inactive: row.inactive,
+      extra: row.extra,
+      lost: row.lost,
+      perCycle: row.perCycle,
+    }));
+  }, [dailyVisibleLineRows, dailyTopOffendersOnly, showAllLineRows]);
 
   const dailyVisibleLineMachineGroups = React.useMemo(() => {
     let groups = [...dailyLineMachineGroups];
@@ -1607,6 +1638,11 @@ export const MissedActionsPage: React.FC = () => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     });
+  };
+
+  const formatDashboardLoss = (value: number) => {
+    const parts = minutesToDurationParts(Math.abs(Number(value) || 0));
+    return `${parts.wholeMinutes}m ${parts.seconds}s`;
   };
 
   const criticalItemsCount = React.useMemo(
@@ -2446,6 +2482,31 @@ export const MissedActionsPage: React.FC = () => {
           </>
         ) : activeTab === 'daily' ? (
           <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              {dailySecondsSinceRefresh !== null ? (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">
+                  <RefreshCw className={`h-3.5 w-3.5 ${isDailySilentRefreshing ? 'animate-spin text-blue-600' : 'text-gray-400'}`} aria-hidden />
+                  Updated {dailySecondsSinceRefresh}s ago
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">Not updated yet</span>
+              )}
+              {isViewingTodayDaily ? (
+                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200 hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={dailyAutoRefresh}
+                    onChange={(e) => setDailyAutoRefresh(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+                  />
+                  Auto-refresh every 15s
+                </label>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-50 px-2.5 py-1.5 ring-1 ring-gray-200 text-gray-400">
+                  Auto-refresh when viewing today only
+                </span>
+              )}
+            </div>
             <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
               <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                 <div>
@@ -2543,14 +2604,16 @@ export const MissedActionsPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               <div className="bg-red-50 rounded-xl border-2 border-red-300 p-5 shadow-sm">
-                <p className="text-[11px] text-red-700 font-semibold uppercase tracking-wide">Total Lost Minutes</p>
-                <p className="text-4xl font-black text-red-800 mt-1">{formatMinutes(dailyVisibleSummary.total_lost_mins)}</p>
+                <p className="text-[11px] text-red-700 font-semibold uppercase tracking-wide">Total Time Loss</p>
+                <p className="text-3xl sm:text-4xl font-black text-red-800 mt-1 tabular-nums">
+                  {formatDashboardLoss(dailyVisibleSummary.total_lost_mins)} <span className="text-lg sm:text-xl">loss</span>
+                </p>
                 {previousDayTrend && (
                   <p className={`text-xs mt-1 font-semibold ${dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? '↓' : '↑'} vs previous day ({formatMinutes(previousDayTrend.lost_mins)}m)
+                    {dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? '↓' : '↑'} vs previous day ({formatDashboardLoss(previousDayTrend.lost_mins)})
                   </p>
                 )}
-                <p className="text-xs text-gray-500 mt-1">Inactive + extra minutes</p>
+                <p className="text-xs text-gray-500 mt-1">Same calculation as TV dashboard time loss</p>
               </div>
               <div className="bg-blue-50 rounded-xl border-2 border-blue-300 p-5 shadow-sm">
                 <p className="text-[11px] text-blue-700 font-semibold uppercase tracking-wide">Inactive Minutes</p>
@@ -2580,7 +2643,7 @@ export const MissedActionsPage: React.FC = () => {
                 </p>
                 <p className="text-xl font-bold text-amber-700 mt-1">{dailyVisibleLineLossRows[0]?.work_centre_name || '-'}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {dailyVisibleLineLossRows[0] ? `${formatMinutes(dailyVisibleLineLossRows[0].lost)} min loss` : 'No data'}
+                  {dailyVisibleLineLossRows[0] ? `${formatDashboardLoss(dailyVisibleLineLossRows[0].lost)} loss` : 'No data'}
                 </p>
               </div>
             </div>
@@ -2617,8 +2680,8 @@ export const MissedActionsPage: React.FC = () => {
                               <td className="px-3 py-2.5 text-sm text-gray-700">{row.cycles}</td>
                               <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatMinutes(row.inactive)}</td>
                               <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatMinutes(row.extra)}</td>
-                              <td className="px-3 py-2.5 text-sm text-red-700 font-bold">{formatMinutes(row.lost)}</td>
-                              <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.perCycle)}</td>
+                              <td className="px-3 py-2.5 text-sm text-red-700 font-bold tabular-nums">{formatDashboardLoss(row.lost)}</td>
+                              <td className="px-3 py-2.5 text-sm text-gray-700 tabular-nums">{formatDashboardLoss(row.perCycle)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3135,8 +3198,8 @@ export const MissedActionsPage: React.FC = () => {
                       <p className="text-4xl font-black text-amber-800 mt-1">{totalExtraAll}</p>
                     </div>
                     <div className="bg-white rounded-xl border-2 border-gray-300 p-4 shadow-sm">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Net Loss (mins)</p>
-                      <p className="text-4xl font-black text-gray-900 mt-1">{totalCombinedAll}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Net Loss</p>
+                      <p className="text-3xl sm:text-4xl font-black text-gray-900 mt-1 tabular-nums">{formatDashboardLoss(totalCombinedAll)}</p>
                     </div>
                   </div>
 
@@ -3148,7 +3211,7 @@ export const MissedActionsPage: React.FC = () => {
                           <div key={o.name} className="rounded-lg border border-gray-200 p-2">
                             <p className="text-sm font-semibold text-gray-800">{o.name}</p>
                             <p className="text-xs text-gray-500">Late: <span className="font-semibold text-blue-700">{o.late}m</span> | Over: <span className="font-semibold text-amber-700">{o.extra}m</span></p>
-                            <p className="text-xs font-bold text-red-700 mt-0.5">Total: {o.combined}m</p>
+                            <p className="text-xs font-bold text-red-700 mt-0.5 tabular-nums">Total: {formatDashboardLoss(o.combined)}</p>
                           </div>
                         ))}
                       </div>

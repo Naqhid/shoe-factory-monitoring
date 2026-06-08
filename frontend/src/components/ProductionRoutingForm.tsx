@@ -1,9 +1,26 @@
 import React from 'react';
-import { Plus, Trash2, Save, RefreshCw, Edit, X, RotateCcw, Download } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Save,
+  RefreshCw,
+  Edit,
+  X,
+  RotateCcw,
+  Download,
+  Route,
+  Search,
+  FileSpreadsheet,
+  Layers,
+  Package,
+  Loader2,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Pagination } from './Pagination';
+import { SearchableSelect, type SearchableSelectOption } from './SearchableSelect';
+import { computeShiftTargetPairs, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import * as XLSX from 'xlsx';
 
 interface MasterOption {
@@ -14,83 +31,6 @@ interface MasterOption {
   machine_name?: string;
 }
 
-// Searchable dropdown component
-const SearchableSelect: React.FC<{
-  value: string;
-  options: MasterOption[];
-  onChange: (value: string) => void;
-  placeholder?: string;
-  disabledValues?: string[];
-}> = ({ value, options, onChange, placeholder = 'Select', disabledValues = [] }) => {
-  const [search, setSearch] = React.useState('');
-  const getOptionValue = (o: MasterOption) => o.machine_id || String(o.id);
-
-  const getLabel = (o: MasterOption) =>
-    o.machine_id ? `${o.machine_id} - ${o.machine_name ?? o.name}` : (o.machine_name ?? o.name);
-
-  const filtered = options.filter(o =>
-    getLabel(o).toLowerCase().includes(search.toLowerCase()) ||
-    o.machine_id?.toLowerCase().includes(search.toLowerCase()) ||
-    (o.machine_name || '').toLowerCase().includes(search.toLowerCase())
-  );
-
-  const selected = options.find(o => getOptionValue(o) === value);
-
-  return (
-    <div className="flex flex-col min-w-[190px] rounded-lg border border-gray-200 shadow-sm overflow-hidden bg-white">
-      {/* Search input */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
-        <svg className="h-3 w-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-        </svg>
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search machine..."
-          className="flex-1 bg-transparent text-xs text-gray-700 placeholder-gray-400 focus:outline-none"
-        />
-        {search && (
-          <button type="button" onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600">
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-      </div>
-      {/* Dropdown */}
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="px-2 py-1 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400 cursor-pointer"
-        size={Math.min(5, Math.max(2, filtered.length + 1))}
-      >
-        <option value="" className="text-gray-400">{placeholder}</option>
-        {filtered.map(opt => (
-          <option
-            key={opt.id}
-            value={opt.machine_id || String(opt.id)}
-            className="py-1"
-            disabled={disabledValues.includes(getOptionValue(opt))}
-          >
-            {getLabel(opt)}
-          </option>
-        ))}
-      </select>
-      {/* Selected badge */}
-      {selected && (
-        <div className="px-2 py-1 bg-blue-50 border-t border-blue-100 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-          <span className="text-xs text-blue-700 font-medium truncate">{getLabel(selected)}</span>
-        </div>
-      )}
-      {filtered.length === 0 && (
-        <div className="px-2 py-2 text-xs text-gray-400 text-center">No results</div>
-      )}
-    </div>
-  );
-};
-
 interface RoutingLine {
   machine_centre_id: string;
   machine_name: string;
@@ -99,6 +39,28 @@ interface RoutingLine {
   rating_factor: string;
   manpower: string;
 }
+
+const buildMachineSelectOptions = (
+  machineCentres: MasterOption[],
+  lines: RoutingLine[],
+  rowIndex: number
+): SearchableSelectOption[] => {
+  const taken = new Set(
+    lines
+      .filter((_, i) => i !== rowIndex)
+      .map((l) => l.machine_centre_id)
+      .filter(Boolean)
+  );
+  return machineCentres.map((m) => {
+    const val = m.machine_id || String(m.id);
+    return {
+      value: val,
+      label: m.machine_name ?? m.name,
+      subLabel: m.machine_id || undefined,
+      disabled: taken.has(val),
+    };
+  });
+};
 
 interface HeaderData {
   customer_id: string;
@@ -232,9 +194,13 @@ export const ProductionRoutingForm: React.FC = () => {
     const stdTimeSecs = normalTimeSecs * 1.15;
     // Minutes for 6 pairs at observed sec/pair (e.g. 72s × 6 ÷ 60 = 7.2 min)
     const mins6Prs = Math.round(((observedTime * 6) / 60) * 10) / 10;
-    // Pairs/hr from cycle time (e.g. 3600 ÷ 72 = 50 pairs/hr)
-    const pairsPerHr = observedTime > 0 ? Math.round(3600 / observedTime) : 0;
-    const pairsPerDay = pairsPerHr * 8;
+    // Pairs/day: round total at end (same as TV dashboard EOD plan), not round hourly × 8
+    const { totalProductiveMins } = getProductiveShiftTotals(new Date());
+    const pairsPerDay = computeShiftTargetPairs(mins6Prs, 6, totalProductiveMins);
+    const pairsPerHr =
+      totalProductiveMins > 0 && pairsPerDay > 0
+        ? Math.round((pairsPerDay / totalProductiveMins) * 60)
+        : 0;
     const manpower = line.manpower ? (Math.round(parseFloat(line.manpower) * 10) / 10) : 0;
 
     return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_6_prs_box: mins6Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
@@ -558,6 +524,13 @@ export const ProductionRoutingForm: React.FC = () => {
     }
   };
 
+  const pageStats = React.useMemo(() => {
+    const activeOnPage = routings.filter((r) => !r.is_deleted).length;
+    const deletedOnPage = routings.filter((r) => r.is_deleted).length;
+    const machinesOnPage = routings.reduce((sum, r) => sum + Number(r.line_count || 0), 0);
+    return { activeOnPage, deletedOnPage, machinesOnPage };
+  }, [routings]);
+
   const downloadRoutingTemplate = () => {
     const rows = [
       {
@@ -583,7 +556,7 @@ export const ProductionRoutingForm: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="bg-gray-100 min-h-full px-3 py-4 sm:px-4 sm:py-6">
       <ConfirmDialog
         isOpen={deleteId !== null}
         title="Delete Routing"
@@ -600,34 +573,27 @@ export const ProductionRoutingForm: React.FC = () => {
         onCancel={() => setRestoreId(null)}
         confirmText="Restore"
       />
-      
-      <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">Production Routing</h1>
-          <div className="flex flex-col md:flex-row gap-2 md:items-center">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Search by style, customer, color, target..."
-              className="w-full md:w-72 px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={showDeleted}
-                onChange={(e) => {
-                  setShowDeleted(e.target.checked);
-                  setCurrentPage(1);
-                }}
-              />
-              Show deleted
-            </label>
-            <button onClick={fetchRoutings} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
+
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 p-4 sm:p-5 shadow-sm mb-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-2.5 py-1 ring-1 ring-indigo-200">
+              <Route className="h-3.5 w-3.5 text-indigo-700" aria-hidden />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800">Style routing</span>
+            </div>
+            <h1 className="mt-3 text-xl sm:text-2xl font-bold text-gray-900">Production Routing</h1>
+            <p className="text-sm text-gray-600 mt-1 max-w-2xl">
+              Define machine sequence, observed times, and SMV for each style — used by planning and production tracking.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold shadow-sm"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Add routing
             </button>
             <input
               ref={fileInputRef}
@@ -640,85 +606,174 @@ export const ProductionRoutingForm: React.FC = () => {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={importing}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"
-              title="Upload first sheet with columns: customer/group/leather/style/color,target_per_day,tot_smv,machine_id,process,observed_time,rating_factor,manpower"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+              title="Upload Excel with customer, style, machine, observed time, rating, manpower columns"
             >
-              {importing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              {importing ? 'Importing...' : 'Upload Excel'}
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden />}
+              {importing ? 'Importing…' : 'Import Excel'}
             </button>
             <button
               type="button"
               onClick={() => setShowTemplatePreview(true)}
-              className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 flex items-center gap-2"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 text-sm font-semibold"
             >
-              <Download className="h-4 w-4" />
-              View Template
-            </button>
-            <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
-              <Plus className="h-4 w-4" />Add New
+              <Download className="h-4 w-4" aria-hidden />
+              Template
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="bg-white rounded-lg shadow-md p-6 relative min-h-[400px]">
-        {refreshing && (
-          <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-indigo-700">
+            <Layers className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Total records</p>
+          </div>
+          <p className="text-3xl font-black text-indigo-900 mt-2 tabular-nums">{pagination.total}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <Package className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Active (page)</p>
+          </div>
+          <p className="text-3xl font-black text-emerald-900 mt-2 tabular-nums">{pageStats.activeOnPage}</p>
+        </div>
+        <div className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-violet-700">
+            <Route className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Machines (page)</p>
+          </div>
+          <p className="text-3xl font-black text-violet-900 mt-2 tabular-nums">{pageStats.machinesOnPage}</p>
+        </div>
+        <div className="rounded-xl border border-rose-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-rose-700">
+            <Trash2 className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Deleted (page)</p>
+          </div>
+          <p className="text-3xl font-black text-rose-900 mt-2 tabular-nums">{pageStats.deletedOnPage}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[400px]">
+        <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50 flex flex-col lg:flex-row lg:items-end gap-3">
+          <div className="flex-1 min-w-0">
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Search</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Style, customer, color, target…"
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+          </div>
+          <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 cursor-pointer select-none hover:bg-gray-50">
+            <input
+              type="checkbox"
+              checked={showDeleted}
+              onChange={(e) => {
+                setShowDeleted(e.target.checked);
+                setCurrentPage(1);
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600"
+            />
+            Show deleted
+          </label>
+          <button
+            type="button"
+            onClick={fetchRoutings}
+            disabled={refreshing}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+
+        {refreshing && routings.length === 0 && (
+          <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
             <div className="flex flex-col items-center gap-2">
-              <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
-              <span className="text-sm text-gray-600">Loading...</span>
+              <Loader2 className="h-8 w-8 text-blue-600 animate-spin" aria-hidden />
+              <span className="text-sm text-gray-600">Loading routings…</span>
             </div>
           </div>
         )}
+
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full">
+            <thead className="bg-slate-50 border-b border-gray-200 sticky top-0 z-[1]">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Color</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target/Day</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total SMV</th>
-                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Lines</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created On</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Record</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Customer</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Style</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Color</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Target/day</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">SMV</th>
+                <th className="px-4 py-2.5 text-center text-[11px] font-bold text-gray-500 uppercase tracking-wide">Machines</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Created</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100">
               {routings.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-2 text-sm">{r.customer_name}</td>
-                  <td className="px-4 py-2 text-sm">{r.style_name}</td>
-                  <td className="px-4 py-2 text-sm">{r.color_name}</td>
-                  <td className="px-4 py-2 text-sm">{r.target_per_day}</td>
-                  <td className="px-4 py-2 text-sm font-mono">{r.tot_smv}</td>
-                  <td className="px-4 py-2 text-center">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.line_count > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                      {r.line_count} {r.line_count === 1 ? 'machine' : 'machines'}
+                <tr key={r.id} className={`hover:bg-slate-50/80 ${r.is_deleted ? 'bg-rose-50/40' : ''}`}>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-800">{r.customer_name}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">{r.style_name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{r.color_name}</td>
+                  <td className="px-4 py-3 text-sm tabular-nums font-semibold text-blue-800">{Number(r.target_per_day || 0).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm font-mono tabular-nums text-gray-700">{r.tot_smv}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ring-1 ${
+                      r.line_count > 0
+                        ? 'bg-violet-50 text-violet-800 ring-violet-200'
+                        : 'bg-red-50 text-red-700 ring-red-200'
+                    }`}>
+                      <Route className="h-3 w-3" aria-hidden />
+                      {r.line_count}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-sm">{new Date(r.created_on).toLocaleDateString()}</td>
-                  <td className="px-4 py-2 text-sm">
+                  <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">{new Date(r.created_on).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-sm">
                     {r.is_deleted ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Deleted</span>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 ring-1 ring-rose-200">Deleted</span>
                     ) : (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200">Active</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-sm">
-                    <div className="flex gap-2">
+                  <td className="px-4 py-3 text-sm">
+                    <div className="flex gap-1.5">
                       {r.is_deleted ? (
-                        <button onClick={() => setRestoreId(r.id)} className="text-emerald-600 hover:text-emerald-900" title="Restore">
-                          <RotateCcw className="h-4 w-4" />
+                        <button
+                          type="button"
+                          onClick={() => setRestoreId(r.id)}
+                          className="inline-flex items-center justify-center rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
+                          title="Restore"
+                        >
+                          <RotateCcw className="h-4 w-4" aria-hidden />
                         </button>
                       ) : (
                         <>
-                          <button onClick={() => handleEdit(r.id)} className="text-blue-600 hover:text-blue-900" title="Edit">
-                            <Edit className="h-4 w-4" />
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(r.id)}
+                            className="inline-flex items-center justify-center rounded-lg p-2 text-blue-700 hover:bg-blue-50"
+                            title="Edit"
+                          >
+                            <Edit className="h-4 w-4" aria-hidden />
                           </button>
-                          <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-900" title="Delete">
-                            <Trash2 className="h-4 w-4" />
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(r.id)}
+                            className="inline-flex items-center justify-center rounded-lg p-2 text-red-700 hover:bg-red-50"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
                           </button>
                         </>
                       )}
@@ -726,111 +781,144 @@ export const ProductionRoutingForm: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {routings.length === 0 && (
+              {routings.length === 0 && !refreshing && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">No routing records found</td>
+                  <td colSpan={9} className="px-4 py-16 text-center">
+                    <Route className="h-10 w-10 text-gray-300 mx-auto mb-2" aria-hidden />
+                    <p className="text-sm font-semibold text-gray-700">No routing records found</p>
+                    <p className="text-xs text-gray-500 mt-1">Add a routing or import from Excel to get started.</p>
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        <Pagination
-          currentPage={currentPage}
-          totalPages={pagination.totalPages}
-          totalItems={pagination.total}
-          itemsPerPage={itemsPerPage}
-          onPageChange={setCurrentPage}
-          onItemsPerPageChange={(newLimit) => {
-            setItemsPerPage(newLimit);
-            setCurrentPage(1);
-          }}
-        />
+        <div className="border-t border-gray-200 px-3 py-2">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newLimit) => {
+              setItemsPerPage(newLimit);
+              setCurrentPage(1);
+            }}
+          />
+        </div>
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0">
-          <div className="bg-white rounded-lg w-full h-full max-h-screen overflow-y-auto" style={{ maxWidth: '100vw', maxHeight: '100vh' }}>
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold">{editingId ? 'Edit' : 'Add'} Production Routing</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="h-6 w-6" />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-2 sm:p-4"
+          onClick={() => setShowModal(false)}
+          role="presentation"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-[min(100vw,1400px)] max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="routing-modal-title"
+          >
+            <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white px-4 sm:px-6 py-4 flex justify-between items-center gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-600">{editingId ? 'Edit record' : 'New record'}</p>
+                <h2 id="routing-modal-title" className="text-lg sm:text-xl font-bold text-gray-900">
+                  {editingId ? 'Edit' : 'Add'} Production Routing
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Header Information</h3>
-                  <span className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-full">One routing covers all machines for this style</span>
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                  <h3 className="text-base font-bold text-gray-900">Header information</h3>
+                  <span className="text-xs text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full ring-1 ring-indigo-200">
+                    One routing covers all machines for this style
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Customer <span className="text-red-500">*</span></label>
-                    <select value={headerData.customer_id} onChange={(e) => setHeaderData({ ...headerData, customer_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Customer <span className="text-red-500">*</span></label>
+                    <select value={headerData.customer_id} onChange={(e) => setHeaderData({ ...headerData, customer_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required>
                       <option value="">Select Customer</option>
                       {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Group <span className="text-red-500">*</span></label>
-                    <select value={headerData.group_id} onChange={(e) => setHeaderData({ ...headerData, group_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Group <span className="text-red-500">*</span></label>
+                    <select value={headerData.group_id} onChange={(e) => setHeaderData({ ...headerData, group_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required>
                       <option value="">Select Group</option>
                       {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Leather <span className="text-red-500">*</span></label>
-                    <select value={headerData.leather_id} onChange={(e) => setHeaderData({ ...headerData, leather_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Leather <span className="text-red-500">*</span></label>
+                    <select value={headerData.leather_id} onChange={(e) => setHeaderData({ ...headerData, leather_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required>
                       <option value="">Select Leather</option>
                       {leathers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Style <span className="text-red-500">*</span></label>
-                    <select value={headerData.style_id} onChange={(e) => setHeaderData({ ...headerData, style_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Style <span className="text-red-500">*</span></label>
+                    <select value={headerData.style_id} onChange={(e) => setHeaderData({ ...headerData, style_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required>
                       <option value="">Select Style</option>
                       {styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Color <span className="text-red-500">*</span></label>
-                    <select value={headerData.color_id} onChange={(e) => setHeaderData({ ...headerData, color_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Color <span className="text-red-500">*</span></label>
+                    <select value={headerData.color_id} onChange={(e) => setHeaderData({ ...headerData, color_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required>
                       <option value="">Select Color</option>
                       {colors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Created On <span className="text-red-500">*</span></label>
-                    <input type="date" value={headerData.created_on} onChange={(e) => setHeaderData({ ...headerData, created_on: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Created on <span className="text-red-500">*</span></label>
+                    <input type="date" value={headerData.created_on} onChange={(e) => setHeaderData({ ...headerData, created_on: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Target per Day <span className="text-red-500">*</span></label>
-                    <input type="number" min="1" step="1" value={headerData.target_per_day} onChange={(e) => setHeaderData({ ...headerData, target_per_day: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target per day <span className="text-red-500">*</span></label>
+                    <input type="number" min="1" step="1" value={headerData.target_per_day} onChange={(e) => setHeaderData({ ...headerData, target_per_day: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Target per Hour</label>
-                    <input type="text" value={targetPerHour} readOnly className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50" />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Target per hour</label>
+                    <input type="text" value={targetPerHour} readOnly className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-slate-100 text-slate-700 tabular-nums" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Total SMV <span className="text-red-500">*</span></label>
-                    <input type="number" min="0.0001" step="0.0001" value={headerData.tot_smv} onChange={(e) => setHeaderData({ ...headerData, tot_smv: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2" required />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Total SMV <span className="text-red-500">*</span></label>
+                    <input type="number" min="0.0001" step="0.0001" value={headerData.tot_smv} onChange={(e) => setHeaderData({ ...headerData, tot_smv: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required />
                   </div>
                 </div>
               </div>
 
-              <div className="mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Machine Routing Lines</h3>
-                  <button type="button" onClick={addLine} className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 flex items-center gap-1 text-sm">
-                    <Plus className="h-4 w-4" />Add Machine
+              <div className="mb-6 rounded-xl border border-gray-200 overflow-hidden">
+                <div className="flex justify-between items-center gap-2 px-4 py-3 bg-slate-50 border-b border-gray-200">
+                  <h3 className="text-base font-bold text-gray-900">Machine routing lines</h3>
+                  <button
+                    type="button"
+                    onClick={addLine}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm font-semibold"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                    Add machine
                   </button>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-white border-b border-gray-200">
                       <tr>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Machine Centre</th>
+                        <th className="px-2 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Machine centre</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Normal Time</th>
@@ -842,21 +930,22 @@ export const ProductionRoutingForm: React.FC = () => {
                         <th className="px-2 py-2"></th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {lines.map((line, index) => {
                         const calc = calculateLineValues(line);
                         return (
-                          <tr key={index}>
-                            <td className="px-2 py-2">
+                          <tr key={index} className="hover:bg-slate-50/60">
+                            <td className="px-2 py-2 min-w-[240px]">
                               <SearchableSelect
                                 value={line.machine_centre_id}
-                                options={machineCentres}
+                                options={buildMachineSelectOptions(machineCentres, lines, index)}
                                 onChange={(val) => updateLine(index, 'machine_centre_id', val)}
-                                placeholder="Select Machine"
-                                disabledValues={lines
-                                  .filter((_, i) => i !== index)
-                                  .map((l) => l.machine_centre_id)
-                                  .filter(Boolean)}
+                                placeholder="Select machine"
+                                searchPlaceholder="Search by ID or name…"
+                                footerCountLabel="machines"
+                                compact
+                                required
+                                className="min-w-[220px]"
                               />
                             </td>
                             <td className="px-2 py-2">
@@ -865,17 +954,22 @@ export const ProductionRoutingForm: React.FC = () => {
                             <td className="px-2 py-2">
                               <input type="number" min="0.01" max="200" step="0.01" value={line.rating_factor} onChange={(e) => updateLine(index, 'rating_factor', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
                             </td>
-                            <td className="px-2 py-2 text-gray-700">{calc.normal_time_secs_pr}</td>
-                            <td className="px-2 py-2 text-gray-700">{calc.std_time_secs_pr}</td>
-                            <td className="px-2 py-2 text-gray-700">{calc.mins_6_prs_box.toFixed(1)}</td>
-                            <td className="px-2 py-2 text-gray-700">{calc.pairs_per_hr}</td>
-                            <td className="px-2 py-2 text-gray-700">{calc.pairs_per_day}</td>
+                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.normal_time_secs_pr}</td>
+                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.std_time_secs_pr}</td>
+                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.mins_6_prs_box.toFixed(1)}</td>
+                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.pairs_per_hr}</td>
+                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.pairs_per_day}</td>
                             <td className="px-2 py-2">
                               <input type="number" min="0.1" step="0.1" value={line.manpower} onChange={(e) => updateLine(index, 'manpower', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
                             </td>
                             <td className="px-2 py-2">
-                              <button type="button" onClick={() => removeLine(index)} className="text-red-600 hover:text-red-900">
-                                <Trash2 className="h-4 w-4" />
+                              <button
+                                type="button"
+                                onClick={() => removeLine(index)}
+                                className="inline-flex items-center justify-center rounded-lg p-2 text-red-600 hover:bg-red-50"
+                                title="Remove line"
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden />
                               </button>
                             </td>
                           </tr>
@@ -886,12 +980,21 @@ export const ProductionRoutingForm: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setShowModal(false)} className="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400">
+              <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-white/95 backdrop-blur border-t border-gray-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-5 py-2 text-sm font-semibold"
+                >
                   Cancel
                 </button>
-                <button type="submit" disabled={loading} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
-                  <Save className="h-4 w-4" />{loading ? 'Saving...' : 'Save'}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+                  {loading ? 'Saving…' : 'Save routing'}
                 </button>
               </div>
             </form>
@@ -900,12 +1003,29 @@ export const ProductionRoutingForm: React.FC = () => {
       )}
 
       {showTemplatePreview && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Production Routing Template Preview</h3>
-              <button onClick={() => setShowTemplatePreview(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="h-5 w-5" />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setShowTemplatePreview(false)}
+          role="presentation"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="px-4 py-3 border-b border-gray-200 bg-slate-50 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-emerald-700" aria-hidden />
+                <h3 className="text-lg font-bold text-gray-900">Excel import template</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTemplatePreview(false)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             <div className="p-4 overflow-auto">
@@ -926,21 +1046,21 @@ export const ProductionRoutingForm: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t flex justify-end gap-2">
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setShowTemplatePreview(false)}
-                className="px-4 py-2 rounded-md border border-gray-300 text-gray-700"
+                className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold"
               >
                 Close
               </button>
               <button
                 type="button"
                 onClick={downloadRoutingTemplate}
-                className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold inline-flex items-center gap-2"
               >
-                <Download className="h-4 w-4" />
-                Download Template
+                <Download className="h-4 w-4" aria-hidden />
+                Download template
               </button>
             </div>
           </div>

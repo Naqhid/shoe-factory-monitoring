@@ -1,6 +1,23 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Save, Upload, Plus, Trash2, RefreshCw, Edit, X, RotateCcw, Download } from 'lucide-react';
+import {
+  Save,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Edit,
+  X,
+  RotateCcw,
+  Download,
+  ClipboardList,
+  Search,
+  FileSpreadsheet,
+  Calendar,
+  Target,
+  Layers,
+  Loader2,
+  Factory,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
@@ -502,6 +519,13 @@ export const ProductionPlanningForm: React.FC = () => {
     }
   };
 
+  const pageStats = React.useMemo(() => {
+    const activeOnPage = plans.filter((p) => !p.is_deleted).length;
+    const deletedOnPage = plans.filter((p) => p.is_deleted).length;
+    const targetOnPage = plans.reduce((sum, p) => sum + Number(p.total_target_per_day || 0), 0);
+    return { activeOnPage, deletedOnPage, targetOnPage };
+  }, [plans]);
+
   const downloadPlanningTemplate = () => {
     const rows = [
       {
@@ -522,7 +546,7 @@ export const ProductionPlanningForm: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="bg-gray-100 min-h-full px-3 py-4 sm:px-4 sm:py-6">
       <ConfirmDialog
         isOpen={deleteId !== null}
         title="Delete Plan"
@@ -539,92 +563,154 @@ export const ProductionPlanningForm: React.FC = () => {
         onCancel={() => setRestoreId(null)}
         confirmText="Restore"
       />
-      
-      <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
-        <div className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">Production Planning</h1>
-            <div className="flex gap-2">
-              <button onClick={fetchPlans} disabled={refreshing} className="text-sm text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50">
-                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing...' : 'Refresh'}
-              </button>
+
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 p-4 sm:p-5 shadow-sm mb-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 ring-1 ring-emerald-200">
+              <ClipboardList className="h-3.5 w-3.5 text-emerald-700" aria-hidden />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Daily plans</span>
+            </div>
+            <h1 className="mt-3 text-xl sm:text-2xl font-bold text-gray-900">Production Planning</h1>
+            <p className="text-sm text-gray-600 mt-1 max-w-2xl">
+              Set daily line targets by style and work centre — feeds TV dashboard EOD targets and production tracking.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold shadow-sm"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Add plan
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleExcelImport}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+              title="Upload Excel: style, work_centre, plan_date, total_target_per_day, target_pairs_per_tray"
+            >
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden />}
+              {importing ? 'Importing…' : 'Import Excel'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowTemplatePreview(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 text-sm font-semibold"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Template
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-indigo-700">
+            <Layers className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Total records</p>
+          </div>
+          <p className="text-3xl font-black text-indigo-900 mt-2 tabular-nums">{pagination.total}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <Calendar className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Active (page)</p>
+          </div>
+          <p className="text-3xl font-black text-emerald-900 mt-2 tabular-nums">{pageStats.activeOnPage}</p>
+        </div>
+        <div className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm col-span-2 lg:col-span-1">
+          <div className="flex items-center gap-2 text-blue-700">
+            <Target className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Target sum (page)</p>
+          </div>
+          <p className="text-3xl font-black text-blue-900 mt-2 tabular-nums">{pageStats.targetOnPage.toLocaleString()}</p>
+        </div>
+        <div className="rounded-xl border border-rose-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-rose-700">
+            <Trash2 className="h-4 w-4" aria-hidden />
+            <p className="text-[11px] font-bold uppercase tracking-wide">Deleted (page)</p>
+          </div>
+          <p className="text-3xl font-black text-rose-900 mt-2 tabular-nums">{pageStats.deletedOnPage}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[400px]">
+        <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-end">
+            <div className="xl:col-span-2">
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Style, customer, work centre…"
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Plan date</label>
               <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleExcelImport}
-                className="hidden"
+                type="date"
+                value={filterDate}
+                onChange={(e) => {
+                  setFilterDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"
-                title="Upload Excel with columns like: style, work_centre, plan_date, total_target_per_day, target_pairs_per_tray"
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Work centre</label>
+              <select
+                value={filterWorkCentre}
+                onChange={(e) => {
+                  setFilterWorkCentre(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                {importing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {importing ? 'Importing...' : 'Upload Excel'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowTemplatePreview(true)}
-                className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 flex items-center gap-2"
+                <option value="">All lines</option>
+                {workCentres.map((wc) => (
+                  <option key={wc.id} value={String(wc.id)}>{wc.code} — {wc.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Style</label>
+              <select
+                value={filterStyle}
+                onChange={(e) => {
+                  setFilterStyle(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                <Download className="h-4 w-4" />
-                View Template
-              </button>
-              <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
-                <Plus className="h-4 w-4" />Add New
-              </button>
+                <option value="">All styles</option>
+                {styles.map((s) => (
+                  <option key={s.id} value={String(s.id)}>{s.name}</option>
+                ))}
+              </select>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Search style/customer/work centre..."
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => {
-                setFilterDate(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-            <select
-              value={filterWorkCentre}
-              onChange={(e) => {
-                setFilterWorkCentre(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-            >
-              <option value="">All Work Centres</option>
-              {workCentres.map((wc) => (
-                <option key={wc.id} value={String(wc.id)}>{wc.code} - {wc.name}</option>
-              ))}
-            </select>
-            <select
-              value={filterStyle}
-              onChange={(e) => {
-                setFilterStyle(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-            >
-              <option value="">All Styles</option>
-              {styles.map((s) => (
-                <option key={s.id} value={String(s.id)}>{s.name}</option>
-              ))}
-            </select>
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 cursor-pointer select-none hover:bg-gray-50">
               <input
                 type="checkbox"
                 checked={showDeleted}
@@ -632,63 +718,97 @@ export const ProductionPlanningForm: React.FC = () => {
                   setShowDeleted(e.target.checked);
                   setCurrentPage(1);
                 }}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600"
               />
               Show deleted
             </label>
+            <button
+              type="button"
+              onClick={fetchPlans}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+            {filterDate && (
+              <span className="text-xs font-semibold text-gray-500 ml-auto">
+                Filtering: {new Date(filterDate).toLocaleDateString()}
+              </span>
+            )}
           </div>
         </div>
-      </header>
 
-      <div className="bg-white rounded-lg shadow-md p-6 relative min-h-[400px]">
-        {refreshing && (
-          <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+        {refreshing && plans.length === 0 && (
+          <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
             <div className="flex flex-col items-center gap-2">
-              <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
-              <span className="text-sm text-gray-600">Loading...</span>
+              <Loader2 className="h-8 w-8 text-blue-600 animate-spin" aria-hidden />
+              <span className="text-sm text-gray-600">Loading plans…</span>
             </div>
           </div>
         )}
+
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full">
+            <thead className="bg-slate-50 border-b border-gray-200 sticky top-0 z-[1]">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Style</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Work Centre</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Target</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pairs/Tray</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Record</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Date</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Style</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Work centre</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Target/day</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Pairs/tray</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100">
               {plans.map((p) => (
-                <tr key={p.id}>
-                  <td className="px-4 py-2 text-sm">{new Date(p.plan_date).toLocaleDateString()}</td>
-                  <td className="px-4 py-2 text-sm">{p.style_name}</td>
-                  <td className="px-4 py-2 text-sm">{p.work_centre_name}</td>
-                  <td className="px-4 py-2 text-sm">{p.total_target_per_day}</td>
-                  <td className="px-4 py-2 text-sm">{p.target_pairs_per_tray}</td>
-                  <td className="px-4 py-2 text-sm">
+                <tr key={p.id} className={`hover:bg-slate-50/80 ${p.is_deleted ? 'bg-rose-50/40' : ''}`}>
+                  <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">{new Date(p.plan_date).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">{p.style_name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Factory className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden />
+                      {p.work_centre_name}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-bold text-blue-800 tabular-nums">{Number(p.total_target_per_day || 0).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm tabular-nums text-gray-700">{p.target_pairs_per_tray}</td>
+                  <td className="px-4 py-3 text-sm">
                     {p.is_deleted ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Deleted</span>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 ring-1 ring-rose-200">Deleted</span>
                     ) : (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200">Active</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-sm">
-                    <div className="flex gap-2">
+                  <td className="px-4 py-3 text-sm">
+                    <div className="flex gap-1.5">
                       {p.is_deleted ? (
-                        <button onClick={() => setRestoreId(p.id)} className="text-emerald-600 hover:text-emerald-900" title="Restore">
-                          <RotateCcw className="h-4 w-4" />
+                        <button
+                          type="button"
+                          onClick={() => setRestoreId(p.id)}
+                          className="inline-flex items-center justify-center rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
+                          title="Restore"
+                        >
+                          <RotateCcw className="h-4 w-4" aria-hidden />
                         </button>
                       ) : (
                         <>
-                          <button onClick={() => handleEdit(p.id)} className="text-blue-600 hover:text-blue-900">
-                            <Edit className="h-4 w-4" />
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(p.id)}
+                            className="inline-flex items-center justify-center rounded-lg p-2 text-blue-700 hover:bg-blue-50"
+                            title="Edit"
+                          >
+                            <Edit className="h-4 w-4" aria-hidden />
                           </button>
-                          <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-900">
-                            <Trash2 className="h-4 w-4" />
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(p.id)}
+                            className="inline-flex items-center justify-center rounded-lg p-2 text-red-700 hover:bg-red-50"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
                           </button>
                         </>
                       )}
@@ -696,78 +816,109 @@ export const ProductionPlanningForm: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {plans.length === 0 && (
+              {plans.length === 0 && !refreshing && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No planning records found</td>
+                  <td colSpan={7} className="px-4 py-16 text-center">
+                    <ClipboardList className="h-10 w-10 text-gray-300 mx-auto mb-2" aria-hidden />
+                    <p className="text-sm font-semibold text-gray-700">No planning records found</p>
+                    <p className="text-xs text-gray-500 mt-1">Add a plan or adjust filters for {filterDate ? new Date(filterDate).toLocaleDateString() : 'today'}.</p>
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        <Pagination
-          currentPage={currentPage}
-          totalPages={pagination.totalPages}
-          totalItems={pagination.total}
-          itemsPerPage={itemsPerPage}
-          onPageChange={setCurrentPage}
-          onItemsPerPageChange={(newLimit) => {
-            setItemsPerPage(newLimit);
-            setCurrentPage(1);
-          }}
-        />
+        <div className="border-t border-gray-200 px-3 py-2">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newLimit) => {
+              setItemsPerPage(newLimit);
+              setCurrentPage(1);
+            }}
+          />
+        </div>
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold">{editingId ? 'Edit' : 'Add'} Production Plan</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="h-6 w-6" />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-2 sm:p-4"
+          onClick={() => setShowModal(false)}
+          role="presentation"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-[min(100vw,1200px)] max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-modal-title"
+          >
+            <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white px-4 sm:px-6 py-4 flex justify-between items-center gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">{editingId ? 'Edit record' : 'New record'}</p>
+                <h2 id="plan-modal-title" className="text-lg sm:text-xl font-bold text-gray-900">
+                  {editingId ? 'Edit' : 'Add'} Production Plan
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Plan Date <span className="text-red-500">*</span></label>
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Plan date <span className="text-red-500">*</span></label>
                 <input
                   type="date"
                   value={planDate}
                   onChange={(e) => setPlanDate(e.target.value)}
-                  className="max-w-xs border border-gray-300 rounded-md px-3 py-2"
+                  className="max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                   required
                 />
               </div>
 
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Line Items</h3>
-                  <button type="button" onClick={addLine} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm font-medium">
-                    <Plus className="h-4 w-4" /> Add Line
+              <div className="mb-6 rounded-xl border border-gray-200 overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-gray-200">
+                  <h3 className="text-base font-bold text-gray-900">Line items</h3>
+                  <button
+                    type="button"
+                    onClick={addLine}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm font-semibold"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                    Add line
                   </button>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
+                  <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Customer</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Style</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Leather</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Color</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Group</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Work Centre</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Total Target</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Pairs/Tray</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Tray Count</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">Man Hrs (min)</th>
-                        <th className="text-left py-2 px-2 font-medium text-gray-700">SMV</th>
+                      <tr className="border-b border-gray-200 bg-white">
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Customer</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Style</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Leather</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Color</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Group</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Work centre</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Target</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Pairs/tray</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Trays</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Man hrs</th>
+                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">SMV</th>
                         <th className="w-10" />
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100">
                       {lines.map((line, idx) => (
-                        <tr key={idx} className="border-b border-gray-100">
+                        <tr key={idx} className="hover:bg-slate-50/60">
                           <td className="py-1 px-2">
                             <input readOnly value={line.customer_name} className="w-full min-w-[100px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
                           </td>
@@ -833,8 +984,14 @@ export const ProductionPlanningForm: React.FC = () => {
                             <input readOnly value={line.smv_per_pair} className="w-16 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
                           </td>
                           <td className="py-1 px-1">
-                            <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1} className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-40">
-                              <Trash2 className="h-4 w-4" />
+                            <button
+                              type="button"
+                              onClick={() => removeLine(idx)}
+                              disabled={lines.length <= 1}
+                              className="inline-flex items-center justify-center rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:opacity-40"
+                              title="Remove line"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden />
                             </button>
                           </td>
                         </tr>
@@ -843,15 +1000,26 @@ export const ProductionPlanningForm: React.FC = () => {
                   </table>
                 </div>
 
-                <p className="mt-4 text-sm text-gray-600">Customer, Group, Leather, and Color are filled from Production Routing when you select a Style.</p>
+                <p className="px-4 py-3 text-xs text-gray-500 border-t border-gray-100 bg-gray-50/80">
+                  Customer, group, leather, color, man-hours and SMV auto-fill from Production Routing when you pick a style.
+                </p>
               </div>
 
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setShowModal(false)} className="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400">
+              <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-white/95 backdrop-blur border-t border-gray-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-5 py-2 text-sm font-semibold"
+                >
                   Cancel
                 </button>
-                <button type="submit" disabled={loading} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
-                  <Save className="h-4 w-4" />{loading ? 'Saving...' : (editingId ? 'Update' : 'Save')}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+                  {loading ? 'Saving…' : (editingId ? 'Update plan' : 'Save plan')}
                 </button>
               </div>
             </form>
@@ -860,12 +1028,29 @@ export const ProductionPlanningForm: React.FC = () => {
       )}
 
       {showTemplatePreview && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Production Planning Template Preview</h3>
-              <button onClick={() => setShowTemplatePreview(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="h-5 w-5" />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setShowTemplatePreview(false)}
+          role="presentation"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="px-4 py-3 border-b border-gray-200 bg-slate-50 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-emerald-700" aria-hidden />
+                <h3 className="text-lg font-bold text-gray-900">Excel import template</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTemplatePreview(false)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             <div className="p-4 overflow-auto">
@@ -895,21 +1080,21 @@ export const ProductionPlanningForm: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t flex justify-end gap-2">
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setShowTemplatePreview(false)}
-                className="px-4 py-2 rounded-md border border-gray-300 text-gray-700"
+                className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold"
               >
                 Close
               </button>
               <button
                 type="button"
                 onClick={downloadPlanningTemplate}
-                className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold inline-flex items-center gap-2"
               >
-                <Download className="h-4 w-4" />
-                Download Template
+                <Download className="h-4 w-4" aria-hidden />
+                Download template
               </button>
             </div>
           </div>

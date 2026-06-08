@@ -42,9 +42,15 @@ const enumerateDateKeys = (fromKey, toKey) => {
   return keys.length ? keys : [fromKey];
 };
 
+/** Match TV dashboard: signed net per machine; only negative net counts as loss. */
 const machineLossMins = (netMins) => {
   const net = Number(netMins) || 0;
   return net < 0 ? Math.abs(net) : 0;
+};
+
+const sumDashboardMachineLossMins = (machineLosses) => {
+  const netMins = (machineLosses || []).reduce((sum, row) => sum + Number(row.net_mins || 0), 0);
+  return netMins < 0 ? Math.abs(netMins) : 0;
 };
 
 const localDateKeyFromTimestamp = (value) => {
@@ -720,14 +726,14 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         );
         const cycleCount = Number(cycleCountRaw) || 0;
 
-        const dashboardLost = machineLosses.reduce((sum, row) => sum + machineLossMins(row.net_mins), 0);
-        const openTailInactive = Math.max(0, Math.round(dashboardLost - Number(cycleLoss.lossOfMinutes || 0)));
+        const dashboardLost = sumDashboardMachineLossMins(machineLosses);
+        const openTailInactive = Math.max(0, dashboardLost - Number(cycleLoss.lossOfMinutes || 0));
 
         const lineAgg = ensureLineAgg(wc.name);
         lineAgg.cycles += cycleCount;
         lineAgg.inactive_mins += Number(cycleLoss.inactiveMins || 0) + openTailInactive;
         lineAgg.extra_mins += Number(cycleLoss.extraMins || 0);
-        lineAgg.lost_mins += Math.round(dashboardLost);
+        lineAgg.lost_mins += dashboardLost;
 
         const cycleLostByMachine = new Map();
         filtered
@@ -744,7 +750,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
           if (totalMachineLoss < 1) return;
           const mid = String(machineRow.machine_id || '');
           const cyclePart = cycleLostByMachine.get(mid) || 0;
-          const openPart = Math.max(0, Math.round(totalMachineLoss - cyclePart));
+          const openPart = Math.max(0, totalMachineLoss - cyclePart);
           if (openPart < 1) return;
 
           syntheticEvents.push({
