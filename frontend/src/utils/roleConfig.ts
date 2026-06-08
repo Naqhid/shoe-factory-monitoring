@@ -86,7 +86,7 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
     allowedMenus: ['overview', 'production_routing', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
   },
   'Planner': {
-    defaultRoute: '/overview',
+    defaultRoute: '/production_planning',
     allowedMenus: ['overview', 'production_planning', 'manual_production_entry', 'production_tracker','reports', 'missed_actions', 'logs', 'alert_center', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
   },
   'Unit Head': {
