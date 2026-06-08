@@ -2,10 +2,33 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { withTransaction, assertExists } = require('../utils/transaction');
 
+const PLAN_LIST_SELECT = `
+  pp.id,
+  DATE_FORMAT(pp.plan_date, '%Y-%m-%d') AS plan_date,
+  pp.style_id,
+  pp.customer_id,
+  pp.group_id,
+  pp.leather_id,
+  pp.color_id,
+  pp.work_centre_id,
+  pp.total_target_per_day,
+  pp.target_pairs_per_tray,
+  pp.tray_count,
+  pp.man_hours_minutes,
+  pp.smv_per_pair,
+  pp.created_at,
+  pp.updated_at,
+  pp.deleted_at
+`;
+
 class ProductionPlanningController {
   normalizePlanPayload(payload = {}) {
+    const planDateRaw = payload.plan_date;
+    const plan_date = planDateRaw
+      ? String(planDateRaw).trim().split('T')[0]
+      : planDateRaw;
     return {
-      plan_date: payload.plan_date,
+      plan_date,
       style_id: payload.style_id,
       customer_id: payload.customer_id,
       group_id: payload.group_id || null,
@@ -58,11 +81,33 @@ class ProductionPlanningController {
 
     const [dupCheck] = await conn.execute(
       existingId
-        ? 'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND id != ? AND deleted_at IS NULL LIMIT 1'
-        : 'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND deleted_at IS NULL LIMIT 1',
+        ? 'SELECT id FROM production_plan WHERE DATE(plan_date) = DATE(?) AND work_centre_id = ? AND id != ? AND deleted_at IS NULL LIMIT 1'
+        : 'SELECT id FROM production_plan WHERE DATE(plan_date) = DATE(?) AND work_centre_id = ? AND deleted_at IS NULL LIMIT 1',
       existingId ? [plan_date, work_centre_id, existingId] : [plan_date, work_centre_id]
     );
-    if (dupCheck.length > 0) {
+
+    const planFields = [
+      plan_date, style_id, customer_id, group_id, leather_id, color_id,
+      work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count,
+      man_hours_minutes, smv_per_pair,
+    ];
+
+    if (dupCheck.length > 0 && !existingId) {
+      const replaceId = dupCheck[0].id;
+      const [r] = await conn.execute(
+        `UPDATE production_plan 
+         SET plan_date = ?, style_id = ?, customer_id = ?, group_id = ?,
+             leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?,
+             target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
+         WHERE id = ? AND deleted_at IS NULL`,
+        [...planFields, replaceId]
+      );
+      if (r.affectedRows === 0) {
+        throw Object.assign(new Error('Plan not found'), { status: 404 });
+      }
+      return { id: replaceId, replaced: true };
+    }
+    if (dupCheck.length > 0 && existingId) {
       throw Object.assign(
         new Error('A production plan already exists for this date and work centre. Please edit the existing plan.'),
         { status: 409 }
@@ -76,23 +121,48 @@ class ProductionPlanningController {
              leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?,
              target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
          WHERE id = ? AND deleted_at IS NULL`,
-        [plan_date, style_id, customer_id, group_id, leather_id, color_id,
-          work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count,
-          man_hours_minutes, smv_per_pair, existingId]
+        [...planFields, existingId]
       );
       if (r.affectedRows === 0) throw Object.assign(new Error('Plan not found'), { status: 404 });
       return { id: existingId };
     }
 
-    const [r] = await conn.execute(
-      `INSERT INTO production_plan 
-       (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id,
-        total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [plan_date, style_id, customer_id, group_id, leather_id, color_id,
-        work_centre_id, total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair]
+    // Soft-deleted row still occupies unique (plan_date, work_centre_id) — revive instead of INSERT
+    const [deletedDup] = await conn.execute(
+      'SELECT id FROM production_plan WHERE DATE(plan_date) = DATE(?) AND work_centre_id = ? AND deleted_at IS NOT NULL LIMIT 1',
+      [plan_date, work_centre_id]
     );
-    return { id: r.insertId };
+    if (deletedDup.length > 0) {
+      const reviveId = deletedDup[0].id;
+      await conn.execute(
+        `UPDATE production_plan 
+         SET deleted_at = NULL, plan_date = ?, style_id = ?, customer_id = ?, group_id = ?,
+             leather_id = ?, color_id = ?, work_centre_id = ?, total_target_per_day = ?,
+             target_pairs_per_tray = ?, tray_count = ?, man_hours_minutes = ?, smv_per_pair = ?
+         WHERE id = ?`,
+        [...planFields, reviveId]
+      );
+      return { id: reviveId, revived: true };
+    }
+
+    try {
+      const [r] = await conn.execute(
+        `INSERT INTO production_plan 
+         (plan_date, style_id, customer_id, group_id, leather_id, color_id, work_centre_id,
+          total_target_per_day, target_pairs_per_tray, tray_count, man_hours_minutes, smv_per_pair) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        planFields
+      );
+      return { id: r.insertId };
+    } catch (insertErr) {
+      if (insertErr && insertErr.code === 'ER_DUP_ENTRY') {
+        throw Object.assign(
+          new Error('A production plan already exists for this date and work centre (including deleted). Enable "Show deleted" to restore it.'),
+          { status: 409 }
+        );
+      }
+      throw insertErr;
+    }
   }
 
   // Get all production plans
@@ -110,8 +180,8 @@ class ProductionPlanningController {
       const params = [];
 
       if (planDate) {
-        whereParts.push('pp.plan_date = ?');
-        params.push(planDate);
+        whereParts.push('DATE(pp.plan_date) = DATE(?)');
+        params.push(planDate.split('T')[0]);
       }
       if (workCentreId) {
         whereParts.push('pp.work_centre_id = ?');
@@ -133,7 +203,7 @@ class ProductionPlanningController {
 
       const [rows] = await db.query(`
         SELECT 
-          pp.*,
+          ${PLAN_LIST_SELECT},
           CASE WHEN pp.deleted_at IS NULL THEN 0 ELSE 1 END as is_deleted,
           s.name as style_name,
           c.name as customer_name,
@@ -187,7 +257,7 @@ class ProductionPlanningController {
 
       const [rows] = await db.execute(`
         SELECT 
-          pp.*,
+          ${PLAN_LIST_SELECT},
           s.name as style_name,
           c.name as customer_name,
           g.name as group_name,
@@ -315,7 +385,7 @@ class ProductionPlanningController {
         }
 
         const [dupCheck] = await conn.execute(
-          'SELECT id FROM production_plan WHERE plan_date = ? AND work_centre_id = ? AND id != ? AND deleted_at IS NULL LIMIT 1',
+          'SELECT id FROM production_plan WHERE DATE(plan_date) = DATE(?) AND work_centre_id = ? AND id != ? AND deleted_at IS NULL LIMIT 1',
           [plan.plan_date, plan.work_centre_id, id]
         );
         if (dupCheck.length > 0) {

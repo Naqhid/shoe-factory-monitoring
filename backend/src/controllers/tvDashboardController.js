@@ -63,6 +63,7 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                      WHERE prl.machine_centre_id = mc.machine_id
                        AND pp2.work_centre_id = ?
                        AND DATE(pp2.plan_date) = ?
+                       AND pp2.deleted_at IS NULL
                     ), 0
                 ) AS target_mins_per_box,
                 ms.emp_code,
@@ -113,7 +114,7 @@ exports.getDashboard = async (req, res) => {
 
         // ── 1. Target ─────────────────────────────────────────────────────────
         const [planningData] = await pool.query(
-            'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
+            'SELECT SUM(total_target_per_day) as total_target FROM production_plan WHERE DATE(plan_date) = DATE(?) AND work_centre_id = ? AND deleted_at IS NULL',
             [today, workCentreId]
         );
 
@@ -149,7 +150,7 @@ exports.getDashboard = async (req, res) => {
 
         // ── 5. Work centre summary (middle section) ───────────────────────────
         const [wcPlanningData] = await pool.query(
-            'SELECT SUM(total_target_per_day) as target FROM production_plan WHERE plan_date = ? AND work_centre_id = ?',
+            'SELECT SUM(total_target_per_day) as target FROM production_plan WHERE DATE(plan_date) = DATE(?) AND work_centre_id = ? AND deleted_at IS NULL',
             [today, workCentreId]
         );
         const [wcSummaryData] = await pool.query(
@@ -184,7 +185,7 @@ exports.getDashboard = async (req, res) => {
                 LIMIT 1
             )
             JOIN production_routing_lines prl ON prh.id = prl.routing_header_id
-            WHERE DATE(pp.plan_date) = DATE(?) AND pp.work_centre_id = ?
+            WHERE DATE(pp.plan_date) = DATE(?) AND pp.work_centre_id = ? AND pp.deleted_at IS NULL
         `, [today, workCentreId]);
 
         const [attendancePresent] = await pool.query(`
@@ -315,7 +316,7 @@ exports.getDashboard = async (req, res) => {
             LEFT JOIN (
                 SELECT work_centre_id, SUM(total_target_per_day) as target
                 FROM production_plan
-                WHERE DATE(plan_date) = DATE(?)
+                WHERE DATE(plan_date) = DATE(?) AND deleted_at IS NULL
                 GROUP BY work_centre_id
             ) pp ON wc.id = pp.work_centre_id
             LEFT JOIN (
