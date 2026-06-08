@@ -11,6 +11,12 @@ import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeForma
 import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import { M4_BADGE_CLASS, M4_REASON_ROW_CLASS, M4_REASON_TEXT_CLASS } from '../utils/m4ReasonUtils';
 
+const formatPairsPerHour = (value: number | null) => {
+    if (value == null || !Number.isFinite(value)) return '—';
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+};
+
 export const TVDashboard: React.FC = () => {
     const navigate = useNavigate();
     const PINNED_LINE_STORAGE_KEY = 'tv_dashboard_pinned_line_id';
@@ -558,6 +564,11 @@ export const TVDashboard: React.FC = () => {
     const isStale = secondsSinceUpdate !== null && secondsSinceUpdate > 30;
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
     const linePerformanceRows = Array.isArray(lowerSection?.linePerformance) ? lowerSection.linePerformance : [];
+    const currentLinePerformance = linePerformanceRows.find(
+        (line: any) => Number(line.work_centre_id) === Number(currentWorkCentreId)
+    );
+    const linePaceTarget = Number(currentLinePerformance?.target ?? 0);
+    const linePaceOutput = Number(currentLinePerformance?.output ?? 0);
     const machineTimeLossRows = Array.isArray(lowerSection?.machineTimeLosses) ? lowerSection.machineTimeLosses : [];
     const reworkEntries = Array.isArray(lowerSection?.reworkEntries) ? lowerSection.reworkEntries : [];
     const reworkTotals = lowerSection?.reworkTotals ?? { total_rework: 0, total_rejection: 0 };
@@ -651,6 +662,36 @@ export const TVDashboard: React.FC = () => {
     const productiveMinsLeft = Math.round(
         getProductiveShiftTotals(currentTime).remainingProductiveMins
     );
+
+    const currentLinePlanPace = (() => {
+        if (linePaceTarget <= 0) return null;
+        const { totalProductiveMins, elapsedProductiveMins } = getProductiveShiftTotals(currentTime);
+        const elapsedMins = Math.max(0, elapsedProductiveMins);
+        const expected =
+            elapsedMins > 0 && totalProductiveMins > 0
+                ? Math.round((linePaceTarget * elapsedMins) / totalProductiveMins)
+                : 0;
+        const projectedEod =
+            elapsedMins > 0 && totalProductiveMins > 0
+                ? Math.round((linePaceOutput / elapsedMins) * totalProductiveMins)
+                : 0;
+        return { expected, projectedEod };
+    })();
+
+    const lineRecoveryStats = (() => {
+        if (linePaceTarget <= 0) return null;
+        const { remainingProductiveMins, elapsedProductiveMins } = getProductiveShiftTotals(currentTime);
+        const gapToTarget = Math.max(0, linePaceTarget - linePaceOutput);
+        const pairsPerHrNeeded =
+            remainingProductiveMins > 0 && gapToTarget > 0
+                ? Math.round((gapToTarget / remainingProductiveMins) * 60 * 10) / 10
+                : null;
+        const currentPairsPerHr =
+            elapsedProductiveMins > 0
+                ? Math.round((linePaceOutput / elapsedProductiveMins) * 60 * 10) / 10
+                : null;
+        return { gapToTarget, pairsPerHrNeeded, currentPairsPerHr };
+    })();
 
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
@@ -959,10 +1000,10 @@ export const TVDashboard: React.FC = () => {
                                 machines={machinePaceSnapshots}
                                 linePlan={{
                                     lineName: currentLineName,
-                                    dailyTarget: Number(topSection.target || 0),
-                                    lineOutput: Number(topSection.output || 0),
-                                    expectedNow: planPaceSnapshot?.expected,
-                                    projectedEod: planPaceSnapshot?.projectedEod,
+                                    dailyTarget: linePaceTarget,
+                                    lineOutput: linePaceOutput,
+                                    expectedNow: currentLinePlanPace?.expected,
+                                    projectedEod: currentLinePlanPace?.projectedEod,
                                 }}
                             />
                         </div>
@@ -975,28 +1016,62 @@ export const TVDashboard: React.FC = () => {
                             style={{ width: `${detailCarouselProgress}%` }}
                         />
                     </div>
-                    <div className="mt-1 flex items-center justify-center gap-2.5">
-                        <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
-                            {DETAIL_CAROUSEL_LABELS.map((label, i) => (
-                                <button
-                                    key={label}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={detailCarouselIndex === i}
-                                    aria-label={label}
-                                    onClick={() => {
-                                        setDetailCarouselIndex(i);
-                                        setDetailCarouselProgress(0);
-                                    }}
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                        detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
-                                    }`}
-                                />
-                            ))}
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        {detailCarouselIndex === 2 && lineRecoveryStats && lineRecoveryStats.gapToTarget > 0 && lineRecoveryStats.pairsPerHrNeeded != null ? (
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+                                <span className="text-[8px] sm:text-[9px] font-bold text-blue-700 whitespace-nowrap truncate max-w-[140px] sm:max-w-none" title={currentLineName}>
+                                    {currentLineName}
+                                </span>
+                                <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wide text-slate-500 whitespace-nowrap">
+                                    · To hit target — pairs / hr
+                                </span>
+                                <div className="inline-flex items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 ring-1 ring-slate-200">
+                                        <span className="text-[8px] sm:text-[9px] font-semibold uppercase text-slate-500">Now</span>
+                                        <span className="text-[10px] sm:text-xs font-black tabular-nums text-slate-800">
+                                            {formatPairsPerHour(lineRecoveryStats.currentPairsPerHr)}
+                                        </span>
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 ring-1 ring-amber-200">
+                                        <span className="text-[8px] sm:text-[9px] font-semibold uppercase text-amber-800">Need</span>
+                                        <span className="text-[10px] sm:text-xs font-black tabular-nums text-amber-950">
+                                            {formatPairsPerHour(lineRecoveryStats.pairsPerHrNeeded)}
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        ) : detailCarouselIndex === 2 && linePaceTarget > 0 ? (
+                            <span className="text-[8px] sm:text-[9px] font-semibold text-emerald-700 truncate" title={currentLineName}>
+                                {currentLineName} · On track for today’s target
+                            </span>
+                        ) : (
+                            <span className="text-[8px] sm:text-[9px] text-transparent select-none" aria-hidden>
+                                —
+                            </span>
+                        )}
+                        <div className="flex items-center gap-2.5 ml-auto shrink-0">
+                            <div className="flex items-center gap-1.5" role="tablist" aria-label="Dashboard views">
+                                {DETAIL_CAROUSEL_LABELS.map((label, i) => (
+                                    <button
+                                        key={label}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={detailCarouselIndex === i}
+                                        aria-label={label}
+                                        onClick={() => {
+                                            setDetailCarouselIndex(i);
+                                            setDetailCarouselProgress(0);
+                                        }}
+                                        className={`h-2 rounded-full transition-all duration-300 ${
+                                            detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
+                                        }`}
+                                    />
+                                ))}
+                            </div>
+                            <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold tabular-nums whitespace-nowrap">
+                                Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
+                            </p>
                         </div>
-                        <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold tabular-nums">
-                            Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
-                        </p>
                     </div>
                 </div>
             </div>

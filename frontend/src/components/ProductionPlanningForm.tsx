@@ -142,12 +142,6 @@ export const ProductionPlanningForm: React.FC = () => {
     }
   };
 
-  const addLine = () => setLines((prev) => [...prev, emptyLine()]);
-  const removeLine = (idx: number) => {
-    if (lines.length <= 1) return;
-    setLines((prev) => prev.filter((_, i) => i !== idx));
-  };
-
   const updateLine = (idx: number, updates: Partial<LineItem>) => {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...updates } : l)));
   };
@@ -843,90 +837,101 @@ export const ProductionPlanningForm: React.FC = () => {
         </div>
       </div>
 
-      {showModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-2 sm:p-4"
-          onClick={() => setShowModal(false)}
-          role="presentation"
-        >
+      {showModal && (() => {
+        const line = lines[0] ?? emptyLine();
+        const cellInput = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400';
+        const cellReadOnly = 'w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-slate-50 text-slate-700';
+
+        return (
           <div
-            className="bg-white rounded-2xl w-full max-w-[min(100vw,1200px)] max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="plan-modal-title"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-2 sm:p-4"
+            onClick={() => setShowModal(false)}
+            role="presentation"
           >
-            <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white px-4 sm:px-6 py-4 flex justify-between items-center gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">{editingId ? 'Edit record' : 'New record'}</p>
-                <h2 id="plan-modal-title" className="text-lg sm:text-xl font-bold text-gray-900">
-                  {editingId ? 'Edit' : 'Add'} Production Plan
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" aria-hidden />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6">
-              <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Plan date <span className="text-red-500">*</span></label>
-                <input
-                  type="date"
-                  value={planDate}
-                  onChange={(e) => setPlanDate(e.target.value)}
-                  className="max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  required
-                />
-              </div>
-
-              <div className="mb-6 rounded-xl border border-gray-200 overflow-hidden">
-                <div className="flex items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-gray-200">
-                  <h3 className="text-base font-bold text-gray-900">Line items</h3>
-                  <button
-                    type="button"
-                    onClick={addLine}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm font-semibold"
-                  >
-                    <Plus className="h-4 w-4" aria-hidden />
-                    Add line
-                  </button>
+            <div
+              className="bg-white rounded-2xl w-full max-w-[min(100vw,1400px)] max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="plan-modal-title"
+            >
+              <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-emerald-50/80 via-slate-50 to-white px-4 sm:px-6 py-4 flex justify-between items-start gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+                    <ClipboardList className="h-5 w-5" aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+                      {editingId ? `Edit record · #${editingId}` : 'New record'}
+                    </p>
+                    <h2 id="plan-modal-title" className="text-lg sm:text-xl font-bold text-gray-900">
+                      {editingId ? 'Edit' : 'Add'} Production Plan
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      All fields on one row — scroll horizontally if needed.
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" aria-hidden />
+                </button>
+              </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-white">
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Customer</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Style</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Leather</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Color</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Group</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Work centre</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Target</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Pairs/tray</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Trays</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">Man hrs</th>
-                        <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide">SMV</th>
-                        <th className="w-10" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {lines.map((line, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/60">
-                          <td className="py-1 px-2">
-                            <input readOnly value={line.customer_name} className="w-full min-w-[100px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="flex items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-slate-600" aria-hidden />
+                      <h3 className="text-sm font-bold text-gray-900">Plan line</h3>
+                    </div>
+                    <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200">
+                      Routing fields auto-fill when you pick a style
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-white">
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Plan date</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Customer</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Style</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Leather</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Color</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Group</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Work centre</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Target</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Pairs/tray</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Trays</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Man hrs</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">SMV</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="hover:bg-slate-50/60">
+                          <td className="py-2 px-2 align-top min-w-[140px]">
+                            <input
+                              type="date"
+                              value={planDate}
+                              onChange={(e) => setPlanDate(e.target.value)}
+                              className={cellInput}
+                              required
+                            />
                           </td>
-                          <td className="py-1 px-2">
+                          <td className="py-2 px-2 align-top min-w-[110px]">
+                            <input readOnly value={line.customer_name} className={cellReadOnly} placeholder="From routing" />
+                          </td>
+                          <td className="py-2 px-2 align-top min-w-[130px]">
                             <select
                               value={line.style_id}
-                              onChange={(e) => handleStyleChange(idx, e.target.value)}
-                              className={`w-full min-w-[120px] border rounded px-2 py-1 ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                              onChange={(e) => handleStyleChange(0, e.target.value)}
+                              className={`${cellInput} ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50 focus:ring-red-300' : ''}`}
+                              required
                             >
                               <option value="">Style</option>
                               {styles.map((s) => (
@@ -934,98 +939,104 @@ export const ProductionPlanningForm: React.FC = () => {
                               ))}
                             </select>
                             {line.style_id && !line.smv_per_pair && (
-                              <p className="text-xs text-red-500 mt-0.5">No routing for today</p>
+                              <p className="text-[10px] text-red-600 mt-0.5 leading-tight">No routing</p>
                             )}
                           </td>
-                          <td className="py-1 px-2">
-                            <input readOnly value={line.leather_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          <td className="py-2 px-2 align-top min-w-[100px]">
+                            <input readOnly value={line.leather_name} className={cellReadOnly} placeholder="From routing" />
                           </td>
-                          <td className="py-1 px-2">
-                            <input readOnly value={line.color_name} className="w-full min-w-[80px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          <td className="py-2 px-2 align-top min-w-[90px]">
+                            <input readOnly value={line.color_name} className={cellReadOnly} placeholder="From routing" />
                           </td>
-                          <td className="py-1 px-2">
-                            <input readOnly value={line.group_name} className="w-full min-w-[90px] border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          <td className="py-2 px-2 align-top min-w-[100px]">
+                            <input readOnly value={line.group_name} className={cellReadOnly} placeholder="From routing" />
                           </td>
-                          <td className="py-1 px-2">
+                          <td className="py-2 px-2 align-top min-w-[150px]">
                             <select
                               value={line.work_centre_id}
-                              onChange={(e) => updateLine(idx, { work_centre_id: e.target.value })}
-                              className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1"
+                              onChange={(e) => updateLine(0, { work_centre_id: e.target.value })}
+                              className={cellInput}
+                              required
                             >
-                              <option value="">Work Centre</option>
+                              <option value="">Work centre</option>
                               {workCentres.map((c) => (
-                                <option key={c.id} value={c.id}>{c.code} - {c.name}</option>
+                                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
                               ))}
                             </select>
                           </td>
-                          <td className="py-1 px-2">
-                            <input type="number" value={line.total_target_per_day} onChange={(e) => {
-                              const val = e.target.value;
-                              const tray = line.target_pairs_per_tray;
-                              const trayCount = val && tray ? String(Math.ceil(parseInt(val) / parseInt(tray))) : line.tray_count;
-                              updateLine(idx, { total_target_per_day: val, tray_count: trayCount });
-                            }} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                          <td className="py-2 px-2 align-top min-w-[80px]">
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={line.total_target_per_day}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const tray = line.target_pairs_per_tray;
+                                const trayCount = val && tray ? String(Math.ceil(parseInt(val) / parseInt(tray))) : line.tray_count;
+                                updateLine(0, { total_target_per_day: val, tray_count: trayCount });
+                              }}
+                              className={`${cellInput} tabular-nums`}
+                              required
+                            />
                           </td>
-                          <td className="py-1 px-2">
-                            <input type="number" value={line.target_pairs_per_tray} onChange={(e) => {
-                              const val = e.target.value;
-                              const target = line.total_target_per_day;
-                              const trayCount = val && target ? String(Math.ceil(parseInt(target) / parseInt(val))) : line.tray_count;
-                              updateLine(idx, { target_pairs_per_tray: val, tray_count: trayCount });
-                            }} className="w-20 border border-gray-300 rounded px-2 py-1" />
+                          <td className="py-2 px-2 align-top min-w-[80px]">
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={line.target_pairs_per_tray}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const target = line.total_target_per_day;
+                                const trayCount = val && target ? String(Math.ceil(parseInt(target) / parseInt(val))) : line.tray_count;
+                                updateLine(0, { target_pairs_per_tray: val, tray_count: trayCount });
+                              }}
+                              className={`${cellInput} tabular-nums`}
+                              required
+                            />
                           </td>
-                          <td className="py-1 px-2">
-                            <input readOnly value={line.tray_count} className="w-20 border border-gray-200 rounded px-2 py-1 bg-gray-50" />
+                          <td className="py-2 px-2 align-top min-w-[72px]">
+                            <input readOnly value={line.tray_count} className={`${cellReadOnly} tabular-nums font-semibold`} />
                           </td>
-                          <td className="py-1 px-2">
-                            <input readOnly value={line.man_hours_minutes} className="w-24 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
+                          <td className="py-2 px-2 align-top min-w-[80px]">
+                            <input readOnly value={line.man_hours_minutes} className={`${cellReadOnly} tabular-nums`} placeholder="—" />
                           </td>
-                          <td className="py-1 px-2">
-                            <input readOnly value={line.smv_per_pair} className="w-16 border border-gray-200 rounded px-2 py-1 bg-gray-50" placeholder="From routing" />
-                          </td>
-                          <td className="py-1 px-1">
-                            <button
-                              type="button"
-                              onClick={() => removeLine(idx)}
-                              disabled={lines.length <= 1}
-                              className="inline-flex items-center justify-center rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:opacity-40"
-                              title="Remove line"
-                            >
-                              <Trash2 className="h-4 w-4" aria-hidden />
-                            </button>
+                          <td className="py-2 px-2 align-top min-w-[72px]">
+                            <input readOnly value={line.smv_per_pair} className={`${cellReadOnly} tabular-nums`} placeholder="—" />
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="px-4 py-2.5 text-xs text-gray-500 border-t border-gray-100 bg-gray-50/80">
+                    Customer, group, leather, color, man-hours and SMV auto-fill from Production Routing when you pick a style.
+                  </p>
                 </div>
 
-                <p className="px-4 py-3 text-xs text-gray-500 border-t border-gray-100 bg-gray-50/80">
-                  Customer, group, leather, color, man-hours and SMV auto-fill from Production Routing when you pick a style.
-                </p>
-              </div>
-
-              <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-white/95 backdrop-blur border-t border-gray-200 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-5 py-2 text-sm font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-                  {loading ? 'Saving…' : (editingId ? 'Update plan' : 'Save plan')}
-                </button>
-              </div>
-            </form>
+                <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-white/95 backdrop-blur border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-5 py-2.5 text-sm font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+                    {loading ? 'Saving…' : (editingId ? 'Update plan' : 'Save plan')}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {showTemplatePreview && (
         <div
