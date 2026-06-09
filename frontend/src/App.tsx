@@ -5,7 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { Header } from './components/Header';
 import { Layout } from './components/Layout';
 import { useMachineStatus, useEfficiencyReport, useOverallDailyData } from './hooks/useApi';
-import { isMenuAllowed, getDefaultRoute, getEffectiveRole } from './utils/roleConfig';
+import { isMenuAllowed, getDefaultRoute, getEffectiveRole, applySessionPermissions } from './utils/roleConfig';
 import { API_BASE_URL, apiFetch } from './services/api';
 import { MachineStatus } from './types';
 import { Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
@@ -82,6 +82,7 @@ function App() {
   const [selectedMachine, setSelectedMachine] = React.useState<MachineStatus | null>(null);
   const [lastRefresh, setLastRefresh] = React.useState<Date>(new Date());
   const lastAccessDeniedRef = React.useRef<string | null>(null);
+  const [permissionsTick, setPermissionsTick] = React.useState(0);
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
@@ -232,6 +233,27 @@ function App() {
   ]), []);
   const isUnknownRoute = pathParts.length > 0 && !knownMenus.has(pathParts[0]);
 
+  // Refresh permissions from DB (Roles master edits apply without full re-login)
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/api/auth/session`);
+        const json = await res.json();
+        if (!cancelled && res.ok && json.success && json.data) {
+          const existing = localStorage.getItem('user_info');
+          const prev = existing ? JSON.parse(existing) : {};
+          applySessionPermissions({ ...prev, ...json.data });
+          setPermissionsTick((t) => t + 1);
+        }
+      } catch {
+        // Keep cached session permissions when offline
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+
   // Role-based access control - must be before any early returns
   React.useEffect(() => {
     if (isAuthenticated) {
@@ -256,7 +278,7 @@ function App() {
         }
       }
     }
-  }, [isAuthenticated, activeMenu, navigate, location.pathname]);
+  }, [isAuthenticated, activeMenu, navigate, location.pathname, permissionsTick]);
 
   // Show login first when app opens; after login, show the main app
   if (!isAuthenticated) {

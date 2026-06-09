@@ -1,4 +1,4 @@
-// Role-based menu configuration
+// Role-based menu configuration — runtime data comes from DB via login (/api/auth/session).
 export type UserRole =
   | 'Admin'
   | 'Line Supervisor'
@@ -14,6 +14,9 @@ export interface UserSession {
   name?: string | null;
   code?: string | null;
   machine_id?: string | null;
+  effective_role?: string | null;
+  default_route?: string | null;
+  allowed_menus?: string[] | null;
 }
 
 export interface RoleConfig {
@@ -21,53 +24,7 @@ export interface RoleConfig {
   allowedMenus: string[];
 }
 
-const ROLE_ALIASES: Record<string, UserRole> = {
-  administrator: 'Admin',
-  admin: 'Admin',
-  'line supervisor': 'Line Supervisor',
-  'machine centre user': 'Machine Centre User',
-  ied: 'IED',
-  planner: 'Planner',
-  'unit head': 'Unit Head',
-  'production manager': 'Production Manager',
-  'production_manager': 'Production Manager',
-  quality: 'Quality',
-};
-
-const normalizeRole = (role: UserRole | string | null): UserRole | null => {
-  if (!role) return null;
-  const cleaned = String(role).trim();
-  const direct = roleConfigs[cleaned as UserRole] ? (cleaned as UserRole) : null;
-  if (direct) return direct;
-  return ROLE_ALIASES[cleaned.toLowerCase()] || null;
-};
-
-const matchesProductionManager = (value: string): boolean => {
-  const v = value.trim().toLowerCase();
-  return v === 'production manager' || v === 'production_manager' || v.includes('production manager');
-};
-
-const matchesQuality = (value: string): boolean => {
-  const v = value.trim().toLowerCase();
-  return v === 'quality';
-};
-
-/** Resolves role from session; maps legacy Unit Head logins for Production Manager / Quality. */
-export const getEffectiveRole = (user: UserSession | null | undefined): UserRole | null => {
-  if (!user) return null;
-  const normalized = normalizeRole(user.role ?? null);
-  if (normalized === 'Production Manager' || normalized === 'Quality') {
-    return normalized;
-  }
-  if (normalized !== 'Unit Head') {
-    return normalized;
-  }
-  const hints = [user.code, user.name].filter(Boolean).map((v) => String(v));
-  if (hints.some(matchesProductionManager)) return 'Production Manager';
-  if (hints.some(matchesQuality)) return 'Quality';
-  return normalized;
-};
-
+/** Fallback when DB role row is missing (offline / migration). Kept in sync with backend roleDefaults.js */
 export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Admin': {
     defaultRoute: '/overview',
@@ -103,16 +60,116 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   }
 };
 
+export const ALL_MENU_DEFINITIONS = [
+  { key: 'overview', label: 'TV Dashboard' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'missed_actions', label: 'Missed Actions' },
+  { key: 'logs', label: 'Login Logs' },
+  { key: 'alert_center', label: 'Alert Center' },
+  { key: 'production_routing', label: 'Production Routing' },
+  { key: 'production_planning', label: 'Production Planning' },
+  { key: 'line_setup_form', label: 'Line Setup Form' },
+  { key: 'manual_production_entry', label: 'Manual Production Entry' },
+  { key: 'production_tracker', label: 'Production Tracker' },
+  { key: 'rework_rejection_tracker', label: 'Rework / Rejection Tracker' },
+  { key: 'mobile', label: 'Line Monitor' },
+  { key: 'customers', label: 'Customer' },
+  { key: 'groups', label: 'Group' },
+  { key: 'leather', label: 'Leather' },
+  { key: 'styles', label: 'Style' },
+  { key: 'colors', label: 'Color' },
+  { key: 'work_centres', label: 'Work Centre' },
+  { key: 'machine_centres', label: 'Machine Centre' },
+  { key: 'employees', label: 'Employee' },
+  { key: 'users', label: 'Users' },
+  { key: 'forms_master', label: 'Forms Master' },
+  { key: 'user_rights', label: 'User Rights' },
+  { key: 'roles', label: 'Roles' },
+  { key: 'monitoring', label: 'Monitoring' },
+];
+
+const ROLE_ALIASES: Record<string, UserRole> = {
+  administrator: 'Admin',
+  admin: 'Admin',
+  'line supervisor': 'Line Supervisor',
+  'machine centre user': 'Machine Centre User',
+  ied: 'IED',
+  planner: 'Planner',
+  'unit head': 'Unit Head',
+  'production manager': 'Production Manager',
+  'production_manager': 'Production Manager',
+  quality: 'Quality',
+};
+
+const normalizeRole = (role: UserRole | string | null): UserRole | null => {
+  if (!role) return null;
+  const cleaned = String(role).trim();
+  const direct = roleConfigs[cleaned as UserRole] ? (cleaned as UserRole) : null;
+  if (direct) return direct;
+  return ROLE_ALIASES[cleaned.toLowerCase()] || null;
+};
+
+const matchesProductionManager = (value: string): boolean => {
+  const v = value.trim().toLowerCase();
+  return v === 'production manager' || v === 'production_manager' || v.includes('production manager');
+};
+
+const matchesQuality = (value: string): boolean => {
+  const v = value.trim().toLowerCase();
+  return v === 'quality';
+};
+
+/** Resolves role from session; maps legacy Unit Head logins for Production Manager / Quality. */
+export const getEffectiveRole = (user: UserSession | null | undefined): UserRole | null => {
+  if (!user) return null;
+  if (user.effective_role) {
+    const fromEffective = normalizeRole(user.effective_role);
+    if (fromEffective) return fromEffective;
+  }
+  const normalized = normalizeRole(user.role ?? null);
+  if (normalized === 'Production Manager' || normalized === 'Quality') {
+    return normalized;
+  }
+  if (normalized !== 'Unit Head') {
+    return normalized;
+  }
+  const hints = [user.code, user.name].filter(Boolean).map((v) => String(v));
+  if (hints.some(matchesProductionManager)) return 'Production Manager';
+  if (hints.some(matchesQuality)) return 'Quality';
+  return normalized;
+};
+
+function getSessionRoleConfig(user: UserSession | null | undefined): RoleConfig | null {
+  if (!user?.allowed_menus || !Array.isArray(user.allowed_menus) || user.allowed_menus.length === 0) {
+    return null;
+  }
+  return {
+    defaultRoute: user.default_route || '/overview',
+    allowedMenus: user.allowed_menus,
+  };
+}
+
+function getStaticRoleConfig(user: UserSession | null | undefined): RoleConfig | null {
+  const normalizedRole = getEffectiveRole(user);
+  if (!normalizedRole) return null;
+  return roleConfigs[normalizedRole] || null;
+}
+
+export function resolveRoleConfig(user: UserSession | null | undefined): RoleConfig | null {
+  return getSessionRoleConfig(user) || getStaticRoleConfig(user);
+}
+
 export const isMenuAllowed = (
   menuKey: string,
   roleOrUser: UserRole | string | UserSession | null
 ): boolean => {
-  const normalizedRole =
+  const user: UserSession | null =
     typeof roleOrUser === 'object' && roleOrUser !== null
-      ? getEffectiveRole(roleOrUser)
-      : normalizeRole(roleOrUser);
-  if (!normalizedRole) return false;
-  const config = roleConfigs[normalizedRole];
+      ? roleOrUser
+      : roleOrUser
+        ? { role: roleOrUser as string }
+        : null;
+  const config = resolveRoleConfig(user);
   return config?.allowedMenus.includes(menuKey) || false;
 };
 
@@ -131,10 +188,18 @@ export const getDefaultRoute = (
   const normalizedRole = getEffectiveRole(user);
   if (!normalizedRole) return '/overview';
 
-  // Special handling for Machine Centre Users - redirect to their assigned machine
   if (normalizedRole === 'Machine Centre User' && user?.machine_id) {
     return `/mobile/${encodeURIComponent(user.machine_id)}`;
   }
 
-  return roleConfigs[normalizedRole]?.defaultRoute || '/overview';
+  const config = resolveRoleConfig(user);
+  return config?.defaultRoute || '/overview';
 };
+
+/** Merge fresh permissions from /api/auth/session into stored user_info */
+export function applySessionPermissions(user: UserSession): UserSession {
+  if (typeof localStorage === 'undefined') return user;
+  const merged = { ...user };
+  localStorage.setItem('user_info', JSON.stringify(merged));
+  return merged;
+}

@@ -32,6 +32,9 @@ const idleReminderSettingsService = require('./services/idleReminderSettingsServ
 const tabBroadcastController = require('./controllers/tabBroadcastController');
 const wipDailyStateController = require('./controllers/wipDailyStateController');
 const checkDayLock = require('./middleware/checkDayLock');
+const requirePermission = require('./middleware/requirePermission');
+const { CAPABILITIES } = require('./config/permissions');
+const permissionService = require('./services/permissionService');
 const backupService = require('./services/backupService');
 const errorHandler = require('./middleware/errorHandler');
 const authenticate = require('./middleware/authenticate');
@@ -297,6 +300,10 @@ const initDb = async () => {
       }
     }
 
+    await permissionService.bootstrapCanonicalRoles();
+    await permissionService.bootstrapRoleDefaultsSnapshot();
+    logger.info('roles table ready (defaults snapshot initialized when missing)');
+
   } catch (e) {
     logger.error('Failed to init database:', e.message);
   }
@@ -304,123 +311,28 @@ const initDb = async () => {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head', 'Production Manager', 'Quality']);
-const MISSED_ACTIONS_READ_ROLES = new Set([...LOGS_ALLOWED_ROLES, 'Machine Centre User']);
-const PRODUCTION_ROUTING_ALLOWED_ROLES = new Set(['Admin', 'IED']);
-/** Read-only routing lookup (e.g. style auto-fill on Production Planning) — Planner has planning access but not routing UI */
-const PRODUCTION_ROUTING_READ_ROLES = new Set(['Admin', 'IED', 'Planner']);
-const PRODUCTION_PLANNING_ALLOWED_ROLES = new Set(['Admin', 'Planner']);
-const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head', 'Production Manager', 'Quality']);
-const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'Quality']);
-const ADMIN_ALLOWED_ROLES = new Set(['Admin']);
-const LINE_SETUP_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
-const MANUAL_ENTRY_ALLOWED_ROLES = new Set(['Admin']);
-
-const requireLogsAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !LOGS_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for logs' });
-  }
-  next();
-};
-
-const requireMissedActionsReadAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !MISSED_ACTIONS_READ_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for missed actions' });
-  }
-  next();
-};
-
-const requireProductionRoutingAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !PRODUCTION_ROUTING_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for production routing' });
-  }
-  next();
-};
-
-const requireProductionRoutingReadAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !PRODUCTION_ROUTING_READ_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for production routing' });
-  }
-  next();
-};
-
-const requireProductionPlanningAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !PRODUCTION_PLANNING_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for production planning' });
-  }
-  next();
-};
-
-const requireTrackerAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !TRACKER_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for production tracker' });
-  }
-  next();
-};
-
-const requireReworkAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !REWORK_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for rework rejection tracker' });
-  }
-  next();
-};
-
-const requireLineSetupAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !LINE_SETUP_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for line setup' });
-  }
-  next();
-};
-
-const requireManualEntryAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !MANUAL_ENTRY_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for manual production entry' });
-  }
-  next();
-};
-
+const requireLogsAccess = requirePermission(CAPABILITIES.LOGS_REPORTS);
+const requireMissedActionsReadAccess = requirePermission(
+  CAPABILITIES.MISSED_ACTIONS_READ,
+  CAPABILITIES.LOGS_REPORTS
+);
+const requireProductionRoutingAccess = requirePermission(CAPABILITIES.PRODUCTION_ROUTING);
+const requireProductionRoutingReadAccess = requirePermission(
+  CAPABILITIES.PRODUCTION_ROUTING_READ,
+  CAPABILITIES.PRODUCTION_ROUTING
+);
+const requireProductionPlanningAccess = requirePermission(CAPABILITIES.PRODUCTION_PLANNING);
+const requireTrackerAccess = requirePermission(CAPABILITIES.TRACKER);
+const requireReworkAccess = requirePermission(CAPABILITIES.REWORK);
+const requireLineSetupAccess = requirePermission(CAPABILITIES.LINE_SETUP);
+const requireManualEntryAccess = requirePermission(CAPABILITIES.MANUAL_ENTRY);
+const requireAdminAccess = requirePermission(CAPABILITIES.ADMIN);
 const requireUsersAdminAccess = (req, res, next) => {
   if (req.params.table !== 'users') return next();
-  const role = req.user?.role;
-  if (!role || !ADMIN_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for user administration' });
-  }
-  next();
+  return requirePermission(CAPABILITIES.ADMIN_USERS)(req, res, next);
 };
-
-const requireMonitoringAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !ADMIN_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Access denied for monitoring dashboard' });
-  }
-  next();
-};
-
-const requireAdminAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !ADMIN_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Admin access required' });
-  }
-  next();
-};
-
-const LOCK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
-const requireProductionLockAccess = (req, res, next) => {
-  const role = req.user?.role;
-  if (!role || !LOCK_ALLOWED_ROLES.has(role)) {
-    return res.status(403).json({ success: false, message: 'Only supervisors/admins can lock production days' });
-  }
-  next();
-};
+const requireMonitoringAccess = requirePermission(CAPABILITIES.ADMIN_MONITORING);
+const requireProductionLockAccess = requirePermission(CAPABILITIES.PRODUCTION_LOCK);
 
 const authenticateUsersTable = (req, res, next) => {
   if (req.params.table !== 'users') return next();
@@ -630,7 +542,8 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.post('/api/login', validate(validate.schemas.login), authController.login);
+app.post('/api/login', validate(validate.schemas.login), authController.login.bind(authController));
+app.get('/api/auth/session', authenticate, authController.session.bind(authController));
 app.post('/api/auth/refresh', authController.refresh.bind(authController));
 
 // Email test endpoint DISABLED - re-enable when email is configured
@@ -839,6 +752,9 @@ app.delete('/api/rework-rejection/:id', authenticate, requireReworkAccess, valid
 app.get('/api/rework-rejection/cycles', authenticate, requireReworkAccess, reworkRejectionController.getCyclesForDate.bind(reworkRejectionController));
 
 // Role routes
+app.get('/api/roles/menu-catalog', authenticate, requireAdminAccess, roleController.getMenuCatalog);
+app.post('/api/roles/save-defaults', authenticate, requireAdminAccess, roleController.saveDefaults);
+app.post('/api/roles/reset-defaults', authenticate, requireAdminAccess, roleController.resetDefaults);
 app.get('/api/roles', authenticate, requireAdminAccess, roleController.getAll);
 app.get('/api/roles/:id', authenticate, requireAdminAccess, roleController.getById);
 app.post('/api/roles', authenticate, requireAdminAccess, roleController.create);
