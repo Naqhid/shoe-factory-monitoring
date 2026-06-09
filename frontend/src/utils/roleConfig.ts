@@ -75,7 +75,7 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   },
   'Line Supervisor': {
     defaultRoute: '/line_setup_form',
-    allowedMenus: ['overview', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
+    allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
   },
   'Machine Centre User': {
     defaultRoute: '/mobile',
@@ -91,15 +91,15 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   },
   'Unit Head': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'manual_production_entry', 'production_tracker','reports', 'missed_actions', 'logs', 'alert_center']
+    allowedMenus: ['overview', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
   },
   'Production Manager': {
     defaultRoute: '/production_tracker',
-    allowedMenus: ['production_tracker']
+    allowedMenus: ['production_tracker', 'missed_actions', 'alert_center']
   },
   'Quality': {
     defaultRoute: '/production_tracker',
-    allowedMenus: ['production_tracker']
+    allowedMenus: ['production_tracker', 'rework_rejection_tracker', 'missed_actions', 'alert_center']
   }
 };
 

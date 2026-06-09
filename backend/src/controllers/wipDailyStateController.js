@@ -82,6 +82,85 @@ exports.getWipBreakdown = async (req, res, next) => {
   }
 };
 
+exports.getOnboardingStatus = async (req, res, next) => {
+  try {
+    const stateDate = toDateKey(req.query.date || req.query.state_date || new Date());
+    const lines = await wipStateService.getLinesNeedingWipOnboarding(stateDate);
+    return res.json({
+      success: true,
+      data: {
+        state_date: stateDate,
+        lines_needing_setup: lines,
+        count: lines.length,
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching WIP onboarding status:', error);
+    return next(error);
+  }
+};
+
+exports.onboardLine = async (req, res, next) => {
+  try {
+    const workCentreId = Number(req.body.work_centre_id);
+    const stateDate = toDateKey(req.body.state_date || req.body.date);
+    const openingWip = clampWip(req.body.opening_wip ?? 0);
+
+    if (!workCentreId || !stateDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'work_centre_id and state_date are required',
+      });
+    }
+
+    const [wcRows] = await pool.query(
+      `SELECT id, name, input_machine_id, eol_machine_id
+       FROM work_centres
+       WHERE id = ? AND deleted_at IS NULL AND COALESCE(is_active, 1) = 1`,
+      [workCentreId]
+    );
+    if (!wcRows.length) {
+      return res.status(404).json({ success: false, message: 'Work centre not found or inactive' });
+    }
+    const wc = wcRows[0];
+    if (!wc.input_machine_id || !wc.eol_machine_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Set Input and EOL machines on the work centre before starting WIP tracking.',
+        code: 'MACHINES_NOT_CONFIGURED',
+      });
+    }
+
+    const live = await wipStateService.seedOpeningWip(workCentreId, stateDate, openingWip);
+
+    const [rows] = await pool.query(
+      `SELECT w.*, wc.name AS work_centre_name
+       FROM wip_daily_state w
+       LEFT JOIN work_centres wc ON wc.id = w.work_centre_id
+       WHERE w.work_centre_id = ? AND w.state_date = ?`,
+      [workCentreId, stateDate]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: `WIP tracking started for ${wc.name} on ${stateDate}`,
+      data: {
+        record: rows.length ? mapRow(rows[0]) : null,
+        live,
+      },
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'WIP record already exists for this line and date' });
+    }
+    logger.error('Error onboarding WIP for line:', error);
+    return next(error);
+  }
+};
+
 exports.refreshLiveWip = async (req, res, next) => {
   try {
     const workCentreId = Number(req.body.work_centre_id || req.query.work_centre_id);

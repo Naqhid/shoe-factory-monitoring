@@ -304,17 +304,17 @@ const initDb = async () => {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head']);
+const LOGS_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head', 'Production Manager', 'Quality']);
 const MISSED_ACTIONS_READ_ROLES = new Set([...LOGS_ALLOWED_ROLES, 'Machine Centre User']);
 const PRODUCTION_ROUTING_ALLOWED_ROLES = new Set(['Admin', 'IED']);
 /** Read-only routing lookup (e.g. style auto-fill on Production Planning) — Planner has planning access but not routing UI */
 const PRODUCTION_ROUTING_READ_ROLES = new Set(['Admin', 'IED', 'Planner']);
 const PRODUCTION_PLANNING_ALLOWED_ROLES = new Set(['Admin', 'Planner']);
 const TRACKER_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'IED', 'Planner', 'Unit Head', 'Production Manager', 'Quality']);
-const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
+const REWORK_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'Quality']);
 const ADMIN_ALLOWED_ROLES = new Set(['Admin']);
 const LINE_SETUP_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor']);
-const MANUAL_ENTRY_ALLOWED_ROLES = new Set(['Admin', 'Line Supervisor', 'Planner', 'Unit Head']);
+const MANUAL_ENTRY_ALLOWED_ROLES = new Set(['Admin']);
 
 const requireLogsAccess = (req, res, next) => {
   const role = req.user?.role;
@@ -752,6 +752,8 @@ app.delete('/api/mobile-production/manual-entry/:id', authenticate, requireManua
 
 // WIP daily state CRUD (manual entry area)
 app.get('/api/wip-daily-state', authenticate, requireManualEntryAccess, wipDailyStateController.listWipDailyState);
+app.get('/api/wip-daily-state/onboarding', authenticate, requireManualEntryAccess, wipDailyStateController.getOnboardingStatus);
+app.post('/api/wip-daily-state/onboard', authenticate, requireManualEntryAccess, checkDayLock('state_date', 'work_centre_id'), wipDailyStateController.onboardLine);
 app.get('/api/wip-daily-state/breakdown', authenticate, requireManualEntryAccess, wipDailyStateController.getWipBreakdown);
 app.post('/api/wip-daily-state/refresh', authenticate, requireManualEntryAccess, wipDailyStateController.refreshLiveWip);
 app.get('/api/wip-daily-state/:id', authenticate, requireManualEntryAccess, wipDailyStateController.getWipDailyStateById);

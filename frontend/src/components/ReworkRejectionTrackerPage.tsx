@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Building, Cpu } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
+import { getEffectiveRole } from '../utils/roleConfig';
 import { StoppageEntryTab } from './StoppageEntryTab';
 import { ReworkRejectionEntryTab } from './ReworkRejectionEntryTab';
 
@@ -17,8 +18,10 @@ interface MachineCentre {
 
 export const ReworkRejectionTrackerPage: React.FC = () => {
   const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
-  const isSupervisor = userInfo?.role === 'Line Supervisor';
-  const canEditDelete = userInfo?.role === 'Admin';
+  const effectiveRole = getEffectiveRole(userInfo);
+  const isSupervisor = effectiveRole === 'Line Supervisor';
+  const canEditRework = effectiveRole === 'Admin' || effectiveRole === 'Line Supervisor' || effectiveRole === 'Quality';
+  const canDeleteRework = effectiveRole === 'Admin';
   const supervisorWorkCentreId = userInfo?.work_centre_id ? String(userInfo.work_centre_id) : '';
 
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -184,7 +187,8 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
           isSupervisor={isSupervisor}
           supervisorWorkCentreId={supervisorWorkCentreId}
           workCentreDisplayName={workCentreDisplayName}
-          canEditDelete={canEditDelete}
+          canEditRework={canEditRework}
+          canDeleteRework={canDeleteRework}
         />
       )}
 
