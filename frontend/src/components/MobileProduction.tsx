@@ -9,6 +9,13 @@ import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours }
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
 
+const formatPairsPerHour = (value: number | null | undefined) => {
+    if (value == null || !Number.isFinite(value)) return '—';
+    const rounded = Math.round(value * 10) / 10;
+    const num = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    return `${num}/hr`;
+};
+
 interface ProductionData {
     id?: number;
     prod_date: string;
@@ -472,6 +479,13 @@ export const MobileProduction: React.FC = () => {
         const gap = actual - expected;
         const projectedEod =
             elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalProductiveMins) : 0;
+        const gapToTarget = Math.max(0, daily - actual);
+        const currentPairsPerHr =
+            elapsedMins > 0 ? Math.round((actual / elapsedMins) * 60 * 10) / 10 : 0;
+        const pairsPerHrNeeded =
+            remainingProductiveMins > 0 && gapToTarget > 0
+                ? Math.round((gapToTarget / remainingProductiveMins) * 60 * 10) / 10
+                : 0;
         return {
             expected,
             daily,
@@ -479,6 +493,9 @@ export const MobileProduction: React.FC = () => {
             projectedEod,
             remainingMins: Math.round(remainingProductiveMins),
             totalProductiveMins: Math.round(totalProductiveMins),
+            gapToTarget,
+            currentPairsPerHr,
+            pairsPerHrNeeded,
         };
     }, [
         currentTime,
@@ -1922,20 +1939,58 @@ export const MobileProduction: React.FC = () => {
     // Deterministic cue selection while START/RESET controls are visible.
     const showStartPrimaryCue = normalizedButtonStatus !== 2;
     const showResetPrimaryCue = normalizedButtonStatus === 2;
-    const actionMarqueeMessage = (() => {
-        if (showFinishPressHint) {
-            return 'Target exceeded. Tap FINISH when cycle is complete.';
-        }
-        if (showStartPressHint) {
-            if (isLunchBreakActive) return 'Lunch time started.';
-            if (!isShiftHoursActive) return 'Shift ended for today.';
-            if (productionData?.button_status === 2) {
-                return `Production is idle for ${idleMinutes} min. Tap RESET, then tap START.`;
-            }
-            return `Production is idle for ${idleMinutes} min. Tap START to begin cycle.`;
-        }
-        return '';
-    })();
+    const showIdlePill =
+        idleMinutes > 0 && showStartPressHint && isShiftHoursActive && !isLunchBreakActive;
+
+    const pacePillClass =
+        'flex min-w-0 flex-1 flex-col items-center justify-center gap-px rounded-lg border px-1 py-1.5 shadow-sm ring-1 ring-inset sm:flex-row sm:gap-1.5 sm:px-2 sm:py-1.5';
+    const pacePillLabelClass =
+        'text-[8px] font-semibold uppercase tracking-wider leading-none opacity-80 sm:text-[9px]';
+    const pacePillValueClass =
+        'text-[11px] font-black tabular-nums leading-tight tracking-tight sm:text-sm';
+    const actionStripBelowButtons =
+        dailyPaceSnapshot || showIdlePill ? (
+            <div
+                className={`mt-3 rounded-xl border px-1 py-1.5 shadow-sm sm:px-1.5 sm:py-2 ${
+                    showIdlePill
+                        ? 'border-red-200/80 bg-gradient-to-r from-red-50/90 via-orange-50/40 to-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]'
+                        : 'border-slate-200/90 bg-gradient-to-r from-slate-50 via-white to-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]'
+                }`}
+            >
+                <div className="flex w-full flex-nowrap items-stretch justify-center gap-1 sm:gap-1.5">
+                    {dailyPaceSnapshot && (
+                        <>
+                            <span
+                                className={`${pacePillClass} border-slate-200/70 bg-gradient-to-b from-white to-slate-50 ring-slate-200/50`}
+                            >
+                                <span className={`${pacePillLabelClass} text-slate-500`}>Current</span>
+                                <span className={`${pacePillValueClass} text-slate-800`}>
+                                    {formatPairsPerHour(dailyPaceSnapshot.currentPairsPerHr)}
+                                </span>
+                            </span>
+                            <span
+                                className={`${pacePillClass} border-amber-500/25 bg-gradient-to-br from-amber-400 to-amber-600 ring-amber-300/25 shadow-md`}
+                            >
+                                <span className={`${pacePillLabelClass} text-amber-50/90`}>Required</span>
+                                <span className={`${pacePillValueClass} text-white drop-shadow-sm`}>
+                                    {formatPairsPerHour(dailyPaceSnapshot.pairsPerHrNeeded)}
+                                </span>
+                            </span>
+                        </>
+                    )}
+                    {showIdlePill && (
+                        <span
+                            className={`${pacePillClass} border-red-400/30 bg-gradient-to-br from-red-500 to-red-600 ring-red-300/30 shadow-md shadow-red-500/20`}
+                        >
+                            <span className={`${pacePillLabelClass} text-red-50/90`}>Idle</span>
+                            <span className={`${pacePillValueClass} text-white drop-shadow-sm`}>
+                                {idleMinutes} m
+                            </span>
+                        </span>
+                    )}
+                </div>
+            </div>
+        ) : null;
 
     // --- RENDER ---
 
@@ -2523,13 +2578,7 @@ export const MobileProduction: React.FC = () => {
                                 </>
                             ) : null}
                         </div>
-                        {actionMarqueeMessage && (
-                            <div className="mt-3 rounded-xl border-2 border-red-300 bg-red-50 px-2 py-1.5 shadow-sm">
-                                <marquee behavior="scroll" direction="left" scrollAmount={6} className="text-sm md:text-base font-bold text-red-700">
-                                    {actionMarqueeMessage}
-                                </marquee>
-                            </div>
-                        )}
+                        {actionStripBelowButtons}
                     </div>
                         </>
                 </div>
