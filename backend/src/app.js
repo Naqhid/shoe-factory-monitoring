@@ -206,6 +206,43 @@ const initDb = async () => {
       )
     `);
     logger.info('manual_entry_audit_logs table ready');
+    for (const [col, def] of [
+      ['input_machine_id', 'VARCHAR(64) NULL'],
+      ['eol_machine_id', 'VARCHAR(64) NULL'],
+    ]) {
+      try {
+        await db.execute(`ALTER TABLE work_centres ADD COLUMN ${col} ${def}`);
+        logger.info(`Added ${col} to work_centres`);
+      } catch (e) {
+        if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+      }
+    }
+    try {
+      await db.execute(`
+        UPDATE work_centres wc
+        SET input_machine_id = COALESCE(
+          wc.input_machine_id,
+          (SELECT mc.machine_id FROM machine_centres mc
+           WHERE mc.work_centre_id = wc.id AND mc.deleted_at IS NULL
+             AND (mc.machine_name LIKE '%(Input)%' OR mc.name LIKE '%(Input)%')
+           ORDER BY mc.machine_id LIMIT 1)
+        ),
+        eol_machine_id = COALESCE(
+          wc.eol_machine_id,
+          (SELECT mc.machine_id FROM machine_centres mc
+           WHERE mc.work_centre_id = wc.id AND mc.deleted_at IS NULL
+             AND (
+               mc.machine_name LIKE '%Final Output%' OR mc.name LIKE '%Final Output%'
+               OR mc.machine_name LIKE '%Final Inspection%' OR mc.name LIKE '%Final Inspection%'
+             )
+           ORDER BY mc.machine_id DESC LIMIT 1)
+        )
+        WHERE wc.input_machine_id IS NULL OR wc.eol_machine_id IS NULL
+      `);
+      logger.info('Backfilled work_centres input/eol machine ids where missing');
+    } catch (backfillErr) {
+      logger.warn('work_centres machine id backfill skipped:', backfillErr.message);
+    }
     // Add production_cycle_id to rework_rejection if missing
     try {
       await db.execute('ALTER TABLE rework_rejection ADD COLUMN production_cycle_id BIGINT NULL');

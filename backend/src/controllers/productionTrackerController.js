@@ -2,6 +2,7 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { aggregateMachineCycleLosses } = require('../utils/cycleLossMins');
 const wipStateService = require('../services/wipStateService');
+const { activeWorkCentreWhere } = require('../utils/workCentreSql');
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const AS_OF_LOCAL_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
@@ -279,6 +280,7 @@ class ProductionTrackerController {
         FROM work_centres wc
         LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?) AND pp.deleted_at IS NULL
         LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
+        WHERE ${activeWorkCentreWhere('wc')}
         GROUP BY wc.id, wc.name
         ORDER BY wc.id
       `, [date, date]);
@@ -327,16 +329,20 @@ class ProductionTrackerController {
           ${workCentreId && workCentreId !== 'all' ? 'AND work_centre_id = ?' : ''}
       `, workCentreId && workCentreId !== 'all' ? [date, workCentreId] : [date]);
 
-      // Get actual output using Machine 07 (Final Inspection) — same as dashboard getDashboard
-      const [outputRows] = await db.execute(`
-        SELECT COALESCE(SUM(total_output_pairs), 0) AS actual_pairs
-        FROM machine_centre_summary
-        WHERE DATE(prod_date) = DATE(?)
-          AND machine_id = '07'
-          ${workCentreId && workCentreId !== 'all' ? 'AND work_centre_id = ?' : ''}
-      `, workCentreId && workCentreId !== 'all' ? [date, workCentreId] : [date]);
-
-      const actual = Number(outputRows[0]?.actual_pairs || 0);
+      // EOL output per line (uses work_centres.eol_machine_id)
+      let actual = 0;
+      if (workCentreId && workCentreId !== 'all') {
+        actual = await wipStateService.getEolOutput(Number(workCentreId), date);
+      } else {
+        const [outputRows] = await db.execute(`
+          SELECT COALESCE(SUM(mcs.total_output_pairs), 0) AS actual_pairs
+          FROM machine_centre_summary mcs
+          INNER JOIN work_centres wc ON wc.id = mcs.work_centre_id
+          WHERE DATE(mcs.prod_date) = DATE(?)
+            AND mcs.machine_id = COALESCE(NULLIF(wc.eol_machine_id, ''), '07')
+        `, [date]);
+        actual = Number(outputRows[0]?.actual_pairs || 0);
+      }
       const target = Number(planRows[0]?.target_pairs || 0);
       const expectedByNow = Math.round(target * elapsedFraction);
       const gap = actual - expectedByNow;

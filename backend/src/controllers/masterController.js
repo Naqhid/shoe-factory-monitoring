@@ -2,6 +2,7 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
 const { hashPassword } = require('../utils/password');
+const { clearLineMachineCache } = require('../services/lineMachineResolver');
 
 class MasterController {
   getArchiveEnabledTables() {
@@ -26,6 +27,30 @@ class MasterController {
   async getTableColumns(conn, table) {
     const [cols] = await conn.query(`SHOW COLUMNS FROM ${table}`);
     return new Set(cols.map((c) => c.Field));
+  }
+
+  async validateLineMachineAssignment(conn, workCentreId, inputMachineId, eolMachineId) {
+    const inputId = inputMachineId ? String(inputMachineId).trim() : null;
+    const eolId = eolMachineId ? String(eolMachineId).trim() : null;
+    if (inputId && eolId && inputId === eolId) {
+      throw Object.assign(new Error('Input machine and EOL machine must be different'), { status: 400 });
+    }
+    for (const machineId of [inputId, eolId]) {
+      if (!machineId) continue;
+      const [rows] = await conn.execute(
+        `SELECT id FROM machine_centres
+         WHERE work_centre_id = ? AND machine_id = ?
+           AND deleted_at IS NULL AND COALESCE(is_active, 1) = 1
+         LIMIT 1`,
+        [workCentreId, machineId]
+      );
+      if (!rows.length) {
+        throw Object.assign(
+          new Error(`Machine ${machineId} is not registered on this work centre`),
+          { status: 400 }
+        );
+      }
+    }
   }
 
   getSoftArchiveClauses(columnSet) {
@@ -296,6 +321,37 @@ class MasterController {
            ${where}`,
           params
         );
+      } else if (table === 'work_centres') {
+        const params = [];
+        const whereParts = [];
+        if (search) {
+          whereParts.push('(wc.code LIKE ? OR wc.name LIKE ?)');
+          params.push(`%${search}%`, `%${search}%`);
+        }
+        if (!includeArchived) {
+          const colSet = await this.getTableColumns(db, table);
+          const activeFilter = this.getActiveFilter(colSet, 'wc');
+          if (activeFilter) whereParts.push(activeFilter);
+        }
+        const where = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+        [rows] = await db.query(
+          `SELECT wc.*,
+                  mc_in.name AS input_machine_label,
+                  mc_eol.name AS eol_machine_label
+           FROM work_centres wc
+           LEFT JOIN machine_centres mc_in
+             ON mc_in.work_centre_id = wc.id AND mc_in.machine_id = wc.input_machine_id
+           LEFT JOIN machine_centres mc_eol
+             ON mc_eol.work_centre_id = wc.id AND mc_eol.machine_id = wc.eol_machine_id
+           ${where}
+           ORDER BY wc.code
+           LIMIT ? OFFSET ?`,
+          [...params, limit, offset]
+        );
+        [countResult] = await db.query(
+          `SELECT COUNT(*) as total FROM work_centres wc ${where}`,
+          params
+        );
       } else {
         const params = [];
         const whereParts = [];
@@ -484,8 +540,23 @@ class MasterController {
           return { id: r.insertId };
         }
 
-        const { code, name, machine_id, machine_name, work_centre_id } = data;
+        const { code, name, machine_id, machine_name, work_centre_id, input_machine_id, eol_machine_id } = data;
         if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+
+        if (table === 'work_centres') {
+          const inputId = input_machine_id ? String(input_machine_id).trim() : null;
+          const eolId = eol_machine_id ? String(eol_machine_id).trim() : null;
+          const [r] = await conn.execute(
+            `INSERT INTO work_centres (code, name, input_machine_id, eol_machine_id)
+             VALUES (?, ?, ?, ?)`,
+            [code, name, inputId, eolId]
+          );
+          if (inputId || eolId) {
+            await this.validateLineMachineAssignment(conn, r.insertId, inputId, eolId);
+          }
+          clearLineMachineCache(Number(r.insertId));
+          return { id: r.insertId, code, name, input_machine_id: inputId, eol_machine_id: eolId };
+        }
 
         let r;
         if (table === 'machine_centres' && machine_id) {
@@ -569,8 +640,21 @@ class MasterController {
           return;
         }
 
-        const { code, name, machine_id, machine_name, work_centre_id } = data;
+        const { code, name, machine_id, machine_name, work_centre_id, input_machine_id, eol_machine_id } = data;
         if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+
+        if (table === 'work_centres') {
+          const inputId = input_machine_id ? String(input_machine_id).trim() : null;
+          const eolId = eol_machine_id ? String(eol_machine_id).trim() : null;
+          await this.validateLineMachineAssignment(conn, Number(id), inputId, eolId);
+          await conn.execute(
+            `UPDATE work_centres SET code = ?, name = ?, input_machine_id = ?, eol_machine_id = ? WHERE id = ?`,
+            [code, name, inputId, eolId, id]
+          );
+          clearLineMachineCache(Number(id));
+          return;
+        }
+
         if (table === 'machine_centres' && machine_id) {
           if (work_centre_id) {
             const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);

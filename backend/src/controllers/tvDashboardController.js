@@ -20,6 +20,7 @@ const pool = require('../../config/database');
 const wipStateService = require('../services/wipStateService');
 const { getRoutingMinsSqlExpr } = require('../utils/routingMinsColumn');
 const { aggregateMachineCycleLosses, aggregateWorkCentreCycleLoss } = require('../utils/cycleLossMins');
+const { ACTIVE_WORK_CENTRE_WHERE, activeWorkCentreWhere } = require('../utils/workCentreSql');
 
 // ── Work Centre ID for Line 3 (legacy constant; input machine resolved per line) ──
 const LINE_3_WORK_CENTRE_ID = 3;
@@ -32,7 +33,9 @@ const EOL_MACHINE_LINE_2A = '07';
 
 exports.getWorkCentres = async (req, res) => {
     try {
-        const [workCentres] = await pool.query('SELECT id, name FROM work_centres ORDER BY id');
+        const [workCentres] = await pool.query(
+            `SELECT id, name FROM work_centres WHERE ${ACTIVE_WORK_CENTRE_WHERE} ORDER BY id`
+        );
         res.json({ success: true, data: workCentres });
     } catch (error) {
         console.error('Error fetching work centres:', error);
@@ -121,13 +124,14 @@ exports.getDashboard = async (req, res) => {
         // ── 2. Output (end-of-line) ───────────────────────────────────────────
         // Line 3 (work_centre_id=5): EOL Final Inspection machine 07 (from production, then summary).
         const finalOutput = await wipStateService.getEolOutput(Number(workCentreId), today);
+        const eolMachineId = await wipStateService.resolveEolMachineId(Number(workCentreId));
 
         const [summaryData] = await pool.query(`
             SELECT COALESCE(avg_efficiency_percent, 0) as eol_efficiency_percent
             FROM machine_centre_summary
-            WHERE prod_date = ? AND work_centre_id = ? AND machine_id = '07'
+            WHERE prod_date = ? AND work_centre_id = ? AND machine_id = ?
             LIMIT 1
-        `, [today, workCentreId]);
+        `, [today, workCentreId, eolMachineId]);
 
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
@@ -320,13 +324,14 @@ exports.getDashboard = async (req, res) => {
                 GROUP BY work_centre_id
             ) pp ON wc.id = pp.work_centre_id
             LEFT JOIN (
-                -- Machine 07 output for Line 2A (Final Inspection)
-                SELECT work_centre_id,
-                       total_output_pairs as output,
-                       total_target_mins as target_mins,
-                       total_actual_mins as actual_mins
-                FROM machine_centre_summary
-                WHERE DATE(prod_date) = DATE(?) AND machine_id = '07'
+                SELECT mcs.work_centre_id,
+                       mcs.total_output_pairs as output,
+                       mcs.total_target_mins as target_mins,
+                       mcs.total_actual_mins as actual_mins
+                FROM machine_centre_summary mcs
+                INNER JOIN work_centres wc_eol ON wc_eol.id = mcs.work_centre_id
+                WHERE DATE(mcs.prod_date) = DATE(?)
+                  AND mcs.machine_id = COALESCE(NULLIF(wc_eol.eol_machine_id, ''), '07')
             ) mcs07 ON wc.id = mcs07.work_centre_id
             LEFT JOIN (
                 -- All machines output for other lines
@@ -338,6 +343,7 @@ exports.getDashboard = async (req, res) => {
                 WHERE DATE(prod_date) = DATE(?)
                 GROUP BY work_centre_id
             ) mcsall ON wc.id = mcsall.work_centre_id
+            WHERE ${activeWorkCentreWhere('wc')}
             ORDER BY wc.id
         `, [today, today, today]);
 
@@ -360,10 +366,12 @@ exports.getDashboard = async (req, res) => {
                     target: Math.round(line.target || 0),
                     input: lineInput,
                     output: Math.round(lineEolOutput),
-                    output_percentage: Math.round(line.output_percentage || 0),
+                    output_percentage: line.target > 0
+                        ? Math.round((lineEolOutput / line.target) * 100)
+                        : 0,
                     efficiency: Math.round(line.efficiency || 0),
-                    wip: lineWip.currentWip,                  // NEW: MES WIP formula
-                    opening_wip: lineWip.openingWip,          // For transparency/debugging
+                    wip: lineWip.currentWip,
+                    opening_wip: lineWip.openingWip,
                 };
             })
         );
