@@ -10,30 +10,25 @@ const {
 const wipStateService = require('../services/wipStateService');
 const { buildMachineTimeLossReportRows } = require('../utils/cycleLossMins');
 
-/** EOL Final Inspection = line output (Line 2A / wc 5). */
-const EOL_MACHINE_ID = '07';
-
-/** Per-line input: machine_centres whose name contains "(Input)" (e.g. 01 Quarter Zig Zag Stitching). */
+/** Per-line input from work_centres.input_machine_id (fallback 01). */
 const SQL_LINE_INPUT_JOIN = `
   LEFT JOIN (
     SELECT mcp.work_centre_id, DATE(mcp.prod_date) AS prod_date, SUM(mcp.output_pairs) AS total_input
     FROM machine_centre_production mcp
-    INNER JOIN machine_centres mc
-      ON mc.machine_id = mcp.machine_id
-     AND mc.work_centre_id = mcp.work_centre_id
-     AND mc.deleted_at IS NULL
-     AND COALESCE(mc.is_active, 1) = 1
-     AND (mc.machine_name LIKE '%(Input)%' OR mc.name LIKE '%(Input)%')
+    INNER JOIN work_centres wc_in ON wc_in.id = mcp.work_centre_id
     WHERE mcp.button_status = 2
+      AND mcp.machine_id = COALESCE(NULLIF(wc_in.input_machine_id, ''), '01')
     GROUP BY mcp.work_centre_id, DATE(mcp.prod_date)
   ) line_input ON line_input.work_centre_id = %WC% AND line_input.prod_date = %DATE%`;
 
 const SQL_LINE_EOL_JOIN = `
   LEFT JOIN (
-    SELECT work_centre_id, DATE(prod_date) AS prod_date, SUM(output_pairs) AS line_eol_output
-    FROM machine_centre_production
-    WHERE machine_id = '${EOL_MACHINE_ID}' AND button_status = 2
-    GROUP BY work_centre_id, DATE(prod_date)
+    SELECT mcp.work_centre_id, DATE(mcp.prod_date) AS prod_date, SUM(mcp.output_pairs) AS line_eol_output
+    FROM machine_centre_production mcp
+    INNER JOIN work_centres wc_eol ON wc_eol.id = mcp.work_centre_id
+    WHERE mcp.button_status = 2
+      AND mcp.machine_id = COALESCE(NULLIF(wc_eol.eol_machine_id, ''), '07')
+    GROUP BY mcp.work_centre_id, DATE(mcp.prod_date)
   ) line_eol ON line_eol.work_centre_id = %WC% AND line_eol.prod_date = %DATE%`;
 
 /** Per-machine daily totals from production (summary table is often stale/empty). */
@@ -218,7 +213,13 @@ class ApiController {
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
-      const resolvedMachineId = machineId || '07';
+      let resolvedMachineId = machineId ? String(machineId) : null;
+      if (!resolvedMachineId && workCentreId) {
+        resolvedMachineId = await wipStateService.resolveEolMachineId(Number(workCentreId));
+      }
+      if (!resolvedMachineId) {
+        resolvedMachineId = '07';
+      }
       let where = 'WHERE DATE(mcp.prod_date) BETWEEN ? AND ? AND mcp.button_status = 2';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcp.work_centre_id = ?'; params.push(workCentreId); }

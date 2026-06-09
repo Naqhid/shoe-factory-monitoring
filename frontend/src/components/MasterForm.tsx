@@ -17,6 +17,10 @@ interface MasterRecord {
   work_centre_name?: string;
   machine_centre_id?: number;
   machine_centre_name?: string;
+  input_machine_id?: string | null;
+  eol_machine_id?: string | null;
+  input_machine_label?: string | null;
+  eol_machine_label?: string | null;
 }
 
 interface MasterFormProps {
@@ -39,6 +43,8 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
     machine_name: '',
     work_centre_id: '',
     machine_centre_id: '',
+    input_machine_id: '',
+    eol_machine_id: '',
   });
   const [loading, setLoading] = React.useState(false);
   const [fetchLoading, setFetchLoading] = React.useState(false);
@@ -53,7 +59,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   const [deleteConfirmText, setDeleteConfirmText] = React.useState('Delete');
   const [deleteBlocked, setDeleteBlocked] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<Array<{ id: number; name: string }>>([]);
-  const [machineCentres, setMachineCentres] = React.useState<Array<{ id: number; name: string; work_centre_id?: number }>>([]);
+  const [machineCentres, setMachineCentres] = React.useState<Array<{ id: number; name: string; machine_id?: string; work_centre_id?: number }>>([]);
   const isArchiveTable = ARCHIVE_TABLES.includes(table);
   const needsUsageCheck = USAGE_CHECK_TABLES.includes(table);
   const archiveLabel = title || 'Record';
@@ -73,7 +79,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   }, [searchTerm]);
 
   React.useEffect(() => {
-    if (table !== 'machine_centres' && table !== 'employees') return;
+    if (table !== 'machine_centres' && table !== 'employees' && table !== 'work_centres') return;
     apiFetch(`${API_BASE}/api/tv-dashboard/work-centres`)
       .then((r) => r.json())
       .then((result) => {
@@ -87,6 +93,13 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
       })
       .catch(() => {});
   }, [table]);
+
+  const lineMachineOptions = React.useMemo(() => {
+    if (table !== 'work_centres' || !editingRecord?.id) return [];
+    return machineCentres.filter(
+      (mc) => Number(mc.work_centre_id) === Number(editingRecord.id)
+    );
+  }, [table, editingRecord?.id, machineCentres]);
 
   const fetchRecords = async () => {
     setFetchLoading(true);
@@ -117,7 +130,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   }, [currentPage, itemsPerPage, table, debouncedSearch, showArchived]);
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '', machine_centre_id: '' });
+    setFormData({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '', machine_centre_id: '', input_machine_id: '', eol_machine_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -130,6 +143,12 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
     }
     if (table === 'employees' && !formData.work_centre_id) {
       toast.error('Work centre is required for employee');
+      return;
+    }
+
+    if (table === 'work_centres' && formData.input_machine_id && formData.eol_machine_id
+      && formData.input_machine_id === formData.eol_machine_id) {
+      toast.error('Input machine and EOL machine must be different');
       return;
     }
 
@@ -148,6 +167,8 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
           ...formData,
           work_centre_id: formData.work_centre_id ? Number(formData.work_centre_id) : null,
           machine_centre_id: formData.machine_centre_id ? Number(formData.machine_centre_id) : null,
+          input_machine_id: formData.input_machine_id || null,
+          eol_machine_id: formData.eol_machine_id || null,
         }),
       });
 
@@ -176,6 +197,8 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
       machine_name: record.machine_name || '',
       work_centre_id: record.work_centre_id ? String(record.work_centre_id) : '',
       machine_centre_id: record.machine_centre_id ? String(record.machine_centre_id) : '',
+      input_machine_id: record.input_machine_id || '',
+      eol_machine_id: record.eol_machine_id || '',
     });
     setShowForm(true);
   };
@@ -484,6 +507,53 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                 </div>
               )}
 
+              {table === 'work_centres' && editingRecord && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Input machine
+                    </label>
+                    <select
+                      value={formData.input_machine_id}
+                      onChange={(e) => setFormData({ ...formData, input_machine_id: e.target.value })}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Auto-detect (name contains &quot;(Input)&quot;)</option>
+                      {lineMachineOptions.map((mc) => (
+                        <option key={mc.id} value={mc.machine_id || ''}>
+                          {mc.machine_id} — {mc.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Feeds WIP input and TV dashboard Input %.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      EOL machine (line output)
+                    </label>
+                    <select
+                      value={formData.eol_machine_id}
+                      onChange={(e) => setFormData({ ...formData, eol_machine_id: e.target.value })}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Auto-detect (Final Output / Inspection)</option>
+                      {lineMachineOptions.map((mc) => (
+                        <option key={`eol-${mc.id}`} value={mc.machine_id || ''}>
+                          {mc.machine_id} — {mc.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Used for Output %, hourly chart, and pacing.</p>
+                  </div>
+                </>
+              )}
+
+              {table === 'work_centres' && !editingRecord && (
+                <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                  Save the line first, add its machines, then edit to set Input and EOL machines.
+                </p>
+              )}
+
               <div className="flex gap-2 pt-2">
                 <button
                   type="submit"
@@ -509,7 +579,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
       {table === 'work_centres' && (
         <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
           <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" /></svg>
-          Click a row to view its machines on the mobile production screen.
+          Edit a line to set Input and EOL machines. Click a row to open mobile production for that line.
         </div>
       )}
 
@@ -538,6 +608,16 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
                   </th>
+                )}
+                {table === 'work_centres' && (
+                  <>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Input machine
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      EOL machine
+                    </th>
+                  </>
                 )}
                 {table === 'machine_centres' && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -588,6 +668,20 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {record.name}
                     </td>
+                  )}
+                  {table === 'work_centres' && (
+                    <>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {record.input_machine_id
+                          ? `${record.input_machine_id}${record.input_machine_label ? ` — ${record.input_machine_label}` : ''}`
+                          : 'Auto'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {record.eol_machine_id
+                          ? `${record.eol_machine_id}${record.eol_machine_label ? ` — ${record.eol_machine_label}` : ''}`
+                          : 'Auto'}
+                      </td>
+                    </>
                   )}
                   {table === 'machine_centres' && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

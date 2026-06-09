@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const wipStateService = require('../services/wipStateService');
 
 /** Standard working hours for prorating daily pair targets (matches production_routing_header.target_per_hour = target_per_day / 8). */
 const SHIFT_HOURS = 8;
@@ -41,6 +42,8 @@ class HourlyOutputController {
 
       logger.info(`Fetching hourly output for work centre: ${workCentreId}, date: ${requestedDate}`);
 
+      const eolMachineId = await wipStateService.resolveEolMachineId(Number(workCentreId));
+
       const [checkData] = await db.query(`
         SELECT COUNT(*) as count, MIN(start_time) as min_start, MAX(finish_time) as max_finish
         FROM machine_centre_production
@@ -49,16 +52,15 @@ class HourlyOutputController {
 
       logger.info(`Data check result:`, checkData[0]);
 
-      // For Line 2A (workCentreId=5), only show Final Inspection (Machine 07) output
-      // This matches how Overall Performance OUTPUT is calculated
+      // End-of-line machine output only (matches TV dashboard / overall performance)
       let [hourlyData] = await db.query(`
         SELECT HOUR(start_time) as hour, SUM(output_pairs) as production
         FROM machine_centre_production
         WHERE work_centre_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL AND button_status = 2
-          AND machine_id = '07'
+          AND machine_id = ?
         GROUP BY HOUR(start_time)
         ORDER BY hour
-      `, [workCentreId, requestedDate]);
+      `, [workCentreId, requestedDate, eolMachineId]);
 
       logger.info(`Found ${hourlyData.length} hourly records:`, hourlyData);
 
@@ -67,10 +69,10 @@ class HourlyOutputController {
           SELECT HOUR(finish_time) as hour, SUM(output_pairs) as production
           FROM machine_centre_production
           WHERE work_centre_id = ? AND DATE(prod_date) = ? AND finish_time IS NOT NULL AND button_status = 2
-            AND machine_id = '07'
+            AND machine_id = ?
           GROUP BY HOUR(finish_time)
           ORDER BY hour
-        `, [workCentreId, requestedDate]);
+        `, [workCentreId, requestedDate, eolMachineId]);
 
         logger.info(`Alternative query found ${altHourlyData.length} records:`, altHourlyData);
         hourlyData = altHourlyData;
@@ -82,10 +84,10 @@ class HourlyOutputController {
           SELECT SUM(output_pairs) as hourly_sum
           FROM machine_centre_production
           WHERE work_centre_id = ? AND DATE(prod_date) = ? AND button_status = 2
-            AND machine_id = '07'
+            AND machine_id = ?
           GROUP BY HOUR(start_time)
         ) as hourly_totals
-      `, [workCentreId, requestedDate]);
+      `, [workCentreId, requestedDate, eolMachineId]);
 
       const dataMap = {};
       hourlyData.forEach(row => { dataMap[row.hour] = parseInt(row.production) || 0; });

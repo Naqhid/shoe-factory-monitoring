@@ -29,11 +29,12 @@
 'use strict';
 
 const pool = require('../../config/database');
+const lineMachineResolver = require('./lineMachineResolver');
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-/** Default WIP input machine when no "(Input)" machine is configured on the line. */
-const WIP_INPUT_MACHINE_ID = '01';
+/** Default WIP input machine when no DB / name match is configured on the line. */
+const WIP_INPUT_MACHINE_ID = lineMachineResolver.DEFAULT_INPUT_MACHINE_ID;
 
 /** @deprecated Use resolveWipInputMachineId — kept for callers that imported HEEL_GRIP_MACHINE_ID */
 const HEEL_GRIP_MACHINE_ID = WIP_INPUT_MACHINE_ID;
@@ -41,8 +42,8 @@ const HEEL_GRIP_MACHINE_ID = WIP_INPUT_MACHINE_ID;
 /** Line 3 in the UI maps to work_centre_id 5; EOL output is Final Inspection (machine 07). */
 const LINE_3_WORK_CENTRE_ID = 5;
 
-/** End-of-line machine for Line 3 WIP output (matches TV dashboard). */
-const EOL_MACHINE_ID = '07';
+/** Default end-of-line machine when not configured per work centre. */
+const EOL_MACHINE_ID = lineMachineResolver.DEFAULT_EOL_MACHINE_ID;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -115,71 +116,14 @@ async function getEolOutputFromProduction(workCentreId, date, machineId = null) 
     return Math.round(Number(rows[0]?.total_output || 0));
 }
 
-const wipEolMachineCache = new Map();
-
 /**
- * End-of-line machine for WIP output (Final Output / Final Inspection / is_end_of_line).
- * Must NOT sum all machines — intermediate stages would double-count and freeze WIP incorrectly.
+ * End-of-line machine for WIP output — work_centres.eol_machine_id, then name/heuristic fallbacks.
  *
  * @param {number} workCentreId
  * @returns {Promise<string>}
  */
 async function resolveEolMachineId(workCentreId) {
-    const wc = Number(workCentreId);
-    if (wipEolMachineCache.has(wc)) {
-        return wipEolMachineCache.get(wc);
-    }
-
-    let machineId = null;
-
-    // Prefer explicit Final Output / Final Inspection name (avoids wrong global is_end_of_line on machine 07).
-    const [named] = await pool.query(
-        `SELECT machine_id
-         FROM machine_centres
-         WHERE work_centre_id = ?
-           AND deleted_at IS NULL
-           AND COALESCE(is_active, 1) = 1
-           AND (
-             machine_name LIKE '%Final Output%'
-             OR name LIKE '%Final Output%'
-             OR machine_name LIKE '%Final Inspection%'
-             OR name LIKE '%Final Inspection%'
-           )
-         ORDER BY machine_id DESC
-         LIMIT 1`,
-        [wc]
-    );
-    if (named.length) {
-        machineId = String(named[0].machine_id);
-    }
-
-    if (!machineId) {
-        try {
-            const [flagged] = await pool.query(
-                `SELECT machine_id
-                 FROM machine_centres
-                 WHERE work_centre_id = ?
-                   AND deleted_at IS NULL
-                   AND COALESCE(is_active, 1) = 1
-                   AND COALESCE(is_end_of_line, 0) = 1
-                 ORDER BY machine_id
-                 LIMIT 1`,
-                [wc]
-            );
-            if (flagged.length) {
-                machineId = String(flagged[0].machine_id);
-            }
-        } catch {
-            // is_end_of_line column may not exist on older DBs
-        }
-    }
-
-    if (!machineId) {
-        machineId = EOL_MACHINE_ID;
-    }
-
-    wipEolMachineCache.set(wc, machineId);
-    return machineId;
+    return lineMachineResolver.resolveEolMachineId(workCentreId);
 }
 
 /**
@@ -271,36 +215,14 @@ async function resolveCarryForwardOpening(workCentreId, beforeDate) {
 
 // ── Core Service Functions ────────────────────────────────────────────────────
 
-const wipInputMachineCache = new Map();
-
 /**
- * Resolves the WIP input machine for a work centre.
- * Prefers machine_centres marked "(Input)" in name (e.g. 01 Quarter Zig Zag Stitching).
+ * Resolves the WIP input machine — work_centres.input_machine_id, then "(Input)" name fallback.
  *
  * @param {number} workCentreId
  * @returns {Promise<string>}
  */
 async function resolveWipInputMachineId(workCentreId) {
-    const wc = Number(workCentreId);
-    if (wipInputMachineCache.has(wc)) {
-        return wipInputMachineCache.get(wc);
-    }
-
-    const [rows] = await pool.query(
-        `SELECT machine_id
-         FROM machine_centres
-         WHERE work_centre_id = ?
-           AND deleted_at IS NULL
-           AND COALESCE(is_active, 1) = 1
-           AND (machine_name LIKE '%(Input)%' OR name LIKE '%(Input)%')
-         ORDER BY machine_id
-         LIMIT 1`,
-        [wc]
-    );
-
-    const machineId = rows.length ? String(rows[0].machine_id) : WIP_INPUT_MACHINE_ID;
-    wipInputMachineCache.set(wc, machineId);
-    return machineId;
+    return lineMachineResolver.resolveInputMachineId(workCentreId);
 }
 
 /**
@@ -578,6 +500,7 @@ module.exports = {
     HEEL_GRIP_MACHINE_ID,
     LINE_3_WORK_CENTRE_ID,
     EOL_MACHINE_ID,
+    clearLineMachineCache: lineMachineResolver.clearLineMachineCache,
     resolveWipInputMachineId,
     resolveEolMachineId,
     getTodayInput,
