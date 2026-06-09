@@ -495,6 +495,77 @@ async function refreshWipAfterProductionChange(workCentreId, date) {
     return computeAndPersistWip(workCentreId, date);
 }
 
+/**
+ * Active lines with no wip_daily_state row on the given date (new-line onboarding).
+ *
+ * @param {string} date  YYYY-MM-DD
+ * @returns {Promise<Array>}
+ */
+async function getLinesNeedingWipOnboarding(date) {
+    const dateKey = toDateKey(date);
+    const [rows] = await pool.query(
+        `SELECT wc.id AS work_centre_id,
+                wc.name AS work_centre_name,
+                wc.input_machine_id,
+                wc.eol_machine_id
+         FROM work_centres wc
+         LEFT JOIN wip_daily_state w
+           ON w.work_centre_id = wc.id AND w.state_date = ?
+         WHERE wc.deleted_at IS NULL
+           AND COALESCE(wc.is_active, 1) = 1
+           AND w.id IS NULL
+         ORDER BY wc.name`,
+        [dateKey]
+    );
+
+    return rows.map((row) => ({
+        work_centre_id: Number(row.work_centre_id),
+        work_centre_name: row.work_centre_name,
+        input_machine_id: row.input_machine_id ? String(row.input_machine_id) : null,
+        eol_machine_id: row.eol_machine_id ? String(row.eol_machine_id) : null,
+        machines_configured: Boolean(row.input_machine_id && row.eol_machine_id),
+    }));
+}
+
+/**
+ * Seed first WIP row for a line (opening WIP only — input/output computed live).
+ *
+ * @param {number} workCentreId
+ * @param {string} date  YYYY-MM-DD
+ * @param {number} openingWip
+ */
+async function seedOpeningWip(workCentreId, date, openingWip) {
+    const dateKey = toDateKey(date);
+    const opening = clampWip(openingWip);
+    const wcId = Number(workCentreId);
+
+    const existing = await fetchWipStateRow(wcId, dateKey);
+    if (existing) {
+        throw Object.assign(
+            new Error(`WIP already exists for this line on ${dateKey}`),
+            { status: 409 }
+        );
+    }
+
+    const [wcRows] = await pool.query(
+        `SELECT id FROM work_centres
+         WHERE id = ? AND deleted_at IS NULL AND COALESCE(is_active, 1) = 1`,
+        [wcId]
+    );
+    if (!wcRows.length) {
+        throw Object.assign(new Error('Work centre not found or inactive'), { status: 404 });
+    }
+
+    await pool.query(
+        `INSERT INTO wip_daily_state
+             (work_centre_id, state_date, opening_wip, today_input, current_wip, closing_wip, is_closed, manual_wip_override)
+         VALUES (?, ?, ?, 0, ?, 0, 0, 1)`,
+        [wcId, dateKey, opening, opening]
+    );
+
+    return computeAndPersistWip(wcId, dateKey);
+}
+
 module.exports = {
     WIP_INPUT_MACHINE_ID,
     HEEL_GRIP_MACHINE_ID,
@@ -508,6 +579,8 @@ module.exports = {
     getEolOutput,
     getEolOutputUpTo,
     refreshWipAfterProductionChange,
+    getLinesNeedingWipOnboarding,
+    seedOpeningWip,
     getWipBreakdown,
     isLiveWipDate,
     resolveCarryForwardOpening,

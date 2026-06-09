@@ -25,6 +25,7 @@ import {
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { SearchableSelect } from './SearchableSelect';
 import { WipDailyStateTab } from './WipDailyStateTab';
+import { ProductionDayLockPanel } from './ProductionDayLockPanel';
 import {
   buildManualEntryNeededHints,
   MANUAL_ENTRY_HINT_GRACE_MINS,
@@ -207,7 +208,9 @@ export const ManualProductionEntryForm: React.FC = () => {
     try { return JSON.parse(localStorage.getItem('user_info') || 'null'); } catch { return null; }
   }, []);
   const currentRole: string = (currentUser?.role || '').toLowerCase();
-  const canEdit = currentRole === 'admin' || currentRole === 'supervisor' || currentRole === 'manager' || currentRole === 'line supervisor' || currentRole === 'unit head';
+  const canEdit = currentRole === 'admin';
+  const [productionDayLocked, setProductionDayLocked] = React.useState(false);
+  const canMutate = canEdit && !productionDayLocked;
   // All authenticated users can VIEW — only canEdit users can add/edit/delete
   const isAuthenticated = !!currentUser;
 
@@ -2047,7 +2050,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                         </option>
                       ))}
                     </select>
-                    {!editingId && canEdit && machineId ? (
+                    {!editingId && canMutate && machineId ? (
                       <button
                         type="button"
                         onClick={copyLastEntryOnMachine}
@@ -2501,6 +2504,16 @@ export const ManualProductionEntryForm: React.FC = () => {
       )}
 
       <div className="bg-white rounded-xl shadow p-3 sm:p-4 md:p-6 mt-4">
+        {isSingleDayEntriesView && tableWorkCentreFilter ? (
+          <div className="mb-4">
+            <ProductionDayLockPanel
+              date={tableDateFilter}
+              workCentreId={tableWorkCentreFilter}
+              workCentreName={workCentres.find((wc) => String(wc.id) === String(tableWorkCentreFilter))?.name}
+              onLockChange={setProductionDayLocked}
+            />
+          </div>
+        ) : null}
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-3">
             <button
@@ -2612,7 +2625,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 setEditingId(null);
                 setEntryDate(getTodayLocalDate());
               })}
-              className={`bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full ${!canEdit ? 'hidden' : ''}`}
+              className={`bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full ${!canMutate ? 'hidden' : ''}`}
             >
               Add New Entry
             </button>
@@ -2632,7 +2645,7 @@ export const ManualProductionEntryForm: React.FC = () => {
             >
               Export CSV
             </button>
-            {canEdit && selectedEntryIds.size > 0 && (
+            {canMutate && selectedEntryIds.size > 0 && (
               <button
                 type="button"
                 onClick={() => setBulkDeleteConfirm(true)}
@@ -2987,7 +3000,11 @@ export const ManualProductionEntryForm: React.FC = () => {
                   : 'No manual entries yet'}
               </p>
               <p className="text-sm text-gray-500 mt-1">
-                {canEdit ? 'Use Add New Entry to record a completed cycle.' : 'Try adjusting the date range or search.'}
+                {productionDayLocked
+                  ? 'This day is locked — contact Admin to unlock for corrections.'
+                  : canEdit
+                    ? 'Use Add New Entry to record a completed cycle.'
+                    : 'Try adjusting the date range or search.'}
               </p>
             </div>
           ) : (
@@ -2996,7 +3013,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-3 w-10">
-                      {canEdit ? (
+                      {canMutate ? (
                         <input
                           type="checkbox"
                           className="rounded border-gray-300 text-blue-600"
@@ -3029,7 +3046,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                       }`}
                     >
                       <td className="px-3 py-3">
-                        {canEdit ? (
+                        {canMutate ? (
                           <input
                             type="checkbox"
                             className="rounded border-gray-300 text-blue-600"
@@ -3095,7 +3112,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          {canEdit ? (
+                          {canMutate ? (
                             <button
                               type="button"
                               onClick={() => handleEdit(row)}
@@ -3113,7 +3130,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                           >
                             <History className="h-4 w-4" aria-hidden />
                           </button>
-                          {canEdit ? (
+                          {canMutate ? (
                             <button
                               type="button"
                               onClick={() => {
@@ -3272,7 +3289,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 <ManualEntrySlotHeatmap
                   rows={slotHeatmapRows}
                   loading={entryHintsLoading && slotHeatmapRows.length === 0}
-                  canEdit={canEdit && isTodayEntriesView}
+                  canEdit={canMutate && isTodayEntriesView}
                   onCellClick={startEntryFromHeatmap}
                   title="Hourly slot coverage (MES + manual)"
                   hint={
@@ -3310,7 +3327,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                             {hint.emp_code} {hint.emp_name}
                             <span className="text-amber-700"> ({hint.mins_waiting}m logged in)</span>
                           </span>
-                          {canEdit && (
+                          {canMutate && (
                             <button
                               type="button"
                               onClick={() => startEntryFromHint(hint)}
@@ -3376,7 +3393,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                           </span>
                         ) : null}
                       </span>
-                      {canEdit && (
+                      {canMutate && (
                         <button
                           type="button"
                           onClick={() => startEntryFromMissingSlot(slot)}
@@ -3901,7 +3918,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                                           >
                                             Edit
                                           </button>
-                                          {canEdit && (
+                                          {canMutate && (
                                             <button
                                               type="button"
                                               onClick={() => setProdDeleteCandidate(row)}
@@ -3968,7 +3985,7 @@ export const ManualProductionEntryForm: React.FC = () => {
           </div>
         )}
         {activeTab === 'wip' && (
-          <WipDailyStateTab workCentres={workCentres} canEdit={canEdit} />
+          <WipDailyStateTab workCentres={workCentres} canEdit={canMutate} />
         )}
 
         {activeTab === 'summary' && (

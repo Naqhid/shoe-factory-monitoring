@@ -9,6 +9,13 @@ import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours }
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
 
+const formatPairsPerHour = (value: number | null | undefined) => {
+    if (value == null || !Number.isFinite(value)) return '—';
+    const rounded = Math.round(value * 10) / 10;
+    const num = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    return `${num}/hr`;
+};
+
 interface ProductionData {
     id?: number;
     prod_date: string;
@@ -472,6 +479,13 @@ export const MobileProduction: React.FC = () => {
         const gap = actual - expected;
         const projectedEod =
             elapsedMins > 0 ? Math.round((actual / elapsedMins) * totalProductiveMins) : 0;
+        const gapToTarget = Math.max(0, daily - actual);
+        const currentPairsPerHr =
+            elapsedMins > 0 ? Math.round((actual / elapsedMins) * 60 * 10) / 10 : 0;
+        const pairsPerHrNeeded =
+            remainingProductiveMins > 0 && gapToTarget > 0
+                ? Math.round((gapToTarget / remainingProductiveMins) * 60 * 10) / 10
+                : 0;
         return {
             expected,
             daily,
@@ -479,6 +493,9 @@ export const MobileProduction: React.FC = () => {
             projectedEod,
             remainingMins: Math.round(remainingProductiveMins),
             totalProductiveMins: Math.round(totalProductiveMins),
+            gapToTarget,
+            currentPairsPerHr,
+            pairsPerHrNeeded,
         };
     }, [
         currentTime,
@@ -1922,20 +1939,61 @@ export const MobileProduction: React.FC = () => {
     // Deterministic cue selection while START/RESET controls are visible.
     const showStartPrimaryCue = normalizedButtonStatus !== 2;
     const showResetPrimaryCue = normalizedButtonStatus === 2;
-    const actionMarqueeMessage = (() => {
-        if (showFinishPressHint) {
-            return 'Target exceeded. Tap FINISH when cycle is complete.';
-        }
-        if (showStartPressHint) {
-            if (isLunchBreakActive) return 'Lunch time started.';
-            if (!isShiftHoursActive) return 'Shift ended for today.';
-            if (productionData?.button_status === 2) {
-                return `Production is idle for ${idleMinutes} min. Tap RESET, then tap START.`;
-            }
-            return `Production is idle for ${idleMinutes} min. Tap START to begin cycle.`;
-        }
-        return '';
-    })();
+    const showIdlePill =
+        idleMinutes > 0 && showStartPressHint && isShiftHoursActive && !isLunchBreakActive;
+
+    const controlBtnBase =
+        'relative flex min-h-[3.75rem] flex-1 touch-manipulation select-none items-center justify-center gap-2.5 overflow-hidden rounded-2xl border text-base font-extrabold uppercase tracking-[0.12em] shadow-md transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed md:min-h-[4.25rem] md:gap-3 md:text-xl';
+    const controlBtnCue =
+        'ring-2 ring-amber-300 ring-offset-2 ring-offset-white shadow-[0_0_24px_rgba(251,191,36,0.4)]';
+    const pacePillClass =
+        'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 shadow-sm sm:px-3 sm:py-3';
+    const pacePillLabelClass =
+        'text-[11px] font-bold uppercase tracking-[0.14em] leading-none sm:text-xs';
+    const pacePillValueClass =
+        'text-base font-black tabular-nums leading-none tracking-tight sm:text-lg';
+    const actionStripBelowButtons =
+        dailyPaceSnapshot || showIdlePill ? (
+            <div
+                className={`mt-4 overflow-hidden rounded-2xl border shadow-sm ${
+                    showIdlePill
+                        ? 'border-red-200/90 bg-gradient-to-br from-red-50 via-orange-50/60 to-white'
+                        : 'border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-slate-50'
+                }`}
+            >
+              
+                <div className="flex w-full flex-nowrap items-stretch gap-2 p-2 sm:gap-2.5 sm:p-2.5">
+                    {dailyPaceSnapshot && (
+                        <>
+                            <span className={`${pacePillClass} border-slate-200 bg-white`}>
+                                <span className={`${pacePillLabelClass} text-slate-500`}>Current</span>
+                                <span className={`${pacePillValueClass} text-slate-800`}>
+                                    {formatPairsPerHour(dailyPaceSnapshot.currentPairsPerHr)}
+                                </span>
+                            </span>
+                            <span
+                                className={`${pacePillClass} border-amber-400/40 bg-gradient-to-b from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/20`}
+                            >
+                                <span className={`${pacePillLabelClass} text-amber-50/95`}>Required</span>
+                                <span className={`${pacePillValueClass} text-white drop-shadow-sm`}>
+                                    {formatPairsPerHour(dailyPaceSnapshot.pairsPerHrNeeded)}
+                                </span>
+                            </span>
+                        </>
+                    )}
+                    {showIdlePill && (
+                        <span
+                            className={`${pacePillClass} border-red-400/40 bg-gradient-to-b from-red-500 to-red-600 text-white shadow-md shadow-red-500/25`}
+                        >
+                            <span className={`${pacePillLabelClass} text-red-50/95`}>Idle</span>
+                            <span className={`${pacePillValueClass} text-white drop-shadow-sm`}>
+                                {idleMinutes} m
+                            </span>
+                        </span>
+                    )}
+                </div>
+            </div>
+        ) : null;
 
     // --- RENDER ---
 
@@ -2283,7 +2341,7 @@ export const MobileProduction: React.FC = () => {
                     </div>
 
                     {/* Metrics Section */}
-                    <div className="bg-white shadow-xl p-4 md:p-6 border-x border-gray-200">
+                    <div className="bg-white shadow-xl border-x border-gray-200 px-4 pt-4 pb-2 md:px-6 md:pt-6 md:pb-3">
                         {/* Progress Bar — red when actual time exceeds target */}
                         {productionData.button_status === 1 && !productionData.is_paused && productionData.target_mins > 0 && (
                             <div className="mb-4">
@@ -2294,9 +2352,11 @@ export const MobileProduction: React.FC = () => {
                                             : ''
                                     }`}
                                 >
-                                    <div className="flex justify-between text-xs text-gray-600 mb-1 px-0.5">
-                                        <span>Progress</span>
-                                        <span className={isTargetTimeExceeded ? 'font-bold text-red-600' : ''}>
+                                    <div className="flex justify-between gap-2 text-xs text-gray-600 mb-1 px-0.5">
+                                        <span className="font-medium leading-tight text-gray-700">
+                                            Cycle time progress
+                                                </span>
+                                        <span className={`shrink-0 tabular-nums ${isTargetTimeExceeded ? 'font-bold text-red-600' : ''}`}>
                                             {Math.min(100, Math.round((actualTimeCounter / 60 / Number(productionData.target_mins)) * 100))}%
                                         </span>
                                     </div>
@@ -2315,8 +2375,8 @@ export const MobileProduction: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-6 rounded-xl border-2 border-blue-200 shadow-sm text-center">
                                 <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Target Time</p>
-                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{Number(productionData.target_mins || 0).toFixed(1)}</p>
-                                <p className="text-xs text-blue-600 mt-1">mins</p>
+                                <p className="text-3xl md:text-5xl font-bold text-blue-900">{Number(productionData.target_mins || 0).toFixed(1)}  <span className="text-xl font-bold text-blue-600 mt-1">m</span></p>
+                               
                             </div>
                             <div
                                 className={`bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-6 rounded-xl border-2 border-purple-200 shadow-sm relative ${
@@ -2368,7 +2428,7 @@ export const MobileProduction: React.FC = () => {
                                             <span className="text-xl md:text-3xl font-semibold text-orange-400">/</span>
                                             <span className="text-3xl md:text-5xl font-bold text-orange-900">{outputExpectedNow}</span>
                                         </div>
-                                        <p className="text-xs text-orange-600 mt-1">pairs (actual / speed)</p>
+                                      
                                     </>
                                 )}
                                 {/* Refresh button for manual update */}
@@ -2400,7 +2460,7 @@ export const MobileProduction: React.FC = () => {
                                                 {formatBoxesDisplay(boxesExpectedNow)}
                                             </span>
                                         </div>
-                                        <p className="text-xs text-cyan-700 mt-1">boxes (actual / speed)</p>
+                                      
                                     </>
                                 )}
                             </div>
@@ -2421,7 +2481,7 @@ export const MobileProduction: React.FC = () => {
                                         >
                                             <span>{outputPaceEfficiencyPct}</span>%
                                         </p>
-                                        <p className="text-xs text-indigo-600 mt-1">percentage</p>
+                                       
                                     </>
                                 )}
                             </div>
@@ -2429,36 +2489,33 @@ export const MobileProduction: React.FC = () => {
                     </div>
 
                     {/* Control Buttons */}
-                    <div className="bg-white shadow-xl rounded-b-2xl p-4 md:p-6 border-x border-b border-gray-200">
+                    <div className="rounded-b-2xl border-x border-b border-gray-200 bg-white px-4 pb-4 pt-1 shadow-xl md:px-6 md:pb-6 md:pt-2">
                         <div className="flex gap-3 md:gap-4">
                             {normalizedButtonStatus === 3 || normalizedButtonStatus === 2 ? (
                                 <>
                                     <button
                                         onClick={handleStart}
                                         disabled={loading || normalizedButtonStatus === 2}
-                                        title={normalizedButtonStatus === 2 ? "Cycle finished. Click RESET to start a new cycle." : ""}
-                                        className={`relative flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-green-700 hover:to-green-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-                                            showStartButtonPressHint
-                                                ? 'ring-4 ring-yellow-300 ring-offset-2 ring-offset-white animate-pulse shadow-[0_0_0_6px_rgba(253,224,71,0.45)]'
-                                                : ''
+                                        title={normalizedButtonStatus === 2 ? 'Cycle finished. Click RESET to start a new cycle.' : ''}
+                                        className={`${controlBtnBase} border-emerald-700/30 bg-gradient-to-b from-emerald-500 to-emerald-700 text-white shadow-emerald-900/20 hover:from-emerald-600 hover:to-emerald-800 disabled:border-slate-300 disabled:from-slate-200 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none ${
+                                            showStartButtonPressHint ? controlBtnCue : ''
                                         }`}
                                     >
                                         {showStartButtonPressHint && (
-                                            <>
-                                                <span className="pointer-events-none absolute inset-0 rounded-xl border-4 border-yellow-300/90 animate-pulse" />
-                                                <span className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/35 animate-ping" />
-                                            </>
+                                            <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent" />
                                         )}
                                         {loading ? (
-                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                            <Loader2 className="h-6 w-6 animate-spin" />
                                         ) : (
                                             <>
-                                                <Play className="h-5 w-5" />
-                                                <span>START</span>
+                                                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/25 md:h-10 md:w-10">
+                                                    <Play className="h-5 w-5 fill-current md:h-5 md:w-5" />
+                                                </span>
+                                                <span>Start</span>
                                                 {showStartPrimaryCue && (
                                                     <Hand
-                                                        className="h-10 w-10 text-yellow-100 animate-bounce drop-shadow-[0_0_10px_rgba(254,240,138,1)]"
-                                                        strokeWidth={3}
+                                                        className="h-7 w-7 animate-bounce text-amber-200 drop-shadow-md md:h-8 md:w-8"
+                                                        strokeWidth={2.5}
                                                     />
                                                 )}
                                             </>
@@ -2467,69 +2524,57 @@ export const MobileProduction: React.FC = () => {
                                     <button
                                         onClick={handleReset}
                                         disabled={loading}
-                                        className={`relative flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-gray-600 hover:to-gray-700 shadow-lg active:scale-95 transition-all uppercase tracking-wide disabled:opacity-50 flex items-center justify-center gap-2 ${
-                                            showResetButtonPressHint
-                                                ? 'ring-4 ring-yellow-300 ring-offset-2 ring-offset-white animate-pulse shadow-[0_0_0_6px_rgba(253,224,71,0.45)]'
-                                                : ''
-                                        }`}
+                                        className={`${controlBtnBase} ${
+                                            showResetPrimaryCue
+                                                ? 'border-emerald-700/30 bg-gradient-to-b from-emerald-500 to-emerald-700 text-white shadow-emerald-900/20 hover:from-emerald-600 hover:to-emerald-800'
+                                                : 'border-slate-400/40 bg-gradient-to-b from-slate-500 to-slate-600 text-white shadow-slate-900/15 hover:from-slate-600 hover:to-slate-700'
+                                        } disabled:opacity-50 ${showResetButtonPressHint ? controlBtnCue : ''}`}
                                     >
                                         {showResetButtonPressHint && (
-                                            <>
-                                                <span className="pointer-events-none absolute inset-0 rounded-xl border-4 border-yellow-300/90 animate-pulse" />
-                                                <span className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/35 animate-ping" />
-                                            </>
+                                            <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent" />
                                         )}
-                                        <RotateCcw className="h-5 w-5" />
-                                        <span>RESET</span>
+                                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/25 md:h-10 md:w-10">
+                                            <RotateCcw className="h-5 w-5 md:h-5 md:w-5" />
+                                        </span>
+                                        <span>Reset</span>
                                         {showResetPrimaryCue && (
                                             <Hand
-                                                className="h-10 w-10 text-yellow-100 animate-bounce drop-shadow-[0_0_10px_rgba(254,240,138,1)]"
-                                                strokeWidth={3}
+                                                className="h-7 w-7 animate-bounce text-amber-200 drop-shadow-md md:h-8 md:w-8"
+                                                strokeWidth={2.5}
                                             />
                                         )}
                                     </button>
                                 </>
                             ) : normalizedButtonStatus === 1 && !productionData.is_paused ? (
-                                <>
-                                    <button
-                                        onClick={handleFinish}
-                                        className={`relative flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 md:py-6 rounded-xl font-bold text-lg md:text-xl hover:from-blue-700 hover:to-blue-800 shadow-lg active:scale-95 transition-all uppercase tracking-wide flex items-center justify-center gap-2 ${
-                                            showFinishPressHint
-                                                ? 'ring-4 ring-red-400/80 ring-offset-2 ring-offset-white animate-pulse'
-                                                : ''
-                                        }`}
-                                    >
-                                        {showFinishPressHint && (
-                                            <span className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-y-1/2 translate-x-12 rounded-full bg-yellow-300/25 animate-ping" />
-                                        )}
-                                        {loading ? (
-                                            <Loader2 className="h-5 w-5 animate-spin" />
-                                        ) : (
-                                            <>
-                                                <CheckCircle className="h-5 w-5" />
-                                                <span>FINISH</span>
-                                                {showFinishPressHint && (
-                                                    <span className="relative inline-flex items-center justify-center ml-1">
-                                                        <span className="absolute h-8 w-8 rounded-full border-2 border-yellow-200/80 animate-ping" />
-                                                        <Hand
-                                                            className="h-7 w-7 text-yellow-100 animate-bounce drop-shadow-[0_0_4px_rgba(254,240,138,0.8)]"
-                                                            strokeWidth={2.8}
-                                                        />
-                                                    </span>
-                                                )}
-                                            </>
-                                        )}
-                                    </button>
-                                </>
+                                <button
+                                    onClick={handleFinish}
+                                    className={`${controlBtnBase} border-blue-700/30 bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-blue-900/20 hover:from-blue-600 hover:to-blue-800 ${
+                                        showFinishPressHint ? 'ring-2 ring-red-400 ring-offset-2 ring-offset-white shadow-[0_0_24px_rgba(248,113,113,0.35)]' : ''
+                                    }`}
+                                >
+                                    {showFinishPressHint && (
+                                        <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent" />
+                                    )}
+                                    {loading ? (
+                                        <Loader2 className="h-6 w-6 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/25 md:h-10 md:w-10">
+                                                <CheckCircle className="h-5 w-5 md:h-5 md:w-5" />
+                                            </span>
+                                            <span>Finish</span>
+                                            {showFinishPressHint && (
+                                                <Hand
+                                                    className="h-7 w-7 animate-bounce text-amber-200 drop-shadow-md md:h-8 md:w-8"
+                                                    strokeWidth={2.5}
+                                                />
+                                            )}
+                                        </>
+                                    )}
+                                </button>
                             ) : null}
                         </div>
-                        {actionMarqueeMessage && (
-                            <div className="mt-3 rounded-xl border-2 border-red-300 bg-red-50 px-2 py-1.5 shadow-sm">
-                                <marquee behavior="scroll" direction="left" scrollAmount={6} className="text-sm md:text-base font-bold text-red-700">
-                                    {actionMarqueeMessage}
-                                </marquee>
-                            </div>
-                        )}
+                        {actionStripBelowButtons}
                     </div>
                         </>
                 </div>

@@ -50,7 +50,8 @@ interface Props {
   isSupervisor: boolean;
   supervisorWorkCentreId: string;
   workCentreDisplayName: string;
-  canEditDelete: boolean;
+  canEditRework: boolean;
+  canDeleteRework: boolean;
 }
 
 const REWORK_CFG = {
@@ -88,7 +89,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   isSupervisor,
   supervisorWorkCentreId,
   workCentreDisplayName,
-  canEditDelete,
+  canEditRework,
+  canDeleteRework,
 }) => {
   const [savedRecords, setSavedRecords] = useState<SavedRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -431,8 +433,9 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                     </td>
                     <td className="px-4 py-3 text-sm text-center">
                       <div className="flex items-center justify-center gap-2">
-                        {canEditDelete && (
+                        {(canEditRework || canDeleteRework) && (
                           <>
+                            {canEditRework && (
                             <button
                               type="button"
                               onClick={() => openModal(rec)}
@@ -441,6 +444,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                             >
                               <Edit className="h-4 w-4" />
                             </button>
+                            )}
+                            {canDeleteRework && (
                             <button
                               type="button"
                               onClick={() => deleteEntry(rec)}
@@ -449,6 +454,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
+                            )}
                           </>
                         )}
                       </div>

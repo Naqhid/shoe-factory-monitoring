@@ -1,4 +1,4 @@
-// Role-based menu configuration
+// Role-based menu configuration — runtime data comes from DB via login (/api/auth/session).
 export type UserRole =
   | 'Admin'
   | 'Line Supervisor'
@@ -14,12 +14,79 @@ export interface UserSession {
   name?: string | null;
   code?: string | null;
   machine_id?: string | null;
+  effective_role?: string | null;
+  default_route?: string | null;
+  allowed_menus?: string[] | null;
 }
 
 export interface RoleConfig {
   defaultRoute: string;
   allowedMenus: string[];
 }
+
+/** Fallback when DB role row is missing (offline / migration). Kept in sync with backend roleDefaults.js */
+export const roleConfigs: Record<UserRole, RoleConfig> = {
+  'Admin': {
+    defaultRoute: '/overview',
+    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
+  },
+  'Line Supervisor': {
+    defaultRoute: '/line_setup_form',
+    allowedMenus: ['overview', 'line_setup_form', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
+  },
+  'Machine Centre User': {
+    defaultRoute: '/mobile',
+    allowedMenus: ['mobile', 'line1', 'line2']
+  },
+  'IED': {
+    defaultRoute: '/production_tracker',
+    allowedMenus: ['overview', 'production_routing', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
+  },
+  'Planner': {
+    defaultRoute: '/production_planning',
+    allowedMenus: ['overview', 'production_planning', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
+  },
+  'Unit Head': {
+    defaultRoute: '/overview',
+    allowedMenus: ['overview', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
+  },
+  'Production Manager': {
+    defaultRoute: '/production_tracker',
+    allowedMenus: ['production_tracker', 'missed_actions', 'alert_center']
+  },
+  'Quality': {
+    defaultRoute: '/production_tracker',
+    allowedMenus: ['production_tracker', 'rework_rejection_tracker', 'missed_actions', 'alert_center']
+  }
+};
+
+export const ALL_MENU_DEFINITIONS = [
+  { key: 'overview', label: 'TV Dashboard' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'missed_actions', label: 'Missed Actions' },
+  { key: 'logs', label: 'Login Logs' },
+  { key: 'alert_center', label: 'Alert Center' },
+  { key: 'production_routing', label: 'Production Routing' },
+  { key: 'production_planning', label: 'Production Planning' },
+  { key: 'line_setup_form', label: 'Line Setup Form' },
+  { key: 'manual_production_entry', label: 'Manual Production Entry' },
+  { key: 'production_tracker', label: 'Production Tracker' },
+  { key: 'rework_rejection_tracker', label: 'Rework / Rejection Tracker' },
+  { key: 'mobile', label: 'Line Monitor' },
+  { key: 'customers', label: 'Customer' },
+  { key: 'groups', label: 'Group' },
+  { key: 'leather', label: 'Leather' },
+  { key: 'styles', label: 'Style' },
+  { key: 'colors', label: 'Color' },
+  { key: 'work_centres', label: 'Work Centre' },
+  { key: 'machine_centres', label: 'Machine Centre' },
+  { key: 'employees', label: 'Employee' },
+  { key: 'users', label: 'Users' },
+  { key: 'forms_master', label: 'Forms Master' },
+  { key: 'user_rights', label: 'User Rights' },
+  { key: 'roles', label: 'Roles' },
+  { key: 'monitoring', label: 'Monitoring' },
+];
 
 const ROLE_ALIASES: Record<string, UserRole> = {
   administrator: 'Admin',
@@ -55,6 +122,10 @@ const matchesQuality = (value: string): boolean => {
 /** Resolves role from session; maps legacy Unit Head logins for Production Manager / Quality. */
 export const getEffectiveRole = (user: UserSession | null | undefined): UserRole | null => {
   if (!user) return null;
+  if (user.effective_role) {
+    const fromEffective = normalizeRole(user.effective_role);
+    if (fromEffective) return fromEffective;
+  }
   const normalized = normalizeRole(user.role ?? null);
   if (normalized === 'Production Manager' || normalized === 'Quality') {
     return normalized;
@@ -68,51 +139,37 @@ export const getEffectiveRole = (user: UserSession | null | undefined): UserRole
   return normalized;
 };
 
-export const roleConfigs: Record<UserRole, RoleConfig> = {
-  'Admin': {
-    defaultRoute: '/overview',
-    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
-  },
-  'Line Supervisor': {
-    defaultRoute: '/line_setup_form',
-    allowedMenus: ['overview', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
-  },
-  'Machine Centre User': {
-    defaultRoute: '/mobile',
-    allowedMenus: ['mobile', 'line1', 'line2']
-  },
-  'IED': {
-    defaultRoute: '/production_tracker',
-    allowedMenus: ['overview', 'production_routing', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center']
-  },
-  'Planner': {
-    defaultRoute: '/production_planning',
-    allowedMenus: ['overview', 'production_planning', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
-  },
-  'Unit Head': {
-    defaultRoute: '/overview',
-    allowedMenus: ['overview', 'manual_production_entry', 'production_tracker','reports', 'missed_actions', 'logs', 'alert_center']
-  },
-  'Production Manager': {
-    defaultRoute: '/production_tracker',
-    allowedMenus: ['production_tracker']
-  },
-  'Quality': {
-    defaultRoute: '/production_tracker',
-    allowedMenus: ['production_tracker']
+function getSessionRoleConfig(user: UserSession | null | undefined): RoleConfig | null {
+  if (!user?.allowed_menus || !Array.isArray(user.allowed_menus) || user.allowed_menus.length === 0) {
+    return null;
   }
-};
+  return {
+    defaultRoute: user.default_route || '/overview',
+    allowedMenus: user.allowed_menus,
+  };
+}
+
+function getStaticRoleConfig(user: UserSession | null | undefined): RoleConfig | null {
+  const normalizedRole = getEffectiveRole(user);
+  if (!normalizedRole) return null;
+  return roleConfigs[normalizedRole] || null;
+}
+
+export function resolveRoleConfig(user: UserSession | null | undefined): RoleConfig | null {
+  return getSessionRoleConfig(user) || getStaticRoleConfig(user);
+}
 
 export const isMenuAllowed = (
   menuKey: string,
   roleOrUser: UserRole | string | UserSession | null
 ): boolean => {
-  const normalizedRole =
+  const user: UserSession | null =
     typeof roleOrUser === 'object' && roleOrUser !== null
-      ? getEffectiveRole(roleOrUser)
-      : normalizeRole(roleOrUser);
-  if (!normalizedRole) return false;
-  const config = roleConfigs[normalizedRole];
+      ? roleOrUser
+      : roleOrUser
+        ? { role: roleOrUser as string }
+        : null;
+  const config = resolveRoleConfig(user);
   return config?.allowedMenus.includes(menuKey) || false;
 };
 
@@ -131,10 +188,18 @@ export const getDefaultRoute = (
   const normalizedRole = getEffectiveRole(user);
   if (!normalizedRole) return '/overview';
 
-  // Special handling for Machine Centre Users - redirect to their assigned machine
   if (normalizedRole === 'Machine Centre User' && user?.machine_id) {
     return `/mobile/${encodeURIComponent(user.machine_id)}`;
   }
 
-  return roleConfigs[normalizedRole]?.defaultRoute || '/overview';
+  const config = resolveRoleConfig(user);
+  return config?.defaultRoute || '/overview';
 };
+
+/** Merge fresh permissions from /api/auth/session into stored user_info */
+export function applySessionPermissions(user: UserSession): UserSession {
+  if (typeof localStorage === 'undefined') return user;
+  const merged = { ...user };
+  localStorage.setItem('user_info', JSON.stringify(merged));
+  return merged;
+}

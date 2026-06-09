@@ -2,6 +2,7 @@ const db = require('../../config/database');
 const logger = require('../utils/logger');
 const jwt = require('jsonwebtoken');
 const { hashPassword, verifyPassword } = require('../utils/password');
+const permissionService = require('../services/permissionService');
 
 const SECRET = process.env.JWT_SECRET;
 if (!SECRET) {
@@ -48,6 +49,11 @@ class AuthController {
             }
 
             const payload = { id: user.id, code: user.code, name: user.name, role: user.role };
+            const permissions = await permissionService.getPermissionsForUser({
+                role: user.role,
+                code: user.code,
+                name: user.name,
+            });
 
             res.json({
                 success: true,
@@ -56,7 +62,10 @@ class AuthController {
                 data: {
                     id: user.id, code: user.code, name: user.name, role: user.role,
                     machine_id: user.machine_id, work_centre_id: user.work_centre_id,
-                    work_centre_code: user.work_centre_code, work_centre_name: user.work_centre_name
+                    work_centre_code: user.work_centre_code, work_centre_name: user.work_centre_name,
+                    effective_role: permissions.effective_role,
+                    default_route: permissions.default_route,
+                    allowed_menus: permissions.allowed_menus,
                 }
             });
         } catch (error) {
@@ -65,6 +74,42 @@ class AuthController {
             if (error.code === 'ECONNREFUSED') message = 'Database connection refused.';
             else if (error.code === 'ETIMEDOUT') message = 'Database connection timeout.';
             res.status(500).json({ success: false, message });
+        }
+    }
+
+    async session(req, res) {
+        try {
+            const [rows] = await db.execute(
+                `SELECT u.id, u.code, u.name, u.role, u.machine_id, u.work_centre_id,
+                        wc.code as work_centre_code, wc.name as work_centre_name
+                 FROM users u
+                 LEFT JOIN work_centres wc ON u.work_centre_id = wc.id
+                 WHERE u.id = ?`,
+                [req.user.id]
+            );
+            if (!rows.length) {
+                return res.status(404).json({ success: false, message: 'User not found' });
+            }
+            const user = rows[0];
+            const permissions = await permissionService.getPermissionsForUser({
+                role: user.role,
+                code: user.code,
+                name: user.name,
+            });
+            return res.json({
+                success: true,
+                data: {
+                    id: user.id, code: user.code, name: user.name, role: user.role,
+                    machine_id: user.machine_id, work_centre_id: user.work_centre_id,
+                    work_centre_code: user.work_centre_code, work_centre_name: user.work_centre_name,
+                    effective_role: permissions.effective_role,
+                    default_route: permissions.default_route,
+                    allowed_menus: permissions.allowed_menus,
+                },
+            });
+        } catch (error) {
+            logger.error('Session permissions error:', error);
+            return res.status(500).json({ success: false, message: 'Internal server error' });
         }
     }
 

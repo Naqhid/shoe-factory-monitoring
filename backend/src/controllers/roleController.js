@@ -1,4 +1,41 @@
 const db = require('../../config/database');
+const permissionService = require('../services/permissionService');
+const { ALL_MENU_DEFINITIONS } = require('../config/roleDefaults');
+
+exports.getMenuCatalog = async (req, res) => {
+  res.json({ success: true, data: ALL_MENU_DEFINITIONS });
+};
+
+exports.saveDefaults = async (req, res) => {
+  try {
+    const result = await permissionService.snapshotRolesAsDefaults();
+    res.json({
+      success: true,
+      message: `Saved current ${result.count} role(s) as factory defaults`,
+      count: result.count,
+    });
+  } catch (error) {
+    console.error('Role saveDefaults error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.resetDefaults = async (req, res) => {
+  try {
+    const result = await permissionService.restoreRolesFromDefaults();
+    res.json({
+      success: true,
+      message: `Restored ${result.count} role(s) from saved factory defaults`,
+      count: result.count,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    console.error('Role resetDefaults error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 exports.getAll = async (req, res) => {
   try {
@@ -43,6 +80,7 @@ exports.create = async (req, res) => {
       'INSERT INTO roles (role_name, default_route, allowed_menus) VALUES (?, ?, ?)',
       [role_name, default_route, JSON.stringify(allowed_menus)]
     );
+    permissionService.invalidateCache();
     res.status(201).json({ id: result.insertId, message: 'Role created successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -56,6 +94,7 @@ exports.update = async (req, res) => {
       'UPDATE roles SET role_name = ?, default_route = ?, allowed_menus = ? WHERE id = ?',
       [role_name, default_route, JSON.stringify(allowed_menus), req.params.id]
     );
+    permissionService.invalidateCache();
     res.json({ message: 'Role updated successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -65,6 +104,7 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
   try {
     await db.query('DELETE FROM roles WHERE id = ?', [req.params.id]);
+    permissionService.invalidateCache();
     res.json({ message: 'Role deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

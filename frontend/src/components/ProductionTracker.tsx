@@ -37,6 +37,7 @@ import { buildMachinePaceSnapshot, getProductiveShiftTotals, SHIFT_END_MINUTES, 
 import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import { formatSinceTimeHHMM } from '../utils/dateTimeFormat';
 import { TimeLossReasonDialog } from './TimeLossReasonDialog';
+import { ProductionDayLockPanel } from './ProductionDayLockPanel';
 import {
   formatReasonDisplayLabel,
   M4_BADGE_CLASS,
@@ -1155,6 +1156,13 @@ export const ProductionTracker: React.FC = () => {
             </div>
           </div>
 
+          <ProductionDayLockPanel
+            date={selectedDate}
+            workCentreId={detailWorkCentreId}
+            workCentreName={selectedLineDetail?.line_name}
+            compact
+          />
+
           {!online && (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">
               <WifiOff className="h-4 w-4 shrink-0" />
@@ -1939,9 +1947,11 @@ export const ProductionTracker: React.FC = () => {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="min-w-0 flex-1 px-1 text-center sm:text-left">
-              <p className="text-sm sm:text-base font-extrabold leading-tight truncate">
-                Prodpulse Factory Production
+            <div className="min-w-0 flex-1 px-0.5 text-center sm:text-left">
+              <p className="text-sm sm:text-base font-extrabold leading-snug">
+                <span className="block sm:inline">Prodpulse Factory</span>
+                <span className="hidden sm:inline"> </span>
+                <span className="block sm:inline">Production</span>
               </p>
               <p className="text-[11px] text-blue-100 flex items-center justify-center sm:justify-start gap-1.5 mt-0.5">
                 <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${online ? 'bg-emerald-400' : 'bg-red-400'}`} />

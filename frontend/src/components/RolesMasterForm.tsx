@@ -1,31 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Loader2, RefreshCw, RotateCcw, Bookmark } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch, API_BASE_URL } from '../services/api';
+import { ALL_MENU_DEFINITIONS } from '../utils/roleConfig';
 
 const API_URL = `${API_BASE_URL}/api`;
-
-const allMenus = [
-  { key: 'overview', label: 'TV Dashboard' },
-  { key: 'reports', label: 'Reports' },
-  { key: 'missed_actions', label: 'Missed Actions' },
-  { key: 'production_routing', label: 'Production Routing' },
-  { key: 'production_planning', label: 'Production Planning' },
-  { key: 'line_setup_form', label: 'Line Setup Form' },
-  { key: 'production_tracker', label: 'Production Tracker' },
-  { key: 'mobile', label: 'Mobile' },
-  { key: 'customers', label: 'Customer' },
-  { key: 'groups', label: 'Group' },
-  { key: 'leather', label: 'Leather' },
-  { key: 'styles', label: 'Style' },
-  { key: 'colors', label: 'Color' },
-  { key: 'work_centres', label: 'Work Centre' },
-  { key: 'machine_centres', label: 'Machine Centre' },
-  { key: 'employees', label: 'Employee' },
-  { key: 'users', label: 'Users' },
-  { key: 'forms_master', label: 'Forms Master' },
-  { key: 'user_rights', label: 'User Rights' },
-];
 
 interface Role {
   id?: number;
@@ -33,6 +12,35 @@ interface Role {
   default_route: string;
   allowed_menus: string[];
 }
+
+type ConfirmAction = 'save-defaults' | 'restore-defaults' | 'delete';
+
+interface ConfirmDialogState {
+  action: ConfirmAction;
+  roleId?: number;
+  roleName?: string;
+}
+
+const CONFIRM_COPY: Record<ConfirmAction, { title: string; message: string; confirmLabel: string; tone: 'emerald' | 'amber' | 'red' }> = {
+  'save-defaults': {
+    title: 'Save as factory defaults?',
+    message: 'Save the current role setup as factory defaults? Restore defaults will reset all roles to this snapshot.',
+    confirmLabel: 'Save defaults',
+    tone: 'emerald',
+  },
+  'restore-defaults': {
+    title: 'Restore factory defaults?',
+    message: 'Restore all roles to the last saved factory defaults? Any unsaved edits will be lost.',
+    confirmLabel: 'Restore defaults',
+    tone: 'amber',
+  },
+  delete: {
+    title: 'Delete role?',
+    message: 'Are you sure you want to delete this role? This cannot be undone.',
+    confirmLabel: 'Delete role',
+    tone: 'red',
+  },
+};
 
 export const RolesMasterForm: React.FC = () => {
   const [roles, setRoles] = useState<Role[]>([]);
@@ -44,6 +52,9 @@ export const RolesMasterForm: React.FC = () => {
     allowed_menus: [],
   });
   const [fetchLoading, setFetchLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [saveDefaultsLoading, setSaveDefaultsLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
 
   useEffect(() => {
     fetchRoles();
@@ -62,6 +73,41 @@ export const RolesMasterForm: React.FC = () => {
     }
   };
 
+  const handleSaveDefaults = async () => {
+    setSaveDefaultsLoading(true);
+    try {
+      const res = await apiFetch(`${API_URL}/roles/save-defaults`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        toast.error(data.error || data.message || 'Failed to save defaults');
+        return;
+      }
+      toast.success(data.message || 'Factory defaults saved');
+    } catch {
+      toast.error('Failed to save defaults');
+    } finally {
+      setSaveDefaultsLoading(false);
+    }
+  };
+
+  const handleResetDefaults = async () => {
+    setResetLoading(true);
+    try {
+      const res = await apiFetch(`${API_URL}/roles/reset-defaults`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        toast.error(data.error || data.message || 'Failed to reset roles');
+        return;
+      }
+      toast.success(data.message || 'Roles restored from saved defaults');
+      await fetchRoles();
+    } catch {
+      toast.error('Failed to reset roles');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -70,7 +116,7 @@ export const RolesMasterForm: React.FC = () => {
           method: 'PUT',
           body: JSON.stringify(formData),
         });
-        toast.success('Role updated successfully');
+        toast.success('Role updated — users should re-login or refresh session to apply');
       } else {
         await apiFetch(`${API_URL}/roles`, {
           method: 'POST',
@@ -86,7 +132,6 @@ export const RolesMasterForm: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this role?')) return;
     try {
       await apiFetch(`${API_URL}/roles/${id}`, { method: 'DELETE' });
       toast.success('Role deleted successfully');
@@ -94,6 +139,29 @@ export const RolesMasterForm: React.FC = () => {
     } catch (error) {
       toast.error('Failed to delete role');
     }
+  };
+
+  const runConfirmAction = async () => {
+    if (!confirmDialog) return;
+    const { action, roleId } = confirmDialog;
+    setConfirmDialog(null);
+    if (action === 'save-defaults') {
+      await handleSaveDefaults();
+      return;
+    }
+    if (action === 'restore-defaults') {
+      await handleResetDefaults();
+      return;
+    }
+    if (action === 'delete' && roleId != null) {
+      await handleDelete(roleId);
+    }
+  };
+
+  const confirmToneClass = (tone: 'emerald' | 'amber' | 'red') => {
+    if (tone === 'emerald') return 'bg-emerald-600 hover:bg-emerald-700';
+    if (tone === 'amber') return 'bg-amber-600 hover:bg-amber-700';
+    return 'bg-red-600 hover:bg-red-700';
   };
 
   const handleEdit = (role: Role) => {
@@ -119,7 +187,7 @@ export const RolesMasterForm: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-2">
         <h2 className="text-2xl font-bold">Role Management</h2>
         <div className="flex flex-wrap gap-2">
           <button
@@ -132,11 +200,32 @@ export const RolesMasterForm: React.FC = () => {
             <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDialog({ action: 'save-defaults' })}
+            disabled={saveDefaultsLoading}
+            className="flex items-center gap-2 bg-emerald-100 text-emerald-900 border border-emerald-200 px-4 py-2 rounded-lg hover:bg-emerald-200 disabled:opacity-50"
+          >
+            <Bookmark className={`h-4 w-4 ${saveDefaultsLoading ? 'animate-spin' : ''}`} />
+            Save as defaults
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDialog({ action: 'restore-defaults' })}
+            disabled={resetLoading}
+            className="flex items-center gap-2 bg-amber-100 text-amber-900 border border-amber-200 px-4 py-2 rounded-lg hover:bg-amber-200 disabled:opacity-50"
+          >
+            <RotateCcw className={`h-4 w-4 ${resetLoading ? 'animate-spin' : ''}`} />
+            Restore defaults
+          </button>
           <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
             <Plus className="h-4 w-4" /> Add Role
           </button>
         </div>
       </div>
+      <p className="text-sm text-gray-600 mb-6 max-w-3xl">
+        Menus and API access are controlled here. Use <strong>Save as defaults</strong> to store the current setup; <strong>Restore defaults</strong> rolls all roles back to that saved snapshot. Live edits apply after re-login or session refresh.
+      </p>
 
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -152,12 +241,12 @@ export const RolesMasterForm: React.FC = () => {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">Default Route</label>
-                <input type="text" value={formData.default_route} onChange={(e) => setFormData({ ...formData, default_route: e.target.value })} className="w-full border rounded-lg px-3 py-2" required />
+                <input type="text" value={formData.default_route} onChange={(e) => setFormData({ ...formData, default_route: e.target.value })} className="w-full border rounded-lg px-3 py-2" required placeholder="/production_tracker" />
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">Allowed Menus</label>
                 <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-lg p-3">
-                  {allMenus.map(menu => (
+                  {ALL_MENU_DEFINITIONS.map(menu => (
                     <label key={menu.key} className="flex items-center gap-2">
                       <input type="checkbox" checked={formData.allowed_menus.includes(menu.key)} onChange={() => toggleMenu(menu.key)} />
                       <span className="text-sm">{menu.label}</span>
@@ -172,6 +261,53 @@ export const RolesMasterForm: React.FC = () => {
                 <button type="button" onClick={resetForm} className="bg-gray-300 px-4 py-2 rounded-lg hover:bg-gray-400">Cancel</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="roles-confirm-title"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
+          >
+            <h3 id="roles-confirm-title" className="text-lg font-bold text-gray-900">
+              {confirmDialog.action === 'delete' && confirmDialog.roleName
+                ? `Delete ${confirmDialog.roleName}?`
+                : CONFIRM_COPY[confirmDialog.action].title}
+            </h3>
+            <p className="text-sm text-gray-600 mt-2">
+              {confirmDialog.action === 'delete' && confirmDialog.roleName
+                ? `Delete the "${confirmDialog.roleName}" role? This cannot be undone.`
+                : CONFIRM_COPY[confirmDialog.action].message}
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                disabled={saveDefaultsLoading || resetLoading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={runConfirmAction}
+                disabled={saveDefaultsLoading || resetLoading}
+                className={`text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-50 ${confirmToneClass(CONFIRM_COPY[confirmDialog.action].tone)}`}
+              >
+                {saveDefaultsLoading || resetLoading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Working...
+                  </span>
+                ) : (
+                  CONFIRM_COPY[confirmDialog.action].confirmLabel
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -202,7 +338,10 @@ export const RolesMasterForm: React.FC = () => {
                     <button onClick={() => handleEdit(role)} className="text-blue-600 hover:text-blue-800">
                       <Edit2 className="h-4 w-4" />
                     </button>
-                    <button onClick={() => handleDelete(role.id!)} className="text-red-600 hover:text-red-800">
+                    <button
+                      onClick={() => setConfirmDialog({ action: 'delete', roleId: role.id, roleName: role.role_name })}
+                      className="text-red-600 hover:text-red-800"
+                    >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
