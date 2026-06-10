@@ -1,4 +1,5 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy, Wrench, Calendar, Filter, X, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
@@ -27,19 +28,33 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 
 const stripWhatsAppMarkdown = (text: string) => text.replace(/\*/g, '');
 
-const canvasToPngBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
-  new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+const SHARE_CAPTURE_DESKTOP_WIDTH = 1280;
+const SHARE_CAPTURE_MOBILE_WIDTH = 1080;
+
+const getShareCaptureScale = (mobile: boolean) =>
+  mobile
+    ? Math.min(4, Math.max(3, Math.ceil(window.devicePixelRatio || 2)))
+    : Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 2)));
+
+const waitForPaint = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 
 /** Stack summary text above the table capture so the PNG is self-contained. */
-const buildReportShareCanvas = (tableCanvas: HTMLCanvasElement, messageText: string): HTMLCanvasElement => {
+const buildReportShareCanvas = (
+  tableCanvas: HTMLCanvasElement,
+  messageText: string,
+  captureScale = 1
+): HTMLCanvasElement => {
   const lines = messageText.split('\n').map(stripWhatsAppMarkdown);
-  const padding = 28;
-  const titleSize = 26;
-  const metaSize = 18;
-  const titleLineHeight = 34;
-  const metaLineHeight = 24;
+  const padding = 28 * captureScale;
+  const titleSize = 26 * captureScale;
+  const metaSize = 18 * captureScale;
+  const titleLineHeight = 34 * captureScale;
+  const metaLineHeight = 24 * captureScale;
   const headerHeight = padding + titleLineHeight + Math.max(0, lines.length - 1) * metaLineHeight + padding;
-  const dividerGap = 12;
+  const dividerGap = 12 * captureScale;
 
   const out = document.createElement('canvas');
   out.width = tableCanvas.width;
@@ -65,7 +80,7 @@ const buildReportShareCanvas = (tableCanvas: HTMLCanvasElement, messageText: str
   });
 
   ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2 * captureScale;
   ctx.beginPath();
   ctx.moveTo(0, headerHeight);
   ctx.lineTo(out.width, headerHeight);
@@ -75,45 +90,79 @@ const buildReportShareCanvas = (tableCanvas: HTMLCanvasElement, messageText: str
   return out;
 };
 
-const copyPngBlobToClipboard = async (blob: Blob): Promise<boolean> => {
-  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return false;
-  try {
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    return true;
-  } catch {
-    return false;
-  }
+const SHARE_IMAGE_MAX_WIDTH = 1400;
+const SHARE_JPEG_QUALITY = 0.88;
+/** Mobile browsers need time to finish writing Downloads before WhatsApp can read the file. */
+const SHARE_SAVE_MOBILE_DELAY_MS = 5000;
+
+const sanitizeShareFilename = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+/** Downscale large captures so saved/shared files stay a reasonable size. */
+const prepareShareCanvas = (canvas: HTMLCanvasElement, maxWidth = SHARE_IMAGE_MAX_WIDTH): HTMLCanvasElement => {
+  if (canvas.width <= maxWidth) return canvas;
+  const out = document.createElement('canvas');
+  const scale = maxWidth / canvas.width;
+  out.width = maxWidth;
+  out.height = Math.round(canvas.height * scale);
+  const ctx = out.getContext('2d');
+  if (!ctx) return canvas;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+  return out;
 };
 
-const openWhatsAppWithText = (messageText: string) => {
-  window.open(`https://wa.me/?text=${encodeURIComponent(messageText)}`, '_blank', 'noopener,noreferrer');
-};
-
-const shareReportImageFile = async (file: File, caption: string): Promise<'shared' | 'cancelled' | 'failed'> => {
-  if (!navigator.share) return 'failed';
-
-  const plainCaption = stripWhatsAppMarkdown(caption);
-
-  if (navigator.canShare?.({ files: [file], text: plainCaption })) {
-    try {
-      await navigator.share({ files: [file], text: plainCaption, title: file.name });
-      return 'shared';
-    } catch (err: unknown) {
-      if ((err as { name?: string })?.name === 'AbortError') return 'cancelled';
+const canvasToShareBlob = (
+  canvas: HTMLCanvasElement,
+  mime: 'image/png' | 'image/jpeg' = 'image/png'
+): Promise<Blob | null> =>
+  new Promise((resolve) => {
+    const prepared = prepareShareCanvas(canvas);
+    if (mime === 'image/jpeg') {
+      prepared.toBlob(resolve, 'image/jpeg', SHARE_JPEG_QUALITY);
+    } else {
+      prepared.toBlob(resolve, 'image/png');
     }
-  }
+  });
 
-  if (navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: file.name });
-      return 'shared';
-    } catch (err: unknown) {
-      if ((err as { name?: string })?.name === 'AbortError') return 'cancelled';
-    }
-  }
-
-  return 'failed';
+const createShareImageFile = async (
+  canvas: HTMLCanvasElement,
+  filename: string,
+  mime: 'image/png' | 'image/jpeg' = 'image/png'
+): Promise<File | null> => {
+  const blob = await canvasToShareBlob(canvas, mime);
+  if (!blob || blob.size === 0) return null;
+  const ext = mime === 'image/jpeg' ? '.jpg' : '.png';
+  const base = sanitizeShareFilename(filename.replace(/\.(png|jpg|jpeg)$/i, ''));
+  return new File([blob], `${base}${ext}`, { type: mime, lastModified: Date.now() });
 };
+
+/** System share sheet (WhatsApp icon in the list) — needs HTTPS on most phones. */
+const canAttemptNativeShare = (): boolean =>
+  typeof navigator !== 'undefined' &&
+  'share' in navigator &&
+  typeof navigator.share === 'function';
+
+const downloadShareFile = (file: File, mobile: boolean): Promise<void> =>
+  new Promise((resolve, reject) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.download = file.name;
+      link.href = url;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      // Keep the blob URL alive until the OS has likely finished writing the file.
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        URL.revokeObjectURL(url);
+        resolve();
+      }, mobile ? SHARE_SAVE_MOBILE_DELAY_MS : 1000);
+    } catch (error) {
+      reject(error);
+    }
+  });
 
 /** UI tabs (8). Legacy API slugs kept for fetch/export via resolveApiReportType. */
 type ReportType =
@@ -427,6 +476,9 @@ const HOURLY_HOUR_LABELS: Record<(typeof HOURLY_HOUR_KEYS)[number], string> = {
   '6_7': '6-7',
 };
 const HOURLY_PRODUCT_HEADERS = ['Customer', 'Article No', 'Color', 'Leather', 'Group'] as const;
+const PRODUCT_FIELD_KEYS = ['customer', 'article_no', 'color', 'leather', 'group'] as const;
+const supportsProductColumnToggle = (tab: ReportType) =>
+  tab === 'hourly-production' || tab === 'line-efficiency';
 
 const EXPORT_OMIT_BY_REPORT: Partial<Record<ApiReportType, readonly string[]>> = {
   'shift-summary': ['shift_idle_mins'],
@@ -521,10 +573,20 @@ export const Reports: React.FC = () => {
   const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [lastReportGeneratedAt, setLastReportGeneratedAt] = React.useState<Date | null>(null);
   const [isShareLoading, setIsShareLoading] = React.useState(false);
+  const [isSavingShare, setIsSavingShare] = React.useState(false);
+  const [forceShareCapture, setForceShareCapture] = React.useState(false);
+  const [preparedShare, setPreparedShare] = React.useState<{
+    previewUrl: string;
+    file: File;
+    caption: string;
+    canvas: HTMLCanvasElement;
+    filename: string;
+  } | null>(null);
+  const preparedShareRef = React.useRef<typeof preparedShare>(null);
   const [reportTypeQuery, setReportTypeQuery] = React.useState('');
   const [showExportMenu, setShowExportMenu] = React.useState(false);
   /** Hourly report: hide Customer/Article/etc. by default to reduce horizontal scroll. */
-  const [hourlyShowProductDetails, setHourlyShowProductDetails] = React.useState(false);
+  const [showProductDetails, setShowProductDetails] = React.useState(false);
   const [compareMode, setCompareMode] = React.useState<ReportCompareMode>('none');
   const [compareMaps, setCompareMaps] = React.useState<{
     yesterday?: Map<string, any>;
@@ -532,6 +594,66 @@ export const Reports: React.FC = () => {
   } | null>(null);
   const [compareLoading, setCompareLoading] = React.useState(false);
   const reportTableRef = React.useRef<HTMLDivElement>(null);
+
+  const closePreparedShare = React.useCallback(() => {
+    const current = preparedShareRef.current;
+    if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+    preparedShareRef.current = null;
+    setPreparedShare(null);
+  }, []);
+
+  React.useEffect(() => () => closePreparedShare(), [closePreparedShare]);
+
+  const saveShareImageOnly = React.useCallback(
+    async (share: NonNullable<typeof preparedShare>) => {
+      setIsSavingShare(true);
+      try {
+        toast.loading('Saving image…', { id: 'share-save' });
+        await downloadShareFile(share.file, isMobile);
+        toast.success(
+          `Saved ${share.file.name}. Open WhatsApp → attach from Downloads → Send.`,
+          { id: 'share-save', duration: 14000 }
+        );
+        closePreparedShare();
+      } catch {
+        toast.error('Could not save image', { id: 'share-save' });
+      } finally {
+        setIsSavingShare(false);
+      }
+    },
+    [closePreparedShare, isMobile]
+  );
+
+  /**
+   * Opens the phone's share sheet (WhatsApp icon in the list) — same as sharing a photo.
+   * Must run directly from this button tap.
+   */
+  const sharePreparedReport = () => {
+    const share = preparedShareRef.current;
+    if (!share) return;
+
+    if (!canAttemptNativeShare()) {
+      void saveShareImageOnly(share);
+      return;
+    }
+
+    navigator
+      .share({ files: [share.file] })
+      .then(() => {
+        closePreparedShare();
+        toast.success('Pick WhatsApp from the list, then send the photo.', { duration: 8000 });
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        toast.error(
+          window.isSecureContext
+            ? 'Share failed — saving to Downloads instead'
+            : 'Share needs HTTPS — saving to Downloads instead',
+          { id: 'share-save' }
+        );
+        void saveShareImageOnly(share);
+      });
+  };
   const supportsPeriodCompare =
     reportType === 'hourly-production' || reportType === 'line-efficiency';
   const generatedFilterSnapshotRef = React.useRef<string | null>(null);
@@ -1028,10 +1150,31 @@ export const Reports: React.FC = () => {
     if (!reportTableRef.current) return;
     setIsShareLoading(true);
     try {
+      flushSync(() => setForceShareCapture(true));
+      await waitForPaint();
+
+      const captureScale = getShareCaptureScale(isMobile);
+      const captureWidth = isMobile ? SHARE_CAPTURE_MOBILE_WIDTH : SHARE_CAPTURE_DESKTOP_WIDTH;
       const tableCanvas = await html2canvas(reportTableRef.current, {
-        scale: 2,
+        scale: captureScale,
         useCORS: true,
         backgroundColor: '#ffffff',
+        logging: false,
+        width: captureWidth,
+        windowWidth: captureWidth,
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (_doc, clonedEl) => {
+          const node = clonedEl as HTMLElement;
+          node.style.position = 'static';
+          node.style.left = '0';
+          node.style.top = '0';
+          node.style.opacity = '1';
+          node.style.visibility = 'visible';
+          node.style.zIndex = 'auto';
+          node.style.width = `${captureWidth}px`;
+          node.style.maxWidth = `${captureWidth}px`;
+        },
       });
       const dateLabel = fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
       const lineName =
@@ -1047,83 +1190,25 @@ export const Reports: React.FC = () => {
         `📋 Records: ${rowCount}\n` +
         `🕐 Generated: ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 
-      const shareCanvas = buildReportShareCanvas(tableCanvas, messageText);
-      const blob = await canvasToPngBlob(shareCanvas);
-      if (!blob) {
+      const shareCanvas = buildReportShareCanvas(tableCanvas, messageText, captureScale);
+
+      const filename = `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}.png`;
+      const file = await createShareImageFile(shareCanvas, filename, 'image/png');
+      if (!file) {
         toast.error('Failed to create report image');
         return;
       }
 
-      const filename = `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}.png`;
-      const file = new File([blob], filename, { type: 'image/png' });
-
-      const shareResult = await shareReportImageFile(file, messageText);
-      if (shareResult === 'shared') {
-        toast.success('Shared to WhatsApp — image and caption should appear together');
-        return;
-      }
-      if (shareResult === 'cancelled') return;
-
-      const copied = await copyPngBlobToClipboard(blob);
-      if (copied) {
-        openWhatsAppWithText(messageText);
-        toast(
-          (t) => (
-            <div className="flex max-w-sm flex-col gap-2">
-              <p className="font-semibold text-gray-900">Report image copied</p>
-              <p className="text-sm text-gray-600">
-                WhatsApp opened with the summary text. Paste the image into the same chat{' '}
-                <span className="font-semibold">(Ctrl+V / long-press → Paste)</span>, then tap Send once — text and
-                image go together.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  openWhatsAppWithText(messageText);
-                  toast.dismiss(t.id);
-                }}
-                className="mt-1 rounded-lg bg-[#25D366] px-3 py-2 text-sm font-semibold text-white hover:bg-[#20BD5A]"
-              >
-                Open WhatsApp again
-              </button>
-            </div>
-          ),
-          { duration: 15000 }
-        );
-        return;
-      }
-
-      const link = document.createElement('a');
-      link.download = filename;
-      link.href = shareCanvas.toDataURL('image/png');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      openWhatsAppWithText(messageText);
-      toast(
-        (t) => (
-          <div className="flex max-w-sm flex-col gap-2">
-            <p className="font-semibold text-gray-900">Report image downloaded</p>
-            <p className="text-sm text-gray-600">
-              WhatsApp opened with the summary text. Attach the downloaded PNG in the same chat, then tap Send.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                openWhatsAppWithText(messageText);
-                toast.dismiss(t.id);
-              }}
-              className="mt-1 rounded-lg bg-[#25D366] px-3 py-2 text-sm font-semibold text-white hover:bg-[#20BD5A]"
-            >
-              Open WhatsApp again
-            </button>
-          </div>
-        ),
-        { duration: 15000 }
-      );
+      // Capture is slow — always show a second tap (share sheet or save). Never auto-open WhatsApp with text.
+      closePreparedShare();
+      const previewUrl = URL.createObjectURL(file);
+      const next = { previewUrl, file, caption: messageText, canvas: shareCanvas, filename: file.name };
+      preparedShareRef.current = next;
+      setPreparedShare(next);
     } catch {
       toast.error('Failed to capture screenshot');
     } finally {
+      setForceShareCapture(false);
       setIsShareLoading(false);
     }
   };
@@ -1144,8 +1229,10 @@ export const Reports: React.FC = () => {
         ? `${activeColor.activeBg} ${activeColor.activeText} border-transparent shadow-sm`
         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
     }`;
-  const secondaryBtnClass =
-    'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40';
+  const actionBtnBase =
+    'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50';
+  const secondaryBtnClass = `${actionBtnBase} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`;
+  const exportBtnClass = `${actionBtnBase} border border-slate-700 bg-slate-800 text-white hover:bg-slate-900 disabled:bg-slate-300 disabled:text-slate-500 disabled:border-slate-300`;
 
   const selectReportTab = (tab: ReportType) => {
     setReportType(tab);
@@ -1340,7 +1427,7 @@ export const Reports: React.FC = () => {
       const ro = new ResizeObserver(() => updateScrollHint());
       ro.observe(el);
       return () => ro.disconnect();
-    }, [data, updateScrollHint, hourlyShowProductDetails]);
+    }, [data, updateScrollHint, showProductDetails]);
 
     return (
       <div className="relative">
@@ -1369,16 +1456,35 @@ export const Reports: React.FC = () => {
 
   const renderReportKpis = () => {
     if (!reportSummaryStats.length) return null;
+    const shareKpi = forceShareCapture && isMobile;
     return (
-      <div className="grid grid-cols-2 gap-2 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-3">
+      <div
+        className={`grid gap-2 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-3 ${
+          shareKpi
+            ? 'grid-cols-2 gap-3 py-4'
+            : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 lg:gap-3'
+        }`}
+      >
         {reportSummaryStats.map((stat) => (
           <div
             key={stat.label}
-            className={`rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 shadow-sm ring-1 ring-inset ring-white ${activeColor.border}`}
+            className={`rounded-xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-inset ring-white ${activeColor.border} ${
+              shareKpi ? 'px-4 py-3' : 'px-3 py-2.5'
+            }`}
             style={{ borderLeftWidth: 3 }}
           >
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
-            <p className={`mt-0.5 text-xl font-black tabular-nums leading-none sm:text-2xl ${activeColor.text}`}>
+            <p
+              className={`font-bold uppercase tracking-[0.14em] text-slate-500 ${
+                shareKpi ? 'text-xs' : 'text-[10px]'
+              }`}
+            >
+              {stat.label}
+            </p>
+            <p
+              className={`mt-1 font-black tabular-nums leading-none ${activeColor.text} ${
+                shareKpi ? 'text-3xl' : 'mt-0.5 text-xl sm:text-2xl'
+              }`}
+            >
               {stat.value}
             </p>
           </div>
@@ -1414,7 +1520,7 @@ export const Reports: React.FC = () => {
       'hourly-production': [
         'date',
         'line',
-        'customer',
+        ...(showProductDetails ? PRODUCT_FIELD_KEYS : []),
         'total_planned_qty',
         'total_input',
         'input_percent',
@@ -1422,7 +1528,16 @@ export const Reports: React.FC = () => {
         'output_percent',
         ...HOURLY_HOUR_KEYS,
       ],
-      'line-efficiency': ['date', 'line', 'process', 'total_planned_qty', 'total_output', 'output_percent', 'efficiency_percent'],
+      'line-efficiency': [
+        'date',
+        'line',
+        'process',
+        ...(showProductDetails ? PRODUCT_FIELD_KEYS : []),
+        'total_planned_qty',
+        'total_output',
+        'output_percent',
+        'efficiency_percent',
+      ],
       'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'login_time'],
       'rework-rejection': ['date', 'line', 'machine', 'target', 'output', 'output_percent', 'rework_qty', 'rejection_qty'],
       'employee-output': ['date', 'line', 'emp_code', 'target', 'total_output', 'output_percent'],
@@ -1448,22 +1563,39 @@ export const Reports: React.FC = () => {
         comparePeriods.forEach((p) => keys.push(`__cmp_eff_${p}`));
       }
     });
+    const shareCard = forceShareCapture && isMobile;
     return (
-      <div className="space-y-3 p-3">
+      <div className={shareCard ? 'space-y-4 bg-slate-50/80 p-4' : 'space-y-3 p-3'}>
         {data.map((row, i) => (
           <div
             key={i}
-            className={`rounded-xl border bg-white shadow-sm overflow-hidden border-l-4 ${activeColor.border}`}
+            className={`overflow-hidden rounded-xl border bg-white shadow-sm border-l-4 ${activeColor.border} ${
+              shareCard ? 'shadow-md' : ''
+            }`}
           >
-            <div className={`px-3 py-2 flex items-center justify-between gap-2 ${activeColor.bg}`}>
-              <span className={`text-xs font-bold ${activeColor.text}`}>{fmtDate(row.date) || '—'}</span>
+            <div
+              className={`${activeColor.bg} ${
+                shareCard
+                  ? 'flex flex-col items-stretch gap-1.5 px-4 py-3'
+                  : 'flex items-center justify-between gap-2 px-3 py-2'
+              }`}
+            >
+              <span className={`font-bold ${activeColor.text} ${shareCard ? 'text-base' : 'text-xs'}`}>
+                {fmtDate(row.date) || '—'}
+              </span>
               {(row.line || row.work_centre_name) && (
-                <span className="text-xs font-semibold text-slate-600 truncate max-w-[55%]">
-                  {row.line || row.work_centre_name}
+                <span
+                  className={
+                    shareCard
+                      ? 'text-base font-semibold leading-snug text-slate-800 break-words'
+                      : 'max-w-[60%] truncate text-xs font-semibold text-slate-600'
+                  }
+                >
+                  {shareCard ? `Line: ${row.line || row.work_centre_name}` : row.line || row.work_centre_name}
                 </span>
               )}
             </div>
-            <div className="p-3 space-y-0">
+            <div className={shareCard ? 'space-y-0 p-4' : 'space-y-0 p-3'}>
               {keys.filter((k) => k !== 'date' && k !== 'line' && k !== 'work_centre_name').map((key) => {
                 if (key.startsWith('__cmp_')) {
                   const [, metric, period] = key.match(/^__cmp_(out|outpct|eff)_(yesterday|last_week)$/) || [];
@@ -1502,13 +1634,28 @@ export const Reports: React.FC = () => {
                 if (key === 'status' && value === 'Absent') value = <span className="text-red-600 font-semibold">Absent</span>;
                 if (value === null || value === undefined || value === '') value = '—';
                 return (
-                  <div key={key} className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0">
-                    <span className="text-xs font-semibold text-slate-500">
+                  <div
+                    key={key}
+                    className={`flex items-start justify-between border-b border-slate-100 py-2 last:border-b-0 ${
+                      shareCard ? 'gap-4 py-2.5' : 'gap-3'
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 font-semibold text-slate-500 ${
+                        shareCard ? 'text-sm' : 'text-xs'
+                      }`}
+                    >
                       {HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])
                         ? HOURLY_HOUR_LABELS[key as (typeof HOURLY_HOUR_KEYS)[number]]
                         : reportColumnLabel(key, apiReportType)}
                     </span>
-                    <span className="text-sm font-medium text-slate-800 text-right">{typeof value === 'object' ? value : String(value)}</span>
+                    <span
+                      className={`text-right font-medium text-slate-800 ${
+                        shareCard ? 'text-base font-semibold' : 'text-sm'
+                      }`}
+                    >
+                      {typeof value === 'object' ? value : String(value)}
+                    </span>
                   </div>
                 );
               })}
@@ -1817,7 +1964,7 @@ export const Reports: React.FC = () => {
     }
     metricHeaders.push('Day WIP', 'Avg/Hr');
     const hourHeaders = HOURLY_HOUR_KEYS.map((k) => HOURLY_HOUR_LABELS[k]);
-    const productHeaders = hourlyShowProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
+    const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
     const allHeaders = ['Date', 'Line', ...productHeaders, ...metricHeaders, ...hourHeaders];
     const leftAlign = new Set(['Date', 'Line', ...HOURLY_PRODUCT_HEADERS]);
     const labelColSpan = 2 + productHeaders.length;
@@ -1852,7 +1999,7 @@ export const Reports: React.FC = () => {
                   <Td stickyLeft={stickyLineLeft} rowShade={shaded}>
                     <LineBadge name={row.line} />
                   </Td>
-                  {hourlyShowProductDetails && (
+                  {showProductDetails && (
                     <>
                       <Td>{row.customer}</Td>
                       <Td>{row.article_no}</Td>
@@ -1918,7 +2065,8 @@ export const Reports: React.FC = () => {
 
   const renderLineEfficiency = () => {
     const avgEff = data!.length ? Math.round(data!.reduce((s, row) => s + (parseFloat(row.efficiency_percent) || 0), 0) / data!.length) : 0;
-    const baseHeaders = ['Date', 'Line', 'Machine', 'Customer', 'Article No', 'Color', 'Leather', 'Group', 'EOD target', 'Output'];
+    const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
+    const baseHeaders = ['Date', 'Line', 'Machine', ...productHeaders, 'EOD target', 'Output'];
     const lineHeaders: string[] = [...baseHeaders];
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => lineHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
@@ -1931,7 +2079,7 @@ export const Reports: React.FC = () => {
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => lineHeaders.push(`Eff % vs ${comparePeriodHeaderLabel(p)}`));
     }
-    const leftCols = new Set(['Date', 'Line', 'Machine', 'Customer', 'Article No', 'Color', 'Leather', 'Group']);
+    const leftCols = new Set(['Date', 'Line', 'Machine', ...HOURLY_PRODUCT_HEADERS]);
     const trailingCompareCols = showPeriodCompare ? comparePeriods.length : 0;
     return (
       <TableWrap>
@@ -1947,7 +2095,15 @@ export const Reports: React.FC = () => {
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
                 <Td><span className="font-medium">{row.process}</span></Td>
-                <Td>{row.customer}</Td><Td>{row.article_no}</Td><Td>{row.color}</Td><Td>{row.leather}</Td><Td>{row.group}</Td>
+                {showProductDetails && (
+                  <>
+                    <Td>{row.customer}</Td>
+                    <Td>{row.article_no}</Td>
+                    <Td>{row.color}</Td>
+                    <Td>{row.leather}</Td>
+                    <Td>{row.group}</Td>
+                  </>
+                )}
                 <Td center>{r(row.total_planned_qty)}</Td>
                 <Td center><span className="font-bold text-green-600">{r(row.total_output)}</span></Td>
                 {showPeriodCompare && renderCompareMetricCells(row, 'total_output', rowShade)}
@@ -2474,7 +2630,7 @@ export const Reports: React.FC = () => {
                     type="button"
                     onClick={() => setShowExportMenu((v) => !v)}
                     disabled={!data || data.length === 0 || isExportLoading}
-                    className={`${secondaryBtnClass} border-slate-700 bg-slate-800 text-white hover:bg-slate-900`}
+                    className={exportBtnClass}
                   >
                     {isExportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                     Export
@@ -2589,29 +2745,47 @@ export const Reports: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div ref={reportTableRef} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-md">
-            <div className={`border-b px-4 py-3 ${activeColor.bg} ${activeColor.border}`}>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className={`rounded-xl bg-white/70 p-2 shadow-sm ${activeColor.text}`}>{activeOption.icon}</span>
-                  <div>
-                    <span className={`block text-sm font-bold ${activeColor.text}`}>
-                      {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
-                    </span>
-                    <span className="text-[11px] font-medium text-slate-600">
-                      {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
-                    </span>
+          <div
+            ref={reportTableRef}
+            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-md"
+            style={
+              forceShareCapture
+                ? {
+                    position: 'fixed',
+                    left: '-12000px',
+                    top: 0,
+                    width: isMobile ? SHARE_CAPTURE_MOBILE_WIDTH : SHARE_CAPTURE_DESKTOP_WIDTH,
+                    maxWidth: isMobile ? SHARE_CAPTURE_MOBILE_WIDTH : SHARE_CAPTURE_DESKTOP_WIDTH,
+                    zIndex: -1,
+                    pointerEvents: 'none',
+                  }
+                : undefined
+            }
+          >
+            {!forceShareCapture && (
+              <div className={`border-b px-4 py-3 ${activeColor.bg} ${activeColor.border}`}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`rounded-xl bg-white/70 p-2 shadow-sm ${activeColor.text}`}>{activeOption.icon}</span>
+                    <div>
+                      <span className={`block text-sm font-bold ${activeColor.text}`}>
+                        {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-600">
+                        {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
+                      </span>
+                    </div>
                   </div>
+                  <span className="text-xs font-medium text-slate-600">
+                    {fmtDate(fromDate)} — {fmtDate(toDate)}
+                    {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
+                    {reportType === 'hourly-production' && selectedMachine && ` · M${selectedMachine}`}
+                  </span>
                 </div>
-                <span className="text-xs font-medium text-slate-600">
-                  {fmtDate(fromDate)} — {fmtDate(toDate)}
-                  {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
-                  {reportType === 'hourly-production' && selectedMachine && ` · M${selectedMachine}`}
-                </span>
               </div>
-            </div>
+            )}
             {renderReportKpis()}
-            {showPeriodCompare && (compareLoading || compareMaps) && (
+            {showPeriodCompare && !forceShareCapture && (compareLoading || compareMaps) && (
               <div className="flex items-center gap-2 border-b border-amber-100 bg-amber-50/90 px-4 py-2.5 text-xs text-amber-950">
                 {compareLoading ? (
                   <>
@@ -2631,9 +2805,11 @@ export const Reports: React.FC = () => {
             )}
             {isMobile ? (
               <>
-                <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2 text-xs text-slate-500">
-                  Card layout for mobile — use landscape or desktop for the full grid.
-                </div>
+                {!forceShareCapture && (
+                  <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2 text-xs text-slate-500">
+                    Card layout for mobile — use landscape or desktop for the full grid.
+                  </div>
+                )}
                 {renderMobileCards()}
               </>
             ) : (
@@ -2643,14 +2819,16 @@ export const Reports: React.FC = () => {
                     <ChevronRight className="h-3 w-3 shrink-0 rotate-90" />
                     {reportType === 'hourly-production'
                       ? 'Scroll for hour columns · Date & line stay fixed on the left'
-                      : 'Scroll horizontally for all columns'}
+                      : reportType === 'line-efficiency'
+                        ? 'Scroll for all columns · Date, line & machine on the left'
+                        : 'Scroll horizontally for all columns'}
                   </p>
-                  {reportType === 'hourly-production' && (
-                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  {supportsProductColumnToggle(reportType) && (
+                    <label className="inline-flex cursor-pointer select-none items-center gap-2">
                       <input
                         type="checkbox"
-                        checked={hourlyShowProductDetails}
-                        onChange={(e) => setHourlyShowProductDetails(e.target.checked)}
+                        checked={showProductDetails}
+                        onChange={(e) => setShowProductDetails(e.target.checked)}
                         className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
                       <span className="text-[11px] font-semibold text-slate-600">Show product columns</span>
@@ -2660,19 +2838,89 @@ export const Reports: React.FC = () => {
                 {renderTable()}
               </>
             )}
-            {data && data.length > 0 && (
-              <Pagination
-                currentPage={page}
-                totalPages={pagination.totalPages}
-                totalItems={pagination.total}
-                itemsPerPage={limit}
-                onPageChange={handlePageChange}
-                onItemsPerPageChange={handleLimitChange}
-              />
-            )}
           </div>
         )}
+        {data && data.length > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={limit}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleLimitChange}
+          />
+        )}
       </div>
+
+      {preparedShare && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal
+          aria-labelledby="share-report-title"
+        >
+          <div className="flex max-h-[92dvh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-2xl sm:max-h-[85vh] sm:rounded-2xl">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-4 pb-3 pt-4">
+              <div className="min-w-0 pr-2">
+                <h3 id="share-report-title" className="text-base font-bold text-slate-900">
+                  Share report
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {canAttemptNativeShare()
+                    ? 'Tap Share below — pick WhatsApp from your phone’s app list.'
+                    : 'Tap Save image — then attach the file in WhatsApp from Downloads.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePreparedShare}
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <img
+                src={preparedShare.previewUrl}
+                alt="Report preview"
+                className="mx-auto max-h-36 w-full rounded-xl border border-slate-200 object-contain bg-slate-50 sm:max-h-44"
+              />
+              <p className="mt-2 text-center text-[11px] text-slate-400">Preview — summary is included on the image</p>
+            </div>
+            <div className="shrink-0 border-t border-slate-100 bg-white px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={sharePreparedReport}
+                disabled={isSavingShare}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#1da851] bg-[#25D366] px-4 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#20BD5A] active:scale-[0.98] disabled:opacity-60"
+              >
+                {isSavingShare ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <WhatsAppIcon className="h-4 w-4 shrink-0" />
+                )}
+                {isSavingShare ? 'Saving…' : canAttemptNativeShare() ? 'Share' : 'Save image'}
+              </button>
+              {canAttemptNativeShare() && (
+                <button
+                  type="button"
+                  onClick={() => void saveShareImageOnly(preparedShare)}
+                  disabled={isSavingShare}
+                  className="mt-2 w-full text-center text-sm font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                >
+                  Save to Downloads instead
+                </button>
+              )}
+              {typeof window !== 'undefined' && !window.isSecureContext && (
+                <p className="mt-2 text-center text-xs text-amber-700">
+                  Use HTTPS to see WhatsApp in the share menu.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
