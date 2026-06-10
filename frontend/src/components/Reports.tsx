@@ -19,6 +19,102 @@ import {
   numCompare,
 } from '../utils/reportCompareUtils';
 
+const WhatsAppIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+  </svg>
+);
+
+const stripWhatsAppMarkdown = (text: string) => text.replace(/\*/g, '');
+
+const canvasToPngBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
+  new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+
+/** Stack summary text above the table capture so the PNG is self-contained. */
+const buildReportShareCanvas = (tableCanvas: HTMLCanvasElement, messageText: string): HTMLCanvasElement => {
+  const lines = messageText.split('\n').map(stripWhatsAppMarkdown);
+  const padding = 28;
+  const titleSize = 26;
+  const metaSize = 18;
+  const titleLineHeight = 34;
+  const metaLineHeight = 24;
+  const headerHeight = padding + titleLineHeight + Math.max(0, lines.length - 1) * metaLineHeight + padding;
+  const dividerGap = 12;
+
+  const out = document.createElement('canvas');
+  out.width = tableCanvas.width;
+  out.height = headerHeight + dividerGap + tableCanvas.height;
+
+  const ctx = out.getContext('2d');
+  if (!ctx) return tableCanvas;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, out.width, headerHeight);
+
+  lines.forEach((line, i) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.font =
+      i === 0
+        ? `bold ${titleSize}px Arial, Helvetica, sans-serif`
+        : `${metaSize}px Arial, Helvetica, sans-serif`;
+    const y = padding + (i === 0 ? titleSize : titleLineHeight + metaSize + (i - 1) * metaLineHeight);
+    ctx.fillText(line, padding, y);
+  });
+
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, headerHeight);
+  ctx.lineTo(out.width, headerHeight);
+  ctx.stroke();
+
+  ctx.drawImage(tableCanvas, 0, headerHeight + dividerGap);
+  return out;
+};
+
+const copyPngBlobToClipboard = async (blob: Blob): Promise<boolean> => {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return false;
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const openWhatsAppWithText = (messageText: string) => {
+  window.open(`https://wa.me/?text=${encodeURIComponent(messageText)}`, '_blank', 'noopener,noreferrer');
+};
+
+const shareReportImageFile = async (file: File, caption: string): Promise<'shared' | 'cancelled' | 'failed'> => {
+  if (!navigator.share) return 'failed';
+
+  const plainCaption = stripWhatsAppMarkdown(caption);
+
+  if (navigator.canShare?.({ files: [file], text: plainCaption })) {
+    try {
+      await navigator.share({ files: [file], text: plainCaption, title: file.name });
+      return 'shared';
+    } catch (err: unknown) {
+      if ((err as { name?: string })?.name === 'AbortError') return 'cancelled';
+    }
+  }
+
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: file.name });
+      return 'shared';
+    } catch (err: unknown) {
+      if ((err as { name?: string })?.name === 'AbortError') return 'cancelled';
+    }
+  }
+
+  return 'failed';
+};
+
 /** UI tabs (8). Legacy API slugs kept for fetch/export via resolveApiReportType. */
 type ReportType =
   | 'hourly-production'
@@ -92,8 +188,15 @@ const migrateReportTab = (raw: string): { tab: ReportType; subView: ReportSubVie
     breakdown: { tab: 'idle-stoppages', subView: 'breakdown' },
     'machine-output': { tab: 'line-efficiency', subView: '' },
   };
-  if (legacy[raw]) return legacy[raw];
-  const tab = raw as ReportType;
+  if (legacy[raw]) {
+    const migrated = legacy[raw];
+    const tab = normalizeVisibleReportTab(migrated.tab);
+    return {
+      tab,
+      subView: tab === migrated.tab ? migrated.subView : defaultSubViewFor(tab),
+    };
+  }
+  const tab = normalizeVisibleReportTab(raw as ReportType);
   return { tab, subView: defaultSubViewFor(tab) };
 };
 
@@ -106,6 +209,16 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
   { value: 'idle-stoppages', label: 'Time Loss & Stoppages', icon: <Wrench className="h-5 w-5" />, color: 'orange', keywords: 'time loss cycle late start bottleneck breakdown M4 stoppage' },
   { value: 'shift-summary', label: 'Shift Summary', icon: <BarChart2 className="h-5 w-5" />, color: 'slate' },
 ];
+
+/** Temporarily hidden from the report picker — remove entries to re-enable. */
+const HIDDEN_REPORT_TYPES: ReadonlySet<ReportType> = new Set(['attendance']);
+const SHOW_DAILY_INACTIVE_REPORT_CALLOUT = false;
+
+const VISIBLE_REPORT_OPTIONS = REPORT_OPTIONS.filter((o) => !HIDDEN_REPORT_TYPES.has(o.value));
+const DEFAULT_VISIBLE_REPORT_TYPE: ReportType = VISIBLE_REPORT_OPTIONS[0]?.value ?? 'hourly-production';
+
+const normalizeVisibleReportTab = (tab: ReportType): ReportType =>
+  HIDDEN_REPORT_TYPES.has(tab) ? DEFAULT_VISIBLE_REPORT_TYPE : tab;
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; activeBg: string; activeText: string }> = {
   blue:   { bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-200',   activeBg: 'bg-blue-600',   activeText: 'text-white' },
@@ -256,7 +369,7 @@ const HEADER_MAP: Record<string, string> = {
   target: 'EOD target',
   line_plan_target: 'Line plan target',
   line_plan_planned_qty: 'Line plan target',
-  wip: 'WIP',
+  wip: 'Day WIP',
   performance_grade: 'Grade', boxes: 'Box', cycles: 'Cycles',
   routing_mins_per_box: 'Routing Mins/6 prs', shift_target_output: 'Shift Target (pairs)', shift_efficiency_pct: 'Shift Efficiency %',
   line_output_percent: 'Line Output %',
@@ -385,7 +498,7 @@ export const Reports: React.FC = () => {
   const [fromDate, setFromDate] = React.useState(defaultRange.from);
   const [toDate, setToDate] = React.useState(defaultRange.to);
   const [datePreset, setDatePreset] = React.useState<DatePreset>('today');
-  const [reportType, setReportType] = React.useState<ReportType>('hourly-production');
+  const [reportType, setReportType] = React.useState<ReportType>(DEFAULT_VISIBLE_REPORT_TYPE);
   const [reportSubView, setReportSubView] = React.useState<ReportSubView>(() => defaultSubViewFor('hourly-production'));
   const apiReportType = React.useMemo(
     () => resolveApiReportType(reportType, reportSubView),
@@ -915,11 +1028,16 @@ export const Reports: React.FC = () => {
     if (!reportTableRef.current) return;
     setIsShareLoading(true);
     try {
-      const canvas = await html2canvas(reportTableRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const tableCanvas = await html2canvas(reportTableRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
       const dateLabel = fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
-      const lineName = selectedLine && workCentres.length > 0
-        ? workCentres.find((w: any) => String(w.id) === String(selectedLine))?.name || 'All Lines'
-        : 'All Lines';
+      const lineName =
+        selectedLine && workCentres.length > 0
+          ? workCentres.find((w: any) => String(w.id) === String(selectedLine))?.name || 'All Lines'
+          : 'All Lines';
       const rowCount = pagination.total || (data?.length ?? 0);
       const viewSuffix = activeSubViewLabel ? ` (${activeSubViewLabel})` : '';
       const messageText =
@@ -929,67 +1047,105 @@ export const Reports: React.FC = () => {
         `📋 Records: ${rowCount}\n` +
         `🕐 Generated: ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 
-      // Try Web Share API first (works on mobile — opens native share sheet with image)
-      if (navigator.canShare) {
-        canvas.toBlob(async (blob) => {
-          if (!blob) { toast.error('Failed to create image'); setIsShareLoading(false); return; }
-          const file = new File([blob], `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}.png`, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({ files: [file], text: messageText });
-              setIsShareLoading(false);
-              return;
-            } catch (err: any) {
-              // User cancelled share — don't fall through to download
-              if (err?.name === 'AbortError') { setIsShareLoading(false); return; }
-            }
-          }
-          // canShare exists but files not supported — fall through to download
-          fallbackDownloadAndOpen(canvas, messageText);
-        }, 'image/png');
-      } else {
-        // Desktop or unsupported browser — download image + open WhatsApp with text
-        fallbackDownloadAndOpen(canvas, messageText);
+      const shareCanvas = buildReportShareCanvas(tableCanvas, messageText);
+      const blob = await canvasToPngBlob(shareCanvas);
+      if (!blob) {
+        toast.error('Failed to create report image');
+        return;
       }
+
+      const filename = `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}.png`;
+      const file = new File([blob], filename, { type: 'image/png' });
+
+      const shareResult = await shareReportImageFile(file, messageText);
+      if (shareResult === 'shared') {
+        toast.success('Shared to WhatsApp — image and caption should appear together');
+        return;
+      }
+      if (shareResult === 'cancelled') return;
+
+      const copied = await copyPngBlobToClipboard(blob);
+      if (copied) {
+        openWhatsAppWithText(messageText);
+        toast(
+          (t) => (
+            <div className="flex max-w-sm flex-col gap-2">
+              <p className="font-semibold text-gray-900">Report image copied</p>
+              <p className="text-sm text-gray-600">
+                WhatsApp opened with the summary text. Paste the image into the same chat{' '}
+                <span className="font-semibold">(Ctrl+V / long-press → Paste)</span>, then tap Send once — text and
+                image go together.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  openWhatsAppWithText(messageText);
+                  toast.dismiss(t.id);
+                }}
+                className="mt-1 rounded-lg bg-[#25D366] px-3 py-2 text-sm font-semibold text-white hover:bg-[#20BD5A]"
+              >
+                Open WhatsApp again
+              </button>
+            </div>
+          ),
+          { duration: 15000 }
+        );
+        return;
+      }
+
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = shareCanvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      openWhatsAppWithText(messageText);
+      toast(
+        (t) => (
+          <div className="flex max-w-sm flex-col gap-2">
+            <p className="font-semibold text-gray-900">Report image downloaded</p>
+            <p className="text-sm text-gray-600">
+              WhatsApp opened with the summary text. Attach the downloaded PNG in the same chat, then tap Send.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                openWhatsAppWithText(messageText);
+                toast.dismiss(t.id);
+              }}
+              className="mt-1 rounded-lg bg-[#25D366] px-3 py-2 text-sm font-semibold text-white hover:bg-[#20BD5A]"
+            >
+              Open WhatsApp again
+            </button>
+          </div>
+        ),
+        { duration: 15000 }
+      );
     } catch {
       toast.error('Failed to capture screenshot');
+    } finally {
       setIsShareLoading(false);
     }
   };
 
-  const fallbackDownloadAndOpen = (canvas: HTMLCanvasElement, messageText: string) => {
-    const link = document.createElement('a');
-    link.download = `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}_${toDate}.png`;
-    link.href = canvas.toDataURL('image/png');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast(
-      (t) => (
-        <div className="flex flex-col gap-2">
-          <p className="font-semibold text-gray-800">📸 Screenshot downloaded!</p>
-          <p className="text-sm text-gray-600">Open WhatsApp, start a chat, tap the attachment icon and select the downloaded image.</p>
-          <button
-            onClick={() => {
-              window.open(`https://wa.me/?text=${encodeURIComponent(messageText)}`, '_blank');
-              toast.dismiss(t.id);
-            }}
-            className="mt-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-lg"
-          >
-            Open WhatsApp
-          </button>
-        </div>
-      ),
-      { duration: 12000 }
-    );
-    setIsShareLoading(false);
-  };
-
-  const activeOption = REPORT_OPTIONS.find(o => o.value === reportType)!;
-  const activeColor = COLOR_MAP[activeOption.color];
-  const lineBadgeClass = LINE_BADGE[activeOption.color] || LINE_BADGE.slate;
+  const activeOption = VISIBLE_REPORT_OPTIONS.find((o) => o.value === reportType) ?? VISIBLE_REPORT_OPTIONS[0];
+  const activeColor = COLOR_MAP[activeOption?.color ?? 'blue'];
+  const lineBadgeClass = LINE_BADGE[activeOption?.color ?? 'blue'] || LINE_BADGE.slate;
 
   const activeSubViewLabel = REPORT_SUB_VIEWS[reportType]?.find((s) => s.value === reportSubView)?.label;
+
+  const filterLabelClass =
+    'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500';
+  const filterInputClass =
+    'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm transition-shadow focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25';
+  const presetBtnClass = (active: boolean) =>
+    `rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all ${
+      active
+        ? `${activeColor.activeBg} ${activeColor.activeText} border-transparent shadow-sm`
+        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+    }`;
+  const secondaryBtnClass =
+    'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40';
 
   const selectReportTab = (tab: ReportType) => {
     setReportType(tab);
@@ -1027,8 +1183,9 @@ export const Reports: React.FC = () => {
 
   const filteredReportOptions = React.useMemo(() => {
     const q = reportTypeQuery.trim().toLowerCase();
-    if (!q) return REPORT_OPTIONS;
-    return REPORT_OPTIONS.filter((o) => {
+    const base = VISIBLE_REPORT_OPTIONS;
+    if (!q) return base;
+    return base.filter((o) => {
       const hay = `${o.label} ${o.keywords || ''}`.toLowerCase();
       if (hay.includes(q)) return true;
       const subs = REPORT_SUB_VIEWS[o.value];
@@ -1045,7 +1202,6 @@ export const Reports: React.FC = () => {
         return [
           { label: 'Total output', value: sum('total_output') },
           { label: 'Total planned', value: sum('total_planned_qty') },
-          { label: 'WIP', value: sum('wip') },
         ];
       case 'line-efficiency':
         return [
@@ -1214,11 +1370,17 @@ export const Reports: React.FC = () => {
   const renderReportKpis = () => {
     if (!reportSummaryStats.length) return null;
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+      <div className="grid grid-cols-2 gap-2 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-3">
         {reportSummaryStats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{stat.label}</p>
-            <p className={`text-lg font-bold tabular-nums ${activeColor.text}`}>{stat.value}</p>
+          <div
+            key={stat.label}
+            className={`rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 shadow-sm ring-1 ring-inset ring-white ${activeColor.border}`}
+            style={{ borderLeftWidth: 3 }}
+          >
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
+            <p className={`mt-0.5 text-xl font-black tabular-nums leading-none sm:text-2xl ${activeColor.text}`}>
+              {stat.value}
+            </p>
           </div>
         ))}
       </div>
@@ -1645,7 +1807,6 @@ export const Reports: React.FC = () => {
     const totalOutput = data!.reduce((s, row) => s + r(row.total_output), 0);
     const totalPlanned = data!.reduce((s, row) => s + r(row.total_planned_qty), 0);
     const totalInput = data!.reduce((s, row) => s + r(row.total_input), 0);
-    const totalWip = data!.reduce((s, row) => s + r(row.wip), 0);
     const metricHeaders: string[] = ['Planned', 'Input', 'Input %', 'Output'];
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => metricHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
@@ -1654,7 +1815,7 @@ export const Reports: React.FC = () => {
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => metricHeaders.push(`Out % vs ${comparePeriodHeaderLabel(p)}`));
     }
-    metricHeaders.push('WIP', 'Avg/Hr');
+    metricHeaders.push('Day WIP', 'Avg/Hr');
     const hourHeaders = HOURLY_HOUR_KEYS.map((k) => HOURLY_HOUR_LABELS[k]);
     const productHeaders = hourlyShowProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
     const allHeaders = ['Date', 'Line', ...productHeaders, ...metricHeaders, ...hourHeaders];
@@ -1746,7 +1907,7 @@ export const Reports: React.FC = () => {
               {showPeriodCompare && comparePeriods.map((p) => (
                 <td key={`pct-${p}`} className="px-3 py-2.5 text-sm text-center text-blue-100/80">—</td>
               ))}
-              <td className="px-3 py-2.5 text-sm font-bold text-center">{totalWip}</td>
+              <td className="px-3 py-2.5 text-sm text-center text-blue-100/80">—</td>
               <td colSpan={HOURLY_HOUR_KEYS.length + 1} />
             </tr>
           </tfoot>
@@ -1987,30 +2148,45 @@ export const Reports: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 p-3 sm:p-6">
-      <div className="max-w-[1600px] mx-auto space-y-4 sm:space-y-5">
+    <div className="min-h-screen bg-gradient-to-b from-slate-200/40 via-slate-50 to-slate-100 p-3 sm:p-6">
+      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
 
         {/* Hero */}
-        <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg overflow-hidden">
-          <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="overflow-hidden rounded-2xl border border-slate-800/50 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl">
+          <div className={`h-1 ${activeColor.activeBg}`} />
+          <div className="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-xl bg-white/10 ring-1 ring-white/20">
+              <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/15">
                 <Sparkles className="h-6 w-6 text-amber-300" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Reports</h1>
-                <p className="text-sm text-slate-300 mt-0.5">Production analytics · export · share</p>
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Reports</h1>
+                <p className="mt-0.5 text-sm text-slate-300">Production analytics · export · share</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-white/20 ${activeColor.activeBg} text-white`}>
+                    <span className="flex h-4 w-4 items-center justify-center [&>svg]:h-3.5 [&>svg]:w-3.5">
+                      {activeOption.icon}
+                    </span>
+                    {activeOption.label}
+                    {activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+                  </span>
+                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-slate-200 ring-1 ring-white/10">
+                    {fmtDate(fromDate)} — {fmtDate(toDate)}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {data && data.length > 0 && (
-                <div className="flex items-center gap-2 bg-white/10 ring-1 ring-white/15 rounded-lg px-3 py-2 text-sm">
-                  <span className={`w-2 h-2 rounded-full ${activeColor.activeBg}`} />
-                  <span className="font-medium">{data.length} / {pagination.total || data.length} rows</span>
+                <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm ring-1 ring-white/15">
+                  <span className={`h-2 w-2 rounded-full ${activeColor.activeBg}`} />
+                  <span className="font-semibold tabular-nums">
+                    {data.length} / {pagination.total || data.length} rows
+                  </span>
                 </div>
               )}
               {lastReportGeneratedAt && (
-                <span className="text-xs text-slate-400 hidden sm:inline">
+                <span className="hidden text-xs text-slate-400 sm:inline">
                   Last run {lastReportGeneratedAt.toLocaleTimeString()}
                 </span>
               )}
@@ -2018,6 +2194,7 @@ export const Reports: React.FC = () => {
           </div>
         </div>
 
+        {SHOW_DAILY_INACTIVE_REPORT_CALLOUT && (
         <div className="rounded-xl bg-white/90 backdrop-blur border border-blue-200/80 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
@@ -2036,29 +2213,38 @@ export const Reports: React.FC = () => {
             <ChevronRight className="h-3.5 w-3.5" />
           </a>
         </div>
+        )}
 
         {/* Report type picker */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 shrink-0">Report type</p>
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                type="text"
-                value={reportTypeQuery}
-                onChange={(e) => setReportTypeQuery(e.target.value)}
-                placeholder="Filter reports…"
-                className="w-full border border-slate-200 rounded-lg pl-8 pr-8 py-1.5 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {reportTypeQuery && (
-                <button type="button" onClick={() => setReportTypeQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-4 py-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <p className="shrink-0 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Report type</p>
+              <div className="relative max-w-md flex-1">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={reportTypeQuery}
+                  onChange={(e) => setReportTypeQuery(e.target.value)}
+                  placeholder="Filter reports…"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+                />
+                {reportTypeQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setReportTypeQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <span className="text-xs font-medium tabular-nums text-slate-400">
+                {filteredReportOptions.length} / {VISIBLE_REPORT_OPTIONS.length}
+              </span>
             </div>
-            <span className="text-xs text-slate-400">{filteredReportOptions.length} of {REPORT_OPTIONS.length}</span>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory [scrollbar-width:thin]">
+          <div className="flex gap-2.5 overflow-x-auto p-3 snap-x snap-mandatory [scrollbar-width:thin] sm:p-4">
             {filteredReportOptions.map((opt) => {
               const c = COLOR_MAP[opt.color];
               const hoverBg = HOVER_BG_MAP[opt.color] || 'hover:bg-slate-50';
@@ -2068,120 +2254,136 @@ export const Reports: React.FC = () => {
                   key={opt.value}
                   type="button"
                   onClick={() => selectReportTab(opt.value)}
-                  className={`snap-start shrink-0 flex flex-col items-center gap-1.5 min-w-[108px] max-w-[120px] p-3 rounded-xl border-2 transition-all text-center ${
+                  className={`snap-start flex min-w-[118px] max-w-[128px] shrink-0 flex-col items-center gap-2 rounded-2xl border-2 p-3.5 text-center transition-all ${
                     isActive
-                      ? `${c.activeBg} ${c.activeText} border-transparent shadow-md ring-2 ring-offset-1 ring-slate-300`
-                      : `bg-white ${c.text} ${c.border} ${hoverBg} hover:shadow-sm`
+                      ? `${c.activeBg} ${c.activeText} border-transparent shadow-lg ring-2 ring-offset-2 ring-slate-200`
+                      : `border-slate-200/80 bg-white ${c.text} ${hoverBg} hover:border-slate-300 hover:shadow-md`
                   }`}
                 >
-                  <div className={`p-1.5 rounded-lg ${isActive ? 'bg-white/20' : c.bg}`}>{opt.icon}</div>
-                  <span className="text-[11px] font-semibold leading-tight">{opt.label}</span>
+                  <div className={`rounded-xl p-2 ${isActive ? 'bg-white/20 ring-1 ring-white/25' : c.bg}`}>
+                    {opt.icon}
+                  </div>
+                  <span className="text-[11px] font-bold leading-tight tracking-tight">{opt.label}</span>
                 </button>
               );
             })}
           </div>
           {filteredReportOptions.length === 0 && (
-            <p className="text-sm text-slate-500 py-4 text-center">No reports match your search.</p>
+            <p className="py-6 text-center text-sm text-slate-500">No reports match your search.</p>
           )}
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-          <div className={`px-4 py-3 border-b border-slate-100 flex items-center gap-2 ${activeColor.bg}`}>
-            <Filter className={`h-4 w-4 ${activeColor.text}`} />
-            <span className={`text-sm font-bold ${activeColor.text}`}>
-              {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''} — filters
-            </span>
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className={`border-b border-slate-100 px-4 py-3 ${activeColor.bg}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Filter className={`h-4 w-4 ${activeColor.text}`} />
+              <span className={`text-sm font-bold ${activeColor.text}`}>
+                {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+              </span>
+              <span className="text-xs font-medium text-slate-500">Filters & actions</span>
+            </div>
           </div>
-          <div className="p-4">
+          <div className="p-4 sm:p-5">
           {REPORT_SUB_VIEWS[reportType] && (
-            <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-slate-100">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 w-full sm:w-auto sm:mr-1 self-center">View</span>
+            <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-100 pb-4">
+              <span className="w-full self-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500 sm:mr-1 sm:w-auto">
+                View
+              </span>
               {REPORT_SUB_VIEWS[reportType]!.map((sub) => (
                 <button
                   key={sub.value}
                   type="button"
                   onClick={() => selectReportSubView(sub.value)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-                    reportSubView === sub.value
-                      ? `${activeColor.activeBg} ${activeColor.activeText} border-transparent`
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
+                  className={presetBtnClass(reportSubView === sub.value)}
                 >
                   {sub.label}
                 </button>
               ))}
             </div>
           )}
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="mb-4 flex flex-wrap gap-2">
             {([
               { key: 'today', label: 'Today' },
               { key: 'yesterday', label: 'Yesterday' },
-              { key: 'last7', label: 'Last 7 Days' },
-              { key: 'thisMonth', label: 'This Month' },
+              { key: 'last7', label: 'Last 7 days' },
+              { key: 'thisMonth', label: 'This month' },
               { key: 'custom', label: 'Custom' },
             ] as { key: DatePreset; label: string }[]).map((preset) => (
               <button
                 key={preset.key}
                 type="button"
                 onClick={() => applyDatePreset(preset.key)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-                  datePreset === preset.key
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                }`}
+                className={presetBtnClass(datePreset === preset.key)}
               >
                 {preset.label}
               </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 items-end">
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Line</label>
-              <select value={selectedLine} onChange={e => setSelectedLine(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                <option value="">All Lines</option>
-                {workCentres.map(wc => <option key={wc.id} value={wc.id}>{wc.name}</option>)}
+              <label className={filterLabelClass}>Line</label>
+              <select value={selectedLine} onChange={(e) => setSelectedLine(e.target.value)} className={filterInputClass}>
+                <option value="">All lines</option>
+                {workCentres.map((wc) => (
+                  <option key={wc.id} value={wc.id}>
+                    {wc.name}
+                  </option>
+                ))}
               </select>
             </div>
             {reportType === 'hourly-production' && (
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Machine</label>
-                <select value={selectedMachine} onChange={e => setSelectedMachine(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 min-w-[180px]">
-                  <option value="">End-of-line (Default)</option>
+                <label className={filterLabelClass}>Machine</label>
+                <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className={filterInputClass}>
+                  <option value="">End-of-line (default)</option>
                   {filteredMachines.map((machine: any) => (
                     <option key={machine.id || machine.machine_id} value={machine.machine_id}>
-                      {machine.machine_id} {machine.machine_name || machine.name ? `- ${machine.machine_name || machine.name}` : ''}
+                      {machine.machine_id}{' '}
+                      {machine.machine_name || machine.name ? `- ${machine.machine_name || machine.name}` : ''}
                     </option>
                   ))}
                 </select>
               </div>
             )}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+              <label className={`${filterLabelClass} flex items-center gap-1`}>
                 <Calendar className="h-3 w-3" /> From
               </label>
-              <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setDatePreset('custom'); }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setDatePreset('custom');
+                }}
+                className={filterInputClass}
+              />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+              <label className={`${filterLabelClass} flex items-center gap-1`}>
                 <Calendar className="h-3 w-3" /> To
               </label>
-              <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setDatePreset('custom'); }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setDatePreset('custom');
+                }}
+                className={filterInputClass}
+              />
             </div>
             {supportsPeriodCompare && (
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> Compare period
+                <label className={`${filterLabelClass} flex items-center gap-1`}>
+                  <TrendingUp className="h-3 w-3" /> Compare
                 </label>
                 <select
                   value={compareMode}
                   onChange={(e) => setCompareMode(e.target.value as ReportCompareMode)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                  className={filterInputClass}
                 >
                   <option value="none">None</option>
                   <option value="yesterday">vs Yesterday</option>
@@ -2191,23 +2393,36 @@ export const Reports: React.FC = () => {
               </div>
             )}
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Search</label>
+              <label className={filterLabelClass}>Search</label>
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <input type="text" value={search} onChange={e => {
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => {
                     const val = e.target.value;
                     setSearch(val);
                     if (data !== null) {
                       if (searchTimeout.current) clearTimeout(searchTimeout.current);
-                      searchTimeout.current = setTimeout(() => { setPage(1); fetchReport(1, val); }, 500);
+                      searchTimeout.current = setTimeout(() => {
+                        setPage(1);
+                        fetchReport(1, val);
+                      }, 500);
                     }
                   }}
-                  onKeyDown={e => e.key === 'Enter' && fetchReport(1, search)}
-                  placeholder="Name, line, machine..."
-                  className="w-full border border-slate-200 rounded-lg pl-8 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+                  onKeyDown={(e) => e.key === 'Enter' && fetchReport(1, search)}
+                  placeholder="Name, line, machine…"
+                  className={`${filterInputClass} pl-9 pr-9`}
+                />
                 {search && (
-                  <button type="button" onClick={() => { setSearch(''); if (data !== null) fetchReport(1, ''); }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('');
+                      if (data !== null) fetchReport(1, '');
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -2215,71 +2430,98 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4">
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <button
                 type="button"
-                onClick={() => { setPage(1); fetchReport(1); }}
+                onClick={() => {
+                  setPage(1);
+                  fetchReport(1);
+                }}
                 disabled={isLoading || !!dateError}
-                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50 ${activeColor.activeBg} hover:opacity-90 shadow-md`}
+                className={`inline-flex min-h-[2.75rem] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-[0.98] disabled:opacity-50 ${activeColor.activeBg} hover:opacity-90`}
               >
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart2 className="h-4 w-4" />}
                 Generate report
               </button>
-              <button
-                type="button"
-                onClick={shareViaWhatsApp}
-                disabled={!data || data.length === 0 || isShareLoading}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-40 shadow-sm"
-              >
-                {isShareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                WhatsApp
-              </button>
-              <button type="button" onClick={clearAllFilters} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200">
-                <RotateCcw className="h-4 w-4" /> Reset
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.href)
-                    .then(() => toast.success('Report link copied'))
-                    .catch(() => toast.error('Could not copy link'));
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200"
-              >
-                <Copy className="h-4 w-4" /> Copy link
-              </button>
-              <div className="relative">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowExportMenu((v) => !v)}
-                  disabled={!data || data.length === 0 || isExportLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 disabled:opacity-40 shadow-sm"
+                  onClick={shareViaWhatsApp}
+                  disabled={!data || data.length === 0 || isShareLoading}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#1da851] bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#20BD5A] active:scale-[0.98] disabled:opacity-40"
                 >
-                  {isExportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  Export
-                  <ChevronRight className={`h-4 w-4 transition-transform ${showExportMenu ? 'rotate-90' : ''}`} />
+                  {isShareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <WhatsAppIcon className="h-4 w-4 shrink-0" />}
+                  WhatsApp
                 </button>
-                {showExportMenu && (
-                  <div className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-lg border border-slate-200 bg-white shadow-lg py-1">
-                    <button type="button" onClick={() => { exportCSV(); setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                      <Download className="h-3.5 w-3.5" /> CSV
-                    </button>
-                    <button type="button" onClick={() => { exportExcel(); setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel
-                    </button>
-                    <button type="button" onClick={() => { exportPDF(); setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                      <FileText className="h-3.5 w-3.5 text-rose-600" /> PDF
-                    </button>
-                  </div>
-                )}
+                <button type="button" onClick={clearAllFilters} className={secondaryBtnClass}>
+                  <RotateCcw className="h-4 w-4" /> Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard
+                      .writeText(window.location.href)
+                      .then(() => toast.success('Report link copied'))
+                      .catch(() => toast.error('Could not copy link'));
+                  }}
+                  className={secondaryBtnClass}
+                >
+                  <Copy className="h-4 w-4" /> Copy link
+                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowExportMenu((v) => !v)}
+                    disabled={!data || data.length === 0 || isExportLoading}
+                    className={`${secondaryBtnClass} border-slate-700 bg-slate-800 text-white hover:bg-slate-900`}
+                  >
+                    {isExportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Export
+                    <ChevronRight className={`h-4 w-4 transition-transform ${showExportMenu ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showExportMenu && (
+                    <div className="absolute left-0 top-full z-20 mt-1 min-w-[168px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportCSV();
+                          setShowExportMenu(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
+                      >
+                        <Download className="h-3.5 w-3.5" /> CSV
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportExcel();
+                          setShowExportMenu(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportPDF();
+                          setShowExportMenu(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-rose-600" /> PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
               <span>Exports include all filtered rows (not just this page).</span>
               <div className="flex flex-wrap items-center gap-2">
                 {hasUnsavedReportFilterChanges && (
-                  <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md font-semibold">
+                  <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-800">
                     Filters changed — regenerate
                   </span>
                 )}
@@ -2294,9 +2536,12 @@ export const Reports: React.FC = () => {
           )}
 
           {activeFilterChips.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               {activeFilterChips.map((chip) => (
-                <span key={chip} className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold ring-1 ring-slate-200">
+                <span
+                  key={chip}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${lineBadgeClass}`}
+                >
                   {chip}
                 </span>
               ))}
@@ -2307,65 +2552,70 @@ export const Reports: React.FC = () => {
 
         {/* Results */}
         {isLoading ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center py-24">
+          <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-24 shadow-sm">
             <div className="text-center">
-              <Loader2 className={`h-11 w-11 animate-spin mx-auto mb-4 ${activeColor.text}`} />
-              <p className="text-slate-600 font-semibold">Generating {activeOption.label}…</p>
-              <p className="text-slate-400 text-sm mt-1">{fmtDate(fromDate)} — {fmtDate(toDate)}</p>
+              <Loader2 className={`mx-auto mb-4 h-11 w-11 animate-spin ${activeColor.text}`} />
+              <p className="font-bold text-slate-700">Generating {activeOption.label}…</p>
+              <p className="mt-1 text-sm text-slate-400">
+                {fmtDate(fromDate)} — {fmtDate(toDate)}
+              </p>
             </div>
           </div>
         ) : error ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-10 text-center">
-            <AlertCircle className="h-14 w-14 text-red-400 mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-red-800 mb-1">Could not load report</h2>
-            <p className="text-red-600 text-sm max-w-md mx-auto">{error}</p>
+          <div className="rounded-2xl border border-red-200 bg-white p-10 text-center shadow-sm">
+            <AlertCircle className="mx-auto mb-4 h-14 w-14 text-red-400" />
+            <h2 className="mb-1 text-lg font-bold text-red-800">Could not load report</h2>
+            <p className="mx-auto max-w-md text-sm text-red-600">{error}</p>
             <button
               type="button"
               onClick={() => fetchReport(page, search)}
-              className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold shadow-sm"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
             >
               <RotateCcw className="h-4 w-4" /> Try again
             </button>
           </div>
         ) : data === null ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-dashed border-slate-300 flex flex-col items-center justify-center py-24 px-6 text-center">
-            <div className={`p-5 rounded-2xl ${activeColor.bg} mb-4 ring-4 ring-white shadow-inner`}>
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-24 text-center shadow-sm">
+            <div className={`mb-4 rounded-2xl p-5 ring-4 ring-white shadow-inner ${activeColor.bg}`}>
               <div className={`scale-125 ${activeColor.text}`}>{activeOption.icon}</div>
             </div>
-            <p className="text-slate-700 font-semibold text-lg">Ready to generate</p>
-            <p className="text-slate-500 text-sm mt-2 max-w-sm">
-              Choose filters above, then click <strong>Generate report</strong> for {activeOption.label}.
+            <p className="text-lg font-bold text-slate-800">Ready to generate</p>
+            <p className="mt-2 max-w-sm text-sm text-slate-500">
+              Set your filters above, then click <strong className="text-slate-700">Generate report</strong> for{' '}
+              {activeOption.label}.
             </p>
-            <p className="text-slate-400 text-xs mt-3 flex items-center justify-center gap-1">
+            <p className="mt-3 flex items-center justify-center gap-1 text-xs text-slate-400">
               {fmtDate(fromDate)} <ChevronRight className="h-3 w-3" /> {fmtDate(toDate)}
             </p>
           </div>
         ) : (
-          <div ref={reportTableRef} className="bg-white rounded-2xl shadow-md border border-slate-200/80 overflow-hidden">
-            <div className={`px-4 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 ${activeColor.bg} border-b ${activeColor.border}`}>
-              <div className="flex items-center gap-2.5">
-                <span className={`p-1.5 rounded-lg bg-white/60 ${activeColor.text}`}>{activeOption.icon}</span>
-                <div>
-                  <span className={`font-bold text-sm block ${activeColor.text}`}>
-                    {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
-                  </span>
-                  <span className="text-[11px] text-slate-600">
-                    {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
-                  </span>
+          <div ref={reportTableRef} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-md">
+            <div className={`border-b px-4 py-3 ${activeColor.bg} ${activeColor.border}`}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className={`rounded-xl bg-white/70 p-2 shadow-sm ${activeColor.text}`}>{activeOption.icon}</span>
+                  <div>
+                    <span className={`block text-sm font-bold ${activeColor.text}`}>
+                      {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-600">
+                      {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
+                    </span>
+                  </div>
                 </div>
+                <span className="text-xs font-medium text-slate-600">
+                  {fmtDate(fromDate)} — {fmtDate(toDate)}
+                  {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
+                  {reportType === 'hourly-production' && selectedMachine && ` · M${selectedMachine}`}
+                </span>
               </div>
-              <span className="text-xs text-slate-600 font-medium">
-                {fmtDate(fromDate)} — {fmtDate(toDate)}
-                {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
-                {reportType === 'hourly-production' && selectedMachine && ` · M${selectedMachine}`}
-              </span>
             </div>
             {renderReportKpis()}
             {showPeriodCompare && (compareLoading || compareMaps) && (
-              <div className="px-4 py-2 text-xs border-b border-slate-100 bg-amber-50/80 text-amber-900 flex items-center gap-2">
+              <div className="flex items-center gap-2 border-b border-amber-100 bg-amber-50/90 px-4 py-2.5 text-xs text-amber-950">
                 {compareLoading ? (
                   <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                     Loading comparison periods…
                   </>
                 ) : (
@@ -2373,26 +2623,26 @@ export const Reports: React.FC = () => {
                     <TrendingUp className="h-3.5 w-3.5 shrink-0" />
                     Compare vs{' '}
                     {compareMode === 'both' ? 'yesterday and last week' : compareMode === 'yesterday' ? 'yesterday' : 'same day last week'}
-                    : top line is <strong>today vs comparison day</strong> (e.g. 134 vs 170 yest); bottom line is the gap. On % columns,{' '}
-                    <strong>points</strong> = simple % difference (54% vs 68% = 14 points down).
+                    : top line is <strong>today vs comparison day</strong>; bottom line is the gap. On % columns,{' '}
+                    <strong>points</strong> = simple % difference.
                   </>
                 )}
               </div>
             )}
             {isMobile ? (
               <>
-                <div className="px-4 py-2 text-xs text-slate-500 border-b border-slate-100 bg-slate-50/50">
-                  Card layout for mobile — use landscape or desktop for full grid.
+                <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2 text-xs text-slate-500">
+                  Card layout for mobile — use landscape or desktop for the full grid.
                 </div>
                 {renderMobileCards()}
               </>
             ) : (
               <>
-                <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/60 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                    <ChevronRight className="h-3 w-3 rotate-90 shrink-0" />
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-2.5">
+                  <p className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                    <ChevronRight className="h-3 w-3 shrink-0 rotate-90" />
                     {reportType === 'hourly-production'
-                      ? 'Scroll for hour columns · Date & Line stay fixed on the left'
+                      ? 'Scroll for hour columns · Date & line stay fixed on the left'
                       : 'Scroll horizontally for all columns'}
                   </p>
                   {reportType === 'hourly-production' && (
