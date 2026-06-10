@@ -1,4 +1,5 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy, Wrench, Calendar, Filter, X, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
@@ -18,6 +19,150 @@ import {
   comparePeriodHeaderLabel,
   numCompare,
 } from '../utils/reportCompareUtils';
+
+const WhatsAppIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+  </svg>
+);
+
+const stripWhatsAppMarkdown = (text: string) => text.replace(/\*/g, '');
+
+const SHARE_CAPTURE_DESKTOP_WIDTH = 1280;
+const SHARE_CAPTURE_MOBILE_WIDTH = 1080;
+
+const getShareCaptureScale = (mobile: boolean) =>
+  mobile
+    ? Math.min(4, Math.max(3, Math.ceil(window.devicePixelRatio || 2)))
+    : Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 2)));
+
+const waitForPaint = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+
+/** Stack summary text above the table capture so the PNG is self-contained. */
+const buildReportShareCanvas = (
+  tableCanvas: HTMLCanvasElement,
+  messageText: string,
+  captureScale = 1
+): HTMLCanvasElement => {
+  const lines = messageText.split('\n').map(stripWhatsAppMarkdown);
+  const padding = 28 * captureScale;
+  const titleSize = 26 * captureScale;
+  const metaSize = 18 * captureScale;
+  const titleLineHeight = 34 * captureScale;
+  const metaLineHeight = 24 * captureScale;
+  const headerHeight = padding + titleLineHeight + Math.max(0, lines.length - 1) * metaLineHeight + padding;
+  const dividerGap = 12 * captureScale;
+
+  const out = document.createElement('canvas');
+  out.width = tableCanvas.width;
+  out.height = headerHeight + dividerGap + tableCanvas.height;
+
+  const ctx = out.getContext('2d');
+  if (!ctx) return tableCanvas;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, out.width, headerHeight);
+
+  lines.forEach((line, i) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.font =
+      i === 0
+        ? `bold ${titleSize}px Arial, Helvetica, sans-serif`
+        : `${metaSize}px Arial, Helvetica, sans-serif`;
+    const y = padding + (i === 0 ? titleSize : titleLineHeight + metaSize + (i - 1) * metaLineHeight);
+    ctx.fillText(line, padding, y);
+  });
+
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 2 * captureScale;
+  ctx.beginPath();
+  ctx.moveTo(0, headerHeight);
+  ctx.lineTo(out.width, headerHeight);
+  ctx.stroke();
+
+  ctx.drawImage(tableCanvas, 0, headerHeight + dividerGap);
+  return out;
+};
+
+const SHARE_IMAGE_MAX_WIDTH = 1400;
+const SHARE_JPEG_QUALITY = 0.88;
+/** Mobile browsers need time to finish writing Downloads before WhatsApp can read the file. */
+const SHARE_SAVE_MOBILE_DELAY_MS = 5000;
+
+const sanitizeShareFilename = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+/** Downscale large captures so saved/shared files stay a reasonable size. */
+const prepareShareCanvas = (canvas: HTMLCanvasElement, maxWidth = SHARE_IMAGE_MAX_WIDTH): HTMLCanvasElement => {
+  if (canvas.width <= maxWidth) return canvas;
+  const out = document.createElement('canvas');
+  const scale = maxWidth / canvas.width;
+  out.width = maxWidth;
+  out.height = Math.round(canvas.height * scale);
+  const ctx = out.getContext('2d');
+  if (!ctx) return canvas;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+  return out;
+};
+
+const canvasToShareBlob = (
+  canvas: HTMLCanvasElement,
+  mime: 'image/png' | 'image/jpeg' = 'image/png'
+): Promise<Blob | null> =>
+  new Promise((resolve) => {
+    const prepared = prepareShareCanvas(canvas);
+    if (mime === 'image/jpeg') {
+      prepared.toBlob(resolve, 'image/jpeg', SHARE_JPEG_QUALITY);
+    } else {
+      prepared.toBlob(resolve, 'image/png');
+    }
+  });
+
+const createShareImageFile = async (
+  canvas: HTMLCanvasElement,
+  filename: string,
+  mime: 'image/png' | 'image/jpeg' = 'image/png'
+): Promise<File | null> => {
+  const blob = await canvasToShareBlob(canvas, mime);
+  if (!blob || blob.size === 0) return null;
+  const ext = mime === 'image/jpeg' ? '.jpg' : '.png';
+  const base = sanitizeShareFilename(filename.replace(/\.(png|jpg|jpeg)$/i, ''));
+  return new File([blob], `${base}${ext}`, { type: mime, lastModified: Date.now() });
+};
+
+/** System share sheet (WhatsApp icon in the list) — needs HTTPS on most phones. */
+const canAttemptNativeShare = (): boolean =>
+  typeof navigator !== 'undefined' &&
+  'share' in navigator &&
+  typeof navigator.share === 'function';
+
+const downloadShareFile = (file: File, mobile: boolean): Promise<void> =>
+  new Promise((resolve, reject) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.download = file.name;
+      link.href = url;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      // Keep the blob URL alive until the OS has likely finished writing the file.
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        URL.revokeObjectURL(url);
+        resolve();
+      }, mobile ? SHARE_SAVE_MOBILE_DELAY_MS : 1000);
+    } catch (error) {
+      reject(error);
+    }
+  });
 
 /** UI tabs (8). Legacy API slugs kept for fetch/export via resolveApiReportType. */
 type ReportType =
@@ -92,8 +237,15 @@ const migrateReportTab = (raw: string): { tab: ReportType; subView: ReportSubVie
     breakdown: { tab: 'idle-stoppages', subView: 'breakdown' },
     'machine-output': { tab: 'line-efficiency', subView: '' },
   };
-  if (legacy[raw]) return legacy[raw];
-  const tab = raw as ReportType;
+  if (legacy[raw]) {
+    const migrated = legacy[raw];
+    const tab = normalizeVisibleReportTab(migrated.tab);
+    return {
+      tab,
+      subView: tab === migrated.tab ? migrated.subView : defaultSubViewFor(tab),
+    };
+  }
+  const tab = normalizeVisibleReportTab(raw as ReportType);
   return { tab, subView: defaultSubViewFor(tab) };
 };
 
@@ -106,6 +258,16 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
   { value: 'idle-stoppages', label: 'Time Loss & Stoppages', icon: <Wrench className="h-5 w-5" />, color: 'orange', keywords: 'time loss cycle late start bottleneck breakdown M4 stoppage' },
   { value: 'shift-summary', label: 'Shift Summary', icon: <BarChart2 className="h-5 w-5" />, color: 'slate' },
 ];
+
+/** Temporarily hidden from the report picker — remove entries to re-enable. */
+const HIDDEN_REPORT_TYPES: ReadonlySet<ReportType> = new Set(['attendance']);
+const SHOW_DAILY_INACTIVE_REPORT_CALLOUT = false;
+
+const VISIBLE_REPORT_OPTIONS = REPORT_OPTIONS.filter((o) => !HIDDEN_REPORT_TYPES.has(o.value));
+const DEFAULT_VISIBLE_REPORT_TYPE: ReportType = VISIBLE_REPORT_OPTIONS[0]?.value ?? 'hourly-production';
+
+const normalizeVisibleReportTab = (tab: ReportType): ReportType =>
+  HIDDEN_REPORT_TYPES.has(tab) ? DEFAULT_VISIBLE_REPORT_TYPE : tab;
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; activeBg: string; activeText: string }> = {
   blue:   { bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-200',   activeBg: 'bg-blue-600',   activeText: 'text-white' },
@@ -256,7 +418,7 @@ const HEADER_MAP: Record<string, string> = {
   target: 'EOD target',
   line_plan_target: 'Line plan target',
   line_plan_planned_qty: 'Line plan target',
-  wip: 'WIP',
+  wip: 'Day WIP',
   performance_grade: 'Grade', boxes: 'Box', cycles: 'Cycles',
   routing_mins_per_box: 'Routing Mins/6 prs', shift_target_output: 'Shift Target (pairs)', shift_efficiency_pct: 'Shift Efficiency %',
   line_output_percent: 'Line Output %',
@@ -314,6 +476,9 @@ const HOURLY_HOUR_LABELS: Record<(typeof HOURLY_HOUR_KEYS)[number], string> = {
   '6_7': '6-7',
 };
 const HOURLY_PRODUCT_HEADERS = ['Customer', 'Article No', 'Color', 'Leather', 'Group'] as const;
+const PRODUCT_FIELD_KEYS = ['customer', 'article_no', 'color', 'leather', 'group'] as const;
+const supportsProductColumnToggle = (tab: ReportType) =>
+  tab === 'hourly-production' || tab === 'line-efficiency';
 
 const EXPORT_OMIT_BY_REPORT: Partial<Record<ApiReportType, readonly string[]>> = {
   'shift-summary': ['shift_idle_mins'],
@@ -385,7 +550,7 @@ export const Reports: React.FC = () => {
   const [fromDate, setFromDate] = React.useState(defaultRange.from);
   const [toDate, setToDate] = React.useState(defaultRange.to);
   const [datePreset, setDatePreset] = React.useState<DatePreset>('today');
-  const [reportType, setReportType] = React.useState<ReportType>('hourly-production');
+  const [reportType, setReportType] = React.useState<ReportType>(DEFAULT_VISIBLE_REPORT_TYPE);
   const [reportSubView, setReportSubView] = React.useState<ReportSubView>(() => defaultSubViewFor('hourly-production'));
   const apiReportType = React.useMemo(
     () => resolveApiReportType(reportType, reportSubView),
@@ -408,10 +573,20 @@ export const Reports: React.FC = () => {
   const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [lastReportGeneratedAt, setLastReportGeneratedAt] = React.useState<Date | null>(null);
   const [isShareLoading, setIsShareLoading] = React.useState(false);
+  const [isSavingShare, setIsSavingShare] = React.useState(false);
+  const [forceShareCapture, setForceShareCapture] = React.useState(false);
+  const [preparedShare, setPreparedShare] = React.useState<{
+    previewUrl: string;
+    file: File;
+    caption: string;
+    canvas: HTMLCanvasElement;
+    filename: string;
+  } | null>(null);
+  const preparedShareRef = React.useRef<typeof preparedShare>(null);
   const [reportTypeQuery, setReportTypeQuery] = React.useState('');
   const [showExportMenu, setShowExportMenu] = React.useState(false);
   /** Hourly report: hide Customer/Article/etc. by default to reduce horizontal scroll. */
-  const [hourlyShowProductDetails, setHourlyShowProductDetails] = React.useState(false);
+  const [showProductDetails, setShowProductDetails] = React.useState(false);
   const [compareMode, setCompareMode] = React.useState<ReportCompareMode>('none');
   const [compareMaps, setCompareMaps] = React.useState<{
     yesterday?: Map<string, any>;
@@ -419,6 +594,66 @@ export const Reports: React.FC = () => {
   } | null>(null);
   const [compareLoading, setCompareLoading] = React.useState(false);
   const reportTableRef = React.useRef<HTMLDivElement>(null);
+
+  const closePreparedShare = React.useCallback(() => {
+    const current = preparedShareRef.current;
+    if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+    preparedShareRef.current = null;
+    setPreparedShare(null);
+  }, []);
+
+  React.useEffect(() => () => closePreparedShare(), [closePreparedShare]);
+
+  const saveShareImageOnly = React.useCallback(
+    async (share: NonNullable<typeof preparedShare>) => {
+      setIsSavingShare(true);
+      try {
+        toast.loading('Saving image…', { id: 'share-save' });
+        await downloadShareFile(share.file, isMobile);
+        toast.success(
+          `Saved ${share.file.name}. Open WhatsApp → attach from Downloads → Send.`,
+          { id: 'share-save', duration: 14000 }
+        );
+        closePreparedShare();
+      } catch {
+        toast.error('Could not save image', { id: 'share-save' });
+      } finally {
+        setIsSavingShare(false);
+      }
+    },
+    [closePreparedShare, isMobile]
+  );
+
+  /**
+   * Opens the phone's share sheet (WhatsApp icon in the list) — same as sharing a photo.
+   * Must run directly from this button tap.
+   */
+  const sharePreparedReport = () => {
+    const share = preparedShareRef.current;
+    if (!share) return;
+
+    if (!canAttemptNativeShare()) {
+      void saveShareImageOnly(share);
+      return;
+    }
+
+    navigator
+      .share({ files: [share.file] })
+      .then(() => {
+        closePreparedShare();
+        toast.success('Pick WhatsApp from the list, then send the photo.', { duration: 8000 });
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        toast.error(
+          window.isSecureContext
+            ? 'Share failed — saving to Downloads instead'
+            : 'Share needs HTTPS — saving to Downloads instead',
+          { id: 'share-save' }
+        );
+        void saveShareImageOnly(share);
+      });
+  };
   const supportsPeriodCompare =
     reportType === 'hourly-production' || reportType === 'line-efficiency';
   const generatedFilterSnapshotRef = React.useRef<string | null>(null);
@@ -915,11 +1150,37 @@ export const Reports: React.FC = () => {
     if (!reportTableRef.current) return;
     setIsShareLoading(true);
     try {
-      const canvas = await html2canvas(reportTableRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      flushSync(() => setForceShareCapture(true));
+      await waitForPaint();
+
+      const captureScale = getShareCaptureScale(isMobile);
+      const captureWidth = isMobile ? SHARE_CAPTURE_MOBILE_WIDTH : SHARE_CAPTURE_DESKTOP_WIDTH;
+      const tableCanvas = await html2canvas(reportTableRef.current, {
+        scale: captureScale,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: captureWidth,
+        windowWidth: captureWidth,
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (_doc, clonedEl) => {
+          const node = clonedEl as HTMLElement;
+          node.style.position = 'static';
+          node.style.left = '0';
+          node.style.top = '0';
+          node.style.opacity = '1';
+          node.style.visibility = 'visible';
+          node.style.zIndex = 'auto';
+          node.style.width = `${captureWidth}px`;
+          node.style.maxWidth = `${captureWidth}px`;
+        },
+      });
       const dateLabel = fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
-      const lineName = selectedLine && workCentres.length > 0
-        ? workCentres.find((w: any) => String(w.id) === String(selectedLine))?.name || 'All Lines'
-        : 'All Lines';
+      const lineName =
+        selectedLine && workCentres.length > 0
+          ? workCentres.find((w: any) => String(w.id) === String(selectedLine))?.name || 'All Lines'
+          : 'All Lines';
       const rowCount = pagination.total || (data?.length ?? 0);
       const viewSuffix = activeSubViewLabel ? ` (${activeSubViewLabel})` : '';
       const messageText =
@@ -929,67 +1190,49 @@ export const Reports: React.FC = () => {
         `📋 Records: ${rowCount}\n` +
         `🕐 Generated: ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 
-      // Try Web Share API first (works on mobile — opens native share sheet with image)
-      if (navigator.canShare) {
-        canvas.toBlob(async (blob) => {
-          if (!blob) { toast.error('Failed to create image'); setIsShareLoading(false); return; }
-          const file = new File([blob], `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}.png`, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({ files: [file], text: messageText });
-              setIsShareLoading(false);
-              return;
-            } catch (err: any) {
-              // User cancelled share — don't fall through to download
-              if (err?.name === 'AbortError') { setIsShareLoading(false); return; }
-            }
-          }
-          // canShare exists but files not supported — fall through to download
-          fallbackDownloadAndOpen(canvas, messageText);
-        }, 'image/png');
-      } else {
-        // Desktop or unsupported browser — download image + open WhatsApp with text
-        fallbackDownloadAndOpen(canvas, messageText);
+      const shareCanvas = buildReportShareCanvas(tableCanvas, messageText, captureScale);
+
+      const filename = `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}.png`;
+      const file = await createShareImageFile(shareCanvas, filename, 'image/png');
+      if (!file) {
+        toast.error('Failed to create report image');
+        return;
       }
+
+      // Capture is slow — always show a second tap (share sheet or save). Never auto-open WhatsApp with text.
+      closePreparedShare();
+      const previewUrl = URL.createObjectURL(file);
+      const next = { previewUrl, file, caption: messageText, canvas: shareCanvas, filename: file.name };
+      preparedShareRef.current = next;
+      setPreparedShare(next);
     } catch {
       toast.error('Failed to capture screenshot');
+    } finally {
+      setForceShareCapture(false);
       setIsShareLoading(false);
     }
   };
 
-  const fallbackDownloadAndOpen = (canvas: HTMLCanvasElement, messageText: string) => {
-    const link = document.createElement('a');
-    link.download = `${activeOption.label.replace(/\s+/g, '_')}_${fromDate}_${toDate}.png`;
-    link.href = canvas.toDataURL('image/png');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast(
-      (t) => (
-        <div className="flex flex-col gap-2">
-          <p className="font-semibold text-gray-800">📸 Screenshot downloaded!</p>
-          <p className="text-sm text-gray-600">Open WhatsApp, start a chat, tap the attachment icon and select the downloaded image.</p>
-          <button
-            onClick={() => {
-              window.open(`https://wa.me/?text=${encodeURIComponent(messageText)}`, '_blank');
-              toast.dismiss(t.id);
-            }}
-            className="mt-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-lg"
-          >
-            Open WhatsApp
-          </button>
-        </div>
-      ),
-      { duration: 12000 }
-    );
-    setIsShareLoading(false);
-  };
-
-  const activeOption = REPORT_OPTIONS.find(o => o.value === reportType)!;
-  const activeColor = COLOR_MAP[activeOption.color];
-  const lineBadgeClass = LINE_BADGE[activeOption.color] || LINE_BADGE.slate;
+  const activeOption = VISIBLE_REPORT_OPTIONS.find((o) => o.value === reportType) ?? VISIBLE_REPORT_OPTIONS[0];
+  const activeColor = COLOR_MAP[activeOption?.color ?? 'blue'];
+  const lineBadgeClass = LINE_BADGE[activeOption?.color ?? 'blue'] || LINE_BADGE.slate;
 
   const activeSubViewLabel = REPORT_SUB_VIEWS[reportType]?.find((s) => s.value === reportSubView)?.label;
+
+  const filterLabelClass =
+    'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500';
+  const filterInputClass =
+    'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm transition-shadow focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25';
+  const presetBtnClass = (active: boolean) =>
+    `rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all ${
+      active
+        ? `${activeColor.activeBg} ${activeColor.activeText} border-transparent shadow-sm`
+        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+    }`;
+  const actionBtnBase =
+    'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50';
+  const secondaryBtnClass = `${actionBtnBase} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`;
+  const exportBtnClass = `${actionBtnBase} border border-slate-700 bg-slate-800 text-white hover:bg-slate-900 disabled:bg-slate-300 disabled:text-slate-500 disabled:border-slate-300`;
 
   const selectReportTab = (tab: ReportType) => {
     setReportType(tab);
@@ -1027,8 +1270,9 @@ export const Reports: React.FC = () => {
 
   const filteredReportOptions = React.useMemo(() => {
     const q = reportTypeQuery.trim().toLowerCase();
-    if (!q) return REPORT_OPTIONS;
-    return REPORT_OPTIONS.filter((o) => {
+    const base = VISIBLE_REPORT_OPTIONS;
+    if (!q) return base;
+    return base.filter((o) => {
       const hay = `${o.label} ${o.keywords || ''}`.toLowerCase();
       if (hay.includes(q)) return true;
       const subs = REPORT_SUB_VIEWS[o.value];
@@ -1045,7 +1289,6 @@ export const Reports: React.FC = () => {
         return [
           { label: 'Total output', value: sum('total_output') },
           { label: 'Total planned', value: sum('total_planned_qty') },
-          { label: 'WIP', value: sum('wip') },
         ];
       case 'line-efficiency':
         return [
@@ -1184,7 +1427,7 @@ export const Reports: React.FC = () => {
       const ro = new ResizeObserver(() => updateScrollHint());
       ro.observe(el);
       return () => ro.disconnect();
-    }, [data, updateScrollHint, hourlyShowProductDetails]);
+    }, [data, updateScrollHint, showProductDetails]);
 
     return (
       <div className="relative">
@@ -1213,12 +1456,37 @@ export const Reports: React.FC = () => {
 
   const renderReportKpis = () => {
     if (!reportSummaryStats.length) return null;
+    const shareKpi = forceShareCapture && isMobile;
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+      <div
+        className={`grid gap-2 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-3 ${
+          shareKpi
+            ? 'grid-cols-2 gap-3 py-4'
+            : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 lg:gap-3'
+        }`}
+      >
         {reportSummaryStats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{stat.label}</p>
-            <p className={`text-lg font-bold tabular-nums ${activeColor.text}`}>{stat.value}</p>
+          <div
+            key={stat.label}
+            className={`rounded-xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-inset ring-white ${activeColor.border} ${
+              shareKpi ? 'px-4 py-3' : 'px-3 py-2.5'
+            }`}
+            style={{ borderLeftWidth: 3 }}
+          >
+            <p
+              className={`font-bold uppercase tracking-[0.14em] text-slate-500 ${
+                shareKpi ? 'text-xs' : 'text-[10px]'
+              }`}
+            >
+              {stat.label}
+            </p>
+            <p
+              className={`mt-1 font-black tabular-nums leading-none ${activeColor.text} ${
+                shareKpi ? 'text-3xl' : 'mt-0.5 text-xl sm:text-2xl'
+              }`}
+            >
+              {stat.value}
+            </p>
           </div>
         ))}
       </div>
@@ -1252,7 +1520,7 @@ export const Reports: React.FC = () => {
       'hourly-production': [
         'date',
         'line',
-        'customer',
+        ...(showProductDetails ? PRODUCT_FIELD_KEYS : []),
         'total_planned_qty',
         'total_input',
         'input_percent',
@@ -1260,7 +1528,16 @@ export const Reports: React.FC = () => {
         'output_percent',
         ...HOURLY_HOUR_KEYS,
       ],
-      'line-efficiency': ['date', 'line', 'process', 'total_planned_qty', 'total_output', 'output_percent', 'efficiency_percent'],
+      'line-efficiency': [
+        'date',
+        'line',
+        'process',
+        ...(showProductDetails ? PRODUCT_FIELD_KEYS : []),
+        'total_planned_qty',
+        'total_output',
+        'output_percent',
+        'efficiency_percent',
+      ],
       'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'login_time'],
       'rework-rejection': ['date', 'line', 'machine', 'target', 'output', 'output_percent', 'rework_qty', 'rejection_qty'],
       'employee-output': ['date', 'line', 'emp_code', 'target', 'total_output', 'output_percent'],
@@ -1286,22 +1563,39 @@ export const Reports: React.FC = () => {
         comparePeriods.forEach((p) => keys.push(`__cmp_eff_${p}`));
       }
     });
+    const shareCard = forceShareCapture && isMobile;
     return (
-      <div className="space-y-3 p-3">
+      <div className={shareCard ? 'space-y-4 bg-slate-50/80 p-4' : 'space-y-3 p-3'}>
         {data.map((row, i) => (
           <div
             key={i}
-            className={`rounded-xl border bg-white shadow-sm overflow-hidden border-l-4 ${activeColor.border}`}
+            className={`overflow-hidden rounded-xl border bg-white shadow-sm border-l-4 ${activeColor.border} ${
+              shareCard ? 'shadow-md' : ''
+            }`}
           >
-            <div className={`px-3 py-2 flex items-center justify-between gap-2 ${activeColor.bg}`}>
-              <span className={`text-xs font-bold ${activeColor.text}`}>{fmtDate(row.date) || '—'}</span>
+            <div
+              className={`${activeColor.bg} ${
+                shareCard
+                  ? 'flex flex-col items-stretch gap-1.5 px-4 py-3'
+                  : 'flex items-center justify-between gap-2 px-3 py-2'
+              }`}
+            >
+              <span className={`font-bold ${activeColor.text} ${shareCard ? 'text-base' : 'text-xs'}`}>
+                {fmtDate(row.date) || '—'}
+              </span>
               {(row.line || row.work_centre_name) && (
-                <span className="text-xs font-semibold text-slate-600 truncate max-w-[55%]">
-                  {row.line || row.work_centre_name}
+                <span
+                  className={
+                    shareCard
+                      ? 'text-base font-semibold leading-snug text-slate-800 break-words'
+                      : 'max-w-[60%] truncate text-xs font-semibold text-slate-600'
+                  }
+                >
+                  {shareCard ? `Line: ${row.line || row.work_centre_name}` : row.line || row.work_centre_name}
                 </span>
               )}
             </div>
-            <div className="p-3 space-y-0">
+            <div className={shareCard ? 'space-y-0 p-4' : 'space-y-0 p-3'}>
               {keys.filter((k) => k !== 'date' && k !== 'line' && k !== 'work_centre_name').map((key) => {
                 if (key.startsWith('__cmp_')) {
                   const [, metric, period] = key.match(/^__cmp_(out|outpct|eff)_(yesterday|last_week)$/) || [];
@@ -1340,13 +1634,28 @@ export const Reports: React.FC = () => {
                 if (key === 'status' && value === 'Absent') value = <span className="text-red-600 font-semibold">Absent</span>;
                 if (value === null || value === undefined || value === '') value = '—';
                 return (
-                  <div key={key} className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0">
-                    <span className="text-xs font-semibold text-slate-500">
+                  <div
+                    key={key}
+                    className={`flex items-start justify-between border-b border-slate-100 py-2 last:border-b-0 ${
+                      shareCard ? 'gap-4 py-2.5' : 'gap-3'
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 font-semibold text-slate-500 ${
+                        shareCard ? 'text-sm' : 'text-xs'
+                      }`}
+                    >
                       {HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])
                         ? HOURLY_HOUR_LABELS[key as (typeof HOURLY_HOUR_KEYS)[number]]
                         : reportColumnLabel(key, apiReportType)}
                     </span>
-                    <span className="text-sm font-medium text-slate-800 text-right">{typeof value === 'object' ? value : String(value)}</span>
+                    <span
+                      className={`text-right font-medium text-slate-800 ${
+                        shareCard ? 'text-base font-semibold' : 'text-sm'
+                      }`}
+                    >
+                      {typeof value === 'object' ? value : String(value)}
+                    </span>
                   </div>
                 );
               })}
@@ -1645,7 +1954,6 @@ export const Reports: React.FC = () => {
     const totalOutput = data!.reduce((s, row) => s + r(row.total_output), 0);
     const totalPlanned = data!.reduce((s, row) => s + r(row.total_planned_qty), 0);
     const totalInput = data!.reduce((s, row) => s + r(row.total_input), 0);
-    const totalWip = data!.reduce((s, row) => s + r(row.wip), 0);
     const metricHeaders: string[] = ['Planned', 'Input', 'Input %', 'Output'];
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => metricHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
@@ -1654,9 +1962,9 @@ export const Reports: React.FC = () => {
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => metricHeaders.push(`Out % vs ${comparePeriodHeaderLabel(p)}`));
     }
-    metricHeaders.push('WIP', 'Avg/Hr');
+    metricHeaders.push('Day WIP', 'Avg/Hr');
     const hourHeaders = HOURLY_HOUR_KEYS.map((k) => HOURLY_HOUR_LABELS[k]);
-    const productHeaders = hourlyShowProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
+    const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
     const allHeaders = ['Date', 'Line', ...productHeaders, ...metricHeaders, ...hourHeaders];
     const leftAlign = new Set(['Date', 'Line', ...HOURLY_PRODUCT_HEADERS]);
     const labelColSpan = 2 + productHeaders.length;
@@ -1691,7 +1999,7 @@ export const Reports: React.FC = () => {
                   <Td stickyLeft={stickyLineLeft} rowShade={shaded}>
                     <LineBadge name={row.line} />
                   </Td>
-                  {hourlyShowProductDetails && (
+                  {showProductDetails && (
                     <>
                       <Td>{row.customer}</Td>
                       <Td>{row.article_no}</Td>
@@ -1746,7 +2054,7 @@ export const Reports: React.FC = () => {
               {showPeriodCompare && comparePeriods.map((p) => (
                 <td key={`pct-${p}`} className="px-3 py-2.5 text-sm text-center text-blue-100/80">—</td>
               ))}
-              <td className="px-3 py-2.5 text-sm font-bold text-center">{totalWip}</td>
+              <td className="px-3 py-2.5 text-sm text-center text-blue-100/80">—</td>
               <td colSpan={HOURLY_HOUR_KEYS.length + 1} />
             </tr>
           </tfoot>
@@ -1757,7 +2065,8 @@ export const Reports: React.FC = () => {
 
   const renderLineEfficiency = () => {
     const avgEff = data!.length ? Math.round(data!.reduce((s, row) => s + (parseFloat(row.efficiency_percent) || 0), 0) / data!.length) : 0;
-    const baseHeaders = ['Date', 'Line', 'Machine', 'Customer', 'Article No', 'Color', 'Leather', 'Group', 'EOD target', 'Output'];
+    const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
+    const baseHeaders = ['Date', 'Line', 'Machine', ...productHeaders, 'EOD target', 'Output'];
     const lineHeaders: string[] = [...baseHeaders];
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => lineHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
@@ -1770,7 +2079,7 @@ export const Reports: React.FC = () => {
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => lineHeaders.push(`Eff % vs ${comparePeriodHeaderLabel(p)}`));
     }
-    const leftCols = new Set(['Date', 'Line', 'Machine', 'Customer', 'Article No', 'Color', 'Leather', 'Group']);
+    const leftCols = new Set(['Date', 'Line', 'Machine', ...HOURLY_PRODUCT_HEADERS]);
     const trailingCompareCols = showPeriodCompare ? comparePeriods.length : 0;
     return (
       <TableWrap>
@@ -1786,7 +2095,15 @@ export const Reports: React.FC = () => {
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
                 <Td><span className="font-medium">{row.process}</span></Td>
-                <Td>{row.customer}</Td><Td>{row.article_no}</Td><Td>{row.color}</Td><Td>{row.leather}</Td><Td>{row.group}</Td>
+                {showProductDetails && (
+                  <>
+                    <Td>{row.customer}</Td>
+                    <Td>{row.article_no}</Td>
+                    <Td>{row.color}</Td>
+                    <Td>{row.leather}</Td>
+                    <Td>{row.group}</Td>
+                  </>
+                )}
                 <Td center>{r(row.total_planned_qty)}</Td>
                 <Td center><span className="font-bold text-green-600">{r(row.total_output)}</span></Td>
                 {showPeriodCompare && renderCompareMetricCells(row, 'total_output', rowShade)}
@@ -1987,30 +2304,45 @@ export const Reports: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 p-3 sm:p-6">
-      <div className="max-w-[1600px] mx-auto space-y-4 sm:space-y-5">
+    <div className="min-h-screen bg-gradient-to-b from-slate-200/40 via-slate-50 to-slate-100 p-3 sm:p-6">
+      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
 
         {/* Hero */}
-        <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg overflow-hidden">
-          <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="overflow-hidden rounded-2xl border border-slate-800/50 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl">
+          <div className={`h-1 ${activeColor.activeBg}`} />
+          <div className="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-xl bg-white/10 ring-1 ring-white/20">
+              <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/15">
                 <Sparkles className="h-6 w-6 text-amber-300" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Reports</h1>
-                <p className="text-sm text-slate-300 mt-0.5">Production analytics · export · share</p>
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Reports</h1>
+                <p className="mt-0.5 text-sm text-slate-300">Production analytics · export · share</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-white/20 ${activeColor.activeBg} text-white`}>
+                    <span className="flex h-4 w-4 items-center justify-center [&>svg]:h-3.5 [&>svg]:w-3.5">
+                      {activeOption.icon}
+                    </span>
+                    {activeOption.label}
+                    {activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+                  </span>
+                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-slate-200 ring-1 ring-white/10">
+                    {fmtDate(fromDate)} — {fmtDate(toDate)}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {data && data.length > 0 && (
-                <div className="flex items-center gap-2 bg-white/10 ring-1 ring-white/15 rounded-lg px-3 py-2 text-sm">
-                  <span className={`w-2 h-2 rounded-full ${activeColor.activeBg}`} />
-                  <span className="font-medium">{data.length} / {pagination.total || data.length} rows</span>
+                <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm ring-1 ring-white/15">
+                  <span className={`h-2 w-2 rounded-full ${activeColor.activeBg}`} />
+                  <span className="font-semibold tabular-nums">
+                    {data.length} / {pagination.total || data.length} rows
+                  </span>
                 </div>
               )}
               {lastReportGeneratedAt && (
-                <span className="text-xs text-slate-400 hidden sm:inline">
+                <span className="hidden text-xs text-slate-400 sm:inline">
                   Last run {lastReportGeneratedAt.toLocaleTimeString()}
                 </span>
               )}
@@ -2018,6 +2350,7 @@ export const Reports: React.FC = () => {
           </div>
         </div>
 
+        {SHOW_DAILY_INACTIVE_REPORT_CALLOUT && (
         <div className="rounded-xl bg-white/90 backdrop-blur border border-blue-200/80 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
@@ -2036,29 +2369,38 @@ export const Reports: React.FC = () => {
             <ChevronRight className="h-3.5 w-3.5" />
           </a>
         </div>
+        )}
 
         {/* Report type picker */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 shrink-0">Report type</p>
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                type="text"
-                value={reportTypeQuery}
-                onChange={(e) => setReportTypeQuery(e.target.value)}
-                placeholder="Filter reports…"
-                className="w-full border border-slate-200 rounded-lg pl-8 pr-8 py-1.5 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {reportTypeQuery && (
-                <button type="button" onClick={() => setReportTypeQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-4 py-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <p className="shrink-0 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Report type</p>
+              <div className="relative max-w-md flex-1">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={reportTypeQuery}
+                  onChange={(e) => setReportTypeQuery(e.target.value)}
+                  placeholder="Filter reports…"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+                />
+                {reportTypeQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setReportTypeQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <span className="text-xs font-medium tabular-nums text-slate-400">
+                {filteredReportOptions.length} / {VISIBLE_REPORT_OPTIONS.length}
+              </span>
             </div>
-            <span className="text-xs text-slate-400">{filteredReportOptions.length} of {REPORT_OPTIONS.length}</span>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory [scrollbar-width:thin]">
+          <div className="flex gap-2.5 overflow-x-auto p-3 snap-x snap-mandatory [scrollbar-width:thin] sm:p-4">
             {filteredReportOptions.map((opt) => {
               const c = COLOR_MAP[opt.color];
               const hoverBg = HOVER_BG_MAP[opt.color] || 'hover:bg-slate-50';
@@ -2068,120 +2410,136 @@ export const Reports: React.FC = () => {
                   key={opt.value}
                   type="button"
                   onClick={() => selectReportTab(opt.value)}
-                  className={`snap-start shrink-0 flex flex-col items-center gap-1.5 min-w-[108px] max-w-[120px] p-3 rounded-xl border-2 transition-all text-center ${
+                  className={`snap-start flex min-w-[118px] max-w-[128px] shrink-0 flex-col items-center gap-2 rounded-2xl border-2 p-3.5 text-center transition-all ${
                     isActive
-                      ? `${c.activeBg} ${c.activeText} border-transparent shadow-md ring-2 ring-offset-1 ring-slate-300`
-                      : `bg-white ${c.text} ${c.border} ${hoverBg} hover:shadow-sm`
+                      ? `${c.activeBg} ${c.activeText} border-transparent shadow-lg ring-2 ring-offset-2 ring-slate-200`
+                      : `border-slate-200/80 bg-white ${c.text} ${hoverBg} hover:border-slate-300 hover:shadow-md`
                   }`}
                 >
-                  <div className={`p-1.5 rounded-lg ${isActive ? 'bg-white/20' : c.bg}`}>{opt.icon}</div>
-                  <span className="text-[11px] font-semibold leading-tight">{opt.label}</span>
+                  <div className={`rounded-xl p-2 ${isActive ? 'bg-white/20 ring-1 ring-white/25' : c.bg}`}>
+                    {opt.icon}
+                  </div>
+                  <span className="text-[11px] font-bold leading-tight tracking-tight">{opt.label}</span>
                 </button>
               );
             })}
           </div>
           {filteredReportOptions.length === 0 && (
-            <p className="text-sm text-slate-500 py-4 text-center">No reports match your search.</p>
+            <p className="py-6 text-center text-sm text-slate-500">No reports match your search.</p>
           )}
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-          <div className={`px-4 py-3 border-b border-slate-100 flex items-center gap-2 ${activeColor.bg}`}>
-            <Filter className={`h-4 w-4 ${activeColor.text}`} />
-            <span className={`text-sm font-bold ${activeColor.text}`}>
-              {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''} — filters
-            </span>
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className={`border-b border-slate-100 px-4 py-3 ${activeColor.bg}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Filter className={`h-4 w-4 ${activeColor.text}`} />
+              <span className={`text-sm font-bold ${activeColor.text}`}>
+                {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+              </span>
+              <span className="text-xs font-medium text-slate-500">Filters & actions</span>
+            </div>
           </div>
-          <div className="p-4">
+          <div className="p-4 sm:p-5">
           {REPORT_SUB_VIEWS[reportType] && (
-            <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-slate-100">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 w-full sm:w-auto sm:mr-1 self-center">View</span>
+            <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-100 pb-4">
+              <span className="w-full self-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500 sm:mr-1 sm:w-auto">
+                View
+              </span>
               {REPORT_SUB_VIEWS[reportType]!.map((sub) => (
                 <button
                   key={sub.value}
                   type="button"
                   onClick={() => selectReportSubView(sub.value)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-                    reportSubView === sub.value
-                      ? `${activeColor.activeBg} ${activeColor.activeText} border-transparent`
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
+                  className={presetBtnClass(reportSubView === sub.value)}
                 >
                   {sub.label}
                 </button>
               ))}
             </div>
           )}
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="mb-4 flex flex-wrap gap-2">
             {([
               { key: 'today', label: 'Today' },
               { key: 'yesterday', label: 'Yesterday' },
-              { key: 'last7', label: 'Last 7 Days' },
-              { key: 'thisMonth', label: 'This Month' },
+              { key: 'last7', label: 'Last 7 days' },
+              { key: 'thisMonth', label: 'This month' },
               { key: 'custom', label: 'Custom' },
             ] as { key: DatePreset; label: string }[]).map((preset) => (
               <button
                 key={preset.key}
                 type="button"
                 onClick={() => applyDatePreset(preset.key)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-                  datePreset === preset.key
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                }`}
+                className={presetBtnClass(datePreset === preset.key)}
               >
                 {preset.label}
               </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 items-end">
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Line</label>
-              <select value={selectedLine} onChange={e => setSelectedLine(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                <option value="">All Lines</option>
-                {workCentres.map(wc => <option key={wc.id} value={wc.id}>{wc.name}</option>)}
+              <label className={filterLabelClass}>Line</label>
+              <select value={selectedLine} onChange={(e) => setSelectedLine(e.target.value)} className={filterInputClass}>
+                <option value="">All lines</option>
+                {workCentres.map((wc) => (
+                  <option key={wc.id} value={wc.id}>
+                    {wc.name}
+                  </option>
+                ))}
               </select>
             </div>
             {reportType === 'hourly-production' && (
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Machine</label>
-                <select value={selectedMachine} onChange={e => setSelectedMachine(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 min-w-[180px]">
-                  <option value="">End-of-line (Default)</option>
+                <label className={filterLabelClass}>Machine</label>
+                <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className={filterInputClass}>
+                  <option value="">End-of-line (default)</option>
                   {filteredMachines.map((machine: any) => (
                     <option key={machine.id || machine.machine_id} value={machine.machine_id}>
-                      {machine.machine_id} {machine.machine_name || machine.name ? `- ${machine.machine_name || machine.name}` : ''}
+                      {machine.machine_id}{' '}
+                      {machine.machine_name || machine.name ? `- ${machine.machine_name || machine.name}` : ''}
                     </option>
                   ))}
                 </select>
               </div>
             )}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+              <label className={`${filterLabelClass} flex items-center gap-1`}>
                 <Calendar className="h-3 w-3" /> From
               </label>
-              <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setDatePreset('custom'); }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setDatePreset('custom');
+                }}
+                className={filterInputClass}
+              />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+              <label className={`${filterLabelClass} flex items-center gap-1`}>
                 <Calendar className="h-3 w-3" /> To
               </label>
-              <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setDatePreset('custom'); }}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setDatePreset('custom');
+                }}
+                className={filterInputClass}
+              />
             </div>
             {supportsPeriodCompare && (
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> Compare period
+                <label className={`${filterLabelClass} flex items-center gap-1`}>
+                  <TrendingUp className="h-3 w-3" /> Compare
                 </label>
                 <select
                   value={compareMode}
                   onChange={(e) => setCompareMode(e.target.value as ReportCompareMode)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                  className={filterInputClass}
                 >
                   <option value="none">None</option>
                   <option value="yesterday">vs Yesterday</option>
@@ -2191,23 +2549,36 @@ export const Reports: React.FC = () => {
               </div>
             )}
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Search</label>
+              <label className={filterLabelClass}>Search</label>
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <input type="text" value={search} onChange={e => {
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => {
                     const val = e.target.value;
                     setSearch(val);
                     if (data !== null) {
                       if (searchTimeout.current) clearTimeout(searchTimeout.current);
-                      searchTimeout.current = setTimeout(() => { setPage(1); fetchReport(1, val); }, 500);
+                      searchTimeout.current = setTimeout(() => {
+                        setPage(1);
+                        fetchReport(1, val);
+                      }, 500);
                     }
                   }}
-                  onKeyDown={e => e.key === 'Enter' && fetchReport(1, search)}
-                  placeholder="Name, line, machine..."
-                  className="w-full border border-slate-200 rounded-lg pl-8 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+                  onKeyDown={(e) => e.key === 'Enter' && fetchReport(1, search)}
+                  placeholder="Name, line, machine…"
+                  className={`${filterInputClass} pl-9 pr-9`}
+                />
                 {search && (
-                  <button type="button" onClick={() => { setSearch(''); if (data !== null) fetchReport(1, ''); }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('');
+                      if (data !== null) fetchReport(1, '');
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -2215,71 +2586,98 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4">
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <button
                 type="button"
-                onClick={() => { setPage(1); fetchReport(1); }}
+                onClick={() => {
+                  setPage(1);
+                  fetchReport(1);
+                }}
                 disabled={isLoading || !!dateError}
-                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50 ${activeColor.activeBg} hover:opacity-90 shadow-md`}
+                className={`inline-flex min-h-[2.75rem] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-[0.98] disabled:opacity-50 ${activeColor.activeBg} hover:opacity-90`}
               >
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart2 className="h-4 w-4" />}
                 Generate report
               </button>
-              <button
-                type="button"
-                onClick={shareViaWhatsApp}
-                disabled={!data || data.length === 0 || isShareLoading}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-40 shadow-sm"
-              >
-                {isShareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                WhatsApp
-              </button>
-              <button type="button" onClick={clearAllFilters} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200">
-                <RotateCcw className="h-4 w-4" /> Reset
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.href)
-                    .then(() => toast.success('Report link copied'))
-                    .catch(() => toast.error('Could not copy link'));
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200"
-              >
-                <Copy className="h-4 w-4" /> Copy link
-              </button>
-              <div className="relative">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowExportMenu((v) => !v)}
-                  disabled={!data || data.length === 0 || isExportLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 disabled:opacity-40 shadow-sm"
+                  onClick={shareViaWhatsApp}
+                  disabled={!data || data.length === 0 || isShareLoading}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#1da851] bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#20BD5A] active:scale-[0.98] disabled:opacity-40"
                 >
-                  {isExportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  Export
-                  <ChevronRight className={`h-4 w-4 transition-transform ${showExportMenu ? 'rotate-90' : ''}`} />
+                  {isShareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <WhatsAppIcon className="h-4 w-4 shrink-0" />}
+                  WhatsApp
                 </button>
-                {showExportMenu && (
-                  <div className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-lg border border-slate-200 bg-white shadow-lg py-1">
-                    <button type="button" onClick={() => { exportCSV(); setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                      <Download className="h-3.5 w-3.5" /> CSV
-                    </button>
-                    <button type="button" onClick={() => { exportExcel(); setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel
-                    </button>
-                    <button type="button" onClick={() => { exportPDF(); setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                      <FileText className="h-3.5 w-3.5 text-rose-600" /> PDF
-                    </button>
-                  </div>
-                )}
+                <button type="button" onClick={clearAllFilters} className={secondaryBtnClass}>
+                  <RotateCcw className="h-4 w-4" /> Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard
+                      .writeText(window.location.href)
+                      .then(() => toast.success('Report link copied'))
+                      .catch(() => toast.error('Could not copy link'));
+                  }}
+                  className={secondaryBtnClass}
+                >
+                  <Copy className="h-4 w-4" /> Copy link
+                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowExportMenu((v) => !v)}
+                    disabled={!data || data.length === 0 || isExportLoading}
+                    className={exportBtnClass}
+                  >
+                    {isExportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Export
+                    <ChevronRight className={`h-4 w-4 transition-transform ${showExportMenu ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showExportMenu && (
+                    <div className="absolute left-0 top-full z-20 mt-1 min-w-[168px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportCSV();
+                          setShowExportMenu(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
+                      >
+                        <Download className="h-3.5 w-3.5" /> CSV
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportExcel();
+                          setShowExportMenu(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          exportPDF();
+                          setShowExportMenu(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-rose-600" /> PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
               <span>Exports include all filtered rows (not just this page).</span>
               <div className="flex flex-wrap items-center gap-2">
                 {hasUnsavedReportFilterChanges && (
-                  <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md font-semibold">
+                  <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-800">
                     Filters changed — regenerate
                   </span>
                 )}
@@ -2294,9 +2692,12 @@ export const Reports: React.FC = () => {
           )}
 
           {activeFilterChips.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               {activeFilterChips.map((chip) => (
-                <span key={chip} className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold ring-1 ring-slate-200">
+                <span
+                  key={chip}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${lineBadgeClass}`}
+                >
                   {chip}
                 </span>
               ))}
@@ -2307,65 +2708,88 @@ export const Reports: React.FC = () => {
 
         {/* Results */}
         {isLoading ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center py-24">
+          <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-24 shadow-sm">
             <div className="text-center">
-              <Loader2 className={`h-11 w-11 animate-spin mx-auto mb-4 ${activeColor.text}`} />
-              <p className="text-slate-600 font-semibold">Generating {activeOption.label}…</p>
-              <p className="text-slate-400 text-sm mt-1">{fmtDate(fromDate)} — {fmtDate(toDate)}</p>
+              <Loader2 className={`mx-auto mb-4 h-11 w-11 animate-spin ${activeColor.text}`} />
+              <p className="font-bold text-slate-700">Generating {activeOption.label}…</p>
+              <p className="mt-1 text-sm text-slate-400">
+                {fmtDate(fromDate)} — {fmtDate(toDate)}
+              </p>
             </div>
           </div>
         ) : error ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-10 text-center">
-            <AlertCircle className="h-14 w-14 text-red-400 mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-red-800 mb-1">Could not load report</h2>
-            <p className="text-red-600 text-sm max-w-md mx-auto">{error}</p>
+          <div className="rounded-2xl border border-red-200 bg-white p-10 text-center shadow-sm">
+            <AlertCircle className="mx-auto mb-4 h-14 w-14 text-red-400" />
+            <h2 className="mb-1 text-lg font-bold text-red-800">Could not load report</h2>
+            <p className="mx-auto max-w-md text-sm text-red-600">{error}</p>
             <button
               type="button"
               onClick={() => fetchReport(page, search)}
-              className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold shadow-sm"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
             >
               <RotateCcw className="h-4 w-4" /> Try again
             </button>
           </div>
         ) : data === null ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-dashed border-slate-300 flex flex-col items-center justify-center py-24 px-6 text-center">
-            <div className={`p-5 rounded-2xl ${activeColor.bg} mb-4 ring-4 ring-white shadow-inner`}>
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-24 text-center shadow-sm">
+            <div className={`mb-4 rounded-2xl p-5 ring-4 ring-white shadow-inner ${activeColor.bg}`}>
               <div className={`scale-125 ${activeColor.text}`}>{activeOption.icon}</div>
             </div>
-            <p className="text-slate-700 font-semibold text-lg">Ready to generate</p>
-            <p className="text-slate-500 text-sm mt-2 max-w-sm">
-              Choose filters above, then click <strong>Generate report</strong> for {activeOption.label}.
+            <p className="text-lg font-bold text-slate-800">Ready to generate</p>
+            <p className="mt-2 max-w-sm text-sm text-slate-500">
+              Set your filters above, then click <strong className="text-slate-700">Generate report</strong> for{' '}
+              {activeOption.label}.
             </p>
-            <p className="text-slate-400 text-xs mt-3 flex items-center justify-center gap-1">
+            <p className="mt-3 flex items-center justify-center gap-1 text-xs text-slate-400">
               {fmtDate(fromDate)} <ChevronRight className="h-3 w-3" /> {fmtDate(toDate)}
             </p>
           </div>
         ) : (
-          <div ref={reportTableRef} className="bg-white rounded-2xl shadow-md border border-slate-200/80 overflow-hidden">
-            <div className={`px-4 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 ${activeColor.bg} border-b ${activeColor.border}`}>
-              <div className="flex items-center gap-2.5">
-                <span className={`p-1.5 rounded-lg bg-white/60 ${activeColor.text}`}>{activeOption.icon}</span>
-                <div>
-                  <span className={`font-bold text-sm block ${activeColor.text}`}>
-                    {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
-                  </span>
-                  <span className="text-[11px] text-slate-600">
-                    {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
+          <div
+            ref={reportTableRef}
+            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-md"
+            style={
+              forceShareCapture
+                ? {
+                    position: 'fixed',
+                    left: '-12000px',
+                    top: 0,
+                    width: isMobile ? SHARE_CAPTURE_MOBILE_WIDTH : SHARE_CAPTURE_DESKTOP_WIDTH,
+                    maxWidth: isMobile ? SHARE_CAPTURE_MOBILE_WIDTH : SHARE_CAPTURE_DESKTOP_WIDTH,
+                    zIndex: -1,
+                    pointerEvents: 'none',
+                  }
+                : undefined
+            }
+          >
+            {!forceShareCapture && (
+              <div className={`border-b px-4 py-3 ${activeColor.bg} ${activeColor.border}`}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`rounded-xl bg-white/70 p-2 shadow-sm ${activeColor.text}`}>{activeOption.icon}</span>
+                    <div>
+                      <span className={`block text-sm font-bold ${activeColor.text}`}>
+                        {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-600">
+                        {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-medium text-slate-600">
+                    {fmtDate(fromDate)} — {fmtDate(toDate)}
+                    {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
+                    {reportType === 'hourly-production' && selectedMachine && ` · M${selectedMachine}`}
                   </span>
                 </div>
               </div>
-              <span className="text-xs text-slate-600 font-medium">
-                {fmtDate(fromDate)} — {fmtDate(toDate)}
-                {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
-                {reportType === 'hourly-production' && selectedMachine && ` · M${selectedMachine}`}
-              </span>
-            </div>
+            )}
             {renderReportKpis()}
-            {showPeriodCompare && (compareLoading || compareMaps) && (
-              <div className="px-4 py-2 text-xs border-b border-slate-100 bg-amber-50/80 text-amber-900 flex items-center gap-2">
+            {showPeriodCompare && !forceShareCapture && (compareLoading || compareMaps) && (
+              <div className="flex items-center gap-2 border-b border-amber-100 bg-amber-50/90 px-4 py-2.5 text-xs text-amber-950">
                 {compareLoading ? (
                   <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                     Loading comparison periods…
                   </>
                 ) : (
@@ -2373,34 +2797,38 @@ export const Reports: React.FC = () => {
                     <TrendingUp className="h-3.5 w-3.5 shrink-0" />
                     Compare vs{' '}
                     {compareMode === 'both' ? 'yesterday and last week' : compareMode === 'yesterday' ? 'yesterday' : 'same day last week'}
-                    : top line is <strong>today vs comparison day</strong> (e.g. 134 vs 170 yest); bottom line is the gap. On % columns,{' '}
-                    <strong>points</strong> = simple % difference (54% vs 68% = 14 points down).
+                    : top line is <strong>today vs comparison day</strong>; bottom line is the gap. On % columns,{' '}
+                    <strong>points</strong> = simple % difference.
                   </>
                 )}
               </div>
             )}
             {isMobile ? (
               <>
-                <div className="px-4 py-2 text-xs text-slate-500 border-b border-slate-100 bg-slate-50/50">
-                  Card layout for mobile — use landscape or desktop for full grid.
-                </div>
+                {!forceShareCapture && (
+                  <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2 text-xs text-slate-500">
+                    Card layout for mobile — use landscape or desktop for the full grid.
+                  </div>
+                )}
                 {renderMobileCards()}
               </>
             ) : (
               <>
-                <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/60 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                    <ChevronRight className="h-3 w-3 rotate-90 shrink-0" />
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-2.5">
+                  <p className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                    <ChevronRight className="h-3 w-3 shrink-0 rotate-90" />
                     {reportType === 'hourly-production'
-                      ? 'Scroll for hour columns · Date & Line stay fixed on the left'
-                      : 'Scroll horizontally for all columns'}
+                      ? 'Scroll for hour columns · Date & line stay fixed on the left'
+                      : reportType === 'line-efficiency'
+                        ? 'Scroll for all columns · Date, line & machine on the left'
+                        : 'Scroll horizontally for all columns'}
                   </p>
-                  {reportType === 'hourly-production' && (
-                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  {supportsProductColumnToggle(reportType) && (
+                    <label className="inline-flex cursor-pointer select-none items-center gap-2">
                       <input
                         type="checkbox"
-                        checked={hourlyShowProductDetails}
-                        onChange={(e) => setHourlyShowProductDetails(e.target.checked)}
+                        checked={showProductDetails}
+                        onChange={(e) => setShowProductDetails(e.target.checked)}
                         className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
                       <span className="text-[11px] font-semibold text-slate-600">Show product columns</span>
@@ -2410,19 +2838,89 @@ export const Reports: React.FC = () => {
                 {renderTable()}
               </>
             )}
-            {data && data.length > 0 && (
-              <Pagination
-                currentPage={page}
-                totalPages={pagination.totalPages}
-                totalItems={pagination.total}
-                itemsPerPage={limit}
-                onPageChange={handlePageChange}
-                onItemsPerPageChange={handleLimitChange}
-              />
-            )}
           </div>
         )}
+        {data && data.length > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={limit}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleLimitChange}
+          />
+        )}
       </div>
+
+      {preparedShare && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal
+          aria-labelledby="share-report-title"
+        >
+          <div className="flex max-h-[92dvh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-2xl sm:max-h-[85vh] sm:rounded-2xl">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-4 pb-3 pt-4">
+              <div className="min-w-0 pr-2">
+                <h3 id="share-report-title" className="text-base font-bold text-slate-900">
+                  Share report
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {canAttemptNativeShare()
+                    ? 'Tap Share below — pick WhatsApp from your phone’s app list.'
+                    : 'Tap Save image — then attach the file in WhatsApp from Downloads.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePreparedShare}
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <img
+                src={preparedShare.previewUrl}
+                alt="Report preview"
+                className="mx-auto max-h-36 w-full rounded-xl border border-slate-200 object-contain bg-slate-50 sm:max-h-44"
+              />
+              <p className="mt-2 text-center text-[11px] text-slate-400">Preview — summary is included on the image</p>
+            </div>
+            <div className="shrink-0 border-t border-slate-100 bg-white px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={sharePreparedReport}
+                disabled={isSavingShare}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#1da851] bg-[#25D366] px-4 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#20BD5A] active:scale-[0.98] disabled:opacity-60"
+              >
+                {isSavingShare ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <WhatsAppIcon className="h-4 w-4 shrink-0" />
+                )}
+                {isSavingShare ? 'Saving…' : canAttemptNativeShare() ? 'Share' : 'Save image'}
+              </button>
+              {canAttemptNativeShare() && (
+                <button
+                  type="button"
+                  onClick={() => void saveShareImageOnly(preparedShare)}
+                  disabled={isSavingShare}
+                  className="mt-2 w-full text-center text-sm font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                >
+                  Save to Downloads instead
+                </button>
+              )}
+              {typeof window !== 'undefined' && !window.isSecureContext && (
+                <p className="mt-2 text-center text-xs text-amber-700">
+                  Use HTTPS to see WhatsApp in the share menu.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
