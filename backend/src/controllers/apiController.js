@@ -249,7 +249,10 @@ class ApiController {
           ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
           SUM(mcp.output_pairs) as total_output,
           ROUND((SUM(mcp.output_pairs) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
-          ROUND(AVG(mcp.output_pairs),1) as avg_hourly_output,
+          ROUND(
+            SUM(mcp.output_pairs) / NULLIF(COUNT(DISTINCT HOUR(mcp.start_time)), 0),
+            1
+          ) as avg_hourly_output,
           SUM(CASE WHEN HOUR(mcp.start_time)=9 THEN mcp.output_pairs ELSE 0 END) as \`9_10\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=10 THEN mcp.output_pairs ELSE 0 END) as \`10_11\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=11 THEN mcp.output_pairs ELSE 0 END) as \`11_12\`,

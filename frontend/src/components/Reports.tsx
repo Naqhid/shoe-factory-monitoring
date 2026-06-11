@@ -314,8 +314,12 @@ const fmtTime = (d: string) => {
 };
 const r = (val: any) => Math.round(val ?? 0);
 
-const effBadge = (val: number) => (
-  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${val >= 90 ? 'bg-green-100 text-green-700' : val >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+const effBadge = (val: number, large = false) => (
+  <span
+    className={`inline-flex items-center justify-center rounded font-bold leading-none ${
+      large ? 'min-h-[2rem] min-w-[3.25rem] px-3 py-1.5 text-base' : 'px-2 py-0.5 text-xs'
+    } ${val >= 90 ? 'bg-green-100 text-green-700' : val >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}
+  >
     {val}%
   </span>
 );
@@ -1625,9 +1629,14 @@ export const Reports: React.FC = () => {
                   value = r(value) || '—';
                 }
                 if (key === 'input_percent' || key === 'output_percent' || key === 'shift_efficiency_pct') {
-                  value = key === 'shift_efficiency_pct' ? effBadge(r(value)) : `${r(value)}%`;
+                  value =
+                    key === 'shift_efficiency_pct'
+                      ? effBadge(r(value), shareCard)
+                      : shareCard
+                        ? effBadge(r(value), true)
+                        : `${r(value)}%`;
                 }
-                if (key === 'efficiency_percent') value = effBadge(r(value));
+                if (key === 'efficiency_percent') value = effBadge(r(value), shareCard);
               if (key === 'net_mins') value = netBalanceBadge(Number(value));
               if (key === 'net_status') value = String(value);
                 if (key === 'status' && value === 'Present') value = <span className="text-green-700 font-semibold">Present</span>;
@@ -1636,13 +1645,13 @@ export const Reports: React.FC = () => {
                 return (
                   <div
                     key={key}
-                    className={`flex items-start justify-between border-b border-slate-100 py-2 last:border-b-0 ${
-                      shareCard ? 'gap-4 py-2.5' : 'gap-3'
+                    className={`flex justify-between border-b border-slate-100 py-2 last:border-b-0 ${
+                      shareCard ? 'items-center gap-4 py-3' : 'items-start gap-3'
                     }`}
                   >
                     <span
                       className={`shrink-0 font-semibold text-slate-500 ${
-                        shareCard ? 'text-sm' : 'text-xs'
+                        shareCard ? 'text-sm leading-snug' : 'text-xs'
                       }`}
                     >
                       {HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])
@@ -1650,8 +1659,14 @@ export const Reports: React.FC = () => {
                         : reportColumnLabel(key, apiReportType)}
                     </span>
                     <span
-                      className={`text-right font-medium text-slate-800 ${
-                        shareCard ? 'text-base font-semibold' : 'text-sm'
+                      className={`shrink-0 text-right ${
+                        typeof value === 'object'
+                          ? shareCard
+                            ? 'flex items-center justify-end'
+                            : ''
+                          : shareCard
+                            ? 'text-base font-semibold text-slate-800'
+                            : 'text-sm font-medium text-slate-800'
                       }`}
                     >
                       {typeof value === 'object' ? value : String(value)}
