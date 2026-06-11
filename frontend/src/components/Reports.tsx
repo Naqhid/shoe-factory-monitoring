@@ -1,6 +1,6 @@
 import React from 'react';
 import { flushSync } from 'react-dom';
-import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy, Wrench, Calendar, Filter, X, Sparkles } from 'lucide-react';
+import { Loader2, AlertCircle, Download, Search, BarChart2, Clock, Users, AlertTriangle, UserCheck, TrendingUp, ChevronRight, FileSpreadsheet, FileText, RotateCcw, Copy, Wrench, Calendar, Filter, X, Sparkles, FileDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -19,6 +19,7 @@ import {
   comparePeriodHeaderLabel,
   numCompare,
 } from '../utils/reportCompareUtils';
+import { downloadReportPdf } from '../utils/reportPdfExport';
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
@@ -302,8 +303,11 @@ const LINE_BADGE: Record<string, string> = {
 
 const fmtDate = (d: string) => {
   if (!d) return '';
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return d;
+  const raw = String(d).trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
+  const dt = new Date(raw);
+  if (isNaN(dt.getTime())) return raw;
   return `${String(dt.getDate()).padStart(2, '0')}-${String(dt.getMonth() + 1).padStart(2, '0')}-${dt.getFullYear()}`;
 };
 const fmtTime = (d: string) => {
@@ -314,8 +318,12 @@ const fmtTime = (d: string) => {
 };
 const r = (val: any) => Math.round(val ?? 0);
 
-const effBadge = (val: number) => (
-  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${val >= 90 ? 'bg-green-100 text-green-700' : val >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+const effBadge = (val: number, large = false) => (
+  <span
+    className={`inline-flex items-center justify-center rounded font-bold leading-none ${
+      large ? 'min-h-[2rem] min-w-[3.25rem] px-3 py-1.5 text-base' : 'px-2 py-0.5 text-xs'
+    } ${val >= 90 ? 'bg-green-100 text-green-700' : val >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}
+  >
     {val}%
   </span>
 );
@@ -545,6 +553,83 @@ const getPresetRange = (preset: DatePreset) => {
   return { from: formatDateInput(start), to: formatDateInput(end) };
 };
 
+const computeReportSummaryStats = (rows: any[], apiReport: ApiReportType) => {
+  if (!rows.length) return [];
+  const sum = (key: string) => rows.reduce((s, row) => s + (Number(row[key]) || 0), 0);
+  const avg = (key: string) => Math.round(rows.reduce((s, row) => s + (parseFloat(row[key]) || 0), 0) / rows.length);
+  switch (apiReport) {
+    case 'hourly-production':
+      return [
+        { label: 'Total output', value: sum('total_output') },
+        { label: 'Total planned', value: sum('total_planned_qty') },
+      ];
+    case 'line-efficiency':
+      return [
+        { label: 'Rows', value: rows.length },
+        { label: 'Avg efficiency', value: `${avg('efficiency_percent')}%` },
+        { label: 'Total output', value: sum('total_output') },
+      ];
+    case 'attendance': {
+      const present = rows.filter((r) => r.status === 'Present').length;
+      return [
+        { label: 'Present', value: present },
+        { label: 'Absent', value: rows.length - present },
+        { label: 'Attendance rate', value: `${Math.round((present / rows.length) * 100)}%` },
+      ];
+    }
+    case 'rework-rejection':
+      return [
+        { label: 'Rework qty', value: sum('rework_qty') },
+        { label: 'Rejection qty', value: sum('rejection_qty') },
+        { label: 'Output', value: sum('output') },
+      ];
+    case 'employee-output':
+      return [{ label: 'Total output', value: sum('total_output') }, { label: 'Employees', value: rows.length }];
+    case 'employee-performance':
+      return [
+        { label: 'Total output', value: sum('output') },
+        { label: 'Avg efficiency', value: `${avg('efficiency_percent')}%` },
+        { label: 'Records', value: rows.length },
+      ];
+    case 'attendance-production':
+      return [
+        { label: 'Sessions', value: rows.length },
+        { label: 'Zero output', value: rows.filter((row) => Number(row.total_output) === 0).length },
+        { label: 'Total output', value: sum('total_output') },
+      ];
+    case 'time-loss': {
+      const netTotal = Math.round(rows.reduce((s, row) => s + Number(row.net_mins || 0), 0) * 100) / 100;
+      const lossRows = rows.filter((row) => row.net_status === 'loss').length;
+      return [
+        { label: 'Machines', value: rows.length },
+        { label: 'With time loss', value: lossRows },
+        { label: 'Net balance', value: `${netTotal}m` },
+      ];
+    }
+    case 'shift-summary':
+      return [
+        { label: 'Total output', value: sum('total_output') },
+        { label: 'Cycles', value: sum('cycles') },
+        { label: 'Avg shift eff.', value: `${avg('shift_efficiency_pct')}%` },
+      ];
+    case 'bottleneck':
+    case 'breakdown':
+      return [
+        { label: 'Events', value: rows.length },
+        { label: 'Total duration', value: `${sum('duration_mins')}m` },
+        { label: 'In progress', value: rows.filter((r) => r.status === 'In progress').length },
+      ];
+    default:
+      return [{ label: 'Rows', value: rows.length }];
+  }
+};
+
+const formatExportCellValue = (key: string, value: unknown, fmtDateFn: (d: string) => string): string => {
+  if (value == null || value === '') return '—';
+  if (key === 'date' || key.endsWith('_date')) return fmtDateFn(String(value));
+  return String(value);
+};
+
 export const Reports: React.FC = () => {
   const defaultRange = getPresetRange('today');
   const [fromDate, setFromDate] = React.useState(defaultRange.from);
@@ -568,6 +653,7 @@ export const Reports: React.FC = () => {
   const [data, setData] = React.useState<any[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isExportLoading, setIsExportLoading] = React.useState(false);
+  const [exportFormatLoading, setExportFormatLoading] = React.useState<'csv' | 'excel' | 'pdf' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [dateError, setDateError] = React.useState<string | null>(null);
   const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
@@ -603,6 +689,15 @@ export const Reports: React.FC = () => {
   }, []);
 
   React.useEffect(() => () => closePreparedShare(), [closePreparedShare]);
+
+  React.useEffect(() => {
+    if (!showExportMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowExportMenu(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showExportMenu]);
 
   const saveShareImageOnly = React.useCallback(
     async (share: NonNullable<typeof preparedShare>) => {
@@ -1039,6 +1134,7 @@ export const Reports: React.FC = () => {
 
   const exportCSV = async () => {
     setIsExportLoading(true);
+    setExportFormatLoading('csv');
     try {
       const { rows } = await fetchAllRowsForExport();
       if (!rows || rows.length === 0) {
@@ -1066,12 +1162,14 @@ export const Reports: React.FC = () => {
     } catch (e: any) {
       toast.error(e.message || 'Export failed');
     } finally {
+      setExportFormatLoading(null);
       setIsExportLoading(false);
     }
   };
 
   const exportExcel = async () => {
     setIsExportLoading(true);
+    setExportFormatLoading('excel');
     try {
       const { rows: exportRows } = await fetchAllRowsForExport();
       if (!exportRows || exportRows.length === 0) {
@@ -1095,53 +1193,61 @@ export const Reports: React.FC = () => {
     } catch (e: any) {
       toast.error(e.message || 'Export failed');
     } finally {
+      setExportFormatLoading(null);
       setIsExportLoading(false);
     }
   };
 
   const exportPDF = async () => {
     setIsExportLoading(true);
+    setExportFormatLoading('pdf');
     try {
+      toast.loading('Building PDF…', { id: 'export-pdf' });
       const { rows: exportRows } = await fetchAllRowsForExport();
       if (!exportRows || exportRows.length === 0) {
-        toast.error('No data to export');
+        toast.error('No data to export', { id: 'export-pdf' });
         return;
       }
       const headers = Object.keys(stripExportFields(exportRows[0], apiReportType));
-    const subLabel = REPORT_SUB_VIEWS[reportType]?.find((s) => s.value === reportSubView)?.label;
-    const title = `${activeOption.label}${subLabel ? ` — ${subLabel}` : ''} (${fmtDate(fromDate)} - ${fmtDate(toDate)})`;
-    const tableHead = headers.map(h => `<th style="border:1px solid #ddd;padding:6px;text-align:left;font-size:11px;">${reportColumnLabel(h, apiReportType)}</th>`).join('');
-    const tableRows = exportRows.map((row) => {
-      const filtered = stripExportFields(row, apiReportType);
-      return `<tr>${headers.map(h => `<td style="border:1px solid #ddd;padding:6px;font-size:10px;">${String(filtered[h] ?? '')}</td>`).join('')}</tr>`;
-    }).join('');
+      const headerLabels = headers.map((h) => reportColumnLabel(h, apiReportType));
+      const tableRows = exportRows.map((row) => {
+        const filtered = stripExportFields(row, apiReportType);
+        return headers.map((h) => formatExportCellValue(h, filtered[h], fmtDate));
+      });
+      const subLabel = REPORT_SUB_VIEWS[reportType]?.find((s) => s.value === reportSubView)?.label;
+      const dateRange =
+        fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} — ${fmtDate(toDate)}`;
+      const filterLines: string[] = [];
+      if (selectedLine) {
+        filterLines.push(
+          `Line: ${workCentres.find((w) => String(w.id) === String(selectedLine))?.name || selectedLine}`
+        );
+      }
+      if (reportType === 'hourly-production') {
+        filterLines.push(selectedMachine ? `Machine: ${selectedMachine}` : 'Machine: End-of-line (07)');
+      }
+      if (search.trim()) filterLines.push(`Search: ${search.trim()}`);
 
-    const html = `
-      <html>
-      <head><title>${title}</title></head>
-      <body style="font-family:Arial, sans-serif; padding:16px;">
-        <h2 style="margin-bottom:4px;">${title}</h2>
-        <p style="color:#666; margin-top:0;">Generated at ${new Date().toLocaleString()}</p>
-        <table style="border-collapse:collapse; width:100%;">
-          <thead><tr style="background:#f3f4f6;">${tableHead}</tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Popup blocked. Please allow popups to export PDF.');
-      return;
-    }
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+      downloadReportPdf({
+        meta: {
+          title: activeOption.label,
+          subtitle: subLabel,
+          dateRange,
+          filters: filterLines,
+          rowCount: exportRows.length,
+          generatedAt: new Date().toLocaleString('en-GB'),
+          themeColor: activeOption.color,
+          summaryStats: computeReportSummaryStats(exportRows, apiReportType),
+        },
+        headerLabels,
+        rows: tableRows,
+        filename: `${apiReportType}_${fromDate}_${toDate}.pdf`,
+      });
+      toast.success('PDF downloaded', { id: 'export-pdf' });
     } catch (e: any) {
-      toast.error(e.message || 'Export failed');
+      toast.error(e.message || 'PDF export failed', { id: 'export-pdf' });
     } finally {
+      setExportFormatLoading(null);
       setIsExportLoading(false);
     }
   };
@@ -1282,73 +1388,11 @@ export const Reports: React.FC = () => {
 
   const reportSummaryStats = React.useMemo(() => {
     if (!data?.length) return [];
-    const sum = (key: string) => data.reduce((s, row) => s + (Number(row[key]) || 0), 0);
-    const avg = (key: string) => Math.round(data.reduce((s, row) => s + (parseFloat(row[key]) || 0), 0) / data.length);
-    switch (apiReportType) {
-      case 'hourly-production':
-        return [
-          { label: 'Total output', value: sum('total_output') },
-          { label: 'Total planned', value: sum('total_planned_qty') },
-        ];
-      case 'line-efficiency':
-        return [
-          { label: 'Rows', value: data.length },
-          { label: 'Avg efficiency', value: `${avg('efficiency_percent')}%` },
-          { label: 'Total output', value: sum('total_output') },
-        ];
-      case 'attendance': {
-        const present = data.filter((r) => r.status === 'Present').length;
-        return [
-          { label: 'Present', value: present },
-          { label: 'Absent', value: data.length - present },
-          { label: 'Attendance rate', value: `${Math.round((present / data.length) * 100)}%` },
-        ];
-      }
-      case 'rework-rejection':
-        return [
-          { label: 'Rework qty', value: sum('rework_qty') },
-          { label: 'Rejection qty', value: sum('rejection_qty') },
-          { label: 'Output', value: sum('output') },
-        ];
-      case 'employee-output':
-        return [{ label: 'Total output', value: sum('total_output') }, { label: 'Employees', value: data.length }];
-      case 'employee-performance':
-        return [
-          { label: 'Total output', value: sum('output') },
-          { label: 'Avg efficiency', value: `${avg('efficiency_percent')}%` },
-          { label: 'Records', value: data.length },
-        ];
-      case 'attendance-production':
-        return [
-          { label: 'Sessions', value: data.length },
-          { label: 'Zero output', value: data.filter((row) => Number(row.total_output) === 0).length },
-          { label: 'Total output', value: sum('total_output') },
-        ];
-      case 'time-loss': {
-        const netTotal = Math.round(data.reduce((s, row) => s + Number(row.net_mins || 0), 0) * 100) / 100;
-        const lossRows = data.filter((row) => row.net_status === 'loss').length;
-        return [
-          { label: 'Machines', value: data.length },
-          { label: 'With time loss', value: lossRows },
-          { label: 'Net balance', value: `${netTotal}m` },
-        ];
-      }
-      case 'shift-summary':
-        return [
-          { label: 'Total output', value: sum('total_output') },
-          { label: 'Cycles', value: sum('cycles') },
-          { label: 'Avg shift eff.', value: `${avg('shift_efficiency_pct')}%` },
-        ];
-      case 'bottleneck':
-      case 'breakdown':
-        return [
-          { label: 'Events', value: data.length },
-          { label: 'Total duration', value: `${sum('duration_mins')}m` },
-          { label: 'In progress', value: data.filter((r) => r.status === 'In progress').length },
-        ];
-      default:
-        return [{ label: 'Rows on page', value: data.length }];
+    const stats = computeReportSummaryStats(data, apiReportType);
+    if (stats.length === 1 && stats[0].label === 'Rows') {
+      return [{ label: 'Rows on page', value: data.length }];
     }
+    return stats;
   }, [data, apiReportType]);
 
   const LineBadge = ({ name }: { name: string }) => (
@@ -1625,9 +1669,14 @@ export const Reports: React.FC = () => {
                   value = r(value) || '—';
                 }
                 if (key === 'input_percent' || key === 'output_percent' || key === 'shift_efficiency_pct') {
-                  value = key === 'shift_efficiency_pct' ? effBadge(r(value)) : `${r(value)}%`;
+                  value =
+                    key === 'shift_efficiency_pct'
+                      ? effBadge(r(value), shareCard)
+                      : shareCard
+                        ? effBadge(r(value), true)
+                        : `${r(value)}%`;
                 }
-                if (key === 'efficiency_percent') value = effBadge(r(value));
+                if (key === 'efficiency_percent') value = effBadge(r(value), shareCard);
               if (key === 'net_mins') value = netBalanceBadge(Number(value));
               if (key === 'net_status') value = String(value);
                 if (key === 'status' && value === 'Present') value = <span className="text-green-700 font-semibold">Present</span>;
@@ -1636,13 +1685,13 @@ export const Reports: React.FC = () => {
                 return (
                   <div
                     key={key}
-                    className={`flex items-start justify-between border-b border-slate-100 py-2 last:border-b-0 ${
-                      shareCard ? 'gap-4 py-2.5' : 'gap-3'
+                    className={`flex justify-between border-b border-slate-100 py-2 last:border-b-0 ${
+                      shareCard ? 'items-center gap-4 py-3' : 'items-start gap-3'
                     }`}
                   >
                     <span
                       className={`shrink-0 font-semibold text-slate-500 ${
-                        shareCard ? 'text-sm' : 'text-xs'
+                        shareCard ? 'text-sm leading-snug' : 'text-xs'
                       }`}
                     >
                       {HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])
@@ -1650,8 +1699,14 @@ export const Reports: React.FC = () => {
                         : reportColumnLabel(key, apiReportType)}
                     </span>
                     <span
-                      className={`text-right font-medium text-slate-800 ${
-                        shareCard ? 'text-base font-semibold' : 'text-sm'
+                      className={`shrink-0 text-right ${
+                        typeof value === 'object'
+                          ? shareCard
+                            ? 'flex items-center justify-end'
+                            : ''
+                          : shareCard
+                            ? 'text-base font-semibold text-slate-800'
+                            : 'text-sm font-medium text-slate-800'
                       }`}
                     >
                       {typeof value === 'object' ? value : String(value)}
@@ -2625,52 +2680,15 @@ export const Reports: React.FC = () => {
                 >
                   <Copy className="h-4 w-4" /> Copy link
                 </button>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowExportMenu((v) => !v)}
-                    disabled={!data || data.length === 0 || isExportLoading}
-                    className={exportBtnClass}
-                  >
-                    {isExportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    Export
-                    <ChevronRight className={`h-4 w-4 transition-transform ${showExportMenu ? 'rotate-90' : ''}`} />
-                  </button>
-                  {showExportMenu && (
-                    <div className="absolute left-0 top-full z-20 mt-1 min-w-[168px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          exportCSV();
-                          setShowExportMenu(false);
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
-                      >
-                        <Download className="h-3.5 w-3.5" /> CSV
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          exportExcel();
-                          setShowExportMenu(false);
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
-                      >
-                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          exportPDF();
-                          setShowExportMenu(false);
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50"
-                      >
-                        <FileText className="h-3.5 w-3.5 text-rose-600" /> PDF
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu(true)}
+                  disabled={!data || data.length === 0 || isExportLoading}
+                  className={exportBtnClass}
+                >
+                  {isExportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Export
+                </button>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
@@ -2851,6 +2869,129 @@ export const Reports: React.FC = () => {
           />
         )}
       </div>
+
+      {showExportMenu && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+          onClick={() => !isExportLoading && setShowExportMenu(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="export-report-title"
+        >
+          <div
+            className="w-full max-w-lg overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`h-1 ${activeColor.activeBg}`} />
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div className="min-w-0">
+                <h3 id="export-report-title" className="text-lg font-bold text-slate-900">
+                  Export report
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {activeOption.label}
+                  {activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''} · {fmtDate(fromDate)}
+                  {fromDate !== toDate ? ` — ${fmtDate(toDate)}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExportMenu(false)}
+                disabled={isExportLoading}
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 p-5">
+              <button
+                type="button"
+                onClick={() => void exportPDF().finally(() => setShowExportMenu(false))}
+                disabled={isExportLoading}
+                className={`group relative w-full overflow-hidden rounded-2xl border-2 text-left transition-all ${activeColor.border} hover:shadow-md active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <div className={`absolute inset-0 opacity-[0.08] ${activeColor.bg}`} />
+                <div className="relative flex items-start gap-4 p-4">
+                  <div className={`rounded-xl p-3 shadow-sm ring-1 ring-inset ring-white/60 ${activeColor.bg} ${activeColor.text}`}>
+                    {exportFormatLoading === 'pdf' ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <FileText className="h-6 w-6" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-base font-bold text-slate-900">PDF report</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${activeColor.activeBg} text-white`}
+                      >
+                        Recommended
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm leading-snug text-slate-500">
+                      Branded document with KPI summary, active filters, and all{' '}
+                      {pagination.total || data?.length || 0} filtered rows.
+                    </p>
+                  </div>
+                  <FileDown className="mt-1 h-5 w-5 shrink-0 text-slate-300 transition-colors group-hover:text-slate-500" />
+                </div>
+              </button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => void exportExcel().finally(() => setShowExportMenu(false))}
+                  disabled={isExportLoading}
+                  className="flex flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-left transition-all hover:border-emerald-200 hover:bg-emerald-50/50 hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                      {exportFormatLoading === 'excel' ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <FileSpreadsheet className="h-5 w-5" />
+                      )}
+                    </div>
+                    <Download className="h-4 w-4 text-slate-300" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900">Excel</p>
+                    <p className="mt-0.5 text-xs text-slate-500">Spreadsheet (.xlsx)</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void exportCSV().finally(() => setShowExportMenu(false))}
+                  disabled={isExportLoading}
+                  className="flex flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-left transition-all hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <div className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                      {exportFormatLoading === 'csv' ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Download className="h-5 w-5" />
+                      )}
+                    </div>
+                    <Download className="h-4 w-4 text-slate-300" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900">CSV</p>
+                    <p className="mt-0.5 text-xs text-slate-500">Plain data (.csv)</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <p className="border-t border-slate-100 px-5 py-3 text-center text-xs text-slate-400">
+              Exports include all filtered rows, not just the current page.
+            </p>
+          </div>
+        </div>
+      )}
 
       {preparedShare && (
         <div

@@ -359,7 +359,8 @@ async function buildMachineTimeLossReportRows(pool, { fromDate, toDate, workCent
 
   const byKey = new Map();
   rows.forEach((row) => {
-    const dateKey = row.date ? String(row.date).slice(0, 10) : '';
+    const dateKey =
+      row.date instanceof Date ? dateKeyLocal(row.date) : row.date ? String(row.date).slice(0, 10) : '';
     const machineId = String(row.machine_id || '');
     const wcId = row.work_centre_id;
     if (!dateKey || !machineId || wcId == null) return;
