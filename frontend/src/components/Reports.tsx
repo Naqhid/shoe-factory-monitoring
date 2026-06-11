@@ -260,7 +260,7 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
 ];
 
 /** Temporarily hidden from the report picker — remove entries to re-enable. */
-const HIDDEN_REPORT_TYPES: ReadonlySet<ReportType> = new Set(['attendance']);
+const HIDDEN_REPORT_TYPES: ReadonlySet<ReportType> = new Set(['attendance', 'employee']);
 const SHOW_DAILY_INACTIVE_REPORT_CALLOUT = false;
 
 const VISIBLE_REPORT_OPTIONS = REPORT_OPTIONS.filter((o) => !HIDDEN_REPORT_TYPES.has(o.value));
