@@ -401,24 +401,28 @@ export const MobileLineSetupForm: React.FC = () => {
     return onLine.length > 0 ? onLine : employees;
   }, [employees, formData.work_centre_id]);
 
+  const activeEmpCodes = React.useMemo(
+    () =>
+      new Set(
+        activeSessions.filter((s) => s.emp_code).map((s) => String(s.emp_code))
+      ),
+    [activeSessions]
+  );
+
+  const loggedInEmployeesOnLine = React.useMemo(
+    () => employeesForLine.filter((emp) => activeEmpCodes.has(String(emp.code))),
+    [employeesForLine, activeEmpCodes]
+  );
+
   const employeeSelectOptions = React.useMemo(() => {
-    const blockedEmpCodes = new Set(
-      activeSessions
-        .filter((s) => {
-          if (!s.emp_code) return false;
-          if (!formData.machine_id) return true;
-          return String(s.machine_id) !== String(formData.machine_id);
-        })
-        .map((s) => String(s.emp_code))
-    );
     return employeesForLine
-      .filter((emp) => !blockedEmpCodes.has(String(emp.code)))
+      .filter((emp) => !activeEmpCodes.has(String(emp.code)))
       .map((emp) => ({
         value: emp.code,
         label: emp.name,
         subLabel: emp.code,
       }));
-  }, [employeesForLine, activeSessions, formData.machine_id]);
+  }, [employeesForLine, activeEmpCodes]);
 
   const workCentreSelectOptions = React.useMemo(
     () =>
