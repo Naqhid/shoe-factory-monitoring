@@ -17,6 +17,8 @@ import {
   Layers,
   Loader2,
   Factory,
+  Copy,
+  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -53,6 +55,51 @@ const formatPlanDateLabel = (value: string | null | undefined) => {
   const [y, m, d] = part.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString();
 };
+
+const todayDateKey = () => new Date().toISOString().split('T')[0];
+
+const dayBeforeDateKey = (dateKey: string) => {
+  const part = String(dateKey || '').split('T')[0];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  const [y, m, d] = part.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+
+const dayAfterDateKey = (dateKey: string) => {
+  const part = String(dateKey || '').split('T')[0];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  const [y, m, d] = part.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+
+interface PlanGapDay {
+  dateKey: string;
+  missingCount: number;
+  totalLines: number;
+  missingLines: Array<{ code: string; name: string }>;
+}
+
+const planRecordToLineItem = (plan: Record<string, unknown>): LineItem => ({
+  style_id: String(plan.style_id ?? ''),
+  customer_id: String(plan.customer_id ?? ''),
+  group_id: String(plan.group_id ?? ''),
+  leather_id: String(plan.leather_id ?? ''),
+  color_id: String(plan.color_id ?? ''),
+  customer_name: String(plan.customer_name || ''),
+  group_name: String(plan.group_name || ''),
+  leather_name: String(plan.leather_name || ''),
+  color_name: String(plan.color_name || ''),
+  work_centre_id: String(plan.work_centre_id ?? ''),
+  total_target_per_day: String(plan.total_target_per_day ?? ''),
+  target_pairs_per_tray: String(plan.target_pairs_per_tray ?? ''),
+  tray_count: String(plan.tray_count ?? '0'),
+  man_hours_minutes: String(plan.man_hours_minutes ?? ''),
+  smv_per_pair: String(plan.smv_per_pair ?? ''),
+});
 
 const emptyLine = (): LineItem => ({
   style_id: '',
@@ -95,10 +142,52 @@ export const ProductionPlanningForm: React.FC = () => {
   const [importing, setImporting] = React.useState(false);
   const [showTemplatePreview, setShowTemplatePreview] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [copyingPlans, setCopyingPlans] = React.useState(false);
+  const [planGaps, setPlanGaps] = React.useState<{
+    today: PlanGapDay | null;
+    tomorrow: PlanGapDay | null;
+    loading: boolean;
+  }>({ today: null, tomorrow: null, loading: true });
+
+  const fetchPlanGaps = React.useCallback(async () => {
+    const todayKey = todayDateKey();
+    const tomorrowKey = dayAfterDateKey(todayKey);
+    setPlanGaps((prev) => ({ ...prev, loading: true }));
+    try {
+      const parseBoard = (dateKey: string, json: { success?: boolean; data?: any }): PlanGapDay => {
+        const lines = json.data?.lines || [];
+        const missing = lines.filter((l: { missing_plan?: boolean }) => l.missing_plan);
+        return {
+          dateKey,
+          missingCount: missing.length,
+          totalLines: lines.length,
+          missingLines: missing.map((l: { work_centre_code?: string; work_centre_name?: string }) => ({
+            code: l.work_centre_code || '—',
+            name: l.work_centre_name || '—',
+          })),
+        };
+      };
+
+      const [todayRes, tomorrowRes] = await Promise.all([
+        apiFetch(`${API_BASE}/api/production-planning/board/today?date=${encodeURIComponent(todayKey)}`),
+        apiFetch(`${API_BASE}/api/production-planning/board/today?date=${encodeURIComponent(tomorrowKey)}`),
+      ]);
+      const [todayJson, tomorrowJson] = await Promise.all([todayRes.json(), tomorrowRes.json()]);
+
+      setPlanGaps({
+        today: todayRes.ok && todayJson.success ? parseBoard(todayKey, todayJson) : null,
+        tomorrow: tomorrowRes.ok && tomorrowJson.success ? parseBoard(tomorrowKey, tomorrowJson) : null,
+        loading: false,
+      });
+    } catch {
+      setPlanGaps({ today: null, tomorrow: null, loading: false });
+    }
+  }, []);
 
   React.useEffect(() => {
     fetchPlans();
     fetchMasters();
+    fetchPlanGaps();
   }, []);
 
   React.useEffect(() => {
@@ -132,6 +221,7 @@ export const ProductionPlanningForm: React.FC = () => {
       console.error('Error fetching plans:', error);
     } finally {
       setRefreshing(false);
+      fetchPlanGaps();
     }
   };
 
@@ -213,6 +303,52 @@ export const ProductionPlanningForm: React.FC = () => {
     setLines([emptyLine()]);
     setShowModal(true);
   };
+
+  const handleCopyPlansFrom = async (sourceDate: string) => {
+    const workCentreId = lines[0]?.work_centre_id;
+
+    setCopyingPlans(true);
+    try {
+      const params = new URLSearchParams({
+        plan_date: sourceDate,
+        limit: '500',
+        page: '1',
+      });
+      const res = await apiFetch(`${API_BASE}/api/production-planning?${params.toString()}`);
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || 'Failed to load plans');
+      }
+
+      let sourcePlans: Record<string, unknown>[] = result.data || [];
+      if (workCentreId) {
+        sourcePlans = sourcePlans.filter((p) => String(p.work_centre_id) === workCentreId);
+      }
+
+      if (sourcePlans.length === 0) {
+        const hint = workCentreId ? ' for this work centre' : '';
+        toast.error(`No plans found for ${formatPlanDateLabel(sourceDate)}${hint}`);
+        return;
+      }
+
+      setLines(sourcePlans.map((p) => planRecordToLineItem(p)));
+      const targetLabel = formatPlanDateLabel(planDate);
+      const sourceLabel = formatPlanDateLabel(sourceDate);
+      toast.success(
+        workCentreId
+          ? `Copied plan from ${sourceLabel} — review and save for ${targetLabel}`
+          : `Loaded ${sourcePlans.length} plan(s) from ${sourceLabel} — review and save for ${targetLabel}`
+      );
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Failed to copy plans';
+      toast.error(message);
+    } finally {
+      setCopyingPlans(false);
+    }
+  };
+
+  const handleCopyFromYesterday = () => handleCopyPlansFrom(dayBeforeDateKey(planDate));
+  const handleCopyFromToday = () => handleCopyPlansFrom(todayDateKey());
 
   const handleEdit = async (id: number) => {
     try {
@@ -622,6 +758,7 @@ export const ProductionPlanningForm: React.FC = () => {
         </div>
       </div>
 
+      <>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2 text-indigo-700">
@@ -652,6 +789,50 @@ export const ProductionPlanningForm: React.FC = () => {
           <p className="text-3xl font-black text-rose-900 mt-2 tabular-nums">{pageStats.deletedOnPage}</p>
         </div>
       </div>
+
+      {!planGaps.loading && (planGaps.today?.missingCount || planGaps.tomorrow?.missingCount) ? (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden />
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-sm font-bold text-amber-900">Missing production plans</p>
+              {planGaps.today && planGaps.today.missingCount > 0 && (
+                <div className="text-sm text-amber-900">
+                  <span className="font-semibold">
+                    {planGaps.today.missingCount} of {planGaps.today.totalLines} line
+                    {planGaps.today.totalLines === 1 ? '' : 's'}{' '}
+                    {planGaps.today.missingCount === 1 ? 'has' : 'have'} no plan for today
+                  </span>
+                  <span className="text-amber-800"> ({formatPlanDateLabel(planGaps.today.dateKey)})</span>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    {planGaps.today.missingLines.map((l) => l.code).join(', ')}
+                  </p>
+                </div>
+              )}
+              {planGaps.tomorrow && planGaps.tomorrow.missingCount > 0 && (
+                <div className="text-sm text-amber-900">
+                  <span className="font-semibold">
+                    {planGaps.tomorrow.missingCount} of {planGaps.tomorrow.totalLines} line
+                    {planGaps.tomorrow.totalLines === 1 ? '' : 's'}{' '}
+                    {planGaps.tomorrow.missingCount === 1 ? 'has' : 'have'} no plan for tomorrow
+                  </span>
+                  <span className="text-amber-800"> ({formatPlanDateLabel(planGaps.tomorrow.dateKey)})</span>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    {planGaps.tomorrow.missingLines.map((l) => l.code).join(', ')}
+                  </p>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={fetchPlanGaps}
+              className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[400px]">
         <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50">
@@ -850,11 +1031,14 @@ export const ProductionPlanningForm: React.FC = () => {
           />
         </div>
       </div>
+      </>
 
       {showModal && (() => {
-        const line = lines[0] ?? emptyLine();
         const cellInput = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400';
         const cellReadOnly = 'w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-slate-50 text-slate-700';
+        const modalLines = editingId ? [lines[0] ?? emptyLine()] : lines;
+        const yesterdaySourceLabel = formatPlanDateLabel(dayBeforeDateKey(planDate));
+        const todaySourceLabel = formatPlanDateLabel(todayDateKey());
 
         return (
           <div
@@ -898,14 +1082,50 @@ export const ProductionPlanningForm: React.FC = () => {
 
               <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6">
                 <div className="rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-gray-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-gray-200">
                     <div className="flex items-center gap-2">
                       <Layers className="h-4 w-4 text-slate-600" aria-hidden />
-                      <h3 className="text-sm font-bold text-gray-900">Plan line</h3>
+                      <h3 className="text-sm font-bold text-gray-900">
+                        {modalLines.length > 1 ? `Plan lines (${modalLines.length})` : 'Plan line'}
+                      </h3>
                     </div>
-                    <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200">
-                      Routing fields auto-fill when you pick a style
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!editingId && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleCopyFromToday}
+                            disabled={copyingPlans}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-800 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                            title={`Load plans from ${todaySourceLabel} for review before saving on ${formatPlanDateLabel(planDate)}`}
+                          >
+                            {copyingPlans ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" aria-hidden />
+                            )}
+                            Copy from today
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCopyFromYesterday}
+                            disabled={copyingPlans}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                            title={`Load plans from ${yesterdaySourceLabel} for review before saving on ${formatPlanDateLabel(planDate)}`}
+                          >
+                            {copyingPlans ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" aria-hidden />
+                            )}
+                            Copy from yesterday
+                          </button>
+                        </>
+                      )}
+                      <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200">
+                        Routing fields auto-fill when you pick a style
+                      </span>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -927,105 +1147,116 @@ export const ProductionPlanningForm: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="hover:bg-slate-50/60">
-                          <td className="py-2 px-2 align-top min-w-[140px]">
-                            <input
-                              type="date"
-                              value={planDate}
-                              onChange={(e) => setPlanDate(e.target.value)}
-                              className={cellInput}
-                              required
-                            />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[110px]">
-                            <input readOnly value={line.customer_name} className={cellReadOnly} placeholder="From routing" />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[130px]">
-                            <select
-                              value={line.style_id}
-                              onChange={(e) => handleStyleChange(0, e.target.value)}
-                              className={`${cellInput} ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50 focus:ring-red-300' : ''}`}
-                              required
-                            >
-                              <option value="">Style</option>
-                              {styles.map((s) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                              ))}
-                            </select>
-                            {line.style_id && !line.smv_per_pair && (
-                              <p className="text-[10px] text-red-600 mt-0.5 leading-tight">No routing</p>
-                            )}
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[100px]">
-                            <input readOnly value={line.leather_name} className={cellReadOnly} placeholder="From routing" />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[90px]">
-                            <input readOnly value={line.color_name} className={cellReadOnly} placeholder="From routing" />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[100px]">
-                            <input readOnly value={line.group_name} className={cellReadOnly} placeholder="From routing" />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[150px]">
-                            <select
-                              value={line.work_centre_id}
-                              onChange={(e) => updateLine(0, { work_centre_id: e.target.value })}
-                              className={cellInput}
-                              required
-                            >
-                              <option value="">Work centre</option>
-                              {workCentres.map((c) => (
-                                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[80px]">
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={line.total_target_per_day}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const tray = line.target_pairs_per_tray;
-                                const trayCount = val && tray ? String(Math.ceil(parseInt(val) / parseInt(tray))) : line.tray_count;
-                                updateLine(0, { total_target_per_day: val, tray_count: trayCount });
-                              }}
-                              className={`${cellInput} tabular-nums`}
-                              required
-                            />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[80px]">
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={line.target_pairs_per_tray}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const target = line.total_target_per_day;
-                                const trayCount = val && target ? String(Math.ceil(parseInt(target) / parseInt(val))) : line.tray_count;
-                                updateLine(0, { target_pairs_per_tray: val, tray_count: trayCount });
-                              }}
-                              className={`${cellInput} tabular-nums`}
-                              required
-                            />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[72px]">
-                            <input readOnly value={line.tray_count} className={`${cellReadOnly} tabular-nums font-semibold`} />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[80px]">
-                            <input readOnly value={line.man_hours_minutes} className={`${cellReadOnly} tabular-nums`} placeholder="—" />
-                          </td>
-                          <td className="py-2 px-2 align-top min-w-[72px]">
-                            <input readOnly value={line.smv_per_pair} className={`${cellReadOnly} tabular-nums`} placeholder="—" />
-                          </td>
-                        </tr>
+                        {modalLines.map((line, idx) => (
+                          <tr key={`plan-line-${idx}-${line.work_centre_id || 'new'}`} className="hover:bg-slate-50/60 border-b border-gray-100 last:border-0">
+                            {idx === 0 ? (
+                              <td className="py-2 px-2 align-top min-w-[140px]" rowSpan={modalLines.length}>
+                                <input
+                                  type="date"
+                                  value={planDate}
+                                  onChange={(e) => setPlanDate(e.target.value)}
+                                  className={cellInput}
+                                  required
+                                />
+                                {!editingId && (
+                                  <p className="text-[10px] text-gray-500 mt-1 leading-tight">
+                                    Copy from today ({todaySourceLabel}) or yesterday ({yesterdaySourceLabel})
+                                  </p>
+                                )}
+                              </td>
+                            ) : null}
+                            <td className="py-2 px-2 align-top min-w-[110px]">
+                              <input readOnly value={line.customer_name} className={cellReadOnly} placeholder="From routing" />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[130px]">
+                              <select
+                                value={line.style_id}
+                                onChange={(e) => handleStyleChange(idx, e.target.value)}
+                                className={`${cellInput} ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50 focus:ring-red-300' : ''}`}
+                                required
+                              >
+                                <option value="">Style</option>
+                                {styles.map((s) => (
+                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                              </select>
+                              {line.style_id && !line.smv_per_pair && (
+                                <p className="text-[10px] text-red-600 mt-0.5 leading-tight">No routing</p>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[100px]">
+                              <input readOnly value={line.leather_name} className={cellReadOnly} placeholder="From routing" />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[90px]">
+                              <input readOnly value={line.color_name} className={cellReadOnly} placeholder="From routing" />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[100px]">
+                              <input readOnly value={line.group_name} className={cellReadOnly} placeholder="From routing" />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[150px]">
+                              <select
+                                value={line.work_centre_id}
+                                onChange={(e) => updateLine(idx, { work_centre_id: e.target.value })}
+                                className={cellInput}
+                                required
+                              >
+                                <option value="">Work centre</option>
+                                {workCentres.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[80px]">
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={line.total_target_per_day}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const tray = line.target_pairs_per_tray;
+                                  const trayCount = val && tray ? String(Math.ceil(parseInt(val) / parseInt(tray))) : line.tray_count;
+                                  updateLine(idx, { total_target_per_day: val, tray_count: trayCount });
+                                }}
+                                className={`${cellInput} tabular-nums`}
+                                required
+                              />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[80px]">
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={line.target_pairs_per_tray}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const target = line.total_target_per_day;
+                                  const trayCount = val && target ? String(Math.ceil(parseInt(target) / parseInt(val))) : line.tray_count;
+                                  updateLine(idx, { target_pairs_per_tray: val, tray_count: trayCount });
+                                }}
+                                className={`${cellInput} tabular-nums`}
+                                required
+                              />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[72px]">
+                              <input readOnly value={line.tray_count} className={`${cellReadOnly} tabular-nums font-semibold`} />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[80px]">
+                              <input readOnly value={line.man_hours_minutes} className={`${cellReadOnly} tabular-nums`} placeholder="—" />
+                            </td>
+                            <td className="py-2 px-2 align-top min-w-[72px]">
+                              <input readOnly value={line.smv_per_pair} className={`${cellReadOnly} tabular-nums`} placeholder="—" />
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
 
                   <p className="px-4 py-2.5 text-xs text-gray-500 border-t border-gray-100 bg-gray-50/80">
-                    Customer, group, leather, color, man-hours and SMV auto-fill from Production Routing when you pick a style.
+                    {!editingId
+                      ? 'Use Copy from today or yesterday to load existing plans, adjust targets if needed, then save for the plan date above.'
+                      : 'Customer, group, leather, color, man-hours and SMV auto-fill from Production Routing when you pick a style.'}
                   </p>
                 </div>
 
@@ -1043,7 +1274,7 @@ export const ProductionPlanningForm: React.FC = () => {
                     className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-                    {loading ? 'Saving…' : (editingId ? 'Update plan' : 'Save plan')}
+                    {loading ? 'Saving…' : (editingId ? 'Update plan' : (lines.length > 1 ? `Save ${lines.length} plans` : 'Save plan'))}
                   </button>
                 </div>
               </form>

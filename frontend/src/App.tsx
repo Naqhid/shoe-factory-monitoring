@@ -14,6 +14,7 @@ import { NotFoundPage } from './components/NotFoundPage';
 
 const MasterForm = lazy(() => import('./components/MasterForm').then(m => ({ default: m.MasterForm })));
 const ProductionPlanningForm = lazy(() => import('./components/ProductionPlanningForm').then(m => ({ default: m.ProductionPlanningForm })));
+const LineScheduleForm = lazy(() => import('./components/LineScheduleForm').then(m => ({ default: m.LineScheduleForm })));
 const Reports = lazy(() => import('./components/Reports').then(m => ({ default: m.Reports })));
 const ProductionRoutingForm = lazy(() => import('./components/ProductionRoutingForm').then(m => ({ default: m.ProductionRoutingForm })));
 const MobileLineSetupForm = lazy(() => import('./components/MobileLineSetupForm').then(m => ({ default: m.MobileLineSetupForm })));
@@ -193,6 +194,7 @@ function App() {
   const isMissedActions = activeMenu === 'missed_actions';
   const isProductionRouting = activeMenu === 'production_routing';
   const isProductionPlanning = activeMenu === 'production_planning';
+  const isLineSchedule = activeMenu === 'line_schedule';
   const isLineSetupForm = activeMenu === 'line_setup_form';
   const isMobileLiveDashboard = activeMenu === 'mobile_live_dashboard';
   const isTrackerApp = activeMenu === 'tracker_app';
@@ -214,6 +216,7 @@ function App() {
     'missed_actions',
     'production_routing',
     'production_planning',
+    'line_schedule',
     'line_setup_form',
     'mobile_live_dashboard',
     'mobile',
@@ -326,6 +329,8 @@ function App() {
         <ProductionRoutingForm />
       ) : isProductionPlanning ? (
         <ProductionPlanningForm />
+      ) : isLineSchedule ? (
+        <LineScheduleForm />
       ) : isLineSetupForm ? (
         <MobileLineSetupForm />
       ) : isMobileLiveDashboard ? (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList, MonitorDot, AlertTriangle, PencilRuler } from 'lucide-react';
+import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Settings, Cpu, Menu, X, BarChart3, TrendingUp, Route, Calendar, UserCheck, User, Smartphone, LogOut, FileText, Shield, Tv, Activity, ClipboardList, MonitorDot, AlertTriangle, PencilRuler, Repeat2 } from 'lucide-react';
 import { isMenuAllowed, getEffectiveRole } from '../utils/roleConfig';
 import { AlertBell } from './AlertBell';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -22,6 +22,7 @@ const processMenus = [
   { key: 'logs', label: 'Login Logs', icon: FileText },
   { key: 'production_routing', label: 'Routing', icon: Route },
   { key: 'production_planning', label: 'Planning', icon: Calendar },
+  { key: 'line_schedule', label: 'Line Schedule', icon: Repeat2 },
   { key: 'line_setup_form', label: 'Line Setup ', icon: UserCheck },
   { key: 'manual_production_entry', label: 'Manual Entry', icon: PencilRuler },
   { key: 'production_tracker', label: 'Production Tracker', icon: Smartphone },
