@@ -192,8 +192,8 @@ export const ProductionRoutingForm: React.FC = () => {
 
     const normalTimeSecs = (observedTime * ratingFactor) / 100;
     const stdTimeSecs = normalTimeSecs * 1.15;
-    // Minutes for 6 pairs at observed sec/pair (e.g. 72s × 6 ÷ 60 = 7.2 min)
-    const mins6Prs = Math.round(((observedTime * 6) / 60) * 10) / 10;
+    // Minutes for 6 pairs at std sec/pair (rating factor + 15% allowance), same as legacy mins_12_prs ÷ 2
+    const mins6Prs = Math.round(((stdTimeSecs * 6) / 60) * 10) / 10;
     // Pairs/day: round total at end (same as TV dashboard EOD plan), not round hourly × 8
     const { totalProductiveMins } = getProductiveShiftTotals(new Date());
     const pairsPerDay = computeShiftTargetPairs(mins6Prs, 6, totalProductiveMins);

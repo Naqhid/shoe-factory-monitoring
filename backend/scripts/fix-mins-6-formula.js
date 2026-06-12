@@ -10,21 +10,19 @@ const db = require('../config/database');
       AND COLUMN_NAME = 'mins_6_prs_box'
   `);
   const expr = String(cols[0]?.GENERATION_EXPRESSION || '');
-  if (cols.length && expr.includes('1.15')) {
-    await db.query('ALTER TABLE production_routing_lines DROP COLUMN mins_6_prs_box');
+  const usesStdFormula = expr.includes('rating_factor') && expr.includes('1.15');
+  const stdFormula = `((((\`observed_time\` * \`rating_factor\`) / 100) * 1.15) * 6) / 60`;
+  if (!cols.length || !usesStdFormula) {
+    if (cols.length) {
+      await db.query('ALTER TABLE production_routing_lines DROP COLUMN mins_6_prs_box');
+    }
     await db.query(`
       ALTER TABLE production_routing_lines
-      ADD COLUMN mins_6_prs_box decimal(10,4) GENERATED ALWAYS AS ((\`observed_time\` * 6) / 60) STORED
+      ADD COLUMN mins_6_prs_box decimal(10,4) GENERATED ALWAYS AS (${stdFormula}) STORED
     `);
-    console.log('Updated mins_6_prs_box formula');
-  } else if (!cols.length) {
-    await db.query(`
-      ALTER TABLE production_routing_lines
-      ADD COLUMN mins_6_prs_box decimal(10,4) GENERATED ALWAYS AS ((\`observed_time\` * 6) / 60) STORED
-    `);
-    console.log('Added mins_6_prs_box');
+    console.log('Updated mins_6_prs_box to std-time formula (rating factor + 15%)');
   } else {
-    console.log('mins_6_prs_box already uses observed-time formula');
+    console.log('mins_6_prs_box already uses std-time formula');
   }
 
   const [row] = await db.query(

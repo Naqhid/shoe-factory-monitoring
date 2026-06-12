@@ -18,7 +18,7 @@ const db = require('../config/database');
     await db.execute(`
       ALTER TABLE production_routing_lines
       ADD COLUMN mins_6_prs_box decimal(10,4) GENERATED ALWAYS AS (
-        ((\`observed_time\` * 6) / 60)
+        (((((\`observed_time\` * \`rating_factor\`) / 100) * 1.15) * 6) / 60)
       ) STORED
     `);
     console.log('Added mins_6_prs_box');
