@@ -70,7 +70,21 @@ async function getRoleRecord(roleName) {
   return null;
 }
 
+let lineScheduleMenuMigrationPromise = null;
+
+function ensureLineScheduleMenuMigration() {
+  if (!lineScheduleMenuMigrationPromise) {
+    lineScheduleMenuMigrationPromise = runOneTimeMigration('menu_line_schedule_v1', async () => {
+      await addMenusToRole('Admin', ['line_schedule']);
+      await addMenusToRole('Planner', ['line_schedule']);
+    });
+  }
+  return lineScheduleMenuMigrationPromise;
+}
+
 async function getPermissionsForUser(user = {}) {
+  await ensureLineScheduleMenuMigration();
+
   const effectiveRole = resolveEffectiveRoleName(user);
   const record = effectiveRole ? await getRoleRecord(effectiveRole) : null;
   const fallback = effectiveRole ? getCanonicalFallback(effectiveRole) : null;
@@ -137,6 +151,38 @@ async function bootstrapCanonicalRoles() {
   invalidateCache();
 }
 
+function mergeMenus(currentMenus, menusToAdd) {
+  const merged = [...currentMenus];
+  let changed = false;
+  for (const menu of menusToAdd) {
+    if (!merged.includes(menu)) {
+      merged.push(menu);
+      changed = true;
+    }
+  }
+  return { merged, changed };
+}
+
+async function addMenusToRole(roleName, menusToAdd) {
+  if (!menusToAdd?.length) return false;
+  await ensureRolesTable();
+  const [rows] = await pool.query(
+    'SELECT allowed_menus FROM roles WHERE role_name = ? LIMIT 1',
+    [roleName]
+  );
+  if (!rows.length) return false;
+  const currentMenus = parseAllowedMenus(rows[0].allowed_menus);
+  const { merged, changed } = mergeMenus(currentMenus, menusToAdd);
+  if (!changed) return false;
+  await pool.query(
+    'UPDATE roles SET allowed_menus = ? WHERE role_name = ?',
+    [JSON.stringify(merged), roleName]
+  );
+  invalidateCache();
+  logger.info(`Added menus [${menusToAdd.join(', ')}] to role: ${roleName}`);
+  return true;
+}
+
 async function ensureRoleDefaultsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS role_defaults (
@@ -193,6 +239,32 @@ async function bootstrapRoleDefaultsSnapshot() {
 /**
  * Restore live roles from role_defaults ("Restore defaults" button).
  */
+async function ensureAppMetaTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_meta (
+      meta_key VARCHAR(100) NOT NULL,
+      meta_value VARCHAR(500) NOT NULL,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (meta_key)
+    )
+  `);
+}
+
+async function runOneTimeMigration(metaKey, fn) {
+  await ensureAppMetaTable();
+  const [rows] = await pool.query(
+    'SELECT meta_key FROM app_meta WHERE meta_key = ? LIMIT 1',
+    [metaKey]
+  );
+  if (rows.length) return false;
+  await fn();
+  await pool.query(
+    'INSERT INTO app_meta (meta_key, meta_value) VALUES (?, ?)',
+    [metaKey, 'done']
+  );
+  return true;
+}
+
 async function restoreRolesFromDefaults() {
   await ensureRolesTable();
   await ensureRoleDefaultsTable();
@@ -237,4 +309,7 @@ module.exports = {
   bootstrapRoleDefaultsSnapshot,
   snapshotRolesAsDefaults,
   restoreRolesFromDefaults,
+  addMenusToRole,
+  mergeMenus,
+  runOneTimeMigration,
 };

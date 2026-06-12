@@ -31,6 +31,7 @@ const idleReminderSettingsController = require('./controllers/idleReminderSettin
 const idleReminderSettingsService = require('./services/idleReminderSettingsService');
 const tabBroadcastController = require('./controllers/tabBroadcastController');
 const wipDailyStateController = require('./controllers/wipDailyStateController');
+const lineStyleAssignmentController = require('./controllers/lineStyleAssignmentController');
 const checkDayLock = require('./middleware/checkDayLock');
 const requirePermission = require('./middleware/requirePermission');
 const { CAPABILITIES } = require('./config/permissions');
@@ -301,7 +302,33 @@ const initDb = async () => {
       }
     }
 
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS line_style_assignments (
+        id                INT AUTO_INCREMENT PRIMARY KEY,
+        assignment_date   DATE NOT NULL,
+        work_centre_id    INT NOT NULL,
+        style_id          INT NOT NULL,
+        customer_id       INT NOT NULL,
+        group_id          INT NULL,
+        leather_id        INT NULL,
+        color_id          INT NULL,
+        routing_header_id INT NULL,
+        notes             VARCHAR(500) NULL,
+        created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        deleted_at        DATETIME NULL,
+        UNIQUE KEY uq_line_style_date (assignment_date, work_centre_id),
+        KEY idx_lsa_wc_date (work_centre_id, assignment_date),
+        KEY idx_lsa_style (style_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    logger.info('line_style_assignments table ready');
+
     await permissionService.bootstrapCanonicalRoles();
+    await permissionService.runOneTimeMigration('menu_line_schedule_v1', async () => {
+      await permissionService.addMenusToRole('Admin', ['line_schedule']);
+      await permissionService.addMenusToRole('Planner', ['line_schedule']);
+    });
     await permissionService.bootstrapRoleDefaultsSnapshot();
     logger.info('roles table ready (defaults snapshot initialized when missing)');
 
@@ -606,12 +633,24 @@ app.post('/api/production-routing/:id/restore', authenticate, requireProductionR
 
 // Production planning routes
 app.get('/api/production-planning', authenticate, requireProductionPlanningAccess, validate.pagination, productionPlanningController.getAll.bind(productionPlanningController));
+app.get('/api/production-planning/board/today', authenticate, requireProductionPlanningAccess, productionPlanningController.getTodayBoard.bind(productionPlanningController));
+app.get('/api/production-planning/board/week', authenticate, requireProductionPlanningAccess, productionPlanningController.getWeekGrid.bind(productionPlanningController));
+app.get('/api/production-planning/copy-preview', authenticate, requireProductionPlanningAccess, productionPlanningController.getCopyPreview.bind(productionPlanningController));
+app.post('/api/production-planning/copy-apply', authenticate, requireProductionPlanningAccess, productionPlanningController.applyCopy.bind(productionPlanningController));
+app.get('/api/production-planning/sync-schedule-preview', authenticate, requireProductionPlanningAccess, productionPlanningController.getScheduleSyncPreview.bind(productionPlanningController));
+app.post('/api/production-planning/sync-schedule-apply', authenticate, requireProductionPlanningAccess, productionPlanningController.applyScheduleSync.bind(productionPlanningController));
 app.get('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.getById.bind(productionPlanningController));
 app.post('/api/production-planning', authenticate, requireProductionPlanningAccess, validate(validate.schemas.productionPlan), productionPlanningController.create.bind(productionPlanningController));
 app.post('/api/production-planning/bulk', authenticate, requireProductionPlanningAccess, productionPlanningController.createBulk.bind(productionPlanningController));
 app.post('/api/production-planning/:id/restore', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.restore.bind(productionPlanningController));
 app.put('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, validate(validate.schemas.productionPlan), productionPlanningController.update.bind(productionPlanningController));
 app.delete('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.delete.bind(productionPlanningController));
+
+// Line schedule (article-on-line assignments)
+app.get('/api/line-schedule/board', authenticate, requireProductionPlanningAccess, lineStyleAssignmentController.getBoard.bind(lineStyleAssignmentController));
+app.get('/api/line-schedule', authenticate, requireProductionPlanningAccess, lineStyleAssignmentController.getList.bind(lineStyleAssignmentController));
+app.post('/api/line-schedule/changeover', authenticate, requireProductionPlanningAccess, lineStyleAssignmentController.changeover.bind(lineStyleAssignmentController));
+app.delete('/api/line-schedule/:id', authenticate, requireProductionPlanningAccess, validate.numericId, lineStyleAssignmentController.delete.bind(lineStyleAssignmentController));
 
 // Line setup routes
 app.get('/api/line-setup', authenticate, requireLineSetupAccess, lineSetupController.getAll);

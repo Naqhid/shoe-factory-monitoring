@@ -28,7 +28,7 @@ export interface RoleConfig {
 export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Admin': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
+    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_schedule', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
   },
   'Line Supervisor': {
     defaultRoute: '/line_setup_form',
@@ -44,7 +44,7 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   },
   'Planner': {
     defaultRoute: '/production_planning',
-    allowedMenus: ['overview', 'production_planning', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
+    allowedMenus: ['overview', 'production_planning', 'line_schedule', 'production_tracker', 'reports', 'missed_actions', 'logs', 'alert_center', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees']
   },
   'Unit Head': {
     defaultRoute: '/overview',
@@ -68,6 +68,7 @@ export const ALL_MENU_DEFINITIONS = [
   { key: 'alert_center', label: 'Alert Center' },
   { key: 'production_routing', label: 'Production Routing' },
   { key: 'production_planning', label: 'Production Planning' },
+  { key: 'line_schedule', label: 'Line Schedule' },
   { key: 'line_setup_form', label: 'Line Setup Form' },
   { key: 'manual_production_entry', label: 'Manual Production Entry' },
   { key: 'production_tracker', label: 'Production Tracker' },

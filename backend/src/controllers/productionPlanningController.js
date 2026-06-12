@@ -1,6 +1,7 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { withTransaction, assertExists } = require('../utils/transaction');
+const productionPlanningBoardService = require('../services/productionPlanningBoardService');
 
 const PLAN_LIST_SELECT = `
   pp.id,
@@ -364,6 +365,87 @@ class ProductionPlanningController {
       res.status(201).json({ success: true, data: { count: result.length, ids: result } });
     } catch (error) {
       logger.error('Error creating production plans in bulk:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getTodayBoard(req, res) {
+    try {
+      const data = await productionPlanningBoardService.getTodayBoard(req.query.date);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error getting planning today board:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getWeekGrid(req, res) {
+    try {
+      const anchor = req.query.date || req.query.week_start;
+      const data = await productionPlanningBoardService.getWeekGrid(anchor);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error getting planning week grid:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getCopyPreview(req, res) {
+    try {
+      const data = await productionPlanningBoardService.getCopyPreview({
+        targetDate: req.query.target_date,
+        sourceDate: req.query.source_date,
+        onlyGaps: String(req.query.only_gaps || '') === '1',
+      });
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error building copy preview:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async applyCopy(req, res) {
+    try {
+      const data = await productionPlanningBoardService.applyCopyLines({
+        targetDate: req.body.target_date,
+        lines: req.body.lines || [],
+        replaceConflicts: Boolean(req.body.replace_conflicts),
+      });
+      res.json({
+        success: true,
+        data,
+        message: `Saved ${data.saved_count} plan(s).`,
+      });
+    } catch (error) {
+      logger.error('Error applying copy plans:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async getScheduleSyncPreview(req, res) {
+    try {
+      const data = await productionPlanningBoardService.getScheduleSyncPreview(req.query.target_date);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error building schedule sync preview:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
+
+  async applyScheduleSync(req, res) {
+    try {
+      const data = await productionPlanningBoardService.applyScheduleSync({
+        targetDate: req.body.target_date,
+        workCentreIds: req.body.work_centre_ids,
+        replaceConflicts: req.body.replace_conflicts !== false,
+      });
+      res.json({
+        success: true,
+        data,
+        message: `Synced ${data.saved_count} plan(s) from line schedule.`,
+      });
+    } catch (error) {
+      logger.error('Error applying schedule sync:', error);
       res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }
