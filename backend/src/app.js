@@ -149,7 +149,7 @@ const initDb = async () => {
         throw planAlterError;
       }
     }
-    // Routing: mins per 6 pairs = observed sec/pair × 6 ÷ 60 (e.g. 72 → 7.2 min)
+    // Routing: mins per 6 pairs = std sec/pair × 6 ÷ 60 (observed × rating% × 1.15)
     try {
       const [routingCols] = await db.execute(`
         SELECT COLUMN_NAME, GENERATION_EXPRESSION
@@ -160,22 +160,23 @@ const initDb = async () => {
       `);
       const routingColNames = new Set(routingCols.map((c) => c.COLUMN_NAME));
       const mins6Row = routingCols.find((c) => c.COLUMN_NAME === 'mins_6_prs_box');
-      const mins6UsesStdFormula = mins6Row?.GENERATION_EXPRESSION
-        && String(mins6Row.GENERATION_EXPRESSION).includes('1.15');
+      const mins6Expr = String(mins6Row?.GENERATION_EXPRESSION || '');
+      const mins6UsesStdFormula =
+        mins6Expr.includes('rating_factor') && mins6Expr.includes('1.15');
 
       if (routingColNames.has('mins_12_prs_box')) {
         await db.execute('ALTER TABLE production_routing_lines DROP COLUMN mins_12_prs_box');
         logger.info('Dropped mins_12_prs_box from production_routing_lines');
       }
-      if (!routingColNames.has('mins_6_prs_box') || mins6UsesStdFormula) {
+      if (!routingColNames.has('mins_6_prs_box') || !mins6UsesStdFormula) {
         if (routingColNames.has('mins_6_prs_box')) {
           await db.execute('ALTER TABLE production_routing_lines DROP COLUMN mins_6_prs_box');
-          logger.info('Recreating mins_6_prs_box with observed-time formula');
+          logger.info('Recreating mins_6_prs_box with std-time formula (rating factor + 15%)');
         }
         await db.execute(`
           ALTER TABLE production_routing_lines
           ADD COLUMN mins_6_prs_box decimal(10,4) GENERATED ALWAYS AS (
-            ((\`observed_time\` * 6) / 60)
+            (((((\`observed_time\` * \`rating_factor\`) / 100) * 1.15) * 6) / 60)
           ) STORED
         `);
         logger.info('Added mins_6_prs_box to production_routing_lines');
@@ -638,6 +639,7 @@ app.delete('/api/user-rights/user/:userId', authenticate, requireAdminAccess, us
 app.post('/api/mobile-session/init', mobileSessionController.createSession);
 app.post('/api/mobile-session/activate', mobileSessionController.activateSession);
 app.post('/api/mobile-session/activate-from-assignments', mobileSessionController.activateFromEmployeeMachineAssignments);
+app.get('/api/mobile-session/active-today', mobileSessionController.getActiveSessionsSnapshot);
 app.get('/api/mobile-session/active-for/:machine_id', mobileSessionController.findActiveSession);
 app.get('/api/mobile-session/waiting-for/:machine_id', mobileSessionController.findWaitingSession);
 app.get('/api/mobile-session/latest-active/:machineId?', mobileSessionController.getLatestActiveSession);
@@ -731,7 +733,12 @@ app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSess
 app.get('/api/mobile-sessions/cycles', authenticate, requireLogsAccess, mobileSessionController.getCycleDetails);
 app.post('/api/mobile-sessions/deactivate', authenticate, requireLogsAccess, mobileSessionController.deactivateSession);
 app.post('/api/mobile-sessions/reactivate', authenticate, requireLogsAccess, mobileSessionController.reactivateSessionFromLogs);
-app.get('/api/mobile-sessions/active-snapshot', authenticate, requireManualEntryAccess, mobileSessionController.getActiveSessionsSnapshot);
+app.get(
+  '/api/mobile-sessions/active-snapshot',
+  authenticate,
+  requirePermission(CAPABILITIES.LINE_SETUP, CAPABILITIES.MANUAL_ENTRY),
+  mobileSessionController.getActiveSessionsSnapshot
+);
 
 // TV Dashboard routes
 app.get('/api/tv-dashboard/work-centres', tvDashboardController.getWorkCentres);
