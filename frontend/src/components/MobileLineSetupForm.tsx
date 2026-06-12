@@ -105,11 +105,28 @@ export const MobileLineSetupForm: React.FC = () => {
     login_date_time: new Date().toISOString().slice(0, 16),
   });
 
+  const rejectBusyEmployee = (empCode: string) => {
+    const code = String(empCode).trim();
+    if (!code) return false;
+    const session = activeSessionsRef.current.find(
+      (s) => s.emp_code && String(s.emp_code) === code
+    );
+    if (!session) return false;
+    toast.error(
+      `Operator ${code} is already logged in on machine ${session.machine_id}. Deactivate from Login Logs before assigning to another machine.`
+    );
+    return true;
+  };
+
   const handleEmployeeScan = async (data: { text: string } | null) => {
     if (data && data.text && !isProcessing) {
       setIsProcessing(true);
       const empId = extractLegacyId(data.text.trim());
       setScanningEmployee(false);
+      if (rejectBusyEmployee(empId)) {
+        setIsProcessing(false);
+        return;
+      }
       const loadingToast = toast.loading(`Fetching employee ${empId}...`);
 
       try {
@@ -263,6 +280,8 @@ export const MobileLineSetupForm: React.FC = () => {
       toast.error('Please select or scan employee and machine');
       return;
     }
+    if (rejectBusyEmployee(formData.employee_id)) return;
+    if (rejectBusyMachine(formData.machine_id)) return;
 
     setLoading(true);
 
@@ -361,8 +380,9 @@ export const MobileLineSetupForm: React.FC = () => {
   }, [activeSessions]);
 
   React.useEffect(() => {
-    if (activeStep !== 'machine') return;
-    void loadActiveSessions();
+    if (activeStep === 'machine' || activeStep === 'operator') {
+      void loadActiveSessions();
+    }
   }, [activeStep, loadActiveSessions]);
 
   const activeMachineIds = React.useMemo(
@@ -902,7 +922,10 @@ export const MobileLineSetupForm: React.FC = () => {
                         <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Employee</label>
                         {formData.work_centre_id != null && (
                           <span className="text-[10px] font-semibold text-violet-700">
-                            {employeesForLine.length} on this line
+                            {employeeSelectOptions.length} available
+                            {loggedInEmployeesOnLine.length > 0
+                              ? ` · ${loggedInEmployeesOnLine.length} logged in`
+                              : ''}
                           </span>
                         )}
                       </div>
@@ -917,6 +940,18 @@ export const MobileLineSetupForm: React.FC = () => {
                         footerCountLabel="employees"
                         disabled={isProcessing || mastersLoading}
                       />
+                      {employeeSelectOptions.length === 0 && employeesForLine.length > 0 && (
+                        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 ring-1 ring-amber-100">
+                          All operators on this line are already logged in on a machine today. Deactivate from Login
+                          Logs to assign again.
+                        </p>
+                      )}
+                      {loggedInEmployeesOnLine.length > 0 && employeeSelectOptions.length > 0 && (
+                        <p className="text-xs text-slate-500">
+                          {loggedInEmployeesOnLine.length} logged-in operator(s) hidden — they cannot be assigned to
+                          another machine until deactivated.
+                        </p>
+                      )}
                     </div>
                     <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-3.5">
                       <p className="mb-2 text-xs font-semibold text-slate-600">Or type employee code</p>
