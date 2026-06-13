@@ -5,10 +5,10 @@ import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 // import { TvPlanPacePanel } from './TvPlanPacePanel';
 import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
+import { TvTimeLossPanel } from './TvTimeLossPanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
-import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import { M4_BADGE_CLASS, M4_REASON_ROW_CLASS, M4_REASON_TEXT_CLASS } from '../utils/m4ReasonUtils';
 
 const formatPairsPerHour = (value: number | null) => {
@@ -576,7 +576,6 @@ export const TVDashboard: React.FC = () => {
     const totalReworkQty = Number(reworkTotals.total_rework || 0);
     const totalRejectionQty = Number(reworkTotals.total_rejection || 0);
     const netMachineDeltaMins = machineTimeLossRows.reduce((sum: number, row: any) => sum + Number(row.net_mins || 0), 0);
-    const netMachineDeltaParts = minutesToDurationParts(Math.abs(netMachineDeltaMins));
     const netMachineDeltaLabel =
       Math.abs(netMachineDeltaMins) * 60 < 1
         ? 'neutral'
@@ -1113,69 +1112,14 @@ export const TVDashboard: React.FC = () => {
                             >
                                 {insightSlides.map((kind) => (
                                 <div key={kind} className="flex-[0_0_100%] w-full h-full min-h-0 flex flex-col text-center px-1 py-0.5">
-                                {kind === 'time_loss' && (<>
-                                    <div className="mb-1.5 flex items-center justify-center gap-1.5 text-center flex-wrap shrink-0">
-                                        <p className="text-[11px] sm:text-xs font-bold text-blue-700 tracking-wide">{currentLineName}</p>
-                                        <span className="text-[10px] sm:text-xs text-slate-300">|</span>
-                                        <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide">Time loss</p>
-                                    </div>
-                                    {machineTimeLossRows.length > 0 ? (
-                                        <div className="grid grid-cols-1 gap-1 overflow-auto pr-0.5 min-h-0 flex-1">
-                                            {machineTimeLossRows.slice(0, 8).map((row: any) => (
-                                                <div
-                                                    key={`${row.machine_id}-${row.machine_name}`}
-                                                    className={`rounded-lg px-2 py-1.5 flex items-center justify-between shadow-sm ${
-                                                        Number(row.net_mins || 0) > 0
-                                                            ? 'border border-emerald-200 bg-emerald-50/70'
-                                                            : 'border border-red-200 bg-white'
-                                                    }`}
-                                                >
-                                                    <span
-                                                        className={`text-[10px] sm:text-[11px] font-bold truncate pr-2 text-left rounded px-1.5 py-0.5 ${
-                                                            Number(row.net_mins || 0) > 0
-                                                                ? 'text-emerald-900 bg-emerald-100 border border-emerald-300'
-                                                                : 'text-slate-900 bg-amber-50/60 border border-amber-100'
-                                                        }`}
-                                                    >
-                                                        {row.machine_name || `Machine ${row.machine_id}`}
-                                                    </span>
-                                                    {(() => {
-                                                        const net = Number(row.net_mins || 0);
-                                                        const parts = minutesToDurationParts(Math.abs(net));
-                                                        const tone =
-                                                            net > 0
-                                                                ? 'text-emerald-800 bg-emerald-100 border border-emerald-300'
-                                                                : 'text-red-700 bg-red-50 border border-red-200';
-                                                        const status = net > 0 ? 'gain' : 'loss';
-                                                        return (
-                                                            <span className={`text-[10px] sm:text-[11px] font-black tabular-nums shrink-0 px-1.5 py-0.5 rounded ${tone}`}>
-                                                                {parts.wholeMinutes}m {parts.seconds}s {status}
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            ))}
-                                            <div className="rounded-lg border border-red-300 bg-gradient-to-r from-red-50 to-red-100 px-2 py-1.5 flex items-center justify-between shadow-sm">
-                                                <span className="text-[10px] sm:text-[11px] font-extrabold text-red-900 uppercase tracking-wide">Total</span>
-                                                <span
-                                                    className={`text-[10px] sm:text-[11px] font-black tabular-nums bg-white/80 px-1.5 py-0.5 rounded ${
-                                                        netMachineDeltaLabel === 'gain'
-                                                            ? 'text-emerald-800'
-                                                            : netMachineDeltaLabel === 'loss'
-                                                              ? 'text-red-800'
-                                                              : 'text-gray-700'
-                                                    }`}
-                                                >
-                                                    {netMachineDeltaParts.wholeMinutes}m {netMachineDeltaParts.seconds}s {netMachineDeltaLabel}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="flex-1 flex flex-col items-center justify-center">
-                                            <p className="text-[10px] sm:text-xs text-gray-400">No time loss data today</p>
-                                        </div>
-                                    )}
-                                </>)}
+                                {kind === 'time_loss' && (
+                                    <TvTimeLossPanel
+                                        lineName={currentLineName}
+                                        rows={machineTimeLossRows}
+                                        netTotalMins={netMachineDeltaMins}
+                                        netTotalLabel={netMachineDeltaLabel}
+                                    />
+                                )}
 
                                 {kind === 'rework' && (
                                     <div className="h-full min-h-0 flex flex-col overflow-hidden">

@@ -43,6 +43,11 @@ export default {
           '0%, 100%': { boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(234, 88, 12, 0.45)' },
           '50%': { boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2), 0 0 0 4px rgba(234, 88, 12, 0.4)' },
         },
+        /** TV time loss sidebar: vertical marquee (duplicate list, scroll 50%). */
+        'tv-time-loss-scroll': {
+          '0%': { transform: 'translateY(0)' },
+          '100%': { transform: 'translateY(-50%)' },
+        },
       },
       animation: {
         'cycle-active-blink': 'cycle-active-blink 1.2s ease-in-out infinite',
@@ -51,6 +56,7 @@ export default {
         'tv-shimmer': 'tv-shimmer 8s ease-in-out infinite',
         'tv-stoppage-glow': 'tv-stoppage-glow 2s ease-in-out infinite',
         'tv-stoppage-glow-bottleneck': 'tv-stoppage-glow-bottleneck 2s ease-in-out infinite',
+        'tv-time-loss-scroll': 'tv-time-loss-scroll linear infinite',
       },
     },
   },
