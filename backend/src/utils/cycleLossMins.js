@@ -10,6 +10,8 @@ const LUNCH_END_HOUR = parseInt(process.env.LUNCH_END_HOUR || '14', 10);
 const LUNCH_END_MINUTE = parseInt(process.env.LUNCH_END_MINUTE || '0', 10);
 const LATE_CYCLE_GRACE_SECS = Math.max(1, parseInt(process.env.LATE_CYCLE_GRACE_SECS || '40', 10));
 const LATE_CYCLE_GRACE_MINS = LATE_CYCLE_GRACE_SECS / 60;
+/** Time loss counts idle from the first second after last FINISH (no start grace). */
+const TIME_LOSS_START_GRACE_MINS = 0;
 
 const dateKeyLocal = (d) => {
   const y = d.getFullYear();
@@ -128,7 +130,7 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date) {
     const shiftStart = new Date(startTs);
     shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
     const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
-    const inactive = computeShiftInactiveMinutes({ baselineTs, startTs, startReminderMins: LATE_CYCLE_GRACE_MINS });
+    const inactive = computeShiftInactiveMinutes({ baselineTs, startTs, startReminderMins: TIME_LOSS_START_GRACE_MINS });
     inactiveMins += inactive;
     netLostMins += computeCycleNetLostMins(inactive, targetMins, actualMins);
   });
@@ -218,7 +220,7 @@ async function applyOpenTailMachineLoss(pool, workCentreId, dateKey, byMachine, 
     const openInactive = computeShiftInactiveMinutes({
       baselineTs,
       startTs: asOf,
-      startReminderMins: LATE_CYCLE_GRACE_MINS,
+      startReminderMins: TIME_LOSS_START_GRACE_MINS,
     });
     if (openInactive <= 0) return;
 
@@ -277,7 +279,7 @@ async function aggregateMachineCycleLosses(pool, workCentreId, date, now = new D
     const inactiveMins = computeShiftInactiveMinutes({
       baselineTs,
       startTs,
-      startReminderMins: LATE_CYCLE_GRACE_MINS,
+      startReminderMins: TIME_LOSS_START_GRACE_MINS,
     });
     const earlySaveMins = Math.max(0, targetMins - actualMins);
     const slowExtraMins = Math.max(0, actualMins - targetMins);
@@ -380,7 +382,7 @@ async function buildMachineTimeLossReportRows(pool, { fromDate, toDate, workCent
     const inactiveMins = computeShiftInactiveMinutes({
       baselineTs,
       startTs,
-      startReminderMins: LATE_CYCLE_GRACE_MINS,
+      startReminderMins: TIME_LOSS_START_GRACE_MINS,
     });
     const earlySaveMins = Math.max(0, targetMins - actualMins);
     const slowExtraMins = Math.max(0, actualMins - targetMins);
@@ -461,4 +463,5 @@ module.exports = {
   effectiveAsOfForDateKey,
   LATE_CYCLE_GRACE_SECS,
   LATE_CYCLE_GRACE_MINS,
+  TIME_LOSS_START_GRACE_MINS,
 };

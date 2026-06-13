@@ -1808,7 +1808,7 @@ export const ProductionTracker: React.FC = () => {
                                       className="text-[10px] font-extrabold uppercase tracking-wide opacity-90"
                                       title={
                                         hasNetLoss
-                                          ? 'Includes gaps between cycles and open idle since last finish (after grace), minus fast cycles'
+                                          ? 'Includes gaps between cycles and open idle since last finish, minus fast cycles'
                                           : undefined
                                       }
                                     >

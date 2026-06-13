@@ -18,8 +18,10 @@ const toNumber = (value, fallback = 0) => {
 const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
 /** Production starts after morning prayer (default 9:05). */
 const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
-/** Late-cycle / daily inactive gap allowance — separate from mobile reminder sound (Reminder Settings). */
+/** Live START_PENDING alerts — wait this long after FINISH before flagging (unchanged). */
 const LATE_CYCLE_GRACE_SECS = Math.max(1, parseInt(process.env.LATE_CYCLE_GRACE_SECS || '40', 10));
+/** Time loss / daily inactive — count idle from first second after FINISH (no start grace). */
+const TIME_LOSS_START_GRACE_SECS = 0;
 const SHIFT_END_HOUR = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
 const SHIFT_END_MINUTE = parseInt(process.env.SHIFT_END_MINUTE || '35', 10);
 const LUNCH_START_HOUR = parseInt(process.env.LUNCH_START_HOUR || '13', 10);
@@ -173,11 +175,10 @@ const queryDailyCycleEvents = async (dateFrom, dateTo) => {
     const shiftStart = new Date(startTs);
     shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
     const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
-    const gapMins = Math.max(0, toNumber((startTs.getTime() - baselineTs.getTime()) / 60000, 0));
     const inactiveMins = computeShiftInactiveMinutes({
       baselineTs,
       startTs,
-      startReminderSecs: LATE_CYCLE_GRACE_SECS,
+      startReminderSecs: TIME_LOSS_START_GRACE_SECS,
     });
     const lostMins = computeCycleNetLostMins(inactiveMins, targetMins, actualMins);
 
@@ -195,7 +196,7 @@ const queryDailyCycleEvents = async (dateFrom, dateTo) => {
       target_mins: targetMins,
       actual_mins: actualMins,
       extra_mins: extraMins,
-      start_gap_mins: gapMins,
+      start_gap_mins: inactiveMins,
       inactive_mins: inactiveMins,
       lost_mins: lostMins,
       root_cause: row.root_cause || null,
@@ -549,7 +550,7 @@ exports.getWeeklyTrend = async (req, res, next) => {
       const inactive = computeShiftInactiveMinutes({
         baselineTs: baseline,
         startTs,
-        startReminderSecs: LATE_CYCLE_GRACE_SECS,
+        startReminderSecs: TIME_LOSS_START_GRACE_SECS,
       });
       inactiveByDay[day] = (inactiveByDay[day] || 0) + inactive;
       const netLost = computeCycleNetLostMins(inactive, targetMins, actualMins);
@@ -624,11 +625,10 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
       const shiftStart = new Date(startTs);
       shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
       const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
-      const gapMins = Math.max(0, toNumber((startTs.getTime() - baselineTs.getTime()) / 60000, 0));
       const inactiveMins = computeShiftInactiveMinutes({
         baselineTs,
         startTs,
-        startReminderSecs: LATE_CYCLE_GRACE_SECS,
+        startReminderSecs: TIME_LOSS_START_GRACE_SECS,
       });
       const lostMins = computeCycleNetLostMins(inactiveMins, targetMins, actualMins);
 
@@ -646,7 +646,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         target_mins: targetMins,
         actual_mins: actualMins,
         extra_mins: extraMins,
-        start_gap_mins: gapMins,
+        start_gap_mins: inactiveMins,
         inactive_mins: inactiveMins,
         lost_mins: lostMins,
         root_cause: row.root_cause || null,
@@ -792,6 +792,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
       date_to: dateTo,
       thresholds: {
         late_cycle_grace_secs: LATE_CYCLE_GRACE_SECS,
+        time_loss_start_grace_secs: TIME_LOSS_START_GRACE_SECS,
         shift_start: formatShiftStartLabel(),
       },
       summary: {
