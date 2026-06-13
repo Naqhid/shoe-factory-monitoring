@@ -1,6 +1,30 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 
+/** mysql2 rejects `undefined` bind values — use SQL NULL instead. */
+const sqlBind = (value) => (value === undefined ? null : value);
+
+const headerInsertParams = (header) => [
+  header.customer_id,
+  header.group_id,
+  header.leather_id,
+  header.style_id,
+  header.color_id,
+  sqlBind(header.created_on),
+  sqlBind(header.category),
+  header.target_per_day,
+  header.tot_smv,
+];
+
+const lineInsertParams = (headerId, line) => [
+  headerId,
+  line.machine_centre_id,
+  sqlBind(line.process) ?? null,
+  line.observed_time,
+  line.rating_factor,
+  line.manpower,
+];
+
 class ProductionRoutingController {
   async ensureUniqueStyle(connection, { styleId, excludeId = null }) {
     const query = excludeId
@@ -237,17 +261,7 @@ class ProductionRoutingController {
         `INSERT INTO production_routing_header 
         (customer_id, group_id, leather_id, style_id, color_id, created_on, category, target_per_day, tot_smv) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          header.customer_id,
-          header.group_id,
-          header.leather_id,
-          header.style_id,
-          header.color_id,
-          header.created_on,
-          header.category,
-          header.target_per_day,
-          header.tot_smv
-        ]
+        headerInsertParams(header)
       );
       
       const headerId = headerResult.insertId;
@@ -258,7 +272,7 @@ class ProductionRoutingController {
           `INSERT INTO production_routing_lines 
           (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower) 
           VALUES (?, ?, ?, ?, ?, ?)`,
-          [headerId, line.machine_centre_id, line.process || null, line.observed_time, line.rating_factor, line.manpower]
+          lineInsertParams(headerId, line)
         );
       }
       
@@ -327,18 +341,7 @@ class ProductionRoutingController {
         SET customer_id = ?, group_id = ?, leather_id = ?, style_id = ?, color_id = ?, 
             created_on = ?, category = ?, target_per_day = ?, tot_smv = ?
         WHERE id = ? AND deleted_at IS NULL`,
-        [
-          header.customer_id,
-          header.group_id,
-          header.leather_id,
-          header.style_id,
-          header.color_id,
-          header.created_on,
-          header.category,
-          header.target_per_day,
-          header.tot_smv,
-          id
-        ]
+        [...headerInsertParams(header), id]
       );
       
       if (result.affectedRows === 0) {
@@ -358,7 +361,7 @@ class ProductionRoutingController {
           `INSERT INTO production_routing_lines 
           (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower) 
           VALUES (?, ?, ?, ?, ?, ?)`,
-          [id, line.machine_centre_id, line.process || null, line.observed_time, line.rating_factor, line.manpower]
+          lineInsertParams(id, line)
         );
       }
 
@@ -427,17 +430,7 @@ class ProductionRoutingController {
           `INSERT INTO production_routing_header
           (customer_id, group_id, leather_id, style_id, color_id, created_on, category, target_per_day, tot_smv)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            header.customer_id,
-            header.group_id,
-            header.leather_id,
-            header.style_id,
-            header.color_id,
-            header.created_on,
-            header.category,
-            header.target_per_day,
-            header.tot_smv
-          ]
+          headerInsertParams(header)
         );
         const headerId = headerResult.insertId;
         createdIds.push(headerId);
@@ -447,7 +440,7 @@ class ProductionRoutingController {
             `INSERT INTO production_routing_lines
             (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower)
             VALUES (?, ?, ?, ?, ?, ?)`,
-            [headerId, line.machine_centre_id, line.process || null, line.observed_time, line.rating_factor, line.manpower]
+            lineInsertParams(headerId, line)
           );
         }
       }
