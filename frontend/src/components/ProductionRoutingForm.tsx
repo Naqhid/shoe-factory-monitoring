@@ -32,6 +32,7 @@ interface MasterOption {
 }
 
 interface RoutingLine {
+  _rowId?: number;
   machine_centre_id: string;
   machine_name: string;
   process: string;
@@ -97,6 +98,22 @@ export const ProductionRoutingForm: React.FC = () => {
   const [importing, setImporting] = React.useState(false);
   const [showTemplatePreview, setShowTemplatePreview] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const routingTableRef = React.useRef<HTMLDivElement | null>(null);
+  const nextRowIdRef = React.useRef(1);
+  const [highlightedRowId, setHighlightedRowId] = React.useState<number | null>(null);
+
+  const createEmptyLine = (): RoutingLine => ({
+    _rowId: nextRowIdRef.current++,
+    machine_centre_id: '',
+    machine_name: '',
+    process: '',
+    observed_time: '',
+    rating_factor: '',
+    manpower: '',
+  });
+
+  const withRowIds = (items: Omit<RoutingLine, '_rowId'>[]): RoutingLine[] =>
+    items.map((line) => ({ ...line, _rowId: nextRowIdRef.current++ }));
 
   const [headerData, setHeaderData] = React.useState<HeaderData>({
     customer_id: '',
@@ -110,9 +127,17 @@ export const ProductionRoutingForm: React.FC = () => {
     tot_smv: '',
   });
 
-  const [lines, setLines] = React.useState<RoutingLine[]>([{
-    machine_centre_id: '', machine_name: '', process: '', observed_time: '', rating_factor: '', manpower: '',
-  }]);
+  const [lines, setLines] = React.useState<RoutingLine[]>([createEmptyLine()]);
+
+  React.useEffect(() => {
+    if (highlightedRowId == null) return;
+    const timer = window.setTimeout(() => setHighlightedRowId(null), 2600);
+    requestAnimationFrame(() => {
+      const rowEl = routingTableRef.current?.querySelector(`[data-row-id="${highlightedRowId}"]`);
+      rowEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    return () => window.clearTimeout(timer);
+  }, [highlightedRowId, lines.length]);
 
   React.useEffect(() => {
     if (hasFetched.current) return;
@@ -206,8 +231,23 @@ export const ProductionRoutingForm: React.FC = () => {
     return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_6_prs_box: mins6Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
   };
 
-  const addLine = () => setLines([...lines, { machine_centre_id: '', machine_name: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
-  const removeLine = (index: number) => lines.length > 1 ? setLines(lines.filter((_, i) => i !== index)) : toast.error('At least one line required');
+  const addLine = () => {
+    const newLine = createEmptyLine();
+    setLines((prev) => {
+      const next = [...prev, newLine];
+      toast.success(`Machine row ${next.length} added`, { id: 'routing-add-line', duration: 1800 });
+      return next;
+    });
+    setHighlightedRowId(newLine._rowId!);
+  };
+  const removeLine = (index: number) => {
+    if (lines.length <= 1) {
+      toast.error('At least one line required');
+      return;
+    }
+    setLines((prev) => prev.filter((_, i) => i !== index));
+    toast('Row removed', { id: 'routing-remove-line', duration: 1200 });
+  };
   const updateLine = (index: number, field: keyof RoutingLine, value: string) => {
     const newLines = [...lines];
     newLines[index] = { ...newLines[index], [field]: value };
@@ -217,7 +257,8 @@ export const ProductionRoutingForm: React.FC = () => {
   const handleAdd = () => {
     setEditingId(null);
     setHeaderData({ customer_id: '', group_id: '', leather_id: '', style_id: '', color_id: '', created_on: new Date().toISOString().split('T')[0], machine_centre_id: '', target_per_day: '', tot_smv: '' });
-    setLines([{ machine_centre_id: '', machine_name: '', process: '', observed_time: '', rating_factor: '', manpower: '' }]);
+    setLines([createEmptyLine()]);
+    setHighlightedRowId(null);
     setShowModal(true);
   };
 
@@ -239,7 +280,15 @@ export const ProductionRoutingForm: React.FC = () => {
           target_per_day: String(header.target_per_day),
           tot_smv: String(header.tot_smv)
         });
-        setLines(result.data.lines.map((l: any) => ({ machine_centre_id: String(l.machine_centre_id), machine_name: l.machine_name || '', process: l.process || '', observed_time: String(l.observed_time), rating_factor: String(l.rating_factor), manpower: String(l.manpower) })));
+        setLines(withRowIds(result.data.lines.map((l: any) => ({
+          machine_centre_id: String(l.machine_centre_id),
+          machine_name: l.machine_name || '',
+          process: l.process || '',
+          observed_time: String(l.observed_time),
+          rating_factor: String(l.rating_factor),
+          manpower: String(l.manpower),
+        }))));
+        setHighlightedRowId(null);
         setShowModal(true);
       }
     } catch (error) {
@@ -903,21 +952,27 @@ export const ProductionRoutingForm: React.FC = () => {
 
               <div className="mb-6 rounded-xl border border-gray-200 overflow-hidden">
                 <div className="flex justify-between items-center gap-2 px-4 py-3 bg-slate-50 border-b border-gray-200">
-                  <h3 className="text-base font-bold text-gray-900">Machine routing lines</h3>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="text-base font-bold text-gray-900">Machine routing lines</h3>
+                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800 tabular-nums ring-1 ring-blue-200">
+                      {lines.length} {lines.length === 1 ? 'row' : 'rows'}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={addLine}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm font-semibold"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm font-semibold shrink-0"
                   >
                     <Plus className="h-4 w-4" aria-hidden />
                     Add machine
                   </button>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div ref={routingTableRef} className="overflow-x-auto max-h-[min(480px,55vh)] overflow-y-auto">
                   <table className="min-w-full text-sm">
-                    <thead className="bg-white border-b border-gray-200">
+                    <thead className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-[0_1px_0_0_rgb(229,231,235)]">
                       <tr>
+                        <th className="px-2 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide w-10">#</th>
                         <th className="px-2 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Machine centre</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Observed Time</th>
                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating Factor %</th>
@@ -933,8 +988,32 @@ export const ProductionRoutingForm: React.FC = () => {
                     <tbody className="divide-y divide-gray-100">
                       {lines.map((line, index) => {
                         const calc = calculateLineValues(line);
+                        const rowId = line._rowId ?? index;
+                        const isHighlighted = highlightedRowId === rowId;
+                        const isEmptyRow = !line.machine_centre_id.trim();
                         return (
-                          <tr key={index} className="hover:bg-slate-50/60">
+                          <tr
+                            key={rowId}
+                            data-row-id={rowId}
+                            className={[
+                              'transition-colors duration-500',
+                              isHighlighted
+                                ? 'bg-blue-100 ring-2 ring-inset ring-blue-400'
+                                : isEmptyRow
+                                  ? 'bg-amber-50/70'
+                                  : 'hover:bg-slate-50/60',
+                            ].join(' ')}
+                          >
+                            <td className="px-2 py-2 text-xs font-bold text-gray-500 tabular-nums align-middle">
+                              <div className="flex flex-col items-start gap-0.5">
+                                <span>{index + 1}</span>
+                                {isHighlighted && (
+                                  <span className="rounded bg-blue-600 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-white">
+                                    New
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-2 py-2 min-w-[240px]">
                               <SearchableSelect
                                 value={line.machine_centre_id}

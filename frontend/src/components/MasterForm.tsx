@@ -411,15 +411,17 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
               {(table === 'machine_centres' || table === 'employees') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Work Centre
+                    Work Centre{table === 'machine_centres' ? ' (optional)' : ''}
                   </label>
                   <select
                     value={formData.work_centre_id}
                     onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
+                    required={table === 'employees'}
                   >
-                    <option value="">Select Work Centre</option>
+                    <option value="">
+                      {table === 'machine_centres' ? 'No work centre' : 'Select Work Centre'}
+                    </option>
                     {workCentres.map((wc) => (
                       <option key={wc.id} value={wc.id}>{wc.name}</option>
                     ))}

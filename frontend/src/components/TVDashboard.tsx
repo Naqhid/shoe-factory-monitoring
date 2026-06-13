@@ -5,10 +5,10 @@ import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
 // import { TvPlanPacePanel } from './TvPlanPacePanel';
 import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
-import { TvTimeLossPanel } from './TvTimeLossPanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
+import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import { M4_BADGE_CLASS, M4_REASON_ROW_CLASS, M4_REASON_TEXT_CLASS } from '../utils/m4ReasonUtils';
 
 const formatPairsPerHour = (value: number | null) => {
@@ -576,6 +576,7 @@ export const TVDashboard: React.FC = () => {
     const totalReworkQty = Number(reworkTotals.total_rework || 0);
     const totalRejectionQty = Number(reworkTotals.total_rejection || 0);
     const netMachineDeltaMins = machineTimeLossRows.reduce((sum: number, row: any) => sum + Number(row.net_mins || 0), 0);
+    const netMachineDeltaParts = minutesToDurationParts(Math.abs(netMachineDeltaMins));
     const netMachineDeltaLabel =
       Math.abs(netMachineDeltaMins) * 60 < 1
         ? 'neutral'
@@ -1077,7 +1078,7 @@ export const TVDashboard: React.FC = () => {
 
             <div className="col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
                 <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-gradient-to-b from-white to-slate-50 ring-1 ring-slate-200/60 overflow-hidden">
-                    <div className="flex-shrink-0 mb-2 min-w-0">
+                    <div className="flex-shrink-0 mb-1 min-w-0">
                         <div className={`grid ${insightGridCols} gap-1 min-w-0`} role="tablist" aria-label="Time loss, rework, and breakdown">
                             {insightSlides.map((kind, index) => {
                                 const tabStyle = insightTabStyles[kind];
@@ -1112,14 +1113,63 @@ export const TVDashboard: React.FC = () => {
                             >
                                 {insightSlides.map((kind) => (
                                 <div key={kind} className="flex-[0_0_100%] w-full h-full min-h-0 flex flex-col text-center px-1 py-0.5">
-                                {kind === 'time_loss' && (
-                                    <TvTimeLossPanel
-                                        lineName={currentLineName}
-                                        rows={machineTimeLossRows}
-                                        netTotalMins={netMachineDeltaMins}
-                                        netTotalLabel={netMachineDeltaLabel}
-                                    />
-                                )}
+                                {kind === 'time_loss' && (<>
+                                    {machineTimeLossRows.length > 0 ? (
+                                        <div className="grid grid-cols-1 gap-0.5 overflow-auto pr-0.5 min-h-0 flex-1">
+                                            {machineTimeLossRows.slice(0, 8).map((row: any) => (
+                                                <div
+                                                    key={`${row.machine_id}-${row.machine_name}`}
+                                                    className={`rounded px-1.5 py-0.5 flex items-center justify-between ${
+                                                        Number(row.net_mins || 0) > 0
+                                                            ? 'border border-emerald-200 bg-emerald-50/70'
+                                                            : 'border border-red-200 bg-white'
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`text-[9px] sm:text-[10px] font-bold truncate pr-1 text-left rounded px-1 py-px leading-tight ${
+                                                            Number(row.net_mins || 0) > 0
+                                                                ? 'text-emerald-900 bg-emerald-100 border border-emerald-300'
+                                                                : 'text-slate-900 bg-amber-50/60 border border-amber-100'
+                                                        }`}
+                                                    >
+                                                        {row.machine_name || `Machine ${row.machine_id}`}
+                                                    </span>
+                                                    {(() => {
+                                                        const net = Number(row.net_mins || 0);
+                                                        const parts = minutesToDurationParts(Math.abs(net));
+                                                        const tone =
+                                                            net > 0
+                                                                ? 'text-emerald-800 bg-emerald-100 border border-emerald-300'
+                                                                : 'text-red-700 bg-red-50 border border-red-200';
+                                                        return (
+                                                            <span className={`text-[9px] sm:text-[10px] font-black tabular-nums shrink-0 px-1 py-px rounded leading-tight ${tone}`}>
+                                                                {parts.wholeMinutes}m {parts.seconds}s
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            ))}
+                                            <div className="rounded border border-red-300 bg-gradient-to-r from-red-50 to-red-100 px-1.5 py-0.5 flex items-center justify-between">
+                                                <span className="text-[9px] sm:text-[10px] font-extrabold text-red-900 uppercase tracking-wide leading-tight">Total</span>
+                                                <span
+                                                    className={`text-[9px] sm:text-[10px] font-black tabular-nums bg-white/80 px-1 py-px rounded leading-tight ${
+                                                        netMachineDeltaLabel === 'gain'
+                                                            ? 'text-emerald-800'
+                                                            : netMachineDeltaLabel === 'loss'
+                                                              ? 'text-red-800'
+                                                              : 'text-gray-700'
+                                                    }`}
+                                                >
+                                                    {netMachineDeltaParts.wholeMinutes}m {netMachineDeltaParts.seconds}s
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center">
+                                            <p className="text-[9px] sm:text-[10px] text-gray-400">No time loss data today</p>
+                                        </div>
+                                    )}
+                                </>)}
 
                                 {kind === 'rework' && (
                                     <div className="h-full min-h-0 flex flex-col overflow-hidden">
@@ -1164,38 +1214,49 @@ export const TVDashboard: React.FC = () => {
                                 ))}
                             </div>
                         </div>
-                        {insightSlideCount > 1 && (
-                            <div className="flex-shrink-0 pt-1 pb-0.5 border-t border-gray-100 mt-1">
-                                <div className="flex items-center justify-center gap-1.5 mb-1" role="tablist" aria-label="Insight carousel">
-                                    {insightSlides.map((kind, i) => (
-                                        <button
-                                            key={kind}
-                                            type="button"
-                                            role="tab"
-                                            aria-selected={insightCarouselIndex === i}
-                                            aria-label={insightSlideLabels[kind]}
-                                            onClick={() => {
-                                                setInsightCarouselIndex(i);
-                                                setInsightCarouselProgress(0);
-                                            }}
-                                            className={`h-1.5 rounded-full transition-all duration-300 ${
-                                                insightCarouselIndex === i ? 'w-5 bg-blue-500' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
-                                            }`}
+                        <div className="flex-shrink-0 pt-0.5 border-t border-gray-100 mt-0.5">
+                            {insightSlideCount > 1 && (
+                                <>
+                                    <div className="flex items-center justify-center gap-1 mb-0.5" role="tablist" aria-label="Insight carousel">
+                                        {insightSlides.map((kind, i) => (
+                                            <button
+                                                key={kind}
+                                                type="button"
+                                                role="tab"
+                                                aria-selected={insightCarouselIndex === i}
+                                                aria-label={insightSlideLabels[kind]}
+                                                onClick={() => {
+                                                    setInsightCarouselIndex(i);
+                                                    setInsightCarouselProgress(0);
+                                                }}
+                                                className={`h-1 rounded-full transition-all duration-300 ${
+                                                    insightCarouselIndex === i ? 'w-4 bg-blue-500' : 'w-1 bg-slate-300 hover:bg-slate-400'
+                                                }`}
+                                            />
+                                        ))}
+                                    </div>
+                                    <div className="w-full rounded-full h-0.5 bg-gray-200 overflow-hidden mb-0.5">
+                                        <div
+                                            className="h-full rounded-full bg-blue-500 transition-[width] duration-100 motion-reduce:transition-none"
+                                            style={{ width: `${insightCarouselProgress}%` }}
                                         />
-                                    ))}
-                                </div>
-                                <div className="w-full rounded-full h-1 bg-gray-200 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-blue-500 transition-[width] duration-100 motion-reduce:transition-none"
-                                        style={{ width: `${insightCarouselProgress}%` }}
-                                    />
-                                </div>
-                                <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold text-center mt-0.5 tabular-nums">
-                                    {insightSlideLabels[insightSlides[insightCarouselIndex]]} · {insightCarouselIndex + 1}/{insightSlideCount} · Auto-switch in{' '}
-                                    {Math.max(0, Math.ceil((INSIGHT_CAROUSEL_MS / 1000) * (1 - insightCarouselProgress / 100)))}s
-                                </p>
-                            </div>
-                        )}
+                                    </div>
+                                </>
+                            )}
+                            <p className="text-[8px] sm:text-[9px] text-slate-500 font-semibold text-center tabular-nums leading-tight truncate px-0.5">
+                                <span className="text-blue-700 font-bold">{currentLineName}</span>
+                                {insightSlideCount > 1 && (
+                                    <>
+                                        {' · '}
+                                        {insightSlideLabels[insightSlides[insightCarouselIndex]]}
+                                        {' · '}
+                                        {insightCarouselIndex + 1}/{insightSlideCount}
+                                        {' · '}
+                                        {Math.max(0, Math.ceil((INSIGHT_CAROUSEL_MS / 1000) * (1 - insightCarouselProgress / 100)))}s
+                                    </>
+                                )}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
