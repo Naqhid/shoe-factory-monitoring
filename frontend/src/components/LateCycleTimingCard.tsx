@@ -22,7 +22,7 @@ const TIPS = {
     [
       'How we calculate lost time:',
       '',
-      '• Late start — machine sat idle before START was pressed (first 40 seconds after last FINISH do not count).',
+      '• Late start — machine sat idle before START was pressed (from last FINISH, lunch excluded).',
       '• Late finish — the cycle took longer than the target time.',
       hasEarly ? '• Finished early — completed under the target time; this reduces lost time.' : null,
       '',
@@ -34,7 +34,7 @@ const TIPS = {
       .join('\n'),
   lateStart:
     'The operator waited before pressing START.\n\n' +
-    'We measure from the last FINISH time (or shift start for the first cycle). The first 40 seconds of waiting are free and not counted.\n\n' +
+    'We measure from the last FINISH time (or shift start for the first cycle). Waiting time counts from the first second (lunch break excluded).\n\n' +
     'This waiting time is added to lost time (+).',
   lateFinish:
     'The operator pressed FINISH later than the target time.\n\n' +

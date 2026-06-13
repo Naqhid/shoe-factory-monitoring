@@ -2,7 +2,7 @@ import { computeCycleNetLostMins } from './cycleLostMins';
 import { minutesToDurationParts } from './formatCycleDuration';
 import { SHIFT_START_MINUTES, SHIFT_END_MINUTES } from './shiftPaceUtils';
 
-const LATE_CYCLE_GRACE_MINS = 40 / 60;
+const LATE_CYCLE_GRACE_MINS = 0;
 
 export type ProdQuickFilter =
   | 'all'
@@ -79,7 +79,7 @@ const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) => {
   return (end - start) / 60000;
 };
 
-/** Gap before START minus grace; lunch excluded (matches backend cycle loss logic). */
+/** Idle gap before START; lunch excluded, no start grace (matches backend time loss). */
 export function computeCycleInactiveMins(baselineTs: Date | null, startTs: Date | null): number {
   if (!baselineTs || !startTs) return 0;
   if (!Number.isFinite(startTs.getTime()) || !Number.isFinite(baselineTs.getTime())) return 0;
