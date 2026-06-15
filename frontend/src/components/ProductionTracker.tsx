@@ -371,6 +371,7 @@ export const ProductionTracker: React.FC = () => {
     sameTime: number;
     fullDay: number;
     asOfTimeLabel: string;
+    compareDateLabel: string;
   } | null>(null);
   const machinePaceTrendRef = useRef<Map<string, number>>(new Map());
   const linePaceTrendRef = useRef<number | null>(null);
@@ -834,14 +835,15 @@ export const ProductionTracker: React.FC = () => {
         `${API_BASE}/api/tracker/line-yesterday-compare?work_centre_id=${detailWorkCentreId}&date=${selectedDate}&as_of=${asOf}`
       );
       const json = await res.json();
-      if (!json.success) {
+      if (!json.success || !json.compare_date) {
         setYesterdayCompare(null);
         return;
       }
       setYesterdayCompare({
-        sameTime: Math.round(Number(json.yesterday_same_time_output || 0)),
-        fullDay: Math.round(Number(json.yesterday_full_day_output || 0)),
+        sameTime: Math.round(Number(json.compare_same_time_output ?? json.yesterday_same_time_output ?? 0)),
+        fullDay: Math.round(Number(json.compare_full_day_output ?? json.yesterday_full_day_output ?? 0)),
         asOfTimeLabel: String(json.as_of_time_label || '').trim() || '—',
+        compareDateLabel: String(json.compare_date_label || json.compare_date || '').trim() || '—',
       });
     } catch {
       setYesterdayCompare(null);
@@ -1301,11 +1303,11 @@ export const ProductionTracker: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Yesterday */}
+                      {/* Last working day compare */}
                       {yesterdayCompare != null && vsYesterdaySameTime != null && (
                         <div className="space-y-2">
                           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            vs yesterday
+                            vs last working day
                           </p>
                           <div
                             className={`rounded-xl border-2 p-3 shadow-sm ${
@@ -1319,12 +1321,14 @@ export const ProductionTracker: React.FC = () => {
                                 vsYesterdaySameTime >= 0 ? 'text-emerald-800' : 'text-rose-800'
                               }`}
                             >
-                              Same time · {yesterdayCompare.asOfTimeLabel}
+                              Same time · {yesterdayCompare.compareDateLabel} · {yesterdayCompare.asOfTimeLabel}
                             </p>
                             <div className="mt-2.5 flex items-stretch gap-2 sm:gap-3">
                               <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 sm:gap-2 rounded-lg bg-white/90 px-2 py-2.5 ring-1 ring-black/5">
                                 <div className="text-center min-w-[2.5rem]">
-                                  <p className="text-[9px] font-bold uppercase text-slate-400">Yest</p>
+                                  <p className="text-[9px] font-bold uppercase text-slate-400 truncate max-w-[4.5rem]">
+                                    {yesterdayCompare.compareDateLabel}
+                                  </p>
                                   <p className="text-lg sm:text-xl font-black tabular-nums text-slate-500">
                                     {yesterdayCompare.sameTime}
                                   </p>
@@ -1364,7 +1368,9 @@ export const ProductionTracker: React.FC = () => {
                             </div>
                           </div>
                           <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-                            <p className="text-xs font-bold text-slate-600">Yesterday full day</p>
+                            <p className="text-xs font-bold text-slate-600">
+                              {yesterdayCompare.compareDateLabel} full day
+                            </p>
                             <p className="shrink-0 text-base font-black tabular-nums text-slate-800 whitespace-nowrap">
                               {yesterdayCompare.fullDay}
                               <span className="ml-1 text-xs font-semibold text-slate-500">pairs</span>
