@@ -553,6 +553,20 @@ const getPresetRange = (preset: DatePreset) => {
   return { from: formatDateInput(start), to: formatDateInput(end) };
 };
 
+/** Shift summary rows repeat line_eol_output on every machine — count each line+date once. */
+const sumShiftSummaryEolOutput = (rows: any[]) => {
+  const seen = new Set<string>();
+  return rows.reduce((sum, row) => {
+    const dateKey =
+      row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date || '').slice(0, 10);
+    const lineKey = row.work_centre_id ?? row.work_centre_name ?? '';
+    const key = `${dateKey}|${lineKey}`;
+    if (seen.has(key)) return sum;
+    seen.add(key);
+    return sum + (Number(row.line_eol_output) || 0);
+  }, 0);
+};
+
 const computeReportSummaryStats = (rows: any[], apiReport: ApiReportType) => {
   if (!rows.length) return [];
   const sum = (key: string) => rows.reduce((s, row) => s + (Number(row[key]) || 0), 0);
@@ -608,7 +622,7 @@ const computeReportSummaryStats = (rows: any[], apiReport: ApiReportType) => {
     }
     case 'shift-summary':
       return [
-        { label: 'Total output', value: sum('total_output') },
+        { label: 'Total output (EOL)', value: sumShiftSummaryEolOutput(rows) },
         { label: 'Cycles', value: sum('cycles') },
         { label: 'Avg shift eff.', value: `${avg('shift_efficiency_pct')}%` },
       ];
@@ -1900,7 +1914,10 @@ export const Reports: React.FC = () => {
     );
   };
 
-  const renderShiftSummary = () => (
+  const renderShiftSummary = () => {
+    const eolOutputTotal = sumShiftSummaryEolOutput(data!);
+    const eolBoxesTotal = eolOutputTotal > 0 ? Math.round(eolOutputTotal / 6) : 0;
+    return (
     <TableWrap>
       <table className="min-w-full">
         <thead>
@@ -1945,17 +1962,16 @@ export const Reports: React.FC = () => {
               Totals · Shift 09:05–17:35 (480 min excl. lunch)
             </td>
             <td className="px-3 py-2.5 text-sm font-bold text-center">{data!.reduce((s: number, r: any) => s + Number(r.cycles || 0), 0)}</td>
-            <td className="px-3 py-2.5 text-sm font-bold text-center">
-              {data!.reduce((s: number, r: any) => s + Number(r.boxes ?? (Number(r.total_output || 0) > 0 ? Math.round(Number(r.total_output) / 6) : 0)), 0)}
-            </td>
-            <td className="px-3 py-2.5 text-sm font-bold">{data!.reduce((s: number, r: any) => s + Number(r.total_output || 0), 0)}</td>
+            <td className="px-3 py-2.5 text-sm font-bold text-center">{eolBoxesTotal}</td>
+            <td className="px-3 py-2.5 text-sm font-bold">{eolOutputTotal}</td>
             <td className="px-3 py-2.5 text-sm font-bold">{data!.reduce((s: number, r: any) => s + Number(r.shift_actual_mins || 0), 0)}m</td>
             <td colSpan={2} className="px-3 py-2.5" />
           </tr>
         </tfoot>
       </table>
     </TableWrap>
-  );
+    );
+  };
 
   const renderTable = () => {
     if (!data || data.length === 0) return (

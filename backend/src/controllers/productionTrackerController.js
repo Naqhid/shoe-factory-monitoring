@@ -17,10 +17,27 @@ function addDaysToDateKey(dateKey, deltaDays) {
   return `${y}-${m}-${d}`;
 }
 
-function shiftAsOfToPreviousDay(asOfLocal) {
-  const m = String(asOfLocal || '').match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/);
+function asOfOnDateKey(dateKey, asOfLocal) {
+  const m = String(asOfLocal || '').match(/^\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})$/);
   if (!m) return null;
-  return `${addDaysToDateKey(m[1], -1)} ${m[2]}`;
+  return `${dateKey} ${m[1]}`;
+}
+
+function formatCompareDateLabel(dateKey) {
+  const d = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+const LAST_WORKING_DAY_LOOKBACK = 7;
+
+async function resolveLastWorkingDayKey(workCentreId, dateKey) {
+  for (let daysBack = 1; daysBack <= LAST_WORKING_DAY_LOOKBACK; daysBack += 1) {
+    const candidate = addDaysToDateKey(dateKey, -daysBack);
+    const output = await wipStateService.getEolOutput(workCentreId, candidate);
+    if (output > 0) return candidate;
+  }
+  return null;
 }
 
 class ProductionTrackerController {
@@ -501,7 +518,7 @@ class ProductionTrackerController {
     }
   }
 
-  /** EOL output: yesterday at same clock time vs yesterday full day (for line detail). */
+  /** EOL output: last working day at same clock time vs that day full (skips Sundays/holidays with 0 EOL). */
   async getLineYesterdayCompare(req, res) {
     try {
       const workCentreId = Number(req.query?.work_centre_id);
@@ -519,27 +536,52 @@ class ProductionTrackerController {
         });
       }
 
-      const yesterdayKey = addDaysToDateKey(dateKey, -1);
-      const yesterdayAsOf = shiftAsOfToPreviousDay(asOfLocal);
-      if (!yesterdayAsOf) {
+      const compareDateKey = await resolveLastWorkingDayKey(workCentreId, dateKey);
+      const asOfTimeLabel = asOfLocal.slice(11, 16);
+
+      if (!compareDateKey) {
+        return res.json({
+          success: true,
+          date: dateKey,
+          compare_date: null,
+          compare_date_label: null,
+          compare_source: 'last_working_day',
+          as_of: asOfLocal,
+          as_of_time_label: asOfTimeLabel,
+          compare_same_time_output: null,
+          compare_full_day_output: null,
+          yesterday_date: null,
+          yesterday_same_time_output: null,
+          yesterday_full_day_output: null,
+        });
+      }
+
+      const compareAsOf = asOfOnDateKey(compareDateKey, asOfLocal);
+      if (!compareAsOf) {
         return res.status(400).json({ success: false, error: 'Invalid as_of value' });
       }
 
-      const [yesterdaySameTime, yesterdayFullDay] = await Promise.all([
-        wipStateService.getEolOutputUpTo(workCentreId, yesterdayKey, yesterdayAsOf),
-        wipStateService.getEolOutput(workCentreId, yesterdayKey),
+      const [compareSameTime, compareFullDay] = await Promise.all([
+        wipStateService.getEolOutputUpTo(workCentreId, compareDateKey, compareAsOf),
+        wipStateService.getEolOutput(workCentreId, compareDateKey),
       ]);
 
-      const asOfTimeLabel = asOfLocal.slice(11, 16);
+      const compareDateLabel = formatCompareDateLabel(compareDateKey);
 
       return res.json({
         success: true,
         date: dateKey,
-        yesterday_date: yesterdayKey,
+        compare_date: compareDateKey,
+        compare_date_label: compareDateLabel,
+        compare_source: 'last_working_day',
         as_of: asOfLocal,
         as_of_time_label: asOfTimeLabel,
-        yesterday_same_time_output: yesterdaySameTime,
-        yesterday_full_day_output: yesterdayFullDay,
+        compare_same_time_output: compareSameTime,
+        compare_full_day_output: compareFullDay,
+        // Legacy field names — same values as compare_* for older clients
+        yesterday_date: compareDateKey,
+        yesterday_same_time_output: compareSameTime,
+        yesterday_full_day_output: compareFullDay,
       });
     } catch (error) {
       logger.error('Error getting line yesterday compare:', error);

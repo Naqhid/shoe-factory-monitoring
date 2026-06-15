@@ -251,7 +251,7 @@ export const MissedActionsPage: React.FC = () => {
   const [summary, setSummary] = React.useState({ total: 0, start_pending: 0, finish_pending: 0 });
   const [selectedLine, setSelectedLine] = React.useState<string>('all');
   const [issueFilter, setIssueFilter] = React.useState<'all' | 'START_PENDING' | 'FINISH_PENDING'>('all');
-  const [liveSort, setLiveSort] = React.useState<'fix_first' | 'priority' | 'overdue' | 'machine'>('fix_first');
+  const [liveSort, setLiveSort] = React.useState<'fix_first' | 'priority' | 'overdue' | 'machine'>('priority');
   const [liveAutoRefresh, setLiveAutoRefresh] = React.useState(true);
   const [liveLiveTick, setLiveLiveTick] = React.useState(0);
   const [machineLossMinsMap, setMachineLossMinsMap] = React.useState<Record<string, number>>({});
@@ -2201,7 +2201,7 @@ export const MissedActionsPage: React.FC = () => {
             <div className="w-full flex flex-wrap gap-1.5">
               {selectedLine !== 'all' && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Line: {selectedLine}</span>}
               {issueFilter !== 'all' && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">Issue: {issueFilter === 'START_PENDING' ? 'Start Pending' : 'Finish Pending'}</span>}
-              {liveSort !== 'fix_first' && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">Sort: {LIVE_SORT_LABELS[liveSort] || liveSort}</span>}
+              {liveSort !== 'priority' && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">Sort: {LIVE_SORT_LABELS[liveSort] || liveSort}</span>}
             </div>
           </div>
 

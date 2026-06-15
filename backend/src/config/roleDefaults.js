@@ -4,6 +4,8 @@
  * Canonical role definitions — seeded into `roles` table on startup when missing.
  * After bootstrap, edit access via Roles master (DB is source of truth).
  */
+const HIDDEN_MENU_KEYS = new Set(['forms_master', 'user_rights']);
+
 const CANONICAL_ROLES = [
   {
     role_name: 'Admin',
@@ -13,7 +15,7 @@ const CANONICAL_ROLES = [
       'production_routing', 'production_planning', 'line_schedule', 'line_setup_form', 'manual_production_entry',
       'production_tracker', 'rework_rejection_tracker', 'mobile',
       'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees',
-      'users', 'forms_master', 'user_rights', 'roles', 'monitoring',
+      'users', 'roles', 'monitoring',
     ],
   },
   {
@@ -86,13 +88,17 @@ const ALL_MENU_DEFINITIONS = [
   { key: 'machine_centres', label: 'Machine Centre' },
   { key: 'employees', label: 'Employee' },
   { key: 'users', label: 'Users' },
-  { key: 'forms_master', label: 'Forms Master' },
-  { key: 'user_rights', label: 'User Rights' },
   { key: 'roles', label: 'Roles' },
   { key: 'monitoring', label: 'Monitoring' },
-];
+].filter((item) => !HIDDEN_MENU_KEYS.has(item.key));
+
+function filterHiddenMenus(menus) {
+  return (menus || []).filter((key) => !HIDDEN_MENU_KEYS.has(key));
+}
 
 module.exports = {
   CANONICAL_ROLES,
   ALL_MENU_DEFINITIONS,
+  HIDDEN_MENU_KEYS,
+  filterHiddenMenus,
 };

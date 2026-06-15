@@ -24,11 +24,14 @@ export interface RoleConfig {
   allowedMenus: string[];
 }
 
+/** Menus kept in codebase but hidden from navigation and role assignment (unused legacy). */
+export const HIDDEN_MENU_KEYS = ['forms_master', 'user_rights'] as const;
+
 /** Fallback when DB role row is missing (offline / migration). Kept in sync with backend roleDefaults.js */
 export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Admin': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_schedule', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'forms_master', 'user_rights', 'roles', 'monitoring']
+    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_schedule', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'roles', 'monitoring']
   },
   'Line Supervisor': {
     defaultRoute: '/line_setup_form',
@@ -83,11 +86,9 @@ export const ALL_MENU_DEFINITIONS = [
   { key: 'machine_centres', label: 'Machine Centre' },
   { key: 'employees', label: 'Employee' },
   { key: 'users', label: 'Users' },
-  { key: 'forms_master', label: 'Forms Master' },
-  { key: 'user_rights', label: 'User Rights' },
   { key: 'roles', label: 'Roles' },
   { key: 'monitoring', label: 'Monitoring' },
-];
+].filter((item) => !HIDDEN_MENU_KEYS.includes(item.key as typeof HIDDEN_MENU_KEYS[number]));
 
 const ROLE_ALIASES: Record<string, UserRole> = {
   administrator: 'Admin',
@@ -171,6 +172,7 @@ export const isMenuAllowed = (
         ? { role: roleOrUser as string }
         : null;
   const config = resolveRoleConfig(user);
+  if (HIDDEN_MENU_KEYS.includes(menuKey as typeof HIDDEN_MENU_KEYS[number])) return false;
   return config?.allowedMenus.includes(menuKey) || false;
 };
 

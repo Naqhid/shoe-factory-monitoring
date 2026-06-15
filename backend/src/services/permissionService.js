@@ -2,7 +2,7 @@
 
 const pool = require('../../config/database');
 const logger = require('../utils/logger');
-const { CANONICAL_ROLES } = require('../config/roleDefaults');
+const { CANONICAL_ROLES, filterHiddenMenus } = require('../config/roleDefaults');
 const {
   resolveEffectiveRoleName,
   capabilitiesFromMenus,
@@ -88,9 +88,11 @@ async function getPermissionsForUser(user = {}) {
   const effectiveRole = resolveEffectiveRoleName(user);
   const record = effectiveRole ? await getRoleRecord(effectiveRole) : null;
   const fallback = effectiveRole ? getCanonicalFallback(effectiveRole) : null;
-  const allowed_menus = record?.allowed_menus?.length
-    ? record.allowed_menus
-    : (fallback?.allowed_menus || []);
+  const allowed_menus = filterHiddenMenus(
+    record?.allowed_menus?.length
+      ? record.allowed_menus
+      : (fallback?.allowed_menus || [])
+  );
   const default_route = record?.default_route || fallback?.default_route || '/overview';
   const capabilities = capabilitiesFromMenus(allowed_menus, effectiveRole);
   return {
