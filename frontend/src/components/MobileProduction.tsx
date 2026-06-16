@@ -507,12 +507,9 @@ export const MobileProduction: React.FC = () => {
     ]);
 
     const outputExpectedNow = dailyPaceSnapshot?.expected ?? 0;
-    const pairsPerBox = Math.max(1, clampMobileTargetPairs(selectedTargetPairs));
-    // Full boxes only — pace 16 pairs @ 6/box = 2 boxes, not 3 (18 pairs needed for 3).
-    const binsCompletedToday =
-        pairsPerBox > 0 ? Math.floor(totalOutputToday / pairsPerBox) : 0;
-    const boxesExpectedNow =
-        pairsPerBox > 0 ? Math.floor(outputExpectedNow / pairsPerBox) : 0;
+    // Physical box count is always 6 pairs/box; cycle dropdown (1–12) is for target time / finish qty only.
+    const binsCompletedToday = Math.floor(totalOutputToday / MOBILE_PAIRS_PER_BIN);
+    const boxesExpectedNow = Math.floor(outputExpectedNow / MOBILE_PAIRS_PER_BIN);
     const formatBoxesDisplay = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
     const outputPaceEfficiencyPct =
         outputExpectedNow > 0 ? Math.round((totalOutputToday / outputExpectedNow) * 100) : 0;
@@ -2297,16 +2294,12 @@ export const MobileProduction: React.FC = () => {
                                         <p className="font-semibold truncate">
                                             {loadingSummary
                                                 ? '...'
-                                                : Number.isInteger(
-                                                      totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs))
-                                                  )
-                                                    ? totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs))
-                                                    : (
-                                                          totalOutputToday / Math.max(1, clampMobileTargetPairs(selectedTargetPairs))
-                                                      ).toFixed(2)}
+                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
+                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
+                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
                                         </p>
                                         <p className="text-[11px] opacity-80">
-                                            ~bins at {clampMobileTargetPairs(selectedTargetPairs)} pr/bin (1–12 cap)
+                                            ~bins at {MOBILE_PAIRS_PER_BIN} pr/box (standard)
                                         </p>
                                     </div>
                                 </div>
