@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Factory, Loader2 } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
+import { getDefaultRoute, getEffectiveRole, isMenuAllowed } from '../utils/roleConfig';
 
 interface MachineEntry {
   id: number;
@@ -21,14 +22,19 @@ export const MobileLineSelector: React.FC = () => {
 
   useEffect(() => {
     const userInfo = localStorage.getItem('user_info');
-    if (userInfo) {
-      const user = JSON.parse(userInfo);
-      if (user.role !== 'Admin') {
-        if (user.machine_id) {
-          navigate(`/mobile/${encodeURIComponent(user.machine_id)}/${encodeURIComponent(user.code)}`, { replace: true });
-          return;
-        }
-      }
+    const user = userInfo ? JSON.parse(userInfo) : null;
+
+    if (!isMenuAllowed('mobile', user)) {
+      navigate(getDefaultRoute(user), { replace: true });
+      return;
+    }
+
+    if (getEffectiveRole(user) === 'Machine Centre User' && user?.machine_id) {
+      navigate(
+        `/mobile/${encodeURIComponent(user.machine_id)}/${encodeURIComponent(user.code)}`,
+        { replace: true }
+      );
+      return;
     }
 
     apiFetch(`${API_BASE_URL}/api/masters/machine_centres?limit=100`)
@@ -58,10 +64,10 @@ export const MobileLineSelector: React.FC = () => {
 
   const userInfo = localStorage.getItem('user_info');
   const user = userInfo ? JSON.parse(userInfo) : null;
-  if (user?.role !== 'Admin') {
+  if (!isMenuAllowed('mobile', user)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-xl text-gray-600">Redirecting...</div>
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
   }

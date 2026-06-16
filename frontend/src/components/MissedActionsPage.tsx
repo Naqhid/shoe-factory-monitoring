@@ -72,12 +72,7 @@ const BTN_SECONDARY =
   'inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold shadow-sm hover:bg-slate-50 disabled:opacity-60 transition-colors';
 const BTN_DARK =
   'inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors';
-const DEFAULT_OUTPUT_PAIRS_PER_CYCLE = 12;
-const FRIDAY_INDEX = 5;
-const DEFAULT_LUNCH_START_MINUTES = 13 * 60 + 30; // 1:30 PM
-const DEFAULT_LUNCH_END_MINUTES = 14 * 60; // 2:00 PM
-const FRIDAY_LUNCH_START_MINUTES = 12 * 60 + 30; // 12:30 PM
-const FRIDAY_LUNCH_END_MINUTES = 13 * 60; // 1:00 PM
+const ROUTING_STANDARD_PAIRS_PER_CYCLE = 6;
 
 function eventLostMins(e: {
   lost_mins?: number;
@@ -95,29 +90,6 @@ function eventLostMins(e: {
   );
 }
 
-function getLunchBounds(anchor: Date) {
-  const isFriday = anchor.getDay() === FRIDAY_INDEX;
-  const lunchStartMins = isFriday ? FRIDAY_LUNCH_START_MINUTES : DEFAULT_LUNCH_START_MINUTES;
-  const lunchEndMins = isFriday ? FRIDAY_LUNCH_END_MINUTES : DEFAULT_LUNCH_END_MINUTES;
-  const lunchStart = new Date(anchor);
-  lunchStart.setHours(Math.floor(lunchStartMins / 60), lunchStartMins % 60, 0, 0);
-  const lunchEnd = new Date(anchor);
-  lunchEnd.setHours(Math.floor(lunchEndMins / 60), lunchEndMins % 60, 0, 0);
-  return { lunchStart, lunchEnd };
-}
-
-function getMinutesExcludingLunch(from: Date, to: Date): number {
-  const startMs = from.getTime();
-  const endMs = to.getTime();
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return 0;
-  const rawMinutes = (endMs - startMs) / 60000;
-  const { lunchStart, lunchEnd } = getLunchBounds(from);
-  const overlapStart = Math.max(startMs, lunchStart.getTime());
-  const overlapEnd = Math.min(endMs, lunchEnd.getTime());
-  const lunchOverlapMinutes = overlapEnd > overlapStart ? (overlapEnd - overlapStart) / 60000 : 0;
-  return Math.max(0, rawMinutes - lunchOverlapMinutes);
-}
-
 type MissedAction = {
   issue_key: string;
   session_id: string;
@@ -131,6 +103,7 @@ type MissedAction = {
   action_label: string;
   overdue_mins: number;
   target_mins?: number;
+  output_pairs?: number;
   details: string;
   state?: {
     acknowledged?: boolean;
@@ -946,15 +919,11 @@ export const MissedActionsPage: React.FC = () => {
     return Math.min(7, base + finishWeight + repeatWeight);
   };
 
-  const projectedIssueLossPairs = React.useCallback((item: MissedAction, unresolvedMinsAhead: number): number => {
+  const currentIssuePairsLost = React.useCallback((item: MissedAction): number => {
     const targetMins = Number(item.target_mins || 0);
-    const horizonMins = Math.max(0, Number(unresolvedMinsAhead || 0));
-    if (!Number.isFinite(targetMins) || targetMins <= 0 || horizonMins <= 0) return 0;
-    const now = new Date();
-    const horizonEnd = new Date(now.getTime() + horizonMins * 60000);
-    const productiveMins = getMinutesExcludingLunch(now, horizonEnd);
-    if (productiveMins <= 0) return 0;
-    return (DEFAULT_OUTPUT_PAIRS_PER_CYCLE / targetMins) * productiveMins;
+    const overdueMins = Math.max(0, Number(item.overdue_mins || 0));
+    if (!Number.isFinite(targetMins) || targetMins <= 0 || overdueMins <= 0) return 0;
+    return (ROUTING_STANDARD_PAIRS_PER_CYCLE / targetMins) * overdueMins;
   }, []);
 
   const visibleItems = React.useMemo(() => {
@@ -1039,14 +1008,13 @@ export const MissedActionsPage: React.FC = () => {
   }, [sortedFilteredItems]);
 
   const lineImpactPreviewMap = React.useMemo(() => {
-    const map = new Map<string, { loss15: number; loss30: number }>();
+    const map = new Map<string, { currentLoss: number }>();
     Object.entries(groupedItems).forEach(([lineName, lineItems]) => {
-      const loss15 = lineItems.reduce((sum, item) => sum + projectedIssueLossPairs(item, 15), 0);
-      const loss30 = lineItems.reduce((sum, item) => sum + projectedIssueLossPairs(item, 30), 0);
-      map.set(lineName, { loss15, loss30 });
+      const currentLoss = lineItems.reduce((sum, item) => sum + currentIssuePairsLost(item), 0);
+      map.set(lineName, { currentLoss });
     });
     return map;
-  }, [groupedItems, projectedIssueLossPairs]);
+  }, [groupedItems, currentIssuePairsLost]);
 
   const dailyLineMachineGroups = React.useMemo(() => {
     const lineMap = new Map<string, {
@@ -2029,7 +1997,7 @@ export const MissedActionsPage: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-1.5">
               {VISIBLE_MISSED_TABS.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -2038,7 +2006,7 @@ export const MissedActionsPage: React.FC = () => {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
+                    className={`inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
                       isActive
                         ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
                         : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white hover:text-slate-900'
@@ -2424,7 +2392,7 @@ export const MissedActionsPage: React.FC = () => {
                         {lineItems.length} issue{lineItems.length === 1 ? '' : 's'}
                       </span>
                       <span className="max-w-full text-[11px] font-semibold text-rose-800 bg-rose-50 px-2.5 py-1 rounded-full ring-1 ring-rose-200 leading-tight whitespace-normal break-words">
-                        If current issue continues for next 15 mins, about {Math.round(lineImpactPreviewMap.get(lineName)?.loss15 || 0)} pairs may be lost. For next 30 mins, about {Math.round(lineImpactPreviewMap.get(lineName)?.loss30 || 0)} pairs may be lost.
+                        Current idle loss on this line: about {Math.round(lineImpactPreviewMap.get(lineName)?.currentLoss || 0)} pairs.
                       </span>
                     </div>
                   </div>
@@ -2483,7 +2451,7 @@ export const MissedActionsPage: React.FC = () => {
                               P{priority}
                             </span>
                             <span className="inline-flex items-center rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-800 ring-1 ring-rose-200 leading-tight whitespace-normal break-words">
-                              If current issue continues for next 15 mins, about {Math.round(projectedIssueLossPairs(item, 15))} pairs may be lost. For next 30 mins, about {Math.round(projectedIssueLossPairs(item, 30))} pairs may be lost.
+                              Current idle loss: about {Math.round(currentIssuePairsLost(item))} pairs.
                             </span>
                           </div>
 
@@ -2618,7 +2586,7 @@ export const MissedActionsPage: React.FC = () => {
                                     {formatTimeLossLabel(lossMins)}
                                   </span>
                                   <span className="inline-flex items-center rounded-md bg-rose-50/70 px-2 py-0.5 text-[9px] font-semibold text-rose-800 ring-1 ring-rose-100 leading-tight whitespace-normal break-words">
-                                    If current issue continues for next 15 mins, about {Math.round(projectedIssueLossPairs(item, 15))} pairs may be lost. For next 30 mins, about {Math.round(projectedIssueLossPairs(item, 30))} pairs may be lost.
+                                    Current idle loss: about {Math.round(currentIssuePairsLost(item))} pairs.
                                   </span>
                                 </div>
                               </td>

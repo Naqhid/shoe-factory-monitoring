@@ -286,6 +286,7 @@ const parseActionRows = (rows, settingsMap, defaultFinishGraceMins, now = new Da
         mins_since_start: row.mins_since_start,
         mins_since_finish: row.mins_since_finish,
         target_mins: targetMins,
+        output_pairs: toNumber(row.output_pairs, 0),
       });
     }
   });
@@ -326,6 +327,7 @@ exports.getMissedActions = async (req, res, next) => {
         lr.id AS production_id,
         lr.button_status,
         lr.target_mins,
+        lr.output_pairs,
         lr.start_time,
         lr.finish_time AS last_finish_time,
         TIMESTAMPDIFF(MINUTE, ms.activated_at, NOW()) AS mins_since_activation,
