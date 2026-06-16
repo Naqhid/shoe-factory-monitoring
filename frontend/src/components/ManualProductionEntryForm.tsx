@@ -132,7 +132,7 @@ const MANUAL_ENTRY_FIELD_CLS =
 const MANUAL_REASON_CHIPS = [
   'Mobile app down / no capture',
   'Operator forgot to submit',
-  'MES output incorrect',
+  'Mobile output incorrect',
   'Late correction for missed slot',
 ];
 
@@ -3291,7 +3291,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                   loading={entryHintsLoading && slotHeatmapRows.length === 0}
                   canEdit={canMutate && isTodayEntriesView}
                   onCellClick={startEntryFromHeatmap}
-                  title="Hourly slot coverage (MES + manual)"
+                  title="Hourly slot coverage (mobile + manual)"
                   hint={
                     isTodayEntriesView
                       ? 'Green = mobile capture · Yellow = manual · Red = missing · Click red cells on live machines to add a manual entry.'
@@ -3598,7 +3598,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                   <option value="last_finished">Last finished cycle</option>
                 </select>
               </div>
-              <button type="button" onClick={loadProdRecords} disabled={prodLoading} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
+              <button type="button" onClick={() => { void loadProdRecords(); }} disabled={prodLoading} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-60">
                 {prodLoading ? 'Loading...' : 'Refresh'}
               </button>
               <label className="inline-flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-2">

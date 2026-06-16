@@ -222,6 +222,7 @@ class MasterController {
       const offset = (page - 1) * limit;
       const search = String(req.query.search || '').trim();
       const includeArchived = String(req.query.includeArchived || 'false') === 'true';
+      const styleId = parseInt(req.query.styleId, 10);
       
       let rows, countResult;
 
@@ -237,6 +238,17 @@ class MasterController {
             OR wc.name LIKE ?
           )`);
           params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        if (!Number.isNaN(styleId) && styleId > 0) {
+          whereParts.push(`EXISTS (
+            SELECT 1
+            FROM production_routing_lines prl
+            INNER JOIN production_routing_header prh ON prh.id = prl.routing_header_id
+            WHERE prl.machine_centre_id = mc.machine_id
+              AND prh.style_id = ?
+              AND prh.deleted_at IS NULL
+          )`);
+          params.push(styleId);
         }
         if (!includeArchived) {
           const colSet = await this.getTableColumns(db, table);
@@ -526,16 +538,19 @@ class MasterController {
 
         if (table === 'employees') {
           const { code, name, work_centre_id, machine_centre_id } = data;
-          if (!code || !name || !work_centre_id) throw Object.assign(new Error('Code, name and work centre are required'), { status: 400 });
-          const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
-          if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+          const wcId = work_centre_id ? parseInt(work_centre_id, 10) : null;
+          if (wcId) {
+            const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [wcId]);
+            if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          }
           if (machine_centre_id) {
             const [mc] = await conn.execute('SELECT id FROM machine_centres WHERE id = ?', [machine_centre_id]);
             if (mc.length === 0) throw Object.assign(new Error('Machine centre not found'), { status: 400 });
           }
           const [r] = await conn.execute(
             `INSERT INTO employees (code, name, work_centre_id, machine_centre_id) VALUES (?, ?, ?, ?)`,
-            [code, name, work_centre_id, machine_centre_id || null]
+            [code, name, wcId, machine_centre_id || null]
           );
           return { id: r.insertId };
         }
@@ -619,16 +634,19 @@ class MasterController {
 
         if (table === 'employees') {
           const { code, name, work_centre_id, machine_centre_id } = data;
-          if (!code || !name || !work_centre_id) throw Object.assign(new Error('Code, name and work centre are required'), { status: 400 });
-          const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
-          if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          if (!code || !name) throw Object.assign(new Error('Code and name are required'), { status: 400 });
+          const wcId = work_centre_id ? parseInt(work_centre_id, 10) : null;
+          if (wcId) {
+            const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [wcId]);
+            if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
+          }
           if (machine_centre_id) {
             const [mc] = await conn.execute('SELECT id FROM machine_centres WHERE id = ?', [machine_centre_id]);
             if (mc.length === 0) throw Object.assign(new Error('Machine centre not found'), { status: 400 });
           }
           await conn.execute(
             `UPDATE employees SET code = ?, name = ?, work_centre_id = ?, machine_centre_id = ? WHERE id = ?`,
-            [code, name, work_centre_id, machine_centre_id || null, id]
+            [code, name, wcId, machine_centre_id || null, id]
           );
           return;
         }

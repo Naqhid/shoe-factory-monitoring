@@ -318,7 +318,7 @@ export function buildEndOfShiftChecklist(input: {
       id: 'missing-slots',
       severity: 'high',
       title: 'Missing hourly slots',
-      detail: 'Logged-in machines with no MES or manual entry for an elapsed hour.',
+      detail: 'Logged-in machines with no mobile or manual entry for an elapsed hour.',
       count: input.missingSlots.length,
       actionLabel: 'Review heatmap',
     });
@@ -339,7 +339,7 @@ export function buildEndOfShiftChecklist(input: {
     items.push({
       id: 'overlap-slots',
       severity: 'high',
-      title: 'MES + manual overlap',
+      title: 'Mobile + manual overlap',
       detail: 'Same hour has both mobile and manual data — review for double counting.',
       count: input.overlapSlotCount,
       actionLabel: 'Review heatmap',

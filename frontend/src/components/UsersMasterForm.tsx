@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Plus, Edit, Trash2, X, Download, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Download, Loader2, RefreshCw, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -18,8 +18,14 @@ interface UserRecord {
   machine_id?: string;
 }
 
+interface RoleOption {
+  id?: number;
+  role_name: string;
+}
+
 export const UsersMasterForm: React.FC = () => {
   const [records, setRecords] = React.useState<UserRecord[]>([]);
+  const [roles, setRoles] = React.useState<RoleOption[]>([]);
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<UserRecord | null>(null);
   const [formData, setFormData] = React.useState({
@@ -38,12 +44,26 @@ export const UsersMasterForm: React.FC = () => {
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(5);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
 
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchRecords = async () => {
     setFetchLoading(true);
     try {
-      const response = await apiFetch(`${API_BASE}/api/masters/users?page=${currentPage}&limit=${itemsPerPage}`);
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(itemsPerPage),
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      const response = await apiFetch(`${API_BASE}/api/masters/users?${params.toString()}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
@@ -82,26 +102,43 @@ export const UsersMasterForm: React.FC = () => {
     }
   };
 
+  const fetchRoles = async () => {
+    try {
+      const response = await apiFetch(`${API_BASE}/api/roles`);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setRoles(data);
+      }
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+    }
+  };
+
+  const defaultRole = React.useMemo(() => {
+    return roles.find((r) => r.role_name === 'Admin')?.role_name || roles[0]?.role_name || 'Admin';
+  }, [roles]);
+
   React.useEffect(() => {
-    fetchRecords();
     fetchWorkCentres();
     fetchMachineCentres();
+    fetchRoles();
   }, []);
 
   React.useEffect(() => {
     fetchRecords();
-  }, [currentPage, itemsPerPage]);
+  }, [currentPage, itemsPerPage, debouncedSearch]);
 
   const handleRefresh = async () => {
     await fetchRecords();
     await fetchWorkCentres();
     await fetchMachineCentres();
+    await fetchRoles();
   };
 
   const filteredMachines = machineCentres;
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '' });
+    setFormData({ code: '', name: '', password: '', role: defaultRole, work_centre_id: '', machine_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -222,7 +259,17 @@ export const UsersMasterForm: React.FC = () => {
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Users Master</h1>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
+            <div className="relative w-full sm:w-64">
+              <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search users..."
+                className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
             <button
               type="button"
               onClick={handleRefresh}
@@ -316,14 +363,18 @@ export const UsersMasterForm: React.FC = () => {
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
-                  <option value="Admin">Admin</option>
-                  <option value="Line Supervisor">Line Supervisor</option>
-                  <option value="Machine Centre User">Machine Centre User</option>
-                  <option value="IED">IED</option>
-                  <option value="Planner">Planner</option>
-                  <option value="Unit Head">Unit Head</option>
-                  <option value="Production Manager">Production Manager</option>
-                  <option value="Quality">Quality</option>
+                  {roles.length === 0 ? (
+                    <option value={formData.role}>{formData.role || 'Loading roles…'}</option>
+                  ) : (
+                    roles.map((role) => (
+                      <option key={role.id ?? role.role_name} value={role.role_name}>
+                        {role.role_name}
+                      </option>
+                    ))
+                  )}
+                  {formData.role && !roles.some((r) => r.role_name === formData.role) && (
+                    <option value={formData.role}>{formData.role}</option>
+                  )}
                 </select>
               </div>
 
@@ -459,7 +510,7 @@ export const UsersMasterForm: React.FC = () => {
 
         {records.length === 0 && (
           <div className="text-center py-8 text-gray-500">
-            No users found
+            {debouncedSearch ? 'No matching users found' : 'No users found'}
           </div>
         )}
 

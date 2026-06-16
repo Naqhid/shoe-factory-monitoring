@@ -2081,10 +2081,10 @@ export const ProductionTracker: React.FC = () => {
 
               <div className="rounded-2xl bg-white p-3 sm:p-4 text-slate-900 shadow-md border border-white/40 flex flex-col gap-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex flex-wrap items-center gap-2">
                     <h3 className="text-lg sm:text-xl font-extrabold text-slate-900">Lines</h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Tap a line for details · coloured circle = efficiency %
+                    <p className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-200">
+                      Click a line card to view details · coloured circle = efficiency %
                     </p>
                   </div>
                   <div className="inline-flex w-fit items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 tabular-nums">

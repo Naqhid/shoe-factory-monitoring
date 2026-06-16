@@ -48,7 +48,7 @@ export const ManualEntryReconciliationStrip: React.FC<{
               </p>
             )}
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">MES</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Mobile</p>
               <p className="text-lg font-black tabular-nums text-emerald-700">{row.mesTotal}</p>
             </div>
             <div>
@@ -172,7 +172,7 @@ export const ManualEntrySlotHeatmap: React.FC<{
       >
         <span className="text-sm font-bold text-slate-900">{title}</span>
         <span className="flex items-center gap-3 text-[10px] text-slate-600">
-          <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 ring-1 ring-emerald-300" /> MES</span>
+          <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 ring-1 ring-emerald-300" /> Mobile</span>
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-100 ring-1 ring-amber-300" /> Manual</span>
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 ring-1 ring-red-300" /> Missing</span>
           <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-violet-100 ring-1 ring-violet-400" /> Overlap</span>
@@ -223,10 +223,10 @@ export const ManualEntrySlotHeatmap: React.FC<{
                               : cell.status === 'missing'
                                 ? 'Missing — click to add'
                                 : cell.status === 'mes'
-                                  ? `MES: ${cell.mesOutput} pairs`
+                                  ? `Mobile: ${cell.mesOutput} pairs`
                                   : cell.status === 'manual'
                                     ? `Manual: ${cell.manualOutput} pairs`
-                                    : `Overlap MES ${cell.mesOutput} / Manual ${cell.manualOutput}`
+                                    : `Overlap — mobile ${cell.mesOutput} / manual ${cell.manualOutput}`
                           }
                           onClick={() => clickable && onCellClick?.(row, slot.value)}
                           className={`w-full min-w-[2rem] h-7 rounded-md font-bold ring-1 transition-transform ${

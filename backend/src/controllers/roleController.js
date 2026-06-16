@@ -39,7 +39,15 @@ exports.resetDefaults = async (req, res) => {
 
 exports.getAll = async (req, res) => {
   try {
-    const [roles] = await db.query('SELECT * FROM roles ORDER BY role_name');
+    const search = String(req.query.search || '').trim();
+    const where = search
+      ? 'WHERE role_name LIKE ? OR default_route LIKE ?'
+      : '';
+    const params = search ? [`%${search}%`, `%${search}%`] : [];
+    const [roles] = await db.query(
+      `SELECT * FROM roles ${where} ORDER BY role_name`,
+      params
+    );
     const parsedRoles = roles.map(role => {
       let allowedMenus = role.allowed_menus;
       if (typeof allowedMenus === 'string') {

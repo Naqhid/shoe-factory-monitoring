@@ -1,7 +1,9 @@
 import React from 'react';
 import {
   AlertTriangle,
+  BarChart2,
   BellOff,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -9,11 +11,14 @@ import {
   Cpu,
   Download,
   ExternalLink,
+  Filter,
   Loader2,
   PlayCircle,
   Radio,
   RefreshCw,
   Save,
+  Settings2,
+  SlidersHorizontal,
   Square,
   TrendingUp,
   User,
@@ -39,6 +44,35 @@ const LIVE_SORT_LABELS: Record<string, string> = {
   overdue: 'Overdue',
   machine: 'Machine A–Z',
 };
+
+type MissedTab = 'live' | 'daily' | 'discipline' | 'operator' | 'reminder';
+
+const MISSED_TABS: { id: MissedTab; label: string; shortLabel: string; icon: React.ElementType }[] = [
+  { id: 'live', label: 'Live Issues', shortLabel: 'Live', icon: Radio },
+  { id: 'daily', label: 'Daily Inactive Report', shortLabel: 'Daily', icon: CalendarDays },
+  { id: 'discipline', label: 'Cycle Discipline', shortLabel: 'Discipline', icon: BarChart2 },
+  { id: 'operator', label: 'Operator Report', shortLabel: 'Operators', icon: User },
+  { id: 'reminder', label: 'Reminder Settings', shortLabel: 'Reminders', icon: Settings2 },
+];
+
+/** Temporarily hidden from the tab bar — remove entries to re-enable. */
+const HIDDEN_MISSED_TABS: ReadonlySet<MissedTab> = new Set(['operator']);
+const VISIBLE_MISSED_TABS = MISSED_TABS.filter((t) => !HIDDEN_MISSED_TABS.has(t.id));
+const DEFAULT_VISIBLE_MISSED_TAB: MissedTab = VISIBLE_MISSED_TABS[0]?.id ?? 'live';
+
+const normalizeVisibleMissedTab = (tab: MissedTab): MissedTab =>
+  HIDDEN_MISSED_TABS.has(tab) ? DEFAULT_VISIBLE_MISSED_TAB : tab;
+
+const FILTER_LABEL = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5';
+const FILTER_CONTROL =
+  'w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400 disabled:opacity-60 transition-shadow';
+const BTN_PRIMARY =
+  'inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors';
+const BTN_SECONDARY =
+  'inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold shadow-sm hover:bg-slate-50 disabled:opacity-60 transition-colors';
+const BTN_DARK =
+  'inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors';
+const ROUTING_STANDARD_PAIRS_PER_CYCLE = 6;
 
 function eventLostMins(e: {
   lost_mins?: number;
@@ -69,6 +103,7 @@ type MissedAction = {
   action_label: string;
   overdue_mins: number;
   target_mins?: number;
+  output_pairs?: number;
   details: string;
   state?: {
     acknowledged?: boolean;
@@ -333,13 +368,31 @@ export const MissedActionsPage: React.FC = () => {
   const [reminderSavingId, setReminderSavingId] = React.useState<string | null>(null);
   const [reminderDrafts, setReminderDrafts] = React.useState<Record<string, IdleReminderDraft>>({});
   const [reminderLineFilter, setReminderLineFilter] = React.useState<string>('all');
+  const [workCentres, setWorkCentres] = React.useState<Array<{ id: number; name: string; code?: string }>>([]);
+
+  React.useEffect(() => {
+    apiFetch(`${API_BASE}/api/tv-dashboard/work-centres`)
+      .then((r) => r.json())
+      .then((result) => {
+        if (result.success) setWorkCentres(result.data || []);
+      })
+      .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    if (HIDDEN_MISSED_TABS.has(activeTab)) {
+      setActiveTab(DEFAULT_VISIBLE_MISSED_TAB);
+    }
+  }, [activeTab]);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     if (tab === 'daily') setActiveTab('daily');
-    if (tab === 'live') setActiveTab('live');
-    if (tab === 'reminder' || tab === 'settings') setActiveTab('reminder');
+    else if (tab === 'live') setActiveTab('live');
+    else if (tab === 'discipline') setActiveTab('discipline');
+    else if (tab === 'reminder' || tab === 'settings') setActiveTab('reminder');
+    else if (tab === 'operator') setActiveTab(DEFAULT_VISIBLE_MISSED_TAB);
   }, []);
 
   React.useEffect(() => {
@@ -390,7 +443,15 @@ export const MissedActionsPage: React.FC = () => {
     else setIsSilentRefreshing(true);
     setError(null);
     try {
-      const response = await apiFetch(`${API_BASE}/api/missed-actions?startReminderMins=10&finishGraceMins=0`);
+      const params = new URLSearchParams({
+        startReminderMins: '10',
+        finishGraceMins: '0',
+      });
+      if (selectedLine !== 'all') {
+        const wc = workCentres.find((w) => w.name === selectedLine);
+        if (wc?.id) params.set('work_centre_id', String(wc.id));
+      }
+      const response = await apiFetch(`${API_BASE}/api/missed-actions?${params.toString()}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.error || 'Failed to load missed actions');
       const incoming: MissedAction[] = result.data || [];
@@ -471,7 +532,7 @@ export const MissedActionsPage: React.FC = () => {
       if (!silent) setIsLoading(false);
       setIsSilentRefreshing(false);
     }
-  }, [playAlert]);
+  }, [playAlert, selectedLine, workCentres]);
 
   React.useEffect(() => {
     if (activeTab !== 'live') return undefined;
@@ -773,11 +834,6 @@ export const MissedActionsPage: React.FC = () => {
     }
   };
 
-  const reminderLines = React.useMemo(() => {
-    const lines = new Set(reminderSettings.map((r) => r.work_centre_name).filter(Boolean));
-    return ['all', ...Array.from(lines).sort()];
-  }, [reminderSettings]);
-
   const filteredReminderSettings = React.useMemo(() => {
     if (reminderLineFilter === 'all') return reminderSettings;
     return reminderSettings.filter((r) => r.work_centre_name === reminderLineFilter);
@@ -801,9 +857,20 @@ export const MissedActionsPage: React.FC = () => {
     }
   }, [dailyEvents, dailyReportDate, dailyDateTo, dailyLine]);
 
-  const lineOptions = React.useMemo(() => {
-    return Array.from(new Set(items.map((i) => i.work_centre_name).filter(Boolean))).sort();
-  }, [items]);
+  const lineLabel = (wc: { code?: string; name: string }) =>
+    wc.code ? `${wc.code} - ${wc.name}` : wc.name;
+
+  const hasLiveFilters =
+    selectedLine !== 'all' || issueFilter !== 'all' || liveSort !== 'priority' || showMuted;
+
+  const clearLiveFilters = () => {
+    setSelectedLine('all');
+    setIssueFilter('all');
+    setLiveSort('priority');
+    setShowMuted(false);
+  };
+
+  const activeTabMeta = VISIBLE_MISSED_TABS.find((t) => t.id === activeTab) ?? VISIBLE_MISSED_TABS[0];
 
   const getSeverity = (overdueMins: number) => {
     if (overdueMins >= 60) return { label: 'Critical', cls: 'bg-red-200 text-red-900 border-red-400' };
@@ -851,6 +918,13 @@ export const MissedActionsPage: React.FC = () => {
     const repeatWeight = recurrenceCount >= 3 ? 1 : 0;
     return Math.min(7, base + finishWeight + repeatWeight);
   };
+
+  const currentIssuePairsLost = React.useCallback((item: MissedAction): number => {
+    const targetMins = Number(item.target_mins || 0);
+    const overdueMins = Math.max(0, Number(item.overdue_mins || 0));
+    if (!Number.isFinite(targetMins) || targetMins <= 0 || overdueMins <= 0) return 0;
+    return (ROUTING_STANDARD_PAIRS_PER_CYCLE / targetMins) * overdueMins;
+  }, []);
 
   const visibleItems = React.useMemo(() => {
     if (showMuted) return items;
@@ -932,6 +1006,15 @@ export const MissedActionsPage: React.FC = () => {
       return acc;
     }, {});
   }, [sortedFilteredItems]);
+
+  const lineImpactPreviewMap = React.useMemo(() => {
+    const map = new Map<string, { currentLoss: number }>();
+    Object.entries(groupedItems).forEach(([lineName, lineItems]) => {
+      const currentLoss = lineItems.reduce((sum, item) => sum + currentIssuePairsLost(item), 0);
+      map.set(lineName, { currentLoss });
+    });
+    return map;
+  }, [groupedItems, currentIssuePairsLost]);
 
   const dailyLineMachineGroups = React.useMemo(() => {
     const lineMap = new Map<string, {
@@ -1725,7 +1808,8 @@ export const MissedActionsPage: React.FC = () => {
   );
 
   return (
-    <div className="bg-gray-100 px-2 py-4 sm:px-3 sm:py-6">
+    <div className="min-h-full bg-gradient-to-b from-slate-100 via-slate-50 to-white">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
       {contextItem && (
         <div className="fixed inset-0 z-[60] flex justify-end bg-black/40 backdrop-blur-sm" onClick={() => setContextItem(null)}>
           <div
@@ -1887,86 +1971,117 @@ export const MissedActionsPage: React.FC = () => {
           </div>
         </div>
       )}
-      <div className="w-full space-y-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-2 shadow-sm inline-flex gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('live')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'live' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-          >
-            Live Issues
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('daily')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'daily' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-          >
-            Daily Inactive Report
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('discipline')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'discipline' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-          >
-            Cycle Discipline
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('operator')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'operator' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-          >
-            Operator Report
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('reminder')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'reminder' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-          >
-            Reminder Settings
-          </button>
+      <div className="w-full space-y-5">
+        <div className="sticky top-0 z-30 -mx-3 sm:-mx-4 lg:-mx-6 px-3 sm:px-4 lg:px-6 pt-1 pb-3 bg-gradient-to-b from-slate-100 via-slate-100/95 to-transparent backdrop-blur-md">
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm p-3 sm:p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Operations</p>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Missed Actions</h1>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5 hidden sm:block">
+                  Track missed START/FINISH clicks, shift time loss, and mobile reminder settings.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500 shrink-0">
+                {activeTab === 'live' && liveSecondsSinceRefresh !== null && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
+                    <Radio className={`h-3 w-3 ${isSilentRefreshing ? 'text-blue-600 animate-pulse' : 'text-slate-400'}`} aria-hidden />
+                    Live · {liveSecondsSinceRefresh}s ago
+                  </span>
+                )}
+                {activeTab === 'daily' && dailySecondsSinceRefresh !== null && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
+                    <RefreshCw className={`h-3 w-3 ${isDailySilentRefreshing ? 'animate-spin text-blue-600' : 'text-slate-400'}`} aria-hidden />
+                    Report · {dailySecondsSinceRefresh}s ago
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-1.5">
+              {VISIBLE_MISSED_TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                        : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className="sm:hidden">{tab.shortLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/80 bg-white/60 px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            {(() => {
+              const Icon = activeTabMeta.icon;
+              return <Icon className="h-4 w-4 text-blue-600 shrink-0" aria-hidden />;
+            })()}
+            <div>
+              <p className="text-sm font-bold text-slate-900">{activeTabMeta.label}</p>
+              <p className="text-xs text-slate-500">
+                {activeTab === 'live' && 'Real-time missed START and FINISH alerts across all lines.'}
+                {activeTab === 'daily' && 'Completed-cycle inactive and extra minutes for a date range.'}
+                {activeTab === 'discipline' && 'Late starts and slow finishes per cycle.'}
+                {activeTab === 'operator' && 'Operator-level loss summary and root causes.'}
+                {activeTab === 'reminder' && 'Per-machine idle reminder and finish grace on mobile.'}
+              </p>
+            </div>
+          </div>
         </div>
 
         {activeTab === 'live' ? (
           <>
-        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/50 p-4 sm:p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/40 p-4 sm:p-5 shadow-sm ring-1 ring-black/[0.02]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 ring-1 ring-emerald-200">
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 ring-1 ring-emerald-200/80">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Live monitoring</span>
               </div>
-              <h1 className="mt-3 text-xl sm:text-2xl font-bold text-gray-900">Missed Start / Finish</h1>
-              <p className="text-sm text-gray-600 mt-1 max-w-2xl">
+              <h2 className="mt-3 text-lg sm:text-xl font-bold text-slate-900">Missed START / FINISH</h2>
+              <p className="text-sm text-slate-600 mt-1 max-w-2xl">
                 Machines where operators likely forgot to click START or FINISH — sorted by time-loss impact.
               </p>
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-500">
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 {liveSecondsSinceRefresh !== null ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">
-                    <Radio className={`h-3.5 w-3.5 ${isSilentRefreshing ? 'text-blue-600 animate-pulse' : 'text-gray-400'}`} aria-hidden />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200">
+                    <Radio className={`h-3.5 w-3.5 ${isSilentRefreshing ? 'text-blue-600 animate-pulse' : 'text-slate-400'}`} aria-hidden />
                     Updated {liveSecondsSinceRefresh}s ago
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">Not updated yet</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Not updated yet</span>
                 )}
-                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200 hover:bg-gray-50">
+                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200 hover:bg-slate-50 transition-colors">
                   <input
                     type="checkbox"
                     checked={liveAutoRefresh}
                     onChange={(e) => setLiveAutoRefresh(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   Auto-refresh every 15s
                 </label>
               </div>
             </div>
             {filteredItems.length > 0 && (
-              <div className="shrink-0 rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Filtered time loss</p>
-                <p className="mt-1 text-2xl font-black text-rose-700">{formatTimeLossLabel(liveTotalTimeLossMins)}</p>
-                <p className="text-[11px] text-gray-500 mt-0.5">{filteredItems.length} issue{filteredItems.length === 1 ? '' : 's'} in view</p>
+              <div className="shrink-0 rounded-2xl bg-white px-4 py-3 ring-1 ring-rose-200/80 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-rose-600">Filtered time loss</p>
+                <p className="mt-1 text-2xl font-black text-rose-700 tabular-nums">{formatTimeLossLabel(liveTotalTimeLossMins)}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{filteredItems.length} issue{filteredItems.length === 1 ? '' : 's'} in view</p>
               </div>
             )}
           </div>
@@ -2041,33 +2156,33 @@ export const MissedActionsPage: React.FC = () => {
         )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="col-span-2 lg:col-span-1 rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
+          <div className="col-span-2 lg:col-span-1 rounded-2xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/50 to-white p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 text-indigo-700">
               <AlertTriangle className="h-4 w-4" aria-hidden />
               <p className="text-[11px] font-bold uppercase tracking-wide">Total alerts</p>
             </div>
-            <p className="text-4xl sm:text-5xl font-black text-indigo-900 mt-2">{filteredSummary.total}</p>
+            <p className="text-4xl sm:text-5xl font-black text-indigo-900 mt-2 tabular-nums">{filteredSummary.total}</p>
           </div>
-          <div className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-white p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 text-amber-700">
               <PlayCircle className="h-4 w-4" aria-hidden />
               <p className="text-[11px] font-bold uppercase tracking-wide">Start pending</p>
             </div>
-            <p className="text-4xl sm:text-5xl font-black text-amber-900 mt-2">{filteredSummary.start_pending}</p>
+            <p className="text-4xl sm:text-5xl font-black text-amber-900 mt-2 tabular-nums">{filteredSummary.start_pending}</p>
           </div>
-          <div className="rounded-xl border border-red-200 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-red-200/80 bg-gradient-to-br from-red-50/50 to-white p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 text-red-700">
               <Square className="h-4 w-4" aria-hidden />
               <p className="text-[11px] font-bold uppercase tracking-wide">Finish pending</p>
             </div>
-            <p className="text-4xl sm:text-5xl font-black text-red-900 mt-2">{filteredSummary.finish_pending}</p>
+            <p className="text-4xl sm:text-5xl font-black text-red-900 mt-2 tabular-nums">{filteredSummary.finish_pending}</p>
           </div>
-          <div className="col-span-2 lg:col-span-1 rounded-xl border border-rose-200 bg-white p-4 shadow-sm">
+          <div className="col-span-2 lg:col-span-1 rounded-2xl border border-rose-200/80 bg-gradient-to-br from-rose-50/50 to-white p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 text-rose-700">
               <Clock className="h-4 w-4" aria-hidden />
               <p className="text-[11px] font-bold uppercase tracking-wide">Time loss (filtered)</p>
             </div>
-            <p className="text-2xl sm:text-3xl font-black text-rose-800 mt-2 leading-tight">{formatTimeLossLabel(liveTotalTimeLossMins)}</p>
+            <p className="text-2xl sm:text-3xl font-black text-rose-800 mt-2 leading-tight tabular-nums">{formatTimeLossLabel(liveTotalTimeLossMins)}</p>
           </div>
         </div>
         {criticalItemsCount > 0 && (
@@ -2106,53 +2221,77 @@ export const MissedActionsPage: React.FC = () => {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-end gap-3">
-            <div className="w-full sm:w-auto">
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ring-1 ring-black/[0.02]">
+          <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-slate-500" aria-hidden />
+                <p className="text-sm font-bold text-slate-800">Filters & actions</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {hasLiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearLiveFilters}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                    Clear filters
+                  </button>
+                )}
+                <span className="text-xs text-slate-500 tabular-nums">
+                  {filteredItems.length} of {items.length} shown
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+            <div className="w-full sm:min-w-[200px] sm:w-auto sm:flex-1 sm:max-w-xs">
+              <label className={FILTER_LABEL}>
+                <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
+              </label>
               <select
                 value={selectedLine}
                 onChange={(e) => setSelectedLine(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                className={FILTER_CONTROL}
               >
-                <option value="all">All Lines</option>
-                {lineOptions.map((line) => (
-                  <option key={line} value={line}>{line}</option>
+                <option value="all">All lines</option>
+                {workCentres.map((wc) => (
+                  <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
                 ))}
               </select>
             </div>
-            <div className="w-full md:w-auto">
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Issue Type</label>
-              <div className="grid grid-cols-1 min-[360px]:grid-cols-3 gap-2">
+            <div className="w-full md:w-auto md:flex-1">
+              <label className={FILTER_LABEL}>Issue type</label>
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setIssueFilter('all')}
-                  className={`px-3 py-2 text-xs font-semibold rounded-lg border ${issueFilter === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                  className={`px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors ${issueFilter === 'all' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                 >
                   All
                 </button>
                 <button
                   type="button"
                   onClick={() => setIssueFilter('START_PENDING')}
-                  className={`px-3 py-2 text-xs font-semibold rounded-lg border ${issueFilter === 'START_PENDING' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300'}`}
+                  className={`px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors ${issueFilter === 'START_PENDING' ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                 >
-                  Start Pending
+                  Start
                 </button>
                 <button
                   type="button"
                   onClick={() => setIssueFilter('FINISH_PENDING')}
-                  className={`px-3 py-2 text-xs font-semibold rounded-lg border ${issueFilter === 'FINISH_PENDING' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                  className={`px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors ${issueFilter === 'FINISH_PENDING' ? 'bg-red-600 text-white border-red-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                 >
-                  Finish Pending
+                  Finish
                 </button>
               </div>
             </div>
-            <div className="w-full sm:w-auto">
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sort By</label>
+            <div className="w-full sm:w-auto sm:min-w-[180px]">
+              <label className={FILTER_LABEL}>Sort by</label>
               <select
                 value={liveSort}
                 onChange={(e) => setLiveSort(e.target.value as 'fix_first' | 'priority' | 'overdue' | 'machine')}
-                className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                className={FILTER_CONTROL}
               >
                 <option value="fix_first">Fix first (time loss)</option>
                 <option value="priority">Priority score</option>
@@ -2160,49 +2299,49 @@ export const MissedActionsPage: React.FC = () => {
                 <option value="machine">Machine (A-Z)</option>
               </select>
             </div>
-            <div className="w-full lg:w-auto lg:ml-auto grid grid-cols-2 lg:flex gap-2">
+            <div className="w-full lg:w-auto lg:ml-auto flex flex-wrap gap-2">
               <button
                 onClick={() => setShowMuted((v) => !v)}
-                className={`inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold border ${
-                  showMuted ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-gray-600 border-gray-300'
+                className={`inline-flex justify-center items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${
+                  showMuted ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : `${BTN_SECONDARY} text-xs py-2.5`
                 }`}
               >
                 <BellOff className="h-3.5 w-3.5" />
-                {showMuted ? 'Hide Muted' : 'Show Muted'}
+                {showMuted ? 'Hide muted' : 'Show muted'}
               </button>
               <button
                 onClick={acknowledgeFiltered}
                 disabled={sortedFilteredItems.length === 0 || isActionLoading === '__bulk__'}
-                className="inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-60"
+                className="inline-flex justify-center items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm disabled:opacity-60 transition-colors"
               >
                 {isActionLoading === '__bulk__' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                Ack Filtered
+                Ack filtered
               </button>
               <button
                 onClick={exportFilteredCsv}
                 disabled={sortedFilteredItems.length === 0}
-                className="inline-flex justify-center items-center gap-2 px-2.5 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold disabled:opacity-60"
+                className={`${BTN_DARK} text-xs py-2.5`}
               >
                 <Download className="h-3.5 w-3.5" />
-                Export CSV
+                Export
               </button>
               <button
                 onClick={() => void fetchData()}
                 disabled={isLoading}
-                className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-60"
+                className={`${BTN_PRIMARY} text-xs py-2.5`}
               >
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
               </button>
             </div>
-            <div className="w-full md:ml-auto md:w-auto text-xs text-gray-500">
-              Showing {filteredItems.length} of {items.length} total
             </div>
-            <div className="w-full flex flex-wrap gap-1.5">
-              {selectedLine !== 'all' && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">Line: {selectedLine}</span>}
-              {issueFilter !== 'all' && <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">Issue: {issueFilter === 'START_PENDING' ? 'Start Pending' : 'Finish Pending'}</span>}
-              {liveSort !== 'priority' && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">Sort: {LIVE_SORT_LABELS[liveSort] || liveSort}</span>}
-            </div>
+            {(selectedLine !== 'all' || issueFilter !== 'all' || liveSort !== 'priority') && (
+              <div className="w-full flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-100">
+                {selectedLine !== 'all' && <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">Line: {selectedLine}</span>}
+                {issueFilter !== 'all' && <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">Issue: {issueFilter === 'START_PENDING' ? 'Start pending' : 'Finish pending'}</span>}
+                {liveSort !== 'priority' && <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">Sort: {LIVE_SORT_LABELS[liveSort] || liveSort}</span>}
+              </div>
+            )}
           </div>
 
           {isLoading && items.length === 0 ? (
@@ -2216,15 +2355,25 @@ export const MissedActionsPage: React.FC = () => {
             </div>
           ) : filteredItems.length === 0 ? (
             items.length === 0 ? (
-              <div className="py-16 px-6 text-center">
-                <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" aria-hidden />
-                <p className="text-lg font-bold text-gray-900">All clear</p>
-                <p className="text-sm text-gray-500 mt-1">No missed start or finish issues right now.</p>
+              <div className="py-20 px-6 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-200">
+                  <CheckCircle2 className="h-9 w-9 text-emerald-500" aria-hidden />
+                </div>
+                <p className="text-lg font-bold text-slate-900 mt-4">All clear</p>
+                <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">No missed START or FINISH issues right now. Live monitoring continues in the background.</p>
               </div>
             ) : (
-              <div className="py-12 px-6 text-center">
-                <p className="text-sm font-semibold text-gray-700">No issues match current filters</p>
-                <p className="text-xs text-gray-500 mt-1">Try widening line or issue type filters.</p>
+              <div className="py-16 px-6 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+                  <Filter className="h-7 w-7 text-slate-400" aria-hidden />
+                </div>
+                <p className="text-sm font-semibold text-slate-800 mt-4">No issues match current filters</p>
+                <p className="text-xs text-slate-500 mt-1">Try a different line or issue type.</p>
+                {hasLiveFilters && (
+                  <button type="button" onClick={clearLiveFilters} className="mt-4 text-sm font-semibold text-blue-600 hover:text-blue-800">
+                    Clear all filters
+                  </button>
+                )}
               </div>
             )
           ) : (
@@ -2238,9 +2387,14 @@ export const MissedActionsPage: React.FC = () => {
                       </div>
                       <p className="text-sm font-bold text-gray-900 truncate">{lineName}</p>
                     </div>
-                    <span className="shrink-0 text-xs font-bold text-blue-800 bg-blue-50 px-2.5 py-1 rounded-full ring-1 ring-blue-200 tabular-nums">
-                      {lineItems.length} issue{lineItems.length === 1 ? '' : 's'}
-                    </span>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <span className="shrink-0 text-xs font-bold text-blue-800 bg-blue-50 px-2.5 py-1 rounded-full ring-1 ring-blue-200 tabular-nums">
+                        {lineItems.length} issue{lineItems.length === 1 ? '' : 's'}
+                      </span>
+                      <span className="max-w-full text-[11px] font-semibold text-rose-800 bg-rose-50 px-2.5 py-1 rounded-full ring-1 ring-rose-200 leading-tight whitespace-normal break-words">
+                        Current idle loss on this line: about {Math.round(lineImpactPreviewMap.get(lineName)?.currentLoss || 0)} pairs.
+                      </span>
+                    </div>
                   </div>
                   <div className="md:hidden divide-y divide-gray-100">
                     {lineItems.map((item) => {
@@ -2295,6 +2449,9 @@ export const MissedActionsPage: React.FC = () => {
                             </div>
                             <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700">
                               P{priority}
+                            </span>
+                            <span className="inline-flex items-center rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-800 ring-1 ring-rose-200 leading-tight whitespace-normal break-words">
+                              Current idle loss: about {Math.round(currentIssuePairsLost(item))} pairs.
                             </span>
                           </div>
 
@@ -2424,9 +2581,14 @@ export const MissedActionsPage: React.FC = () => {
                                 </span>
                               </td>
                               <td className="px-3 py-2.5 align-middle whitespace-nowrap">
-                                <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-800 ring-1 ring-rose-200 whitespace-nowrap tabular-nums">
-                                  {formatTimeLossLabel(lossMins)}
-                                </span>
+                                <div className="flex flex-col items-start gap-1">
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-800 ring-1 ring-rose-200 whitespace-nowrap tabular-nums">
+                                    {formatTimeLossLabel(lossMins)}
+                                  </span>
+                                  <span className="inline-flex items-center rounded-md bg-rose-50/70 px-2 py-0.5 text-[9px] font-semibold text-rose-800 ring-1 ring-rose-100 leading-tight whitespace-normal break-words">
+                                    Current idle loss: about {Math.round(currentIssuePairsLost(item))} pairs.
+                                  </span>
+                                </div>
                               </td>
                               <td className="px-3 py-2.5 align-middle whitespace-nowrap">
                                 <div className="inline-flex items-center gap-1">
@@ -2532,64 +2694,60 @@ export const MissedActionsPage: React.FC = () => {
           </>
         ) : activeTab === 'daily' ? (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-              {dailySecondsSinceRefresh !== null ? (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">
-                  <RefreshCw className={`h-3.5 w-3.5 ${isDailySilentRefreshing ? 'animate-spin text-blue-600' : 'text-gray-400'}`} aria-hidden />
-                  Updated {dailySecondsSinceRefresh}s ago
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200">Not updated yet</span>
-              )}
-              {isViewingTodayDaily ? (
-                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-gray-200 hover:bg-gray-50">
-                  <input
-                    type="checkbox"
-                    checked={dailyAutoRefresh}
-                    onChange={(e) => setDailyAutoRefresh(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
-                  />
-                  Auto-refresh every 15s
-                </label>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-50 px-2.5 py-1.5 ring-1 ring-gray-200 text-gray-400">
-                  Auto-refresh when viewing today only
-                </span>
-              )}
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm ring-1 ring-black/[0.02]">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  {isViewingTodayDaily ? (
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-full bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200 hover:bg-white transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={dailyAutoRefresh}
+                        onChange={(e) => setDailyAutoRefresh(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600"
+                      />
+                      Auto-refresh every 15s
+                    </label>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200 text-slate-400">
+                      Auto-refresh when viewing today only
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
+                  <label className={FILTER_LABEL}>From</label>
                   <input
                     type="date"
                     value={dailyReportDate}
                     max={dailyDateTo}
                     onChange={(e) => setDailyReportDate(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                    className={FILTER_CONTROL}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">To</label>
+                  <label className={FILTER_LABEL}>To</label>
                   <input
                     type="date"
                     value={dailyDateTo}
                     min={dailyReportDate}
                     onChange={(e) => setDailyDateTo(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                    className={FILTER_CONTROL}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
+                  <label className={FILTER_LABEL}>
+                    <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
+                  </label>
                   <select
                     value={dailyLine}
                     onChange={(e) => setDailyLine(e.target.value)}
                     disabled={dailyLoading}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white disabled:opacity-60"
+                    className={FILTER_CONTROL}
                   >
-                    <option value="all">{dailyLoading ? 'Loading…' : 'All Lines'}</option>
-                    {dailyByLine.map((line) => (
-                      <option key={line.work_centre_name} value={line.work_centre_name}>{line.work_centre_name}</option>
+                    <option value="all">{dailyLoading ? 'Loading…' : 'All lines'}</option>
+                    {workCentres.map((wc) => (
+                      <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
                     ))}
                   </select>
                 </div>
@@ -2597,42 +2755,42 @@ export const MissedActionsPage: React.FC = () => {
                   type="button"
                   onClick={() => { void fetchDailyReport(); }}
                   disabled={dailyLoading}
-                  className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60"
+                  className={BTN_PRIMARY}
                 >
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Refresh Report
+                  Refresh
                 </button>
                 <button
                   type="button"
                   onClick={exportDailyCsv}
                   disabled={dailyFilteredEvents.length === 0}
-                  className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-60"
+                  className={BTN_DARK}
                 >
                   <Download className="h-4 w-4" />
-                  Export Detailed
+                  Export detail
                 </button>
                 <button
                   type="button"
                   onClick={exportDailySummaryCsv}
                   disabled={dailyVisibleLineLossRows.length === 0}
-                  className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold disabled:opacity-60"
+                  className={BTN_SECONDARY}
                 >
                   <Download className="h-4 w-4" />
-                  Export Summary
+                  Export summary
                 </button>
               </div>
-              <div className="mt-3 border-t border-gray-100 pt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-4 border-t border-slate-100 pt-4 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setDailyTopOffendersOnly((v) => !v)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${dailyTopOffendersOnly ? 'bg-red-100 text-red-800 border-red-300' : 'bg-white text-gray-700 border-gray-300'}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyTopOffendersOnly ? 'bg-red-100 text-red-800 border-red-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
                 >
                   Top offenders only
                 </button>
                 <button
                   type="button"
                   onClick={() => setDailyBreachedOnly((v) => !v)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${dailyBreachedOnly ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-gray-700 border-gray-300'}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyBreachedOnly ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
                 >
                   Breached only
                 </button>
@@ -2640,11 +2798,11 @@ export const MissedActionsPage: React.FC = () => {
                   type="button"
                   onClick={() => setDailyMyLineOnly((v) => !v)}
                   disabled={!preferredDailyLine}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${dailyMyLineOnly ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-white text-gray-700 border-gray-300'} disabled:opacity-50`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyMyLineOnly ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'} disabled:opacity-50`}
                 >
                   My line only {preferredDailyLine ? `(${preferredDailyLine})` : '(set line first)'}
                 </button>
-                <div className="ml-auto text-[11px] text-gray-500 flex items-center gap-2">
+                <div className="ml-auto text-[11px] text-slate-500 flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">Inactive = blue</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Extra = amber</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Loss = red</span>
@@ -2944,13 +3102,9 @@ export const MissedActionsPage: React.FC = () => {
 
         {activeTab === 'reminder' && (
           <div className="space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-black/[0.02]">
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Idle Reminder Settings</h1>
-                <p className="text-sm text-gray-500 mt-1">
-                  Per-machine timing for mobile idle alarm and missed-start thresholds.
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-slate-500 mt-0">
                   Defaults: idle {formatIdleIntervalLabel(reminderDefaults.idle_interval_mins, reminderDefaults.idle_interval_secs_part)}, alarm {reminderDefaults.alarm_duration_secs}s, finish grace {reminderDefaults.finish_grace_mins} min (min 15s idle).
                 </p>
               </div>
@@ -2958,16 +3112,19 @@ export const MissedActionsPage: React.FC = () => {
                 type="button"
                 onClick={() => { void fetchReminderSettings(); }}
                 disabled={reminderLoading}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className={BTN_SECONDARY}
               >
                 {reminderLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
               </button>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
-              <p className="font-semibold">How it works on mobile</p>
-              <ul className="list-disc ml-5 mt-1 space-y-0.5 text-blue-800">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50/50 border border-blue-200/80 rounded-2xl p-4 text-sm text-blue-900 shadow-sm">
+              <p className="font-bold flex items-center gap-2">
+                <Settings2 className="h-4 w-4" aria-hidden />
+                How it works on mobile
+              </p>
+              <ul className="list-disc ml-5 mt-2 space-y-1 text-blue-800/90 text-xs sm:text-sm">
                 <li><strong>Mobile reminder sound</strong> uses <strong>Idle (min/sec)</strong> per machine (e.g. 10 min for machine 07).</li>
                 <li><strong>Late Cycles / daily reports / TV time loss</strong> use shift <strong>9:05 AM – 5:35 PM</strong>; idle before START counts from the first second (lunch excluded).</li>
                 <li><strong>Live START alerts</strong> still use <strong>40 seconds</strong> grace before flagging “next cycle not started” (separate from time loss).</li>
@@ -2975,16 +3132,19 @@ export const MissedActionsPage: React.FC = () => {
               </ul>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex flex-wrap gap-3 items-end">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm ring-1 ring-black/[0.02] flex flex-wrap gap-3 items-end">
+              <div className="min-w-[200px] flex-1 sm:flex-none sm:max-w-xs">
+                <label className={FILTER_LABEL}>
+                  <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
+                </label>
                 <select
                   value={reminderLineFilter}
                   onChange={(e) => setReminderLineFilter(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white min-w-[180px]"
+                  className={FILTER_CONTROL}
                 >
-                  {reminderLines.map((line) => (
-                    <option key={line} value={line}>{line === 'all' ? 'All lines' : line}</option>
+                  <option value="all">All lines</option>
+                  {workCentres.map((wc) => (
+                    <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
                   ))}
                 </select>
               </div>
@@ -3112,27 +3272,31 @@ export const MissedActionsPage: React.FC = () => {
         )}
 
         {activeTab === 'discipline' && (
-          <div className="space-y-3">
-            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm ring-1 ring-black/[0.02]">
               <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
-                  <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => { setDailyReportDate(e.target.value); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                  <label className={FILTER_LABEL}>From</label>
+                  <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => { setDailyReportDate(e.target.value); setDiscPage(0); }} className={FILTER_CONTROL} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">To</label>
-                  <input type="date" value={dailyDateTo} min={dailyReportDate} onChange={(e) => { setDailyDateTo(e.target.value); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                  <label className={FILTER_LABEL}>To</label>
+                  <input type="date" value={dailyDateTo} min={dailyReportDate} onChange={(e) => { setDailyDateTo(e.target.value); setDiscPage(0); }} className={FILTER_CONTROL} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
-                  <select value={dailyLine} onChange={(e) => { setDailyLine(e.target.value); setDiscPage(0); }} disabled={dailyLoading} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white disabled:opacity-60">
-                    <option value="all">{dailyLoading ? 'Loading…' : 'All Lines'}</option>
-                    {dailyByLine.map((l) => <option key={l.work_centre_name} value={l.work_centre_name}>{l.work_centre_name}</option>)}
+                  <label className={FILTER_LABEL}>
+                    <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
+                  </label>
+                  <select value={dailyLine} onChange={(e) => { setDailyLine(e.target.value); setDiscPage(0); }} disabled={dailyLoading} className={FILTER_CONTROL}>
+                    <option value="all">{dailyLoading ? 'Loading…' : 'All lines'}</option>
+                    {workCentres.map((wc) => (
+                      <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Verdict</label>
-                  <select value={discVerdictFilter} onChange={(e) => { setDiscVerdictFilter(e.target.value as 'all' | 'late' | 'slow' | 'both'); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white">
+                  <label className={FILTER_LABEL}>Verdict</label>
+                  <select value={discVerdictFilter} onChange={(e) => { setDiscVerdictFilter(e.target.value as 'all' | 'late' | 'slow' | 'both'); setDiscPage(0); }} className={FILTER_CONTROL}>
                     <option value="all">All</option>
                     <option value="late">Late start</option>
                     <option value="slow">Slow finish</option>
@@ -3140,23 +3304,23 @@ export const MissedActionsPage: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sort By</label>
-                  <select value={discSort} onChange={(e) => { setDiscSort(e.target.value as 'combined' | 'late' | 'extra' | 'operator'); setDiscPage(0); }} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white">
+                  <label className={FILTER_LABEL}>Sort by</label>
+                  <select value={discSort} onChange={(e) => { setDiscSort(e.target.value as 'combined' | 'late' | 'extra' | 'operator'); setDiscPage(0); }} className={FILTER_CONTROL}>
                     <option value="combined">Combined loss</option>
                     <option value="late">Started late</option>
                     <option value="extra">Finished extra</option>
                     <option value="operator">Operator name</option>
                   </select>
                 </div>
-                <button type="button" onClick={() => { void fetchDailyReport(); }} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
+                <button type="button" onClick={() => { void fetchDailyReport(); }} disabled={dailyLoading} className={BTN_PRIMARY}>
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Refresh
                 </button>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">Blue = started late</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Amber = finished over</span>
-                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Red = both</span>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold">Blue = started late</span>
+                <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-semibold">Amber = finished over</span>
+                <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Red = both</span>
               </div>
             </div>
 
@@ -3407,24 +3571,28 @@ export const MissedActionsPage: React.FC = () => {
 
         {activeTab === 'operator' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm ring-1 ring-black/[0.02]">
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
-                  <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => setDailyReportDate(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                  <label className={FILTER_LABEL}>From</label>
+                  <input type="date" value={dailyReportDate} max={dailyDateTo} onChange={(e) => setDailyReportDate(e.target.value)} className={FILTER_CONTROL} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">To</label>
-                  <input type="date" value={dailyDateTo} min={dailyReportDate} onChange={(e) => setDailyDateTo(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+                  <label className={FILTER_LABEL}>To</label>
+                  <input type="date" value={dailyDateTo} min={dailyReportDate} onChange={(e) => setDailyDateTo(e.target.value)} className={FILTER_CONTROL} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Line</label>
-                  <select value={dailyLine} onChange={(e) => setDailyLine(e.target.value)} disabled={dailyLoading} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white disabled:opacity-60">
-                    <option value="all">{dailyLoading ? 'Loading…' : 'All Lines'}</option>
-                    {dailyByLine.map((l) => <option key={l.work_centre_name} value={l.work_centre_name}>{l.work_centre_name}</option>)}
+                  <label className={FILTER_LABEL}>
+                    <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
+                  </label>
+                  <select value={dailyLine} onChange={(e) => setDailyLine(e.target.value)} disabled={dailyLoading} className={FILTER_CONTROL}>
+                    <option value="all">{dailyLoading ? 'Loading…' : 'All lines'}</option>
+                    {workCentres.map((wc) => (
+                      <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
+                    ))}
                   </select>
                 </div>
-                <button type="button" onClick={() => { void fetchDailyReport(); }} disabled={dailyLoading} className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-60">
+                <button type="button" onClick={() => { void fetchDailyReport(); }} disabled={dailyLoading} className={BTN_PRIMARY}>
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Refresh
                 </button>
@@ -3445,7 +3613,7 @@ export const MissedActionsPage: React.FC = () => {
                     a.download = `operator_report_${dailyReportDate}_to_${dailyDateTo}.csv`;
                     document.body.appendChild(a); a.click(); document.body.removeChild(a);
                   }}
-                  className="inline-flex justify-center items-center gap-2 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-60"
+                  className={`${BTN_DARK} disabled:opacity-60`}
                 >
                   <Download className="h-4 w-4" /> Export CSV
                 </button>
@@ -3698,6 +3866,7 @@ export const MissedActionsPage: React.FC = () => {
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

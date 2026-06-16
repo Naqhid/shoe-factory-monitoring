@@ -111,6 +111,12 @@ const normalizeRole = (role: UserRole | string | null): UserRole | null => {
   return ROLE_ALIASES[cleaned.toLowerCase()] || null;
 };
 
+const normalizeAppRoute = (route: string | null | undefined): string => {
+  const cleaned = String(route || '').trim();
+  if (!cleaned) return '/overview';
+  return cleaned.startsWith('/') ? cleaned : `/${cleaned}`;
+};
+
 const matchesProductionManager = (value: string): boolean => {
   const v = value.trim().toLowerCase();
   return v === 'production manager' || v === 'production_manager' || v.includes('production manager');
@@ -133,7 +139,9 @@ export const getEffectiveRole = (user: UserSession | null | undefined): UserRole
     return normalized;
   }
   if (normalized !== 'Unit Head') {
-    return normalized;
+    if (normalized) return normalized;
+    const customRole = String(user.role || '').trim();
+    return customRole || null;
   }
   const hints = [user.code, user.name].filter(Boolean).map((v) => String(v));
   if (hints.some(matchesProductionManager)) return 'Production Manager';
@@ -146,7 +154,7 @@ function getSessionRoleConfig(user: UserSession | null | undefined): RoleConfig 
     return null;
   }
   return {
-    defaultRoute: user.default_route || '/overview',
+    defaultRoute: normalizeAppRoute(user.default_route),
     allowedMenus: user.allowed_menus,
   };
 }
@@ -188,15 +196,19 @@ export const getDefaultRoute = (
         : roleOrUser
           ? { role: roleOrUser as string }
           : null;
-  const normalizedRole = getEffectiveRole(user);
-  if (!normalizedRole) return '/overview';
 
+  const normalizedRole = getEffectiveRole(user);
   if (normalizedRole === 'Machine Centre User' && user?.machine_id) {
     return `/mobile/${encodeURIComponent(user.machine_id)}`;
   }
 
   const config = resolveRoleConfig(user);
-  return config?.defaultRoute || '/overview';
+  if (config?.defaultRoute) {
+    return normalizeAppRoute(config.defaultRoute);
+  }
+
+  if (!normalizedRole) return '/overview';
+  return normalizeAppRoute(roleConfigs[normalizedRole as UserRole]?.defaultRoute);
 };
 
 /** Merge fresh permissions from /api/auth/session into stored user_info */
