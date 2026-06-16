@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Plus, Edit, Trash2, X, Download, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Download, Loader2, RefreshCw, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -38,12 +38,26 @@ export const UsersMasterForm: React.FC = () => {
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(5);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
 
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchRecords = async () => {
     setFetchLoading(true);
     try {
-      const response = await apiFetch(`${API_BASE}/api/masters/users?page=${currentPage}&limit=${itemsPerPage}`);
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(itemsPerPage),
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      const response = await apiFetch(`${API_BASE}/api/masters/users?${params.toString()}`);
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
@@ -83,14 +97,13 @@ export const UsersMasterForm: React.FC = () => {
   };
 
   React.useEffect(() => {
-    fetchRecords();
     fetchWorkCentres();
     fetchMachineCentres();
   }, []);
 
   React.useEffect(() => {
     fetchRecords();
-  }, [currentPage, itemsPerPage]);
+  }, [currentPage, itemsPerPage, debouncedSearch]);
 
   const handleRefresh = async () => {
     await fetchRecords();
@@ -222,7 +235,17 @@ export const UsersMasterForm: React.FC = () => {
       <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Users Master</h1>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
+            <div className="relative w-full sm:w-64">
+              <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search users..."
+                className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
             <button
               type="button"
               onClick={handleRefresh}
@@ -459,7 +482,7 @@ export const UsersMasterForm: React.FC = () => {
 
         {records.length === 0 && (
           <div className="text-center py-8 text-gray-500">
-            No users found
+            {debouncedSearch ? 'No matching users found' : 'No users found'}
           </div>
         )}
 

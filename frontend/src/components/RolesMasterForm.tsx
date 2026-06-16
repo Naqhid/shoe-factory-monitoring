@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Loader2, RefreshCw, RotateCcw, Bookmark } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Loader2, RefreshCw, RotateCcw, Bookmark, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch, API_BASE_URL } from '../services/api';
 import { ALL_MENU_DEFINITIONS } from '../utils/roleConfig';
@@ -55,15 +55,27 @@ export const RolesMasterForm: React.FC = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const [saveDefaultsLoading, setSaveDefaultsLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   useEffect(() => {
     fetchRoles();
-  }, []);
+  }, [debouncedSearch]);
 
   const fetchRoles = async () => {
     setFetchLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/roles`);
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      const query = params.toString();
+      const res = await apiFetch(`${API_URL}/roles${query ? `?${query}` : ''}`);
       const data = await res.json();
       setRoles(data);
     } catch (error) {
@@ -189,7 +201,17 @@ export const RolesMasterForm: React.FC = () => {
     <div className="p-6">
       <div className="flex flex-wrap justify-between items-center gap-3 mb-2">
         <h2 className="text-2xl font-bold">Role Management</h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative w-full sm:w-64">
+            <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search roles..."
+              className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
           <button
             type="button"
             onClick={() => fetchRoles()}
@@ -317,6 +339,10 @@ export const RolesMasterForm: React.FC = () => {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
             <span className="ml-3 text-gray-600 text-lg">Loading data...</span>
+          </div>
+        ) : roles.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            {debouncedSearch ? 'No matching roles found' : 'No roles found'}
           </div>
         ) : (
           <table className="w-full">
