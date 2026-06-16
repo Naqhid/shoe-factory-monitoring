@@ -60,6 +60,8 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   const [deleteBlocked, setDeleteBlocked] = React.useState(false);
   const [workCentres, setWorkCentres] = React.useState<Array<{ id: number; name: string }>>([]);
   const [machineCentres, setMachineCentres] = React.useState<Array<{ id: number; name: string; machine_id?: string; work_centre_id?: number }>>([]);
+  const [styles, setStyles] = React.useState<Array<{ id: number; code: string; name: string }>>([]);
+  const [selectedStyleId, setSelectedStyleId] = React.useState('');
   const isArchiveTable = ARCHIVE_TABLES.includes(table);
   const needsUsageCheck = USAGE_CHECK_TABLES.includes(table);
   const archiveLabel = title || 'Record';
@@ -92,6 +94,14 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
         if (result.success) setMachineCentres(result.data || []);
       })
       .catch(() => {});
+    if (table === 'machine_centres') {
+      apiFetch(`${API_BASE}/api/masters/styles?limit=500`)
+        .then((r) => r.json())
+        .then((result) => {
+          if (result.success) setStyles(result.data || []);
+        })
+        .catch(() => {});
+    }
   }, [table]);
 
   const lineMachineOptions = React.useMemo(() => {
@@ -109,6 +119,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
         limit: String(itemsPerPage),
       });
       if (debouncedSearch) params.set('search', debouncedSearch);
+      if (table === 'machine_centres' && selectedStyleId) params.set('styleId', selectedStyleId);
       if (isArchiveTable && showArchived) params.set('includeArchived', 'true');
       const response = await apiFetch(`${API_BASE}/api/masters/${table}?${params.toString()}`);
       const result = await response.json();
@@ -127,7 +138,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
 
   React.useEffect(() => {
     fetchRecords();
-  }, [currentPage, itemsPerPage, table, debouncedSearch, showArchived]);
+  }, [currentPage, itemsPerPage, table, debouncedSearch, showArchived, selectedStyleId]);
 
   const resetForm = () => {
     setFormData({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '', machine_centre_id: '', input_machine_id: '', eol_machine_id: '' });
@@ -141,11 +152,6 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
       toast.error('Code and name are required');
       return;
     }
-    if (table === 'employees' && !formData.work_centre_id) {
-      toast.error('Work centre is required for employee');
-      return;
-    }
-
     if (table === 'work_centres' && formData.input_machine_id && formData.eol_machine_id
       && formData.input_machine_id === formData.eol_machine_id) {
       toast.error('Input machine and EOL machine must be different');
@@ -354,6 +360,24 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                 className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            {table === 'machine_centres' && (
+              <select
+                value={selectedStyleId}
+                onChange={(e) => {
+                  setSelectedStyleId(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full sm:w-56 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                aria-label="Filter by article"
+              >
+                <option value="">All articles</option>
+                {styles.map((style) => (
+                  <option key={style.id} value={String(style.id)}>
+                    {style.code} - {style.name}
+                  </option>
+                ))}
+              </select>
+            )}
             {isArchiveTable && (
               <button
                 onClick={() => setShowArchived((prev) => !prev)}
@@ -411,16 +435,15 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
               {(table === 'machine_centres' || table === 'employees') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Work Centre{table === 'machine_centres' ? ' (optional)' : ''}
+                    Work Centre (optional)
                   </label>
                   <select
                     value={formData.work_centre_id}
                     onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required={table === 'employees'}
                   >
                     <option value="">
-                      {table === 'machine_centres' ? 'No work centre' : 'Select Work Centre'}
+                      {table === 'machine_centres' || table === 'employees' ? 'No work centre' : 'Select Work Centre'}
                     </option>
                     {workCentres.map((wc) => (
                       <option key={wc.id} value={wc.id}>{wc.name}</option>
@@ -759,7 +782,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
 
         {records.length === 0 && (
           <div className="text-center py-8 text-gray-500">
-            {debouncedSearch ? 'No matching records found' : 'No records found'}
+            {debouncedSearch || selectedStyleId ? 'No matching records found' : 'No records found'}
           </div>
         )}
 

@@ -411,93 +411,180 @@ const mobileSessionController = {
         try {
             const { work_centre_id, date, status } = req.query;
 
-            let query = `
+            const prodStatsSubquery = `
                 SELECT
-                    ms.session_id,
-                    ms.machine_id,
-                    COALESCE(mc.name, ms.machine_id) AS machine_name,
-                    COALESCE(ms.work_centre_id, mc.work_centre_id) AS work_centre_id,
-                    wc.name AS work_centre_name,
-                    ms.emp_code,
-                    e.name AS emp_name,
-                    ms.status,
-                    ms.activated_at,
-                    ms.created_at,
-                    -- Production metrics from finished cycles during this session
-                    COALESCE(prod_stats.total_output, 0) AS total_output,
-                    COALESCE(prod_stats.total_cycles, 0) AS total_cycles,
-                    COALESCE(prod_stats.total_actual_mins, 0) AS total_actual_mins,
-                    COALESCE(prod_stats.total_target_mins, 0) AS total_target_mins,
-                    COALESCE(prod_stats.avg_efficiency, 0) AS avg_efficiency,
-                    COALESCE(prod_stats.total_idle_mins, 0) AS total_idle_mins,
-                    COALESCE(run_stats.has_active_cycle, 0) AS has_active_cycle,
-                    -- Last logout/completed time
-                    prod_stats.last_finish_time AS last_finish_time
-                FROM mobile_sessions ms
-                LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
-                LEFT JOIN work_centres wc ON wc.id = COALESCE(ms.work_centre_id, mc.work_centre_id)
-                LEFT JOIN employees e ON e.id = ms.emp_id
-                LEFT JOIN (
-                    -- Aggregate production stats per machine/employee/date for finished cycles
-                    SELECT 
-                        machine_id,
-                        emp_id,
-                        prod_date,
-                        SUM(output_pairs) AS total_output,
-                        COUNT(*) AS total_cycles,
-                        SUM(actual_time) AS total_actual_mins,
-                        SUM(target_mins) AS total_target_mins,
-                        CASE 
-                            WHEN SUM(actual_time) > 0 THEN ROUND((SUM(target_mins) / SUM(actual_time)) * 100, 1)
-                            ELSE 0 
-                        END AS avg_efficiency,
-                        SUM(idle_mins) AS total_idle_mins,
-                        MAX(finish_time) AS last_finish_time
-                    FROM machine_centre_production
-                    WHERE button_status = 2
-                    GROUP BY machine_id, emp_id, prod_date
-                ) prod_stats 
-                    ON prod_stats.machine_id = ms.machine_id 
-                    AND prod_stats.emp_id = ms.emp_code
-                    AND prod_stats.prod_date = DATE(ms.activated_at)
-                LEFT JOIN (
-                    -- Running cycle signal for this session day
-                    SELECT
-                        machine_id,
-                        emp_id,
-                        prod_date,
-                        CASE
-                            WHEN SUM(CASE WHEN button_status = 1 THEN 1 ELSE 0 END) > 0 THEN 1
-                            ELSE 0
-                        END AS has_active_cycle
-                    FROM machine_centre_production
-                    WHERE button_status != 2
-                    GROUP BY machine_id, emp_id, prod_date
-                ) run_stats
-                    ON run_stats.machine_id = ms.machine_id
-                    AND run_stats.emp_id = ms.emp_code
-                    AND run_stats.prod_date = DATE(ms.activated_at)
-                WHERE ms.activated_at IS NOT NULL
+                    machine_id,
+                    emp_id,
+                    prod_date,
+                    SUM(output_pairs) AS total_output,
+                    COUNT(*) AS total_cycles,
+                    SUM(actual_time) AS total_actual_mins,
+                    SUM(target_mins) AS total_target_mins,
+                    CASE
+                        WHEN SUM(actual_time) > 0 THEN ROUND((SUM(target_mins) / SUM(actual_time)) * 100, 1)
+                        ELSE 0
+                    END AS avg_efficiency,
+                    SUM(idle_mins) AS total_idle_mins,
+                    MIN(start_time) AS first_start_time,
+                    MAX(finish_time) AS last_finish_time
+                FROM machine_centre_production
+                WHERE button_status = 2
+                GROUP BY machine_id, emp_id, prod_date
             `;
 
+            const runStatsSubquery = `
+                SELECT
+                    machine_id,
+                    emp_id,
+                    prod_date,
+                    CASE
+                        WHEN SUM(CASE WHEN button_status = 1 THEN 1 ELSE 0 END) > 0 THEN 1
+                        ELSE 0
+                    END AS has_active_cycle
+                FROM machine_centre_production
+                WHERE button_status != 2
+                GROUP BY machine_id, emp_id, prod_date
+            `;
+
+            let query;
             const params = [];
 
+            if (date) {
+                // mobile_sessions.activated_at is overwritten on each login, so historical dates
+                // must include production activity (prod_date) as well as same-day sessions.
+                query = `
+                    WITH day_keys AS (
+                        SELECT DISTINCT
+                            mcp.machine_id,
+                            mcp.emp_id AS emp_code,
+                            mcp.work_centre_id,
+                            mcp.prod_date AS log_date
+                        FROM machine_centre_production mcp
+                        WHERE DATE(mcp.prod_date) = DATE(?)
+
+                        UNION
+
+                        SELECT
+                            ms.machine_id,
+                            ms.emp_code,
+                            COALESCE(ms.work_centre_id, mc.work_centre_id) AS work_centre_id,
+                            DATE(ms.activated_at) AS log_date
+                        FROM mobile_sessions ms
+                        LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
+                        WHERE ms.activated_at IS NOT NULL
+                          AND DATE(ms.activated_at) = DATE(?)
+                    )
+                    SELECT
+                        COALESCE(
+                            ms.session_id,
+                            CONCAT(dk.machine_id, ':', dk.emp_code, ':', DATE_FORMAT(dk.log_date, '%Y-%m-%d'))
+                        ) AS session_id,
+                        dk.machine_id,
+                        COALESCE(mc.name, dk.machine_id) AS machine_name,
+                        dk.work_centre_id,
+                        wc.name AS work_centre_name,
+                        dk.emp_code,
+                        e.name AS emp_name,
+                        CASE
+                            WHEN ms.session_id IS NOT NULL AND DATE(ms.activated_at) = DATE(dk.log_date) THEN ms.status
+                            ELSE 'expired'
+                        END AS status,
+                        COALESCE(
+                            CASE
+                                WHEN ms.session_id IS NOT NULL AND DATE(ms.activated_at) = DATE(dk.log_date)
+                                THEN ms.activated_at
+                            END,
+                            prod_stats.first_start_time
+                        ) AS activated_at,
+                        ms.created_at,
+                        COALESCE(prod_stats.total_output, 0) AS total_output,
+                        COALESCE(prod_stats.total_cycles, 0) AS total_cycles,
+                        COALESCE(prod_stats.total_actual_mins, 0) AS total_actual_mins,
+                        COALESCE(prod_stats.total_target_mins, 0) AS total_target_mins,
+                        COALESCE(prod_stats.avg_efficiency, 0) AS avg_efficiency,
+                        COALESCE(prod_stats.total_idle_mins, 0) AS total_idle_mins,
+                        COALESCE(run_stats.has_active_cycle, 0) AS has_active_cycle,
+                        prod_stats.last_finish_time AS last_finish_time
+                    FROM day_keys dk
+                    LEFT JOIN mobile_sessions ms
+                        ON ms.machine_id = dk.machine_id
+                        AND ms.emp_code = dk.emp_code
+                    LEFT JOIN machine_centres mc ON mc.machine_id = dk.machine_id
+                    LEFT JOIN work_centres wc ON wc.id = dk.work_centre_id
+                    LEFT JOIN employees e ON e.code = dk.emp_code
+                    LEFT JOIN (${prodStatsSubquery}) prod_stats
+                        ON prod_stats.machine_id = dk.machine_id
+                        AND prod_stats.emp_id = dk.emp_code
+                        AND prod_stats.prod_date = dk.log_date
+                    LEFT JOIN (${runStatsSubquery}) run_stats
+                        ON run_stats.machine_id = dk.machine_id
+                        AND run_stats.emp_id = dk.emp_code
+                        AND run_stats.prod_date = dk.log_date
+                    WHERE DATE(dk.log_date) = DATE(?)
+                `;
+                params.push(date, date, date);
+            } else {
+                query = `
+                    SELECT
+                        ms.session_id,
+                        ms.machine_id,
+                        COALESCE(mc.name, ms.machine_id) AS machine_name,
+                        COALESCE(ms.work_centre_id, mc.work_centre_id) AS work_centre_id,
+                        wc.name AS work_centre_name,
+                        ms.emp_code,
+                        e.name AS emp_name,
+                        ms.status,
+                        ms.activated_at,
+                        ms.created_at,
+                        COALESCE(prod_stats.total_output, 0) AS total_output,
+                        COALESCE(prod_stats.total_cycles, 0) AS total_cycles,
+                        COALESCE(prod_stats.total_actual_mins, 0) AS total_actual_mins,
+                        COALESCE(prod_stats.total_target_mins, 0) AS total_target_mins,
+                        COALESCE(prod_stats.avg_efficiency, 0) AS avg_efficiency,
+                        COALESCE(prod_stats.total_idle_mins, 0) AS total_idle_mins,
+                        COALESCE(run_stats.has_active_cycle, 0) AS has_active_cycle,
+                        prod_stats.last_finish_time AS last_finish_time
+                    FROM mobile_sessions ms
+                    LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
+                    LEFT JOIN work_centres wc ON wc.id = COALESCE(ms.work_centre_id, mc.work_centre_id)
+                    LEFT JOIN employees e ON e.id = ms.emp_id
+                    LEFT JOIN (${prodStatsSubquery}) prod_stats
+                        ON prod_stats.machine_id = ms.machine_id
+                        AND prod_stats.emp_id = ms.emp_code
+                        AND prod_stats.prod_date = DATE(ms.activated_at)
+                    LEFT JOIN (${runStatsSubquery}) run_stats
+                        ON run_stats.machine_id = ms.machine_id
+                        AND run_stats.emp_id = ms.emp_code
+                        AND run_stats.prod_date = DATE(ms.activated_at)
+                    WHERE ms.activated_at IS NOT NULL
+                `;
+            }
+
             if (work_centre_id) {
-                query += ' AND COALESCE(ms.work_centre_id, mc.work_centre_id) = ?';
+                if (date) {
+                    query += ' AND dk.work_centre_id = ?';
+                } else {
+                    query += ' AND COALESCE(ms.work_centre_id, mc.work_centre_id) = ?';
+                }
                 params.push(work_centre_id);
             }
 
-            if (date) {
-                query += ' AND DATE(ms.activated_at) = DATE(?)';
-                params.push(date);
-            }
-
             if (status) {
-                query += ' AND ms.status = ?';
-                params.push(status);
+                if (date) {
+                    query += ` AND (
+                        (ms.session_id IS NOT NULL AND DATE(ms.activated_at) = DATE(?) AND ms.status = ?)
+                        OR (ms.session_id IS NULL AND ? = 'expired')
+                    )`;
+                    params.push(date, status, status);
+                } else {
+                    query += ' AND ms.status = ?';
+                    params.push(status);
+                }
             }
 
-            query += ' ORDER BY ms.activated_at DESC';
+            query += date
+                ? ' ORDER BY activated_at DESC'
+                : ' ORDER BY ms.activated_at DESC';
 
             const [rows] = await pool.execute(query, params);
 

@@ -18,8 +18,14 @@ interface UserRecord {
   machine_id?: string;
 }
 
+interface RoleOption {
+  id?: number;
+  role_name: string;
+}
+
 export const UsersMasterForm: React.FC = () => {
   const [records, setRecords] = React.useState<UserRecord[]>([]);
+  const [roles, setRoles] = React.useState<RoleOption[]>([]);
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<UserRecord | null>(null);
   const [formData, setFormData] = React.useState({
@@ -96,9 +102,26 @@ export const UsersMasterForm: React.FC = () => {
     }
   };
 
+  const fetchRoles = async () => {
+    try {
+      const response = await apiFetch(`${API_BASE}/api/roles`);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setRoles(data);
+      }
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+    }
+  };
+
+  const defaultRole = React.useMemo(() => {
+    return roles.find((r) => r.role_name === 'Admin')?.role_name || roles[0]?.role_name || 'Admin';
+  }, [roles]);
+
   React.useEffect(() => {
     fetchWorkCentres();
     fetchMachineCentres();
+    fetchRoles();
   }, []);
 
   React.useEffect(() => {
@@ -109,12 +132,13 @@ export const UsersMasterForm: React.FC = () => {
     await fetchRecords();
     await fetchWorkCentres();
     await fetchMachineCentres();
+    await fetchRoles();
   };
 
   const filteredMachines = machineCentres;
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', password: '', role: 'Admin', work_centre_id: '', machine_id: '' });
+    setFormData({ code: '', name: '', password: '', role: defaultRole, work_centre_id: '', machine_id: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -339,14 +363,18 @@ export const UsersMasterForm: React.FC = () => {
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
-                  <option value="Admin">Admin</option>
-                  <option value="Line Supervisor">Line Supervisor</option>
-                  <option value="Machine Centre User">Machine Centre User</option>
-                  <option value="IED">IED</option>
-                  <option value="Planner">Planner</option>
-                  <option value="Unit Head">Unit Head</option>
-                  <option value="Production Manager">Production Manager</option>
-                  <option value="Quality">Quality</option>
+                  {roles.length === 0 ? (
+                    <option value={formData.role}>{formData.role || 'Loading roles…'}</option>
+                  ) : (
+                    roles.map((role) => (
+                      <option key={role.id ?? role.role_name} value={role.role_name}>
+                        {role.role_name}
+                      </option>
+                    ))
+                  )}
+                  {formData.role && !roles.some((r) => r.role_name === formData.role) && (
+                    <option value={formData.role}>{formData.role}</option>
+                  )}
                 </select>
               </div>
 

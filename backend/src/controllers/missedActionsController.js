@@ -299,6 +299,18 @@ exports.getMissedActions = async (req, res, next) => {
     // Prevent stale "active" sessions from previous shifts/days from polluting today's dashboard.
     // Default keeps current-day sessions and a small lookback window for midnight edge cases.
     const sessionLookbackHours = Math.max(1, Number(req.query.sessionLookbackHours) || 8);
+    let workCentreId = parseInt(req.query.work_centre_id, 10);
+    const lineName = String(req.query.line || '').trim();
+    if ((!workCentreId || Number.isNaN(workCentreId)) && lineName && lineName !== 'all') {
+      const [wcRows] = await db.query('SELECT id FROM work_centres WHERE name = ? LIMIT 1', [lineName]);
+      if (wcRows[0]?.id) workCentreId = Number(wcRows[0].id);
+    }
+    const filterByWorkCentre = Number.isFinite(workCentreId) && workCentreId > 0;
+    const queryParams = [sessionLookbackHours];
+    const workCentreFilterSql = filterByWorkCentre
+      ? ' AND COALESCE(ms.work_centre_id, lr.work_centre_id, mc.work_centre_id) = ?'
+      : '';
+    if (filterByWorkCentre) queryParams.push(workCentreId);
 
     const [rows] = await db.query(
       `
@@ -334,10 +346,11 @@ exports.getMissedActions = async (req, res, next) => {
         ) p2 ON p1.machine_id = p2.machine_id AND p1.created_at = p2.max_created
       ) lr ON lr.machine_id = ms.machine_id
       LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
-      LEFT JOIN work_centres wc ON wc.id = COALESCE(ms.work_centre_id, lr.work_centre_id)
+      LEFT JOIN work_centres wc ON wc.id = COALESCE(ms.work_centre_id, lr.work_centre_id, mc.work_centre_id)
       LEFT JOIN employees e ON e.code = ms.emp_code
       WHERE ms.status = 'active'
         AND ms.activated_at >= DATE_SUB(CURDATE(), INTERVAL ? HOUR)
+        ${workCentreFilterSql}
         AND NOT EXISTS (
           SELECT 1 FROM machine_centre_production m
           WHERE m.machine_id = ms.machine_id
@@ -350,7 +363,7 @@ exports.getMissedActions = async (req, res, next) => {
       ORDER BY ms.machine_id ASC
       `
       ,
-      [sessionLookbackHours]
+      queryParams
     );
 
     const settingsMap = await idleReminderSettings.getMapByMachineId();
