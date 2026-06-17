@@ -38,6 +38,8 @@ import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import { formatSinceTimeHHMM } from '../utils/dateTimeFormat';
 import { TimeLossReasonDialog } from './TimeLossReasonDialog';
 import { ProductionDayLockPanel } from './ProductionDayLockPanel';
+import { LastWorkingDayCompareCard } from './LastWorkingDayCompareCard';
+import { getCompareAsOf } from '../utils/compareDateUtils';
 import {
   formatReasonDisplayLabel,
   M4_BADGE_CLASS,
@@ -152,24 +154,6 @@ const addDaysToDateKey = (dateKey: string, deltaDays: number) => {
   const m = String(base.getMonth() + 1).padStart(2, '0');
   const d = String(base.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-};
-
-const formatLocalDateTimeForApi = (date: Date) => {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mi = String(date.getMinutes()).padStart(2, '0');
-  const ss = String(date.getSeconds()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
-};
-
-/** Wall-clock as-of for yesterday compare (today = now; past dates = shift end). */
-const getLineCompareAsOf = (selectedDate: string, now: Date) => {
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  if (selectedDate === todayKey) return formatLocalDateTimeForApi(now);
-  return `${selectedDate} 17:35:00`;
 };
 
 const paceEfficiencyCircleClass = (pct: number | null): string => {
@@ -829,7 +813,7 @@ export const ProductionTracker: React.FC = () => {
 
   const loadYesterdayCompare = useCallback(async () => {
     if (!Number.isFinite(detailWorkCentreId)) return;
-    const asOf = encodeURIComponent(getLineCompareAsOf(selectedDate, currentTime));
+    const asOf = encodeURIComponent(getCompareAsOf(selectedDate, currentTime));
     try {
       const res = await apiFetch(
         `${API_BASE}/api/tracker/line-yesterday-compare?work_centre_id=${detailWorkCentreId}&date=${selectedDate}&as_of=${asOf}`
@@ -945,10 +929,6 @@ export const ProductionTracker: React.FC = () => {
       currentTime
     );
     const totalLossLabel = formatNetBalanceDuration(-totalLineLossMins);
-    const vsYesterdaySameTime =
-      yesterdayCompare != null
-        ? detailLinePace.actual - yesterdayCompare.sameTime
-        : null;
     const shiftTotals = getProductiveShiftTotals(currentTime);
     const paceGapPairs = Math.max(0, detailLinePace.expected - detailLinePace.actual);
     let linePaceTrend: 'up' | 'down' | 'flat' | null = null;
@@ -1304,79 +1284,12 @@ export const ProductionTracker: React.FC = () => {
                       )}
 
                       {/* Last working day compare */}
-                      {yesterdayCompare != null && vsYesterdaySameTime != null && (
-                        <div className="space-y-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            vs last working day
-                          </p>
-                          <div
-                            className={`rounded-xl border-2 p-3 shadow-sm ${
-                              vsYesterdaySameTime >= 0
-                                ? 'border-emerald-400/90 bg-emerald-50'
-                                : 'border-rose-400/90 bg-rose-50'
-                            }`}
-                          >
-                            <p
-                              className={`text-[10px] font-bold uppercase tracking-wide ${
-                                vsYesterdaySameTime >= 0 ? 'text-emerald-800' : 'text-rose-800'
-                              }`}
-                            >
-                              Same time · {yesterdayCompare.compareDateLabel} · {yesterdayCompare.asOfTimeLabel}
-                            </p>
-                            <div className="mt-2.5 flex items-stretch gap-2 sm:gap-3">
-                              <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 sm:gap-2 rounded-lg bg-white/90 px-2 py-2.5 ring-1 ring-black/5">
-                                <div className="text-center min-w-[2.5rem]">
-                                  <p className="text-[9px] font-bold uppercase text-slate-400 truncate max-w-[4.5rem]">
-                                    {yesterdayCompare.compareDateLabel}
-                                  </p>
-                                  <p className="text-lg sm:text-xl font-black tabular-nums text-slate-500">
-                                    {yesterdayCompare.sameTime}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`text-lg font-black ${
-                                    vsYesterdaySameTime >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                                  }`}
-                                  aria-hidden
-                                >
-                                  →
-                                </span>
-                                <div className="text-center min-w-[2.5rem]">
-                                  <p className="text-[9px] font-bold uppercase text-slate-400">Today</p>
-                                  <p
-                                    className={`text-lg sm:text-xl font-black tabular-nums ${
-                                      vsYesterdaySameTime >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                                    }`}
-                                  >
-                                    {detailLinePace.actual}
-                                  </p>
-                                </div>
-                              </div>
-                              <div
-                                className={`flex shrink-0 flex-col items-center justify-center rounded-lg px-2.5 py-2 min-w-[3.25rem] sm:min-w-[3.5rem] ${
-                                  vsYesterdaySameTime >= 0
-                                    ? 'bg-emerald-600 text-white shadow-sm'
-                                    : 'bg-rose-600 text-white shadow-sm'
-                                }`}
-                              >
-                                <p className="text-[9px] font-bold uppercase opacity-90">Δ</p>
-                                <p className="text-lg sm:text-xl font-black tabular-nums leading-none">
-                                  {vsYesterdaySameTime >= 0 ? '+' : ''}
-                                  {vsYesterdaySameTime}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-                            <p className="text-xs font-bold text-slate-600">
-                              {yesterdayCompare.compareDateLabel} full day
-                            </p>
-                            <p className="shrink-0 text-base font-black tabular-nums text-slate-800 whitespace-nowrap">
-                              {yesterdayCompare.fullDay}
-                              <span className="ml-1 text-xs font-semibold text-slate-500">pairs</span>
-                            </p>
-                          </div>
-                        </div>
+                      {yesterdayCompare != null && (
+                        <LastWorkingDayCompareCard
+                          data={yesterdayCompare}
+                          todayActual={detailLinePace.actual}
+                          variant="light"
+                        />
                       )}
                     </div>
                   </div>

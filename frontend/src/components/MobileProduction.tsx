@@ -6,8 +6,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { classifyLateCycleCategory, computeCycleNetLostMins } from '../utils/cycleLostMins';
 import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours } from '../utils/shiftPaceUtils';
+import { getCompareAsOf, todayDateKey } from '../utils/compareDateUtils';
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
+import { LastWorkingDayCompareCard, type LastWorkingDayCompareData } from './LastWorkingDayCompareCard';
 
 const formatPairsPerHour = (value: number | null | undefined) => {
     if (value == null || !Number.isFinite(value)) return '—';
@@ -287,6 +289,8 @@ export const MobileProduction: React.FC = () => {
     const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number; early_mins: number; lost_mins: number; output_pairs?: number }>>([]);
     const [timingLoading, setTimingLoading] = useState(false);
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
+    const [yesterdayCompare, setYesterdayCompare] = useState<LastWorkingDayCompareData | null>(null);
+    const [loadingYesterdayCompare, setLoadingYesterdayCompare] = useState(false);
     const [selectedTargetPairs, setSelectedTargetPairs] = useState(MOBILE_PAIRS_PER_BIN);
     const baseTargetMinsRef = React.useRef(0);
     /** Routing mins column is per bin (6 pairs after mins_6_prs_box migration). */
@@ -1056,6 +1060,40 @@ export const MobileProduction: React.FC = () => {
     }, [productionData?.id, productionData?.button_status, productionData?.is_paused, API_BASE]);
 
     // Fetch summary data from machine_centre_summary table
+    const fetchYesterdayCompare = React.useCallback(async (machineId: string, workCentreId?: number) => {
+        if (!machineId) {
+            setYesterdayCompare(null);
+            return;
+        }
+        setLoadingYesterdayCompare(true);
+        try {
+            const dateKey = todayDateKey();
+            const asOf = encodeURIComponent(getCompareAsOf(dateKey, currentTime));
+            const wcParam =
+                workCentreId != null && Number.isFinite(workCentreId)
+                    ? `&work_centre_id=${workCentreId}`
+                    : '';
+            const response = await apiFetch(
+                `${API_BASE}/api/mobile-production/machine/${encodeURIComponent(machineId)}/yesterday-compare?date=${dateKey}&as_of=${asOf}${wcParam}&_=${Date.now()}`
+            );
+            const json = await response.json();
+            if (!json.success || !json.compare_date) {
+                setYesterdayCompare(null);
+                return;
+            }
+            setYesterdayCompare({
+                sameTime: Math.round(Number(json.compare_same_time_output ?? 0)),
+                fullDay: Math.round(Number(json.compare_full_day_output ?? 0)),
+                asOfTimeLabel: String(json.as_of_time_label || '').trim() || '—',
+                compareDateLabel: String(json.compare_date_label || json.compare_date || '').trim() || '—',
+            });
+        } catch {
+            setYesterdayCompare(null);
+        } finally {
+            setLoadingYesterdayCompare(false);
+        }
+    }, [currentTime]);
+
     const fetchSummaryData = async (machineId: string, expectedMinTotal?: number) => {
         setLoadingSummary(true);
         try {
@@ -1126,6 +1164,7 @@ export const MobileProduction: React.FC = () => {
             await Promise.all([
                 fetchSummaryData(productionData.machine_id),
                 fetchIdleReminderSettings(productionData.machine_id),
+                fetchYesterdayCompare(productionData.machine_id, productionData.work_centre_id),
             ]);
             toast.success('Data refreshed');
         } catch {
@@ -1179,6 +1218,24 @@ export const MobileProduction: React.FC = () => {
             fetchSummaryData(productionData.machine_id);
         }
     }, [productionData?.machine_id]);
+
+    useEffect(() => {
+        if (!productionData?.machine_id || !headerExpanded) return;
+        void fetchYesterdayCompare(productionData.machine_id, productionData.work_centre_id);
+    }, [
+        productionData?.machine_id,
+        productionData?.work_centre_id,
+        headerExpanded,
+        fetchYesterdayCompare,
+    ]);
+
+    useEffect(() => {
+        if (!headerExpanded || !productionData?.machine_id) return;
+        const interval = window.setInterval(() => {
+            void fetchYesterdayCompare(productionData.machine_id, productionData.work_centre_id);
+        }, 30000);
+        return () => window.clearInterval(interval);
+    }, [headerExpanded, productionData?.machine_id, productionData?.work_centre_id, fetchYesterdayCompare]);
 
     // Session Initialization and Polling
     useEffect(() => {
@@ -2196,6 +2253,62 @@ export const MobileProduction: React.FC = () => {
                                         )}
                                     </button>
                                 </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Operator</p>
+                                        <p className="font-semibold truncate">
+                                            {formatOperatorDisplay(employeeName, productionData.emp_id)}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Machine ID</p>
+                                        <p className="font-semibold truncate">{resolvedMachineId || productionData.machine_id}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Line Name</p>
+                                        <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Process Name</p>
+                                        <p className="font-semibold truncate">{machineName || 'N/A'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Bins Completed (Today)</p>
+                                        <p className="font-semibold truncate">
+                                            {loadingSummary
+                                                ? '...'
+                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
+                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
+                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
+                                        </p>
+                                        <p className="text-[11px] opacity-80">
+                                            ~bins at {MOBILE_PAIRS_PER_BIN} pr/box (standard)
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Date & Time</p>
+                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    </div>
+                                </div>
+                                {yesterdayCompare ? (
+                                    <div className="col-span-2 md:col-span-6">
+                                        <LastWorkingDayCompareCard
+                                            data={yesterdayCompare}
+                                            todayActual={totalOutputToday}
+                                            variant="mobile"
+                                        />
+                                    </div>
+                                ) : null}
                                 {loadingSummary && !dailyPaceSnapshot ? (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/80 py-1">
                                         Loading daily speed…
@@ -2262,53 +2375,6 @@ export const MobileProduction: React.FC = () => {
                                         No routing target time for this machine — shift target and speed are unavailable.
                                     </div>
                                 )}
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Operator</p>
-                                        <p className="font-semibold truncate">
-                                            {formatOperatorDisplay(employeeName, productionData.emp_id)}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Machine ID</p>
-                                        <p className="font-semibold truncate">{resolvedMachineId || productionData.machine_id}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Line Name</p>
-                                        <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Process Name</p>
-                                        <p className="font-semibold truncate">{machineName || 'N/A'}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Bins Completed (Today)</p>
-                                        <p className="font-semibold truncate">
-                                            {loadingSummary
-                                                ? '...'
-                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
-                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
-                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
-                                        </p>
-                                        <p className="text-[11px] opacity-80">
-                                            ~bins at {MOBILE_PAIRS_PER_BIN} pr/box (standard)
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Date & Time</p>
-                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                    </div>
-                                </div>
                                 <button
                                     type="button"
                                     onClick={toggleIdleReminder}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import {
   RefreshCw,
@@ -16,6 +17,7 @@ import {
   TrendingUp,
   X,
   History,
+  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -109,6 +111,42 @@ const FILTER_CONTROL =
 const BTN_PRIMARY =
   'inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors';
 
+const LOGS_MACHINE_STORAGE_KEY = 'logs_context_machine_id';
+
+const readUserMachineId = (): string => {
+  try {
+    const raw = localStorage.getItem('user_info');
+    if (!raw) return '';
+    const user = JSON.parse(raw);
+    return String(user.machine_id || '').trim();
+  } catch {
+    return '';
+  }
+};
+
+const resolveContextMachineId = (searchParams: URLSearchParams): string => {
+  const fromUrl =
+    searchParams.get('machine') ||
+    searchParams.get('machine_id') ||
+    searchParams.get('machineId') ||
+    '';
+  if (fromUrl.trim()) {
+    try {
+      localStorage.setItem(LOGS_MACHINE_STORAGE_KEY, fromUrl.trim());
+    } catch {
+      // ignore storage errors
+    }
+    return fromUrl.trim();
+  }
+  try {
+    const stored = localStorage.getItem(LOGS_MACHINE_STORAGE_KEY);
+    if (stored?.trim()) return stored.trim();
+  } catch {
+    // ignore storage errors
+  }
+  return readUserMachineId();
+};
+
 const paceEfficiencyClass = (pct: number | null | undefined): string => {
   const n = Number(pct);
   if (!Number.isFinite(n) || n <= 0) return 'text-slate-400';
@@ -133,6 +171,7 @@ const formatPaceEfficiencyLabel = (log: SessionLogEntry): string => {
 };
 
 const LogPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const today = new Date().toLocaleDateString('en-CA');
   const [logs, setLogs] = React.useState<SessionLogEntry[]>([]);
   const [workCentres, setWorkCentres] = React.useState<WorkCentre[]>([]);
@@ -156,6 +195,32 @@ const LogPage: React.FC = () => {
   const [employees, setEmployees] = React.useState<EmployeeOption[]>([]);
 
   const todayKey = React.useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+
+  const contextMachineId = React.useMemo(
+    () => resolveContextMachineId(searchParams),
+    [searchParams]
+  );
+
+  const thisMachineLogin = React.useMemo(() => {
+    if (!contextMachineId || selectedDate !== todayKey) return null;
+    return (
+      logs.find(
+        (log) =>
+          String(log.machine_id) === String(contextMachineId) &&
+          (log.status === 'active' || log.status === 'waiting')
+      ) || null
+    );
+  }, [contextMachineId, logs, selectedDate, todayKey]);
+
+  const contextMachineLabel = React.useMemo(() => {
+    if (!contextMachineId) return '';
+    const anyRow = logs.find((log) => String(log.machine_id) === String(contextMachineId));
+    if (anyRow?.machine_name) return `${anyRow.machine_name} (${contextMachineId})`;
+    return contextMachineId;
+  }, [contextMachineId, logs]);
+
+  const showThisMachineNotLoggedIn =
+    Boolean(contextMachineId) && selectedDate === todayKey && !loading && !thisMachineLogin;
 
   const lineLabel = (wc: WorkCentre) => (wc.code ? `${wc.code} - ${wc.name}` : wc.name);
 
@@ -637,6 +702,29 @@ const LogPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {showThisMachineNotLoggedIn && (
+          <div
+            className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5 shadow-sm ring-1 ring-amber-200/70 flex items-start gap-3"
+            role="alert"
+          >
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-amber-950">This machine is not logged in</p>
+              <p className="text-sm text-amber-900/90 mt-0.5">
+                <span className="font-semibold">{contextMachineLabel}</span> has no active operator session today.
+                Use{' '}
+                <Link
+                  to={`/line_setup_form?machine=${encodeURIComponent(contextMachineId)}`}
+                  className="font-semibold underline underline-offset-2 hover:text-amber-950"
+                >
+                  Line Setup
+                </Link>{' '}
+                or <span className="font-semibold">Same as yesterday</span> above to log in.
+              </p>
+            </div>
+          </div>
+        )}
 
         {yesterdayPreviewOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
