@@ -1,6 +1,268 @@
 const pool = require('../../config/database');
 const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
+const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
+const { buildPaceSnapshot, routingMapKey, toLocalDateStr } = require('../utils/shiftPaceEfficiency');
+
+async function loadRoutingMinsMap(fromDate, toDate, workCentreId) {
+    const routingMinsCol = await getRoutingMinsColumnName();
+    const routingParams = [fromDate, toDate];
+    if (workCentreId) routingParams.push(workCentreId);
+    const [routingRows] = await pool.query(`
+        SELECT
+            pp2.work_centre_id,
+            DATE(pp2.plan_date) AS plan_date,
+            prl.machine_centre_id AS machine_id,
+            ROUND(SUM(prl.${routingMinsCol}), 2) AS routing_mins_per_box
+        FROM production_routing_lines prl
+        INNER JOIN production_routing_header prh
+            ON prl.routing_header_id = prh.id AND prh.deleted_at IS NULL
+        INNER JOIN production_plan pp2
+            ON prh.style_id = pp2.style_id AND pp2.deleted_at IS NULL
+        WHERE DATE(pp2.plan_date) BETWEEN ? AND ?
+            ${workCentreId ? 'AND pp2.work_centre_id = ?' : ''}
+        GROUP BY pp2.work_centre_id, DATE(pp2.plan_date), prl.machine_centre_id
+    `, routingParams);
+
+    const map = new Map();
+    for (const row of routingRows) {
+        map.set(routingMapKey(row.work_centre_id, row.plan_date, row.machine_id), Number(row.routing_mins_per_box) || 0);
+    }
+    return map;
+}
+
+async function enrichSessionLogsWithPace(rows, { filterDate, workCentreId } = {}) {
+    if (!rows.length) return rows;
+
+    const pairsPerBin = await getPairsPerRoutingBin();
+    let fromDate = filterDate ? toLocalDateStr(filterDate) : null;
+    let toDate = fromDate;
+
+    if (!fromDate) {
+        const dateKeys = rows.map((r) => toLocalDateStr(r.activated_at)).filter(Boolean);
+        if (!dateKeys.length) {
+            return rows.map((row) => ({
+                ...row,
+                pace_efficiency: 0,
+                pace_in_progress_actual: 0,
+                pace_in_progress_expected: 0,
+                pace_daily_target: 0,
+            }));
+        }
+        fromDate = dateKeys.reduce((a, b) => (a < b ? a : b));
+        toDate = dateKeys.reduce((a, b) => (a > b ? a : b));
+    }
+
+    const routingMap = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
+    const clockNow = new Date();
+
+    return rows.map((row) => {
+        const dateStr = filterDate ? toLocalDateStr(filterDate) : toLocalDateStr(row.activated_at);
+        const output = Number(row.total_output) || 0;
+        const routingMins = routingMap.get(routingMapKey(row.work_centre_id, dateStr, row.machine_id)) || 0;
+        const pace = buildPaceSnapshot(output, routingMins, pairsPerBin, dateStr, clockNow);
+        return {
+            ...row,
+            pace_efficiency: pace.pacePct,
+            pace_in_progress_actual: pace.actual,
+            pace_in_progress_expected: pace.expected,
+            pace_daily_target: pace.daily,
+        };
+    });
+}
+
+function localDateKey(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function yesterdayDateKey() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return localDateKey(d);
+}
+
+async function querySessionLogRowsForDate(date, workCentreId = null) {
+    const prodStatsSubquery = `
+        SELECT
+            machine_id,
+            emp_id,
+            prod_date,
+            SUM(output_pairs) AS total_output,
+            COUNT(*) AS total_cycles,
+            SUM(actual_time) AS total_actual_mins,
+            SUM(target_mins) AS total_target_mins,
+            CASE
+                WHEN SUM(actual_time) > 0 THEN ROUND((SUM(target_mins) / SUM(actual_time)) * 100, 1)
+                ELSE 0
+            END AS avg_efficiency,
+            SUM(idle_mins) AS total_idle_mins,
+            MIN(start_time) AS first_start_time,
+            MAX(finish_time) AS last_finish_time
+        FROM machine_centre_production
+        WHERE button_status = 2
+        GROUP BY machine_id, emp_id, prod_date
+    `;
+
+    const runStatsSubquery = `
+        SELECT
+            machine_id,
+            emp_id,
+            prod_date,
+            CASE
+                WHEN SUM(CASE WHEN button_status = 1 THEN 1 ELSE 0 END) > 0 THEN 1
+                ELSE 0
+            END AS has_active_cycle
+        FROM machine_centre_production
+        WHERE button_status != 2
+        GROUP BY machine_id, emp_id, prod_date
+    `;
+
+    let query = `
+        WITH day_keys AS (
+            SELECT DISTINCT
+                mcp.machine_id,
+                mcp.emp_id AS emp_code,
+                mcp.work_centre_id,
+                mcp.prod_date AS log_date
+            FROM machine_centre_production mcp
+            WHERE DATE(mcp.prod_date) = DATE(?)
+
+            UNION
+
+            SELECT
+                ms.machine_id,
+                ms.emp_code,
+                COALESCE(ms.work_centre_id, mc.work_centre_id) AS work_centre_id,
+                DATE(ms.activated_at) AS log_date
+            FROM mobile_sessions ms
+            LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
+            WHERE ms.activated_at IS NOT NULL
+              AND DATE(ms.activated_at) = DATE(?)
+        )
+        SELECT
+            dk.machine_id,
+            COALESCE(mc.name, dk.machine_id) AS machine_name,
+            dk.work_centre_id,
+            wc.name AS work_centre_name,
+            dk.emp_code,
+            e.name AS emp_name,
+            COALESCE(
+                CASE
+                    WHEN ms.session_id IS NOT NULL AND DATE(ms.activated_at) = DATE(dk.log_date)
+                    THEN ms.activated_at
+                END,
+                prod_stats.first_start_time
+            ) AS activated_at,
+            prod_stats.last_finish_time AS last_finish_time
+        FROM day_keys dk
+        LEFT JOIN mobile_sessions ms
+            ON ms.machine_id = dk.machine_id
+            AND ms.emp_code = dk.emp_code
+        LEFT JOIN machine_centres mc ON mc.machine_id = dk.machine_id
+        LEFT JOIN work_centres wc ON wc.id = dk.work_centre_id
+        LEFT JOIN employees e ON e.code = dk.emp_code
+        LEFT JOIN (${prodStatsSubquery}) prod_stats
+            ON prod_stats.machine_id = dk.machine_id
+            AND prod_stats.emp_id = dk.emp_code
+            AND prod_stats.prod_date = dk.log_date
+        LEFT JOIN (${runStatsSubquery}) run_stats
+            ON run_stats.machine_id = dk.machine_id
+            AND run_stats.emp_id = dk.emp_code
+            AND run_stats.prod_date = dk.log_date
+        WHERE DATE(dk.log_date) = DATE(?)
+    `;
+    const params = [date, date, date];
+
+    if (workCentreId != null && workCentreId !== '' && !Number.isNaN(Number(workCentreId))) {
+        query += ' AND dk.work_centre_id = ?';
+        params.push(Number(workCentreId));
+    }
+
+    query += ' ORDER BY COALESCE(prod_stats.last_finish_time, activated_at) DESC';
+
+    const [rows] = await pool.execute(query, params);
+    return rows;
+}
+
+function dedupeLatestPerMachine(rows) {
+    const byMachine = new Map();
+    for (const row of rows) {
+        if (!row.machine_id || !row.emp_code) continue;
+        const ts = new Date(row.last_finish_time || row.activated_at || 0).getTime();
+        const key = String(row.machine_id);
+        const cur = byMachine.get(key);
+        if (!cur || ts >= cur._ts) {
+            byMachine.set(key, { ...row, _ts: ts });
+        }
+    }
+    return [...byMachine.values()]
+        .map(({ _ts, ...row }) => row)
+        .sort((a, b) => String(a.machine_id).localeCompare(String(b.machine_id), undefined, { numeric: true }));
+}
+
+async function queryTodayActiveByMachine(workCentreId = null) {
+    let sql = `
+        SELECT
+            ms.machine_id,
+            COALESCE(mc.name, ms.machine_id) AS machine_name,
+            ms.emp_code,
+            e.name AS emp_name,
+            COALESCE(ms.work_centre_id, mc.work_centre_id) AS work_centre_id,
+            wc.name AS work_centre_name
+        FROM mobile_sessions ms
+        LEFT JOIN machine_centres mc ON mc.machine_id = ms.machine_id
+        LEFT JOIN work_centres wc ON wc.id = COALESCE(ms.work_centre_id, mc.work_centre_id)
+        LEFT JOIN employees e ON e.code = ms.emp_code
+        WHERE ms.status IN ('active', 'waiting')
+          AND DATE(ms.activated_at) = CURDATE()
+    `;
+    const params = [];
+    if (workCentreId != null && workCentreId !== '' && !Number.isNaN(Number(workCentreId))) {
+        sql += ' AND COALESCE(ms.work_centre_id, mc.work_centre_id) = ?';
+        params.push(Number(workCentreId));
+    }
+    const [rows] = await pool.execute(sql, params);
+    const map = new Map();
+    for (const row of rows) {
+        map.set(String(row.machine_id), row);
+    }
+    return map;
+}
+
+async function bulkActivateAssignments(assignments, { clearActiveSessions = false, workCentreId = null } = {}) {
+    let clearedSessionsCount = 0;
+    if (clearActiveSessions) {
+        let sql = `UPDATE mobile_sessions SET status = 'expired'
+                   WHERE status IN ('active', 'waiting') AND DATE(activated_at) = CURDATE()`;
+        const params = [];
+        if (workCentreId != null && !Number.isNaN(Number(workCentreId))) {
+            sql += ' AND work_centre_id = ?';
+            params.push(Number(workCentreId));
+        }
+        const [clearResult] = await pool.execute(sql, params);
+        clearedSessionsCount = clearResult?.affectedRows || 0;
+    }
+
+    const results = [];
+    for (const row of assignments) {
+        const r = await activateMachineSessionCore(pool, {
+            machine_id: row.machine_id,
+            work_centre_id: row.work_centre_id,
+            emp_id: String(row.emp_code),
+        });
+        results.push({
+            machine_id: row.machine_id,
+            machine_name: row.machine_name,
+            emp_code: String(row.emp_code),
+            emp_name: row.emp_name,
+            success: r.ok,
+            session_id: r.ok ? r.session_id : undefined,
+            error: r.ok ? undefined : r.message,
+        });
+    }
+
+    return { results, clearedSessionsCount };
+}
 
 /**
  * Core activation used by POST /activate and bulk assign-from-employees.
@@ -587,10 +849,14 @@ const mobileSessionController = {
                 : ' ORDER BY ms.activated_at DESC';
 
             const [rows] = await pool.execute(query, params);
+            const data = await enrichSessionLogsWithPace(rows, {
+                filterDate: date || null,
+                workCentreId: work_centre_id || null,
+            });
 
             res.json({
                 success: true,
-                data: rows
+                data,
             });
         } catch (error) {
             next(error);
@@ -760,6 +1026,113 @@ const mobileSessionController = {
                 success: true,
                 message: 'Session reactivated successfully',
                 session_id: result.session_id
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    /** Preview yesterday's last operator per machine for bulk re-login today. */
+    getYesterdayLoginPreview: async (req, res, next) => {
+        try {
+            const workCentreId = req.query.work_centre_id != null && req.query.work_centre_id !== ''
+                ? Number(req.query.work_centre_id)
+                : null;
+            const sourceDate = req.query.date || yesterdayDateKey();
+            const rows = await querySessionLogRowsForDate(sourceDate, workCentreId);
+            const assignments = dedupeLatestPerMachine(rows);
+            const activeTodayMap = await queryTodayActiveByMachine(workCentreId);
+
+            const preview = assignments.map((row) => {
+                const active = activeTodayMap.get(String(row.machine_id));
+                let today_status = 'not_logged';
+                if (active) {
+                    today_status = String(active.emp_code) === String(row.emp_code) ? 'same' : 'different';
+                }
+                return {
+                    machine_id: row.machine_id,
+                    machine_name: row.machine_name,
+                    work_centre_id: row.work_centre_id,
+                    work_centre_name: row.work_centre_name,
+                    emp_code: row.emp_code,
+                    emp_name: row.emp_name,
+                    last_activity_at: row.last_finish_time || row.activated_at,
+                    today_status,
+                    today_emp_code: active?.emp_code || null,
+                    today_emp_name: active?.emp_name || null,
+                };
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    source_date: sourceDate,
+                    today_date: localDateKey(),
+                    total: preview.length,
+                    assignments: preview,
+                },
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    /** Activate today using yesterday's last operator per machine. */
+    activateYesterdayLogins: async (req, res, next) => {
+        try {
+            const workCentreId = req.query.work_centre_id != null && req.query.work_centre_id !== ''
+                ? Number(req.query.work_centre_id)
+                : null;
+            const sourceDate = req.body?.source_date || req.query.date || yesterdayDateKey();
+            const clearActiveSessions = ['1', 'true', 'yes', 'y', 'on'].includes(
+                String(req.body?.clear_active_sessions ?? req.query.clear_active_sessions ?? '').trim().toLowerCase()
+            );
+
+            let assignments;
+            if (Array.isArray(req.body?.assignments) && req.body.assignments.length > 0) {
+                assignments = req.body.assignments
+                    .filter((row) => row?.machine_id && row?.emp_code)
+                    .map((row) => ({
+                        machine_id: String(row.machine_id),
+                        machine_name: row.machine_name || String(row.machine_id),
+                        work_centre_id: row.work_centre_id ?? null,
+                        work_centre_name: row.work_centre_name || null,
+                        emp_code: String(row.emp_code),
+                        emp_name: row.emp_name || String(row.emp_code),
+                    }));
+            } else {
+                const rows = await querySessionLogRowsForDate(sourceDate, workCentreId);
+                assignments = dedupeLatestPerMachine(rows);
+            }
+
+            if (!assignments.length) {
+                return res.status(400).json({
+                    success: false,
+                    message: `No machine logins found for ${sourceDate}.`,
+                });
+            }
+
+            const { results, clearedSessionsCount } = await bulkActivateAssignments(assignments, {
+                clearActiveSessions,
+                workCentreId,
+            });
+
+            const succeeded = results.filter((x) => x.success).length;
+            const failed = results.length - succeeded;
+
+            res.json({
+                success: true,
+                message: `Logged in ${succeeded} of ${results.length} machine(s) from ${sourceDate}.${clearActiveSessions ? ` Cleared ${clearedSessionsCount} active session(s) first.` : ''}${failed ? ` ${failed} failed — see details.` : ''}`,
+                data: {
+                    source_date: sourceDate,
+                    summary: {
+                        total: results.length,
+                        succeeded,
+                        failed,
+                        clearedActiveSessions: clearActiveSessions ? clearedSessionsCount : undefined,
+                    },
+                    results,
+                },
             });
         } catch (error) {
             next(error);

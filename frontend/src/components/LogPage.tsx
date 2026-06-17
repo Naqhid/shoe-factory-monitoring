@@ -15,9 +15,11 @@ import {
   Activity,
   TrendingUp,
   X,
+  History,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from './ConfirmDialog';
+import { SearchableSelect } from './SearchableSelect';
 
 interface SessionLogEntry {
   session_id: string;
@@ -34,9 +36,42 @@ interface SessionLogEntry {
   total_actual_mins: number;
   total_target_mins: number;
   avg_efficiency: number;
+  pace_efficiency?: number;
+  pace_in_progress_actual?: number;
+  pace_in_progress_expected?: number;
+  pace_daily_target?: number;
   total_idle_mins: number;
   has_active_cycle?: number;
   last_finish_time: string | null;
+}
+
+interface YesterdayLoginAssignment {
+  machine_id: string;
+  machine_name: string;
+  work_centre_id: number;
+  work_centre_name: string;
+  emp_code: string;
+  emp_name: string;
+  last_activity_at: string | null;
+  today_status: 'not_logged' | 'same' | 'different';
+  today_emp_code?: string | null;
+  today_emp_name?: string | null;
+}
+
+interface YesterdayLoginPreview {
+  source_date: string;
+  today_date: string;
+  total: number;
+  assignments: YesterdayLoginAssignment[];
+}
+
+interface YesterdayActivateResult {
+  machine_id: string;
+  machine_name?: string;
+  emp_code: string;
+  emp_name?: string;
+  success: boolean;
+  error?: string;
 }
 
 interface CycleDetail {
@@ -57,11 +92,45 @@ interface WorkCentre {
   code?: string;
 }
 
+interface EmployeeOption {
+  code: string;
+  name: string;
+  work_centre_id?: number;
+}
+
+interface EditableLoginRow extends YesterdayLoginAssignment {
+  login_emp_code: string;
+  login_emp_name: string;
+}
+
 const FILTER_LABEL = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5';
 const FILTER_CONTROL =
   'w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400 disabled:opacity-60 transition-shadow';
 const BTN_PRIMARY =
   'inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors';
+
+const paceEfficiencyClass = (pct: number | null | undefined): string => {
+  const n = Number(pct);
+  if (!Number.isFinite(n) || n <= 0) return 'text-slate-400';
+  if (n > 90) return 'text-emerald-600';
+  if (n >= 70) return 'text-amber-600';
+  if (n >= 50) return 'text-orange-600';
+  return 'text-red-600';
+};
+
+const getLogPaceEfficiency = (log: SessionLogEntry): number =>
+  Number(log.pace_efficiency ?? 0);
+
+const formatPaceEfficiencyLabel = (log: SessionLogEntry): string => {
+  const pct = getLogPaceEfficiency(log);
+  const actual = Number(log.pace_in_progress_actual ?? log.total_output ?? 0);
+  const expected = Number(log.pace_in_progress_expected ?? 0);
+  if (expected > 0) {
+    return `In progress ${pct}% (${actual} / ${expected} target so far)`;
+  }
+  if (pct > 0) return `In progress ${pct}%`;
+  return 'No routing target for pace';
+};
 
 const LogPage: React.FC = () => {
   const today = new Date().toLocaleDateString('en-CA');
@@ -77,6 +146,16 @@ const LogPage: React.FC = () => {
   const [reactivatingSessions, setReactivatingSessions] = React.useState<Set<string>>(new Set());
   const [deactivatingSessions, setDeactivatingSessions] = React.useState<Set<string>>(new Set());
   const [deactivateTarget, setDeactivateTarget] = React.useState<SessionLogEntry | null>(null);
+  const [yesterdayPreviewOpen, setYesterdayPreviewOpen] = React.useState(false);
+  const [yesterdayPreview, setYesterdayPreview] = React.useState<YesterdayLoginPreview | null>(null);
+  const [yesterdayPreviewLoading, setYesterdayPreviewLoading] = React.useState(false);
+  const [yesterdayActivating, setYesterdayActivating] = React.useState(false);
+  const [clearActiveBeforeYesterdayLogin, setClearActiveBeforeYesterdayLogin] = React.useState(false);
+  const [yesterdayActivateResults, setYesterdayActivateResults] = React.useState<YesterdayActivateResult[] | null>(null);
+  const [editableLoginRows, setEditableLoginRows] = React.useState<EditableLoginRow[]>([]);
+  const [employees, setEmployees] = React.useState<EmployeeOption[]>([]);
+
+  const todayKey = React.useMemo(() => new Date().toLocaleDateString('en-CA'), []);
 
   const lineLabel = (wc: WorkCentre) => (wc.code ? `${wc.code} - ${wc.name}` : wc.name);
 
@@ -142,12 +221,7 @@ const LogPage: React.FC = () => {
   const summary = React.useMemo(() => {
     const active = logs.filter((l) => l.status === 'active' || l.status === 'waiting').length;
     const totalOutput = logs.reduce((s, l) => s + (Number(l.total_output) || 0), 0);
-    const withEff = logs.filter((l) => Number(l.avg_efficiency) > 0);
-    const avgEff =
-      withEff.length > 0
-        ? withEff.reduce((s, l) => s + Number(l.avg_efficiency), 0) / withEff.length
-        : 0;
-    return { total: logs.length, active, totalOutput, avgEff };
+    return { total: logs.length, active, totalOutput };
   }, [logs]);
 
   const formatDateTime = (value?: string | null) => {
@@ -323,6 +397,186 @@ const LogPage: React.FC = () => {
     }
   };
 
+  const closeYesterdayModal = () => {
+    setYesterdayPreviewOpen(false);
+    setYesterdayPreview(null);
+    setYesterdayActivateResults(null);
+    setClearActiveBeforeYesterdayLogin(false);
+    setEditableLoginRows([]);
+  };
+
+  const employeesForWorkCentre = React.useCallback(
+    (workCentreId?: number) => {
+      if (!workCentreId) return employees;
+      const onLine = employees.filter((e) => Number(e.work_centre_id) === Number(workCentreId));
+      return onLine.length > 0 ? onLine : employees;
+    },
+    [employees]
+  );
+
+  const buildEditableRows = (assignments: YesterdayLoginAssignment[]): EditableLoginRow[] =>
+    assignments.map((row) => ({
+      ...row,
+      login_emp_code: row.emp_code,
+      login_emp_name: row.emp_name || row.emp_code,
+    }));
+
+  const updateLoginOperator = (machineId: string, empCode: string) => {
+    if (!empCode) return;
+    const emp = employees.find((e) => String(e.code) === String(empCode));
+    setEditableLoginRows((prev) =>
+      prev.map((row) =>
+        String(row.machine_id) === String(machineId)
+          ? {
+              ...row,
+              login_emp_code: empCode,
+              login_emp_name: emp?.name || empCode,
+            }
+          : row
+      )
+    );
+  };
+
+  const operatorSelectOptions = React.useCallback(
+    (row: EditableLoginRow) => {
+      const lineEmployees = employeesForWorkCentre(row.work_centre_id);
+      const list =
+        lineEmployees.some((e) => String(e.code) === String(row.login_emp_code))
+          ? lineEmployees
+          : [
+              { code: row.login_emp_code, name: row.login_emp_name, work_centre_id: row.work_centre_id },
+              ...lineEmployees,
+            ];
+      return list.map((emp) => ({
+        value: String(emp.code),
+        label: emp.name,
+        subLabel: String(emp.code),
+      }));
+    },
+    [employeesForWorkCentre]
+  );
+
+  const getTodayStatusForLogin = (row: EditableLoginRow) => {
+    if (!row.today_emp_code) return 'not_logged' as const;
+    if (String(row.today_emp_code) === String(row.login_emp_code)) return 'same' as const;
+    return 'different' as const;
+  };
+
+  const loadYesterdayLoginPreview = async () => {
+    setYesterdayPreviewLoading(true);
+    setYesterdayActivateResults(null);
+    try {
+      const params = new URLSearchParams();
+      if (selectedWorkCentre !== 'all') params.set('work_centre_id', selectedWorkCentre);
+
+      const [previewRes, employeesRes] = await Promise.all([
+        apiFetch(
+          `${API_BASE_URL}/api/mobile-sessions/yesterday-login-preview${params.toString() ? `?${params.toString()}` : ''}`
+        ),
+        apiFetch(`${API_BASE_URL}/api/masters/employees?limit=2000`),
+      ]);
+
+      const result = await previewRes.json();
+      if (!result.success) {
+        toast.error(result.message || 'Failed to load yesterday logins');
+        return;
+      }
+
+      try {
+        const empJson = await employeesRes.json();
+        if (empJson.success && Array.isArray(empJson.data)) {
+          setEmployees(
+            empJson.data.map((e: { code: string; name: string; work_centre_id?: number }) => ({
+              code: String(e.code),
+              name: String(e.name || e.code),
+              work_centre_id: e.work_centre_id,
+            }))
+          );
+        }
+      } catch {
+        // Preview still works; operator dropdown may be limited
+      }
+
+      const preview = result.data as YesterdayLoginPreview;
+      setYesterdayPreview(preview);
+      setEditableLoginRows(buildEditableRows(preview.assignments || []));
+      setYesterdayPreviewOpen(true);
+      if (!preview.assignments?.length) {
+        toast.error(`No machine logins found for ${preview.source_date || 'yesterday'}.`);
+      }
+    } catch {
+      toast.error('Unable to load yesterday login preview');
+    } finally {
+      setYesterdayPreviewLoading(false);
+    }
+  };
+
+  const handleActivateYesterdayLogins = async () => {
+    if (!editableLoginRows.length) return;
+    setYesterdayActivating(true);
+    try {
+      const params = new URLSearchParams();
+      if (selectedWorkCentre !== 'all') params.set('work_centre_id', selectedWorkCentre);
+      const assignments = editableLoginRows.map((row) => ({
+        machine_id: row.machine_id,
+        machine_name: row.machine_name,
+        work_centre_id: row.work_centre_id,
+        work_centre_name: row.work_centre_name,
+        emp_code: row.login_emp_code,
+        emp_name: row.login_emp_name,
+      }));
+      const response = await apiFetch(
+        `${API_BASE_URL}/api/mobile-sessions/activate-yesterday-logins${params.toString() ? `?${params.toString()}` : ''}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_date: yesterdayPreview?.source_date,
+            clear_active_sessions: clearActiveBeforeYesterdayLogin,
+            assignments,
+          }),
+        }
+      );
+      const result = await response.json();
+      if (!result.success) {
+        toast.error(result.message || 'Bulk login failed');
+        return;
+      }
+      setYesterdayActivateResults((result.data?.results || []) as YesterdayActivateResult[]);
+      toast.success(result.message || 'Bulk login completed');
+      if (selectedDate === todayKey) {
+        await handleRefresh();
+      } else {
+        setSelectedDate(todayKey);
+      }
+    } catch {
+      toast.error('Unable to activate yesterday logins');
+    } finally {
+      setYesterdayActivating(false);
+    }
+  };
+
+  const todayStatusLabel = (row: EditableLoginRow) => {
+    const status = getTodayStatusForLogin(row);
+    const changed = String(row.login_emp_code) !== String(row.emp_code);
+    if (status === 'same') {
+      return (
+        <span className="text-emerald-700 font-semibold">
+          {changed ? 'Will update login' : 'Already same'}
+        </span>
+      );
+    }
+    if (status === 'different') {
+      return (
+        <span className="text-amber-700 font-semibold">
+          Different today
+          {row.today_emp_code ? ` (${row.today_emp_name || row.today_emp_code})` : ''}
+        </span>
+      );
+    }
+    return <span className="text-slate-500">Not logged in</span>;
+  };
+
   const deactivateMessage = deactivateTarget
     ? `Deactivate login for ${getEmployeeLabel(deactivateTarget)} on ${deactivateTarget.machine_name || deactivateTarget.machine_id}? They will need to scan and log in again on mobile.`
     : '';
@@ -354,20 +608,197 @@ const LogPage: React.FC = () => {
                 Machine Login Logs
               </h1>
               <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-                Mobile operator sessions by line and date — expand a row for cycle details, or deactivate / reactivate logins.
+                Mobile operator sessions by line and date — expand a row for cycle details, deactivate / reactivate, or bulk login same as yesterday.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={loading}
-              className={`${BTN_PRIMARY} shrink-0`}
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              {loading ? 'Refreshing…' : 'Refresh'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => void loadYesterdayLoginPreview()}
+                disabled={yesterdayPreviewLoading || yesterdayActivating}
+                className="inline-flex justify-center items-center gap-2 px-3.5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors"
+              >
+                {yesterdayPreviewLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <History className="h-4 w-4" />
+                )}
+                Same as yesterday
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={loading}
+                className={`${BTN_PRIMARY} shrink-0`}
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
           </div>
         </div>
+
+        {yesterdayPreviewOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
+            <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 flex flex-col">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 sm:px-5 py-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-500">Bulk login</p>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-1">Login same as yesterday</h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    {yesterdayPreview
+                      ? `Last operator per machine from ${yesterdayPreview.source_date} → activate for ${yesterdayPreview.today_date}. Edit any row if a new operator joined.`
+                      : 'Loading yesterday assignments…'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeYesterdayModal}
+                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto flex-1 px-4 sm:px-5 py-4 space-y-4">
+                {yesterdayPreviewLoading && !yesterdayPreview ? (
+                  <div className="flex items-center justify-center gap-2 py-12 text-slate-500">
+                    <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                    Loading yesterday logins…
+                  </div>
+                ) : yesterdayPreview && yesterdayPreview.assignments.length === 0 ? (
+                  <p className="text-sm text-slate-600 py-8 text-center">
+                    No machine logins found for {yesterdayPreview.source_date}.
+                  </p>
+                ) : yesterdayPreview ? (
+                  <>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Line</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Machine</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Yesterday</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Login as</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Today</th>
+                            {yesterdayActivateResults && (
+                              <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Result</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {editableLoginRows.map((row) => {
+                            const result = yesterdayActivateResults?.find(
+                              (r) => String(r.machine_id) === String(row.machine_id)
+                            );
+                            const isChanged = String(row.login_emp_code) !== String(row.emp_code);
+                            return (
+                              <tr key={`${row.machine_id}-${row.emp_code}`} className="hover:bg-slate-50/80">
+                                <td className="px-3 py-2 text-slate-700">{row.work_centre_name || '—'}</td>
+                                <td className="px-3 py-2 font-medium text-slate-900">{row.machine_name || row.machine_id}</td>
+                                <td className="px-3 py-2 text-slate-600">
+                                  {row.emp_name ? (
+                                    <>
+                                      <span className="font-medium">{row.emp_name}</span>
+                                      <span className="block text-xs text-slate-500">{row.emp_code}</span>
+                                    </>
+                                  ) : (
+                                    row.emp_code
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 min-w-[200px]">
+                                  {!yesterdayActivateResults ? (
+                                    <div className="space-y-1">
+                                      <SearchableSelect
+                                        compact
+                                        value={row.login_emp_code}
+                                        options={operatorSelectOptions(row)}
+                                        onChange={(code) => updateLoginOperator(row.machine_id, code)}
+                                        placeholder="Select operator"
+                                        searchPlaceholder="Search name or code…"
+                                        footerCountLabel="operators"
+                                        className="min-w-[180px]"
+                                      />
+                                      {isChanged && (
+                                        <span className="inline-flex rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 ring-1 ring-indigo-200">
+                                          Changed from yesterday
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <span className="font-medium text-slate-900">{row.login_emp_name}</span>
+                                      <span className="block text-xs text-slate-500">{row.login_emp_code}</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-xs">{todayStatusLabel(row)}</td>
+                                {yesterdayActivateResults && (
+                                  <td className="px-3 py-2 text-xs">
+                                    {result ? (
+                                      result.success ? (
+                                        <span className="text-emerald-700 font-semibold">Logged in</span>
+                                      ) : (
+                                        <span className="text-red-700 font-semibold" title={result.error}>
+                                          Failed
+                                        </span>
+                                      )
+                                    ) : (
+                                      '—'
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {!yesterdayActivateResults && (
+                      <label className="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={clearActiveBeforeYesterdayLogin}
+                          onChange={(e) => setClearActiveBeforeYesterdayLogin(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>
+                          Clear today&apos;s active sessions on selected line(s) before logging in
+                          <span className="block text-xs text-slate-500 mt-0.5">
+                            Use if operators are stuck on wrong machines and bulk login fails.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                  </>
+                ) : null}
+              </div>
+
+              <div className="border-t border-slate-200 px-4 sm:px-5 py-4 flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeYesterdayModal}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50"
+                >
+                  {yesterdayActivateResults ? 'Close' : 'Cancel'}
+                </button>
+                {!yesterdayActivateResults && editableLoginRows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void handleActivateYesterdayLogins()}
+                    disabled={yesterdayActivating}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-60"
+                  >
+                    {yesterdayActivating ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
+                    Login all ({editableLoginRows.length})
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm ring-1 ring-black/[0.02]">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -439,7 +870,7 @@ const LogPage: React.FC = () => {
         </div>
 
         {!loading && !error && logs.length > 0 && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-slate-600">
                 <Users className="h-4 w-4" aria-hidden />
@@ -461,15 +892,6 @@ const LogPage: React.FC = () => {
               </div>
               <p className="text-3xl font-black text-green-900 mt-2 tabular-nums">{summary.totalOutput}</p>
               <p className="text-[10px] text-slate-500 mt-0.5">pairs</p>
-            </div>
-            <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50/50 to-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-blue-700">
-                <Clock className="h-4 w-4" aria-hidden />
-                <p className="text-[11px] font-bold uppercase tracking-wide">Avg efficiency</p>
-              </div>
-              <p className="text-3xl font-black text-blue-900 mt-2 tabular-nums">
-                {summary.avgEff > 0 ? `${summary.avgEff.toFixed(1)}%` : '—'}
-              </p>
             </div>
           </div>
         )}
@@ -493,7 +915,7 @@ const LogPage: React.FC = () => {
                   <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Last activity</th>
                   <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cycles</th>
                   <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Output</th>
-                  <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Eff %</th>
+                  <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pace eff</th>
                   <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Time</th>
                   <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cycle</th>
                   <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
@@ -555,17 +977,21 @@ const LogPage: React.FC = () => {
                         <td className="px-3 py-3 text-sm text-slate-600 whitespace-nowrap">{formatDateTime(log.last_finish_time)}</td>
                         <td className="px-3 py-3 text-sm text-slate-700 text-center tabular-nums">{formatNumber(log.total_cycles)}</td>
                         <td className="px-3 py-3 text-sm font-bold text-green-700 text-center tabular-nums">{formatNumber(log.total_output)}</td>
-                        <td
-                          className={`px-3 py-3 text-sm font-bold text-center tabular-nums ${
-                            log.avg_efficiency >= 90
-                              ? 'text-green-600'
-                              : log.avg_efficiency >= 70
-                                ? 'text-amber-600'
-                                : 'text-red-600'
-                          }`}
-                        >
-                          {formatNumber(log.avg_efficiency, 1)}
-                          {log.avg_efficiency > 0 ? '%' : ''}
+                        <td className="px-3 py-3 text-sm text-center">
+                          {Number(log.pace_in_progress_expected) > 0 || getLogPaceEfficiency(log) > 0 ? (
+                            <div title={formatPaceEfficiencyLabel(log)}>
+                              <p className={`font-bold tabular-nums ${paceEfficiencyClass(getLogPaceEfficiency(log))}`}>
+                                {getLogPaceEfficiency(log)}%
+                              </p>
+                              {Number(log.pace_in_progress_expected) > 0 && (
+                                <p className="text-[10px] text-slate-500 tabular-nums mt-0.5">
+                                  {Number(log.pace_in_progress_actual ?? log.total_output ?? 0)} / {Number(log.pace_in_progress_expected)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-3 text-sm text-slate-600 text-center">{formatDuration(log.total_actual_mins)}</td>
                         <td className="px-3 py-3 text-xs text-blue-700 font-medium text-center max-w-[140px]">
@@ -628,7 +1054,7 @@ const LogPage: React.FC = () => {
                                         <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Finish</th>
                                         <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Duration</th>
                                         <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Output</th>
-                                        <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Efficiency</th>
+                                        <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Cycle eff</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 bg-white">

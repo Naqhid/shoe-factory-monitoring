@@ -769,6 +769,8 @@ app.get('/api/tab-broadcast/:broadcastId/view', tabBroadcastController.viewerPag
 
 // Logs routes (protected)
 app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSessionController.getSessionLogs);
+app.get('/api/mobile-sessions/yesterday-login-preview', authenticate, requireLogsAccess, mobileSessionController.getYesterdayLoginPreview);
+app.post('/api/mobile-sessions/activate-yesterday-logins', authenticate, requireLogsAccess, mobileSessionController.activateYesterdayLogins);
 app.get('/api/mobile-sessions/cycles', authenticate, requireLogsAccess, mobileSessionController.getCycleDetails);
 app.post('/api/mobile-sessions/deactivate', authenticate, requireLogsAccess, mobileSessionController.deactivateSession);
 app.post('/api/mobile-sessions/reactivate', authenticate, requireLogsAccess, mobileSessionController.reactivateSessionFromLogs);
