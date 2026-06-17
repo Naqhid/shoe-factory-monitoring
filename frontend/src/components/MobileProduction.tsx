@@ -38,6 +38,17 @@ interface ProductionData {
     is_paused?: boolean;
 }
 
+type BestArticleSummary = {
+    style_id: number;
+    style_name: string;
+    emp_id: number;
+    as_of_time_label: string;
+    best_full_day_output: number | null;
+    best_full_day_date: string | null;
+    best_same_time_output: number | null;
+    best_same_time_date: string | null;
+};
+
 const normalizePauseState = <T extends ProductionData>(record: T): T => {
     // Pause state is deprecated: treat any in-progress paused record as running.
     if (record.button_status === 3 && record.start_time) {
@@ -291,6 +302,7 @@ export const MobileProduction: React.FC = () => {
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
     const [yesterdayCompare, setYesterdayCompare] = useState<LastWorkingDayCompareData | null>(null);
     const [loadingYesterdayCompare, setLoadingYesterdayCompare] = useState(false);
+    const [bestArticleSummary, setBestArticleSummary] = useState<BestArticleSummary | null>(null);
     const [selectedTargetPairs, setSelectedTargetPairs] = useState(MOBILE_PAIRS_PER_BIN);
     const baseTargetMinsRef = React.useRef(0);
     /** Routing mins column is per bin (6 pairs after mins_6_prs_box migration). */
@@ -1108,7 +1120,11 @@ export const MobileProduction: React.FC = () => {
             while (retries > 0) {
                 // Add cache-busting timestamp to prevent browser caching stale data
                 const timestamp = Date.now();
-                const response = await apiFetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}?_=${timestamp}`);
+                const resolvedEmpId = Number(productionData?.emp_id ?? 0);
+                const empIdQuery = Number.isFinite(resolvedEmpId) && resolvedEmpId > 0
+                    ? `&emp_id=${resolvedEmpId}`
+                    : '';
+                const response = await apiFetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}?_=${timestamp}${empIdQuery}`);
                 const result = await response.json();
                 lastResult = result;
                 
@@ -1141,19 +1157,29 @@ export const MobileProduction: React.FC = () => {
                             ? Number(dtp)
                             : null
                     );
+                    setBestArticleSummary(result.data.best_article || null);
                     return;
                 } else {
                     setTotalOutputToday(0);
                     setAvgEfficiencyToday('0');
                     setDailyTargetPairs(null);
+                    setBestArticleSummary(null);
                     return;
                 }
             }
         } catch (error) {
             console.error('Error fetching summary data:', error);
+            setBestArticleSummary(null);
         } finally {
             setLoadingSummary(false);
         }
+    };
+
+    const formatBestDateLabel = (dateStr?: string | null) => {
+        if (!dateStr) return '—';
+        const d = new Date(`${dateStr}T12:00:00`);
+        if (Number.isNaN(d.getTime())) return dateStr;
+        return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     };
 
     // Pull-to-refresh handlers
@@ -2307,6 +2333,42 @@ export const MobileProduction: React.FC = () => {
                                             todayActual={totalOutputToday}
                                             variant="mobile"
                                         />
+                                    </div>
+                                ) : null}
+                                {bestArticleSummary ? (
+                                    <div className="col-span-2 md:col-span-6 rounded-xl border border-fuchsia-300/45 bg-fuchsia-500/10 p-3 shadow-sm">
+                                        <p className="text-[10px] font-bold uppercase tracking-wide text-fuchsia-100">
+                                            Your best for this article
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold text-white">
+                                            {bestArticleSummary.style_name}
+                                        </p>
+                                        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                            <div className="rounded-lg bg-white/10 px-3 py-2 ring-1 ring-white/20">
+                                                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75">
+                                                    Best same time ({bestArticleSummary.as_of_time_label || 'now'})
+                                                </p>
+                                                <p className="mt-1 text-lg font-black tabular-nums text-white">
+                                                    {bestArticleSummary.best_same_time_output ?? '—'}
+                                                    <span className="ml-1 text-xs font-semibold text-white/70">pairs</span>
+                                                </p>
+                                                <p className="text-[11px] text-white/70">
+                                                    {formatBestDateLabel(bestArticleSummary.best_same_time_date)}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-lg bg-white/10 px-3 py-2 ring-1 ring-white/20">
+                                                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75">
+                                                    Best full day
+                                                </p>
+                                                <p className="mt-1 text-lg font-black tabular-nums text-white">
+                                                    {bestArticleSummary.best_full_day_output ?? '—'}
+                                                    <span className="ml-1 text-xs font-semibold text-white/70">pairs</span>
+                                                </p>
+                                                <p className="text-[11px] text-white/70">
+                                                    {formatBestDateLabel(bestArticleSummary.best_full_day_date)}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                 ) : null}
                                 {loadingSummary && !dailyPaceSnapshot ? (

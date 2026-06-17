@@ -1995,8 +1995,44 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
       }
     }
 
+    let activeEmpId = null;
+    const requestedEmpId = Number(req.query?.emp_id);
+    if (Number.isFinite(requestedEmpId) && requestedEmpId > 0) {
+      activeEmpId = requestedEmpId;
+    }
+
+    if (activeEmpId == null) {
+      const [activeSessionRows] = await db.query(
+        `SELECT emp_id
+         FROM mobile_sessions
+         WHERE machine_id IN (${ph}) AND status = 'active'
+         ORDER BY activated_at DESC
+         LIMIT 1`,
+        [...inList]
+      );
+      if (activeSessionRows.length > 0 && activeSessionRows[0].emp_id != null) {
+        activeEmpId = Number(activeSessionRows[0].emp_id);
+      }
+    }
+
+    if (activeEmpId == null) {
+      const [todayEmpRows] = await db.query(
+        `SELECT emp_id
+         FROM machine_centre_production
+         WHERE machine_id IN (${ph})
+           AND DATE(prod_date) = DATE(?)
+         ORDER BY id DESC
+         LIMIT 1`,
+        [...inList, date]
+      );
+      if (todayEmpRows.length > 0 && todayEmpRows[0].emp_id != null) {
+        activeEmpId = Number(todayEmpRows[0].emp_id);
+      }
+    }
+
     let dailyTargetPairs = null;
     let planManHoursMinutes = null;
+    let currentArticle = null;
     if (workCentreId != null) {
       // Match TV dashboard / line performance: sum all styles for the line+date, tolerate DATE vs DATETIME
       const [planAgg] = await db.query(
@@ -2018,6 +2054,93 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
         if (Number.isFinite(mh) && mh > 0) {
           planManHoursMinutes = mh;
         }
+      }
+
+      const [currentArticleRows] = await db.query(
+        `SELECT pp.style_id, s.name AS style_name
+         FROM production_plan pp
+         LEFT JOIN styles s ON s.id = pp.style_id
+         WHERE pp.work_centre_id = ?
+           AND DATE(pp.plan_date) = DATE(?)
+           AND pp.deleted_at IS NULL
+         ORDER BY pp.id DESC
+         LIMIT 1`,
+        [workCentreId, date]
+      );
+      if (currentArticleRows.length > 0) {
+        currentArticle = {
+          style_id: Number(currentArticleRows[0].style_id),
+          style_name: currentArticleRows[0].style_name || `Style ${currentArticleRows[0].style_id}`,
+        };
+      }
+    }
+
+    let bestArticle = null;
+    if (workCentreId != null && currentArticle?.style_id && activeEmpId != null) {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mi = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      const asOfTime = `${hh}:${mi}:${ss}`;
+      const asOfTimeLabel = `${hh}:${mi}`;
+
+      const [bestFullRows] = await db.query(
+        `SELECT DATE_FORMAT(mcp.prod_date, '%Y-%m-%d') AS prod_date,
+                COALESCE(SUM(mcp.output_pairs), 0) AS total_output
+         FROM machine_centre_production mcp
+         WHERE mcp.machine_id IN (${ph})
+           AND mcp.emp_id = ?
+           AND mcp.button_status = 2
+           AND EXISTS (
+             SELECT 1
+             FROM production_plan pp
+             WHERE pp.work_centre_id = mcp.work_centre_id
+               AND DATE(pp.plan_date) = DATE(mcp.prod_date)
+               AND pp.deleted_at IS NULL
+               AND pp.style_id = ?
+           )
+         GROUP BY DATE(mcp.prod_date)
+         ORDER BY total_output DESC, prod_date DESC
+         LIMIT 1`,
+        [...inList, activeEmpId, currentArticle.style_id]
+      );
+
+      const [bestSameTimeRows] = await db.query(
+        `SELECT DATE_FORMAT(mcp.prod_date, '%Y-%m-%d') AS prod_date,
+                COALESCE(SUM(mcp.output_pairs), 0) AS total_output
+         FROM machine_centre_production mcp
+         WHERE mcp.machine_id IN (${ph})
+           AND mcp.emp_id = ?
+           AND mcp.button_status = 2
+           AND mcp.finish_time IS NOT NULL
+           AND TIME(mcp.finish_time) <= ?
+           AND EXISTS (
+             SELECT 1
+             FROM production_plan pp
+             WHERE pp.work_centre_id = mcp.work_centre_id
+               AND DATE(pp.plan_date) = DATE(mcp.prod_date)
+               AND pp.deleted_at IS NULL
+               AND pp.style_id = ?
+           )
+         GROUP BY DATE(mcp.prod_date)
+         ORDER BY total_output DESC, prod_date DESC
+         LIMIT 1`,
+        [...inList, activeEmpId, asOfTime, currentArticle.style_id]
+      );
+
+      const bestFull = bestFullRows[0];
+      const bestSameTime = bestSameTimeRows[0];
+      if (bestFull || bestSameTime) {
+        bestArticle = {
+          style_id: currentArticle.style_id,
+          style_name: currentArticle.style_name,
+          emp_id: activeEmpId,
+          as_of_time_label: asOfTimeLabel,
+          best_full_day_output: bestFull ? Math.round(Number(bestFull.total_output || 0)) : null,
+          best_full_day_date: bestFull?.prod_date || null,
+          best_same_time_output: bestSameTime ? Math.round(Number(bestSameTime.total_output || 0)) : null,
+          best_same_time_date: bestSameTime?.prod_date || null,
+        };
       }
     }
 
@@ -2064,6 +2187,8 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
       total_cycles: totalCycles,
       daily_target_pairs: dailyTargetPairs,
       plan_man_hours_minutes: planManHoursMinutes,
+      current_article: currentArticle,
+      best_article: bestArticle,
     };
 
     logger.info(`Fresh calc for ${machineId}: ${JSON.stringify(result)}`);
