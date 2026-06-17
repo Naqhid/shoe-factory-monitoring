@@ -29,6 +29,12 @@ interface Props {
   hideTitle?: boolean;
   /** Line detail / narrow embed: tighter axis, readable on phones. */
   embedded?: boolean;
+  /** Parent-supplied line hourly payload (e.g. tracker line-detail bundle). */
+  externalLineData?: HourlyOutputData | null;
+  /** Parent-supplied per-machine hourly payload. */
+  externalMachineData?: MachineHourlyData[];
+  /** Skip self-fetch when parent refreshes hourly data on another poll. */
+  skipFetch?: boolean;
 }
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
@@ -95,6 +101,9 @@ export const HourlyOutputChart: React.FC<Props> = ({
   fitContainer = false,
   hideTitle = false,
   embedded = false,
+  externalLineData,
+  externalMachineData,
+  skipFetch = false,
 }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState<'line' | 'machine'>('line');
@@ -128,11 +137,18 @@ export const HourlyOutputChart: React.FC<Props> = ({
   };
 
   useEffect(() => {
+    if (skipFetch) {
+      if (externalLineData != null) setLineData(externalLineData);
+      if (externalMachineData != null) setMachineData(externalMachineData);
+      setLoading(externalLineData == null && (externalMachineData?.length ?? 0) === 0);
+      return;
+    }
+
     setLoading(true);
     Promise.all([fetchLineData(), fetchMachineData()]).finally(() => setLoading(false));
     const interval = setInterval(() => { fetchLineData(); fetchMachineData(); }, 60000);
     return () => clearInterval(interval);
-  }, [workCentreId, date]);
+  }, [workCentreId, date, skipFetch, externalLineData, externalMachineData]);
 
   useEffect(() => {
     const updateMobileState = () => setIsMobile(window.innerWidth < 640);

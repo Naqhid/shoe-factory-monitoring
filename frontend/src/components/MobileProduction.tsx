@@ -206,7 +206,7 @@ const QRWaitScreen: React.FC<{
             } catch (error) {
                 console.warn('Session polling failed while waiting for employee scan:', error);
             }
-        }, 1000);
+        }, 2500);
         return () => clearInterval(interval);
     }, [machineId, onSessionActive]);
 
