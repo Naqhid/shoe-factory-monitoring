@@ -693,6 +693,7 @@ app.get('/api/mobile-production/init/:machineId/:empCode', mobileProductionContr
 app.get('/api/mobile-production/machine/:machineId/latest-unfinished', mobileProductionController.getLatestUnfinishedByMachine);
 app.get('/api/mobile-production/machine/:machineId/daily-cycles', missedActionsController.getMachineDailyCycles);
 app.get('/api/mobile-production/machine/:machineId/yesterday-compare', mobileProductionController.getMachineYesterdayCompare);
+app.get('/api/mobile-production/machine/:machineId/article-bests', mobileProductionController.getMachineArticleBests);
 app.get('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntries);
 app.get('/api/mobile-production/manual-entry/audit-logs', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntryAuditLogs);
 app.post('/api/mobile-production/manual-entry/audit-logs/:logId/restore', authenticate, requireManualEntryAccess, mobileProductionController.restoreManualEntryFromAuditLog);

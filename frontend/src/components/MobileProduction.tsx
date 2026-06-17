@@ -6,10 +6,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { classifyLateCycleCategory, computeCycleNetLostMins } from '../utils/cycleLostMins';
 import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours } from '../utils/shiftPaceUtils';
-import { getCompareAsOf, todayDateKey } from '../utils/compareDateUtils';
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
-import { LastWorkingDayCompareCard, type LastWorkingDayCompareData } from './LastWorkingDayCompareCard';
 
 const formatPairsPerHour = (value: number | null | undefined) => {
     if (value == null || !Number.isFinite(value)) return '—';
@@ -37,17 +35,6 @@ interface ProductionData {
     updated_at?: string;
     is_paused?: boolean;
 }
-
-type BestArticleSummary = {
-    style_id: number;
-    style_name: string;
-    emp_id: number;
-    as_of_time_label: string;
-    best_full_day_output: number | null;
-    best_full_day_date: string | null;
-    best_same_time_output: number | null;
-    best_same_time_date: string | null;
-};
 
 const normalizePauseState = <T extends ProductionData>(record: T): T => {
     // Pause state is deprecated: treat any in-progress paused record as running.
@@ -300,9 +287,6 @@ export const MobileProduction: React.FC = () => {
     const [timingCycles, setTimingCycles] = useState<Array<{ id: number; cycle: number; start_time: string; finish_time: string | null; target_mins: number; actual_mins: number; start_gap_mins: number; extra_mins: number; early_mins: number; lost_mins: number; output_pairs?: number }>>([]);
     const [timingLoading, setTimingLoading] = useState(false);
     const [timingTotalCycles, setTimingTotalCycles] = useState(0);
-    const [yesterdayCompare, setYesterdayCompare] = useState<LastWorkingDayCompareData | null>(null);
-    const [loadingYesterdayCompare, setLoadingYesterdayCompare] = useState(false);
-    const [bestArticleSummary, setBestArticleSummary] = useState<BestArticleSummary | null>(null);
     const [selectedTargetPairs, setSelectedTargetPairs] = useState(MOBILE_PAIRS_PER_BIN);
     const baseTargetMinsRef = React.useRef(0);
     /** Routing mins column is per bin (6 pairs after mins_6_prs_box migration). */
@@ -378,20 +362,6 @@ export const MobileProduction: React.FC = () => {
         if (!effectiveMachineId || sessionStatus !== 'active') return;
         void fetchIdleReminderSettings(effectiveMachineId);
     }, [effectiveMachineId, sessionStatus, fetchIdleReminderSettings]);
-
-    useEffect(() => {
-        const refreshSettings = () => {
-            if (document.visibilityState === 'visible' && effectiveMachineId) {
-                void fetchIdleReminderSettings(effectiveMachineId);
-            }
-        };
-        document.addEventListener('visibilitychange', refreshSettings);
-        window.addEventListener('focus', refreshSettings);
-        return () => {
-            document.removeEventListener('visibilitychange', refreshSettings);
-            window.removeEventListener('focus', refreshSettings);
-        };
-    }, [effectiveMachineId, fetchIdleReminderSettings]);
 
     const targetPairsSessionKey = React.useMemo(() => {
         if (!effectiveMachineId || !urlEmpId) return null;
@@ -1072,40 +1042,6 @@ export const MobileProduction: React.FC = () => {
     }, [productionData?.id, productionData?.button_status, productionData?.is_paused, API_BASE]);
 
     // Fetch summary data from machine_centre_summary table
-    const fetchYesterdayCompare = React.useCallback(async (machineId: string, workCentreId?: number) => {
-        if (!machineId) {
-            setYesterdayCompare(null);
-            return;
-        }
-        setLoadingYesterdayCompare(true);
-        try {
-            const dateKey = todayDateKey();
-            const asOf = encodeURIComponent(getCompareAsOf(dateKey, currentTime));
-            const wcParam =
-                workCentreId != null && Number.isFinite(workCentreId)
-                    ? `&work_centre_id=${workCentreId}`
-                    : '';
-            const response = await apiFetch(
-                `${API_BASE}/api/mobile-production/machine/${encodeURIComponent(machineId)}/yesterday-compare?date=${dateKey}&as_of=${asOf}${wcParam}&_=${Date.now()}`
-            );
-            const json = await response.json();
-            if (!json.success || !json.compare_date) {
-                setYesterdayCompare(null);
-                return;
-            }
-            setYesterdayCompare({
-                sameTime: Math.round(Number(json.compare_same_time_output ?? 0)),
-                fullDay: Math.round(Number(json.compare_full_day_output ?? 0)),
-                asOfTimeLabel: String(json.as_of_time_label || '').trim() || '—',
-                compareDateLabel: String(json.compare_date_label || json.compare_date || '').trim() || '—',
-            });
-        } catch {
-            setYesterdayCompare(null);
-        } finally {
-            setLoadingYesterdayCompare(false);
-        }
-    }, [currentTime]);
-
     const fetchSummaryData = async (machineId: string, expectedMinTotal?: number) => {
         setLoadingSummary(true);
         try {
@@ -1120,11 +1056,7 @@ export const MobileProduction: React.FC = () => {
             while (retries > 0) {
                 // Add cache-busting timestamp to prevent browser caching stale data
                 const timestamp = Date.now();
-                const resolvedEmpId = Number(productionData?.emp_id ?? 0);
-                const empIdQuery = Number.isFinite(resolvedEmpId) && resolvedEmpId > 0
-                    ? `&emp_id=${resolvedEmpId}`
-                    : '';
-                const response = await apiFetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}?_=${timestamp}${empIdQuery}`);
+                const response = await apiFetch(`${API_BASE}/api/mobile-production/summary/${machineId}/date/${localDate}?_=${timestamp}`);
                 const result = await response.json();
                 lastResult = result;
                 
@@ -1157,29 +1089,19 @@ export const MobileProduction: React.FC = () => {
                             ? Number(dtp)
                             : null
                     );
-                    setBestArticleSummary(result.data.best_article || null);
                     return;
                 } else {
                     setTotalOutputToday(0);
                     setAvgEfficiencyToday('0');
                     setDailyTargetPairs(null);
-                    setBestArticleSummary(null);
                     return;
                 }
             }
         } catch (error) {
             console.error('Error fetching summary data:', error);
-            setBestArticleSummary(null);
         } finally {
             setLoadingSummary(false);
         }
-    };
-
-    const formatBestDateLabel = (dateStr?: string | null) => {
-        if (!dateStr) return '—';
-        const d = new Date(`${dateStr}T12:00:00`);
-        if (Number.isNaN(d.getTime())) return dateStr;
-        return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     };
 
     // Pull-to-refresh handlers
@@ -1190,7 +1112,6 @@ export const MobileProduction: React.FC = () => {
             await Promise.all([
                 fetchSummaryData(productionData.machine_id),
                 fetchIdleReminderSettings(productionData.machine_id),
-                fetchYesterdayCompare(productionData.machine_id, productionData.work_centre_id),
             ]);
             toast.success('Data refreshed');
         } catch {
@@ -1244,24 +1165,6 @@ export const MobileProduction: React.FC = () => {
             fetchSummaryData(productionData.machine_id);
         }
     }, [productionData?.machine_id]);
-
-    useEffect(() => {
-        if (!productionData?.machine_id || !headerExpanded) return;
-        void fetchYesterdayCompare(productionData.machine_id, productionData.work_centre_id);
-    }, [
-        productionData?.machine_id,
-        productionData?.work_centre_id,
-        headerExpanded,
-        fetchYesterdayCompare,
-    ]);
-
-    useEffect(() => {
-        if (!headerExpanded || !productionData?.machine_id) return;
-        const interval = window.setInterval(() => {
-            void fetchYesterdayCompare(productionData.machine_id, productionData.work_centre_id);
-        }, 30000);
-        return () => window.clearInterval(interval);
-    }, [headerExpanded, productionData?.machine_id, productionData?.work_centre_id, fetchYesterdayCompare]);
 
     // Session Initialization and Polling
     useEffect(() => {
@@ -2326,51 +2229,6 @@ export const MobileProduction: React.FC = () => {
                                         <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
                                 </div>
-                                {yesterdayCompare ? (
-                                    <div className="col-span-2 md:col-span-6">
-                                        <LastWorkingDayCompareCard
-                                            data={yesterdayCompare}
-                                            todayActual={totalOutputToday}
-                                            variant="mobile"
-                                        />
-                                    </div>
-                                ) : null}
-                                {bestArticleSummary ? (
-                                    <div className="col-span-2 md:col-span-6 rounded-xl border border-fuchsia-300/45 bg-fuchsia-500/10 p-3 shadow-sm">
-                                        <p className="text-[10px] font-bold uppercase tracking-wide text-fuchsia-100">
-                                            Your best for this article
-                                        </p>
-                                        <p className="mt-1 text-sm font-semibold text-white">
-                                            {bestArticleSummary.style_name}
-                                        </p>
-                                        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                            <div className="rounded-lg bg-white/10 px-3 py-2 ring-1 ring-white/20">
-                                                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75">
-                                                    Best same time ({bestArticleSummary.as_of_time_label || 'now'})
-                                                </p>
-                                                <p className="mt-1 text-lg font-black tabular-nums text-white">
-                                                    {bestArticleSummary.best_same_time_output ?? '—'}
-                                                    <span className="ml-1 text-xs font-semibold text-white/70">pairs</span>
-                                                </p>
-                                                <p className="text-[11px] text-white/70">
-                                                    {formatBestDateLabel(bestArticleSummary.best_same_time_date)}
-                                                </p>
-                                            </div>
-                                            <div className="rounded-lg bg-white/10 px-3 py-2 ring-1 ring-white/20">
-                                                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75">
-                                                    Best full day
-                                                </p>
-                                                <p className="mt-1 text-lg font-black tabular-nums text-white">
-                                                    {bestArticleSummary.best_full_day_output ?? '—'}
-                                                    <span className="ml-1 text-xs font-semibold text-white/70">pairs</span>
-                                                </p>
-                                                <p className="text-[11px] text-white/70">
-                                                    {formatBestDateLabel(bestArticleSummary.best_full_day_date)}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : null}
                                 {loadingSummary && !dailyPaceSnapshot ? (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/80 py-1">
                                         Loading daily speed…
