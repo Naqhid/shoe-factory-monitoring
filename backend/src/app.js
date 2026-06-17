@@ -692,6 +692,8 @@ app.get('/api/mobile-production/records', authenticate, mobileProductionControll
 app.get('/api/mobile-production/init/:machineId/:empCode', mobileProductionController.getInitData);
 app.get('/api/mobile-production/machine/:machineId/latest-unfinished', mobileProductionController.getLatestUnfinishedByMachine);
 app.get('/api/mobile-production/machine/:machineId/daily-cycles', missedActionsController.getMachineDailyCycles);
+app.get('/api/mobile-production/machine/:machineId/yesterday-compare', mobileProductionController.getMachineYesterdayCompare);
+app.get('/api/mobile-production/machine/:machineId/article-bests', mobileProductionController.getMachineArticleBests);
 app.get('/api/mobile-production/manual-entry', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntries);
 app.get('/api/mobile-production/manual-entry/audit-logs', authenticate, requireManualEntryAccess, mobileProductionController.getManualEntryAuditLogs);
 app.post('/api/mobile-production/manual-entry/audit-logs/:logId/restore', authenticate, requireManualEntryAccess, mobileProductionController.restoreManualEntryFromAuditLog);
@@ -769,6 +771,8 @@ app.get('/api/tab-broadcast/:broadcastId/view', tabBroadcastController.viewerPag
 
 // Logs routes (protected)
 app.get('/api/mobile-sessions/logs', authenticate, requireLogsAccess, mobileSessionController.getSessionLogs);
+app.get('/api/mobile-sessions/yesterday-login-preview', authenticate, requireLogsAccess, mobileSessionController.getYesterdayLoginPreview);
+app.post('/api/mobile-sessions/activate-yesterday-logins', authenticate, requireLogsAccess, mobileSessionController.activateYesterdayLogins);
 app.get('/api/mobile-sessions/cycles', authenticate, requireLogsAccess, mobileSessionController.getCycleDetails);
 app.post('/api/mobile-sessions/deactivate', authenticate, requireLogsAccess, mobileSessionController.deactivateSession);
 app.post('/api/mobile-sessions/reactivate', authenticate, requireLogsAccess, mobileSessionController.reactivateSessionFromLogs);

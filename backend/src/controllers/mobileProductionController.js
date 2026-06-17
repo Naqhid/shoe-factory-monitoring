@@ -2195,3 +2195,353 @@ exports.getInitData = async (req, res, next) => {
     next(error);
   }
 };
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const AS_OF_LOCAL_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+const LAST_WORKING_DAY_LOOKBACK = 7;
+
+const addDaysToDateKey = (dateKey, deltaDays) => {
+  const base = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return dateKey;
+  base.setDate(base.getDate() + deltaDays);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const asOfOnDateKey = (dateKey, asOfLocal) => {
+  const m = String(asOfLocal || '').match(/^\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})$/);
+  if (!m) return null;
+  return `${dateKey} ${m[1]}`;
+};
+
+const formatCompareDateLabel = (dateKey) => {
+  const d = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+
+async function resolveWorkCentreIdForMachine(machineKeys, dateKey, queryWorkCentreId) {
+  const queryId = Number(queryWorkCentreId);
+  if (Number.isFinite(queryId) && queryId > 0) return queryId;
+
+  const inList = machineKeys.length ? machineKeys : [];
+  if (!inList.length) return null;
+  const ph = inList.map(() => '?').join(', ');
+
+  const [mcFromMaster] = await db.query(
+    `SELECT work_centre_id FROM machine_centres
+     WHERE machine_id IN (${ph}) OR code IN (${ph})
+     LIMIT 1`,
+    [...inList, ...inList]
+  );
+  if (mcFromMaster.length > 0 && mcFromMaster[0].work_centre_id != null) {
+    return mcFromMaster[0].work_centre_id;
+  }
+
+  const [sessRows] = await db.query(
+    `SELECT work_centre_id FROM mobile_sessions
+     WHERE machine_id IN (${ph}) AND status = 'active'
+     ORDER BY activated_at DESC
+     LIMIT 1`,
+    [...inList]
+  );
+  if (sessRows.length > 0 && sessRows[0].work_centre_id != null) {
+    return sessRows[0].work_centre_id;
+  }
+
+  const [prodWcRows] = await db.query(
+    `SELECT work_centre_id FROM machine_centre_production
+     WHERE machine_id IN (${ph}) AND DATE(prod_date) = DATE(?)
+     ORDER BY id DESC
+     LIMIT 1`,
+    [...inList, dateKey]
+  );
+  if (prodWcRows.length > 0 && prodWcRows[0].work_centre_id != null) {
+    return prodWcRows[0].work_centre_id;
+  }
+
+  return null;
+}
+
+async function getMachineDayOutput(workCentreId, dateKey, machineKeys) {
+  const inList = machineKeys.length ? machineKeys : [];
+  if (!inList.length) return 0;
+  const ph = inList.map(() => '?').join(', ');
+  const [rows] = await db.query(
+    `SELECT COALESCE(SUM(output_pairs), 0) AS total_output
+     FROM machine_centre_production
+     WHERE work_centre_id = ?
+       AND DATE(prod_date) = DATE(?)
+       AND button_status = 2
+       AND machine_id IN (${ph})`,
+    [workCentreId, dateKey, ...inList]
+  );
+  return Math.round(Number(rows[0]?.total_output || 0));
+}
+
+async function getMachineOutputUpTo(workCentreId, dateKey, machineKeys, asOfLocal) {
+  const inList = machineKeys.length ? machineKeys : [];
+  if (!inList.length) return 0;
+  const ph = inList.map(() => '?').join(', ');
+  const [rows] = await db.query(
+    `SELECT COALESCE(SUM(output_pairs), 0) AS total_output
+     FROM machine_centre_production
+     WHERE work_centre_id = ?
+       AND DATE(prod_date) = DATE(?)
+       AND button_status = 2
+       AND machine_id IN (${ph})
+       AND finish_time IS NOT NULL
+       AND finish_time <= ?`,
+    [workCentreId, dateKey, ...inList, asOfLocal]
+  );
+  return Math.round(Number(rows[0]?.total_output || 0));
+}
+
+async function resolveLastWorkingDayKeyForMachine(workCentreId, machineKeys, dateKey) {
+  for (let daysBack = 1; daysBack <= LAST_WORKING_DAY_LOOKBACK; daysBack += 1) {
+    const candidate = addDaysToDateKey(dateKey, -daysBack);
+    const output = await getMachineDayOutput(workCentreId, candidate, machineKeys);
+    if (output > 0) return candidate;
+  }
+  return null;
+}
+
+/** Machine output: last working day at same clock time vs that day full. */
+exports.getMachineYesterdayCompare = async (req, res, next) => {
+  try {
+    const { machineId } = req.params;
+    const rawDate = String(req.query?.date || '');
+    const dateKey = DATE_ONLY_RE.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+    const asOfLocal = String(req.query?.as_of || '').trim();
+
+    if (!AS_OF_LOCAL_RE.test(asOfLocal)) {
+      return res.status(400).json({
+        success: false,
+        error: 'as_of is required (YYYY-MM-DD HH:mm:ss)',
+      });
+    }
+
+    const machineKeys = expandMachineIdKeys(machineId);
+    const inList = machineKeys.length ? machineKeys : [String(machineId || '').trim()].filter(Boolean);
+    if (!inList.length) {
+      return res.status(400).json({ success: false, error: 'machineId is required' });
+    }
+
+    const workCentreId = await resolveWorkCentreIdForMachine(inList, dateKey, req.query?.work_centre_id);
+    if (!workCentreId) {
+      return res.status(404).json({ success: false, error: 'Work centre not found for machine' });
+    }
+
+    const compareDateKey = await resolveLastWorkingDayKeyForMachine(workCentreId, inList, dateKey);
+    const asOfTimeLabel = asOfLocal.slice(11, 16);
+
+    if (!compareDateKey) {
+      return res.json({
+        success: true,
+        date: dateKey,
+        work_centre_id: workCentreId,
+        machine_id: inList[0],
+        compare_date: null,
+        compare_date_label: null,
+        compare_source: 'last_working_day',
+        as_of: asOfLocal,
+        as_of_time_label: asOfTimeLabel,
+        compare_same_time_output: null,
+        compare_full_day_output: null,
+      });
+    }
+
+    const compareAsOf = asOfOnDateKey(compareDateKey, asOfLocal);
+    if (!compareAsOf) {
+      return res.status(400).json({ success: false, error: 'Invalid as_of value' });
+    }
+
+    const [compareSameTime, compareFullDay] = await Promise.all([
+      getMachineOutputUpTo(workCentreId, compareDateKey, inList, compareAsOf),
+      getMachineDayOutput(workCentreId, compareDateKey, inList),
+    ]);
+
+    return res.json({
+      success: true,
+      date: dateKey,
+      work_centre_id: workCentreId,
+      machine_id: inList[0],
+      compare_date: compareDateKey,
+      compare_date_label: formatCompareDateLabel(compareDateKey),
+      compare_source: 'last_working_day',
+      as_of: asOfLocal,
+      as_of_time_label: asOfTimeLabel,
+      compare_same_time_output: compareSameTime,
+      compare_full_day_output: compareFullDay,
+    });
+  } catch (error) {
+    logger.error('Error getting machine yesterday compare:', error);
+    next(error);
+  }
+};
+
+const mondayOfWeek = (dateKey) => {
+  const d = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  const day = d.getDay(); // Sun=0
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+};
+
+const parseAsOfTime = (asOfLocal) => String(asOfLocal || '').slice(11, 19);
+
+const pickBestMetric = (rows, fieldName) => {
+  let best = null;
+  for (const row of rows || []) {
+    const value = Math.round(Number(row?.[fieldName] || 0));
+    if (best == null || value > best.value) {
+      best = {
+        value,
+        date: row.prod_date || null,
+        date_label: row.prod_date ? formatCompareDateLabel(String(row.prod_date)) : null,
+      };
+    }
+  }
+  return best || { value: 0, date: null, date_label: null };
+};
+
+exports.getMachineArticleBests = async (req, res, next) => {
+  try {
+    const { machineId } = req.params;
+    const rawDate = String(req.query?.date || '');
+    const dateKey = DATE_ONLY_RE.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+    const asOfLocal = String(req.query?.as_of || '').trim();
+
+    if (!AS_OF_LOCAL_RE.test(asOfLocal)) {
+      return res.status(400).json({
+        success: false,
+        error: 'as_of is required (YYYY-MM-DD HH:mm:ss)',
+      });
+    }
+
+    const machineKeys = expandMachineIdKeys(machineId);
+    const inList = machineKeys.length ? machineKeys : [String(machineId || '').trim()].filter(Boolean);
+    if (!inList.length) {
+      return res.status(400).json({ success: false, error: 'machineId is required' });
+    }
+    const ph = inList.map(() => '?').join(', ');
+
+    const workCentreId = await resolveWorkCentreIdForMachine(inList, dateKey, req.query?.work_centre_id);
+    if (!workCentreId) {
+      return res.status(404).json({ success: false, error: 'Work centre not found for machine' });
+    }
+
+    const [planRows] = await db.query(
+      `SELECT
+         pp.style_id,
+         COALESCE(NULLIF(TRIM(s.code), ''), NULLIF(TRIM(s.name), ''), CONCAT('Style #', pp.style_id)) AS article_label
+       FROM production_plan pp
+       LEFT JOIN styles s ON s.id = pp.style_id
+       WHERE pp.work_centre_id = ?
+         AND DATE(pp.plan_date) = DATE(?)
+         AND pp.deleted_at IS NULL
+       ORDER BY pp.id DESC
+       LIMIT 1`,
+      [workCentreId, dateKey]
+    );
+    const styleId = Number(planRows[0]?.style_id || 0);
+    const articleLabel = String(planRows[0]?.article_label || '').trim();
+    if (!styleId) {
+      return res.json({
+        success: true,
+        date: dateKey,
+        work_centre_id: workCentreId,
+        machine_id: inList[0],
+        article_label: null,
+        process_label: null,
+        process_article: {
+          week_start: mondayOfWeek(dateKey),
+          week_end: dateKey,
+          best_same_time: { value: 0, date: null, date_label: null },
+          best_full_day: { value: 0, date: null, date_label: null },
+        },
+        machine_article: {
+          best_same_time: { value: 0, date: null, date_label: null },
+          best_full_day: { value: 0, date: null, date_label: null },
+        },
+      });
+    }
+
+    const [machineMetaRows] = await db.query(
+      `SELECT COALESCE(NULLIF(TRIM(machine_name), ''), NULLIF(TRIM(name), ''), machine_id) AS process_label
+       FROM machine_centres
+       WHERE machine_id IN (${ph}) OR code IN (${ph})
+       LIMIT 1`,
+      [...inList, ...inList]
+    );
+    const processLabel = String(machineMetaRows[0]?.process_label || inList[0]).trim();
+    const weekStart = mondayOfWeek(dateKey);
+    const asOfTime = parseAsOfTime(asOfLocal);
+
+    const [processRows] = await db.query(
+      `SELECT
+         DATE(mcp.prod_date) AS prod_date,
+         COALESCE(SUM(CASE WHEN mcp.finish_time IS NOT NULL AND TIME(mcp.finish_time) <= ? THEN mcp.output_pairs ELSE 0 END), 0) AS same_time_output,
+         COALESCE(SUM(mcp.output_pairs), 0) AS full_day_output
+       FROM machine_centre_production mcp
+       JOIN machine_centres mc ON mc.machine_id = mcp.machine_id
+       JOIN production_plan pp
+         ON pp.work_centre_id = mcp.work_centre_id
+        AND DATE(pp.plan_date) = DATE(mcp.prod_date)
+        AND pp.deleted_at IS NULL
+       WHERE mcp.button_status = 2
+         AND pp.style_id = ?
+         AND COALESCE(NULLIF(TRIM(mc.machine_name), ''), NULLIF(TRIM(mc.name), ''), mc.machine_id) = ?
+         AND DATE(mcp.prod_date) BETWEEN DATE(?) AND DATE(?)
+       GROUP BY DATE(mcp.prod_date)`,
+      [asOfTime, styleId, processLabel, weekStart, dateKey]
+    );
+
+    const [machineRows] = await db.query(
+      `SELECT
+         DATE(mcp.prod_date) AS prod_date,
+         COALESCE(SUM(CASE WHEN mcp.finish_time IS NOT NULL AND TIME(mcp.finish_time) <= ? THEN mcp.output_pairs ELSE 0 END), 0) AS same_time_output,
+         COALESCE(SUM(mcp.output_pairs), 0) AS full_day_output
+       FROM machine_centre_production mcp
+       JOIN production_plan pp
+         ON pp.work_centre_id = mcp.work_centre_id
+        AND DATE(pp.plan_date) = DATE(mcp.prod_date)
+        AND pp.deleted_at IS NULL
+       WHERE mcp.button_status = 2
+         AND pp.style_id = ?
+         AND mcp.machine_id IN (${ph})
+       GROUP BY DATE(mcp.prod_date)`,
+      [asOfTime, styleId, ...inList]
+    );
+
+    return res.json({
+      success: true,
+      date: dateKey,
+      as_of: asOfLocal,
+      as_of_time_label: asOfLocal.slice(11, 16),
+      work_centre_id: workCentreId,
+      machine_id: inList[0],
+      article_label: articleLabel || null,
+      process_label: processLabel || null,
+      process_article: {
+        week_start: weekStart,
+        week_end: dateKey,
+        best_same_time: pickBestMetric(processRows, 'same_time_output'),
+        best_full_day: pickBestMetric(processRows, 'full_day_output'),
+      },
+      machine_article: {
+        best_same_time: pickBestMetric(machineRows, 'same_time_output'),
+        best_full_day: pickBestMetric(machineRows, 'full_day_output'),
+      },
+    });
+  } catch (error) {
+    logger.error('Error getting machine article bests:', error);
+    next(error);
+  }
+};

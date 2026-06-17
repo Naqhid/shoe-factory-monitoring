@@ -363,20 +363,6 @@ export const MobileProduction: React.FC = () => {
         void fetchIdleReminderSettings(effectiveMachineId);
     }, [effectiveMachineId, sessionStatus, fetchIdleReminderSettings]);
 
-    useEffect(() => {
-        const refreshSettings = () => {
-            if (document.visibilityState === 'visible' && effectiveMachineId) {
-                void fetchIdleReminderSettings(effectiveMachineId);
-            }
-        };
-        document.addEventListener('visibilitychange', refreshSettings);
-        window.addEventListener('focus', refreshSettings);
-        return () => {
-            document.removeEventListener('visibilitychange', refreshSettings);
-            window.removeEventListener('focus', refreshSettings);
-        };
-    }, [effectiveMachineId, fetchIdleReminderSettings]);
-
     const targetPairsSessionKey = React.useMemo(() => {
         if (!effectiveMachineId || !urlEmpId) return null;
         return `mobile_target_pairs_${effectiveMachineId}_${urlEmpId}`;
@@ -2196,6 +2182,53 @@ export const MobileProduction: React.FC = () => {
                                         )}
                                     </button>
                                 </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Operator</p>
+                                        <p className="font-semibold truncate">
+                                            {formatOperatorDisplay(employeeName, productionData.emp_id)}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Machine ID</p>
+                                        <p className="font-semibold truncate">{resolvedMachineId || productionData.machine_id}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Line Name</p>
+                                        <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Process Name</p>
+                                        <p className="font-semibold truncate">{machineName || 'N/A'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Bins Completed (Today)</p>
+                                        <p className="font-semibold truncate">
+                                            {loadingSummary
+                                                ? '...'
+                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
+                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
+                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
+                                        </p>
+                                        <p className="text-[11px] opacity-80">
+                                            ~bins at {MOBILE_PAIRS_PER_BIN} pr/box (standard)
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">Date & Time</p>
+                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    </div>
+                                </div>
                                 {loadingSummary && !dailyPaceSnapshot ? (
                                     <div className="col-span-2 md:col-span-6 text-center text-xs text-white/80 py-1">
                                         Loading daily speed…
@@ -2262,53 +2295,6 @@ export const MobileProduction: React.FC = () => {
                                         No routing target time for this machine — shift target and speed are unavailable.
                                     </div>
                                 )}
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Operator</p>
-                                        <p className="font-semibold truncate">
-                                            {formatOperatorDisplay(employeeName, productionData.emp_id)}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Machine ID</p>
-                                        <p className="font-semibold truncate">{resolvedMachineId || productionData.machine_id}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 ring-1 ring-inset ring-white/5">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Line Name</p>
-                                        <p className="font-semibold truncate">{productionData.work_centre_name || `WC-${productionData.work_centre_id}`}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Process Name</p>
-                                        <p className="font-semibold truncate">{machineName || 'N/A'}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Bins Completed (Today)</p>
-                                        <p className="font-semibold truncate">
-                                            {loadingSummary
-                                                ? '...'
-                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
-                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
-                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
-                                        </p>
-                                        <p className="text-[11px] opacity-80">
-                                            ~bins at {MOBILE_PAIRS_PER_BIN} pr/box (standard)
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
-                                    <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Date & Time</p>
-                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                    </div>
-                                </div>
                                 <button
                                     type="button"
                                     onClick={toggleIdleReminder}
