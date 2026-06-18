@@ -358,6 +358,48 @@ export const MobileProduction: React.FC = () => {
         : urlMachineId;
     const effectiveMachineId = resolvedMachineId || urlMachineId || '';
 
+    const redirectToActiveSessionIfAny = React.useCallback(
+        async (machineId: string, urlSlug: string): Promise<boolean> => {
+            try {
+                const res = await apiFetch(
+                    `${API_BASE}/api/mobile-session/active-for/${machineId}?_=${Date.now()}`,
+                    { cache: 'no-store' }
+                );
+                const json = await res.json();
+                if (json.success && json.data?.emp_code) {
+                    const empCode = json.data.emp_code;
+                    const token = json.data.session_id;
+                    if (token && typeof sessionStorage !== 'undefined') {
+                        sessionStorage.setItem(`mobile_control_session_${urlSlug}_${empCode}`, token);
+                    }
+                    const machine = encodeURIComponent(urlSlug);
+                    const emp = encodeURIComponent(empCode);
+                    const sessionQuery = token ? `?session=${encodeURIComponent(token)}` : '';
+                    navigate(`/mobile/${machine}/${emp}${sessionQuery}`, { replace: true });
+                    return true;
+                }
+            } catch (error) {
+                console.warn('Active session lookup failed:', error);
+            }
+            return false;
+        },
+        [navigate]
+    );
+
+    const isValidEmployeeCode = React.useCallback(async (empCode: string): Promise<boolean> => {
+        try {
+            const res = await apiFetch(`${API_BASE}/api/masters/employees`);
+            const json = await res.json();
+            if (!json.success || !Array.isArray(json.data)) return false;
+            return json.data.some(
+                (e: { code?: string; emp_id?: string }) =>
+                    String(e.code) === String(empCode) || String(e.emp_id) === String(empCode)
+            );
+        } catch {
+            return false;
+        }
+    }, []);
+
     const fetchIdleReminderSettings = React.useCallback(async (machineId?: string) => {
         const mid = machineId || effectiveMachineId;
         if (!mid) return;
@@ -1190,6 +1232,34 @@ export const MobileProduction: React.FC = () => {
                 setLoading(true);
                 setInitializing(true);
                 try {
+                    // Prefer active session on this machine when URL employee is wrong or stale
+                    try {
+                        const activeSessionRes = await apiFetch(
+                            `${API_BASE}/api/mobile-session/active-for/${effectiveMachineId}?_=${Date.now()}`,
+                            { cache: 'no-store' }
+                        );
+                        const activeSessionData = await activeSessionRes.json();
+                        if (activeSessionData.success && activeSessionData.data?.emp_code) {
+                            const activeEmp = activeSessionData.data.emp_code;
+                            if (String(activeEmp) !== String(urlEmpId)) {
+                                const token = activeSessionData.data.session_id;
+                                if (token && typeof sessionStorage !== 'undefined') {
+                                    sessionStorage.setItem(
+                                        `mobile_control_session_${urlMachineId}_${activeEmp}`,
+                                        token
+                                    );
+                                }
+                                const machine = encodeURIComponent(urlMachineId || effectiveMachineId);
+                                const emp = encodeURIComponent(activeEmp);
+                                const sessionQuery = token ? `?session=${encodeURIComponent(token)}` : '';
+                                navigate(`/mobile/${machine}/${emp}${sessionQuery}`, { replace: true });
+                                return;
+                            }
+                        }
+                    } catch {
+                        // continue with normal init
+                    }
+
                     // Add minimum delay to show loader
                     const [_, __] = await Promise.all([
                         (async () => {
@@ -1310,6 +1380,15 @@ export const MobileProduction: React.FC = () => {
 
                         if (!result.success) {
                             toast.error(result.message || 'Failed to initialize');
+                            const redirected = await redirectToActiveSessionIfAny(
+                                effectiveMachineId,
+                                urlMachineId || effectiveMachineId
+                            );
+                            if (!redirected) {
+                                navigate(`/mobile/${encodeURIComponent(urlMachineId || effectiveMachineId)}`, {
+                                    replace: true,
+                                });
+                            }
                             return;
                         }
 
@@ -1377,6 +1456,15 @@ export const MobileProduction: React.FC = () => {
                     ]);
                 } catch (e) {
                     toast.error('Failed to load setup data');
+                    const redirected = await redirectToActiveSessionIfAny(
+                        effectiveMachineId,
+                        urlMachineId || effectiveMachineId
+                    );
+                    if (!redirected) {
+                        navigate(`/mobile/${encodeURIComponent(urlMachineId || effectiveMachineId)}`, {
+                            replace: true,
+                        });
+                    }
                 } finally {
                     setLoading(false);
                     setInitializing(false);
@@ -1392,6 +1480,11 @@ export const MobileProduction: React.FC = () => {
             const resolveMachineOnlyRoute = async () => {
                 setResolvingMachineRoute(true);
                 try {
+                    const machineSlug = urlMachineId || effectiveMachineId;
+                    if (await redirectToActiveSessionIfAny(effectiveMachineId, machineSlug)) {
+                        return;
+                    }
+
                     try {
                         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('user_info') : null;
                         const user = raw ? JSON.parse(raw) : null;
@@ -1404,11 +1497,12 @@ export const MobileProduction: React.FC = () => {
                                 !user.machine_id ||
                                 String(user.machine_id) === String(effectiveMachineId) ||
                                 String(user.machine_id) === String(urlMachineId)
-                            )
+                            ) &&
+                            (await isValidEmployeeCode(userCode))
                         ) {
                             if (!cancelled) {
                                 navigate(
-                                    `/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(userCode)}`,
+                                    `/mobile/${encodeURIComponent(machineSlug)}/${encodeURIComponent(userCode)}`,
                                     { replace: true }
                                 );
                             }
@@ -1416,24 +1510,6 @@ export const MobileProduction: React.FC = () => {
                         }
                     } catch {
                         // ignore malformed user_info
-                    }
-
-                    const ts = Date.now();
-                    const sessionRes = await apiFetch(
-                        `${API_BASE}/api/mobile-session/active-for/${effectiveMachineId}?_=${ts}`,
-                        { cache: 'no-store' }
-                    );
-                    const sessionJson = await sessionRes.json();
-                    if (!cancelled && sessionJson.success && sessionJson.data?.emp_code) {
-                        const empCode = sessionJson.data.emp_code;
-                        const token = sessionJson.data.session_id;
-                        if (token && typeof sessionStorage !== 'undefined') {
-                            sessionStorage.setItem(`mobile_control_session_${urlMachineId}_${empCode}`, token);
-                        }
-                        const machine = encodeURIComponent(urlMachineId);
-                        const emp = encodeURIComponent(empCode);
-                        const sessionQuery = token ? `?session=${encodeURIComponent(token)}` : '';
-                        navigate(`/mobile/${machine}/${emp}${sessionQuery}`, { replace: true });
                     }
                 } catch (error) {
                     console.warn('Failed to resolve machine-only mobile route:', error);
@@ -1466,7 +1542,42 @@ export const MobileProduction: React.FC = () => {
             }, 5000); // 5 second polling as requested
             return () => clearInterval(globalSyncInterval);
         }
-    }, [location.pathname, location.search, API_BASE, navigate, urlMachineId, urlEmpId, sessionToken, initializeTargetPairBaseline, effectiveMachineId]);
+    }, [location.pathname, location.search, API_BASE, navigate, urlMachineId, urlEmpId, sessionToken, initializeTargetPairBaseline, effectiveMachineId, redirectToActiveSessionIfAny, isValidEmployeeCode]);
+
+    // Recover from bad/stale employee in URL — poll for active session instead of hanging
+    useEffect(() => {
+        if (
+            !urlMachineId ||
+            !urlEmpId ||
+            productionData ||
+            sessionStatus !== 'waiting' ||
+            loading ||
+            initializing
+        ) {
+            return;
+        }
+
+        let cancelled = false;
+        const poll = async () => {
+            if (cancelled) return;
+            await redirectToActiveSessionIfAny(effectiveMachineId, urlMachineId);
+        };
+        void poll();
+        const interval = setInterval(poll, 2500);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [
+        urlMachineId,
+        urlEmpId,
+        productionData,
+        sessionStatus,
+        loading,
+        initializing,
+        effectiveMachineId,
+        redirectToActiveSessionIfAny,
+    ]);
 
 
     // Retry helper — retries up to maxRetries times with exponential backoff
@@ -2109,7 +2220,7 @@ export const MobileProduction: React.FC = () => {
                             ? `Waiting for supervisor scan on ${urlMachineId}...`
                             : !urlMachineId && !urlEmpId
                                 ? 'Waiting for QR scan from another device...'
-                                : 'Waiting for connection...'
+                                : `Looking for active session on ${urlMachineId}...`
                         }
                     </p>
                 </div>
