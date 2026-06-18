@@ -67,6 +67,7 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
     allowedMenus: [
       'overview', 'production_tracker', 'manual_production_entry',
       'reports', 'missed_actions', 'logs', 'alert_center',
+      'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees',
     ],
   },
 };
