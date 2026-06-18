@@ -3,6 +3,7 @@
 const db = require('../../config/database');
 const { withTransaction } = require('../utils/transaction');
 const { activeWorkCentreWhere } = require('../utils/workCentreSql');
+const { localDateKey } = require('../utils/dateKey');
 const lineStyleAssignmentService = require('./lineStyleAssignmentService');
 
 function getPlanningController() {
@@ -191,7 +192,7 @@ function buildRowFlags(sourcePlan, targetPlan, schedule) {
 }
 
 async function getTodayBoard(planDate) {
-  const dateKey = parseDateKey(planDate) || parseDateKey(new Date().toISOString());
+  const dateKey = parseDateKey(planDate) || localDateKey();
   const [workCentres, plans, schedules, actuals] = await Promise.all([
     fetchActiveWorkCentres(),
     fetchPlansByDate(dateKey),
@@ -249,7 +250,7 @@ async function getTodayBoard(planDate) {
 }
 
 async function getWeekGrid(anchorDate) {
-  const dateKey = parseDateKey(anchorDate) || parseDateKey(new Date().toISOString());
+  const dateKey = parseDateKey(anchorDate) || localDateKey();
   const days = enumerateWeek(dateKey);
   const workCentres = await fetchActiveWorkCentres();
 

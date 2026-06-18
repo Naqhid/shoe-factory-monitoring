@@ -24,6 +24,7 @@ import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import * as XLSX from 'xlsx';
+import { todayDateKey, dayBeforeDateKey, dayAfterDateKey, parseDateKey } from '../utils/compareDateUtils';
 
 interface MasterOption {
   id: number;
@@ -50,30 +51,10 @@ interface LineItem {
 }
 
 const formatPlanDateLabel = (value: string | null | undefined) => {
-  const part = String(value || '').split('T')[0];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return part || '—';
+  const part = parseDateKey(value);
+  if (!part) return '—';
   const [y, m, d] = part.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString();
-};
-
-const todayDateKey = () => new Date().toISOString().split('T')[0];
-
-const dayBeforeDateKey = (dateKey: string) => {
-  const part = String(dateKey || '').split('T')[0];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
-  const [y, m, d] = part.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() - 1);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-};
-
-const dayAfterDateKey = (dateKey: string) => {
-  const part = String(dateKey || '').split('T')[0];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
-  const [y, m, d] = part.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + 1);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 };
 
 interface PlanGapDay {
@@ -129,13 +110,13 @@ export const ProductionPlanningForm: React.FC = () => {
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
   const [restoreId, setRestoreId] = React.useState<number | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
-  const [planDate, setPlanDate] = React.useState(new Date().toISOString().split('T')[0]);
+  const [planDate, setPlanDate] = React.useState(() => todayDateKey());
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(10);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [filterDate, setFilterDate] = React.useState(() => new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = React.useState(() => todayDateKey());
   const [filterWorkCentre, setFilterWorkCentre] = React.useState('');
   const [filterStyle, setFilterStyle] = React.useState('');
   const [showDeleted, setShowDeleted] = React.useState(false);
@@ -185,24 +166,46 @@ export const ProductionPlanningForm: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    fetchPlans();
     fetchMasters();
     fetchPlanGaps();
   }, []);
 
   React.useEffect(() => {
+    const syncCalendarDay = () => {
+      const today = todayDateKey();
+      setFilterDate((prev) => {
+        const yesterday = dayBeforeDateKey(today);
+        return prev === yesterday ? today : prev;
+      });
+      fetchPlanGaps();
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') syncCalendarDay();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    const timer = window.setInterval(syncCalendarDay, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(timer);
+    };
+  }, [fetchPlanGaps]);
+
+  React.useEffect(() => {
     fetchPlans();
   }, [currentPage, itemsPerPage, searchTerm, filterDate, filterWorkCentre, filterStyle, showDeleted]);
 
-  const fetchPlans = async () => {
+  const fetchPlans = async (options?: { planDate?: string }) => {
     setRefreshing(true);
     try {
+      const dateFilter = options?.planDate ?? filterDate;
       const params = new URLSearchParams({
         page: String(currentPage),
         limit: String(itemsPerPage),
       });
       if (searchTerm.trim()) params.set('search', searchTerm.trim());
-      if (filterDate) params.set('plan_date', filterDate);
+      if (dateFilter) params.set('plan_date', dateFilter);
       if (filterWorkCentre) params.set('work_centre_id', filterWorkCentre);
       if (filterStyle) params.set('style_id', filterStyle);
       if (showDeleted) params.set('include_deleted', '1');
@@ -299,7 +302,7 @@ export const ProductionPlanningForm: React.FC = () => {
 
   const handleAdd = () => {
     setEditingId(null);
-    setPlanDate(new Date().toISOString().split('T')[0]);
+    setPlanDate(filterDate || todayDateKey());
     setLines([emptyLine()]);
     setShowModal(true);
   };
@@ -357,7 +360,7 @@ export const ProductionPlanningForm: React.FC = () => {
       if (result.success) {
         const plan = result.data;
         setEditingId(id);
-        setPlanDate(plan.plan_date ? new Date(plan.plan_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+        setPlanDate(parseDateKey(plan.plan_date) || todayDateKey());
         setLines([{
           style_id: String(plan.style_id),
           customer_id: String(plan.customer_id),
@@ -464,7 +467,10 @@ export const ProductionPlanningForm: React.FC = () => {
         if (result.success) {
           toast.success('Plan updated');
           setShowModal(false);
-          fetchPlans();
+          setFilterDate(planDate);
+          setCurrentPage(1);
+          fetchPlans({ planDate });
+          fetchPlanGaps();
         } else {
           toast.error(result.error || 'Failed to update plan');
         }
@@ -510,7 +516,10 @@ export const ProductionPlanningForm: React.FC = () => {
       if (ok > 0) {
         toast.success(`Saved ${ok} plan(s)`);
         setShowModal(false);
-        fetchPlans();
+        setFilterDate(planDate);
+        setCurrentPage(1);
+        fetchPlans({ planDate });
+        fetchPlanGaps();
       }
     }
   };
@@ -575,7 +584,7 @@ export const ProductionPlanningForm: React.FC = () => {
       });
 
       const routingCache = new Map<string, any>();
-      const defaultDate = new Date().toISOString().split('T')[0];
+      const defaultDate = todayDateKey();
       const payloadLines = [];
 
       for (let idx = 0; idx < rows.length; idx += 1) {
@@ -673,7 +682,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const downloadPlanningTemplate = () => {
     const rows = [
       {
-        plan_date: new Date().toISOString().split('T')[0],
+        plan_date: todayDateKey(),
         style: 'STYLE01',
         work_centre: 'WC01',
         total_target_per_day: 1200,
@@ -864,6 +873,36 @@ export const ProductionPlanningForm: React.FC = () => {
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterDate(todayDateKey());
+                    setCurrentPage(1);
+                  }}
+                  className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition ${
+                    filterDate === todayDateKey()
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterDate(dayAfterDateKey(todayDateKey()));
+                    setCurrentPage(1);
+                  }}
+                  className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition ${
+                    filterDate === dayAfterDateKey(todayDateKey())
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Tomorrow
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Work centre</label>
@@ -1321,7 +1360,7 @@ export const ProductionPlanningForm: React.FC = () => {
                 <tbody>
                   <tr>
                     {[
-                      new Date().toISOString().split('T')[0],
+                      todayDateKey(),
                       'STYLE01',
                       'WC01',
                       '1200',
