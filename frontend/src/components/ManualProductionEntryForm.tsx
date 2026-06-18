@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
+import { canMutateManualProduction } from '../utils/roleConfig';
 import { SearchableSelect } from './SearchableSelect';
 import { WipDailyStateTab } from './WipDailyStateTab';
 import { ProductionDayLockPanel } from './ProductionDayLockPanel';
@@ -207,11 +208,10 @@ export const ManualProductionEntryForm: React.FC = () => {
   const currentUser = React.useMemo(() => {
     try { return JSON.parse(localStorage.getItem('user_info') || 'null'); } catch { return null; }
   }, []);
-  const currentRole: string = (currentUser?.role || '').toLowerCase();
-  const canEdit = currentRole === 'admin';
+  const canEdit = canMutateManualProduction(currentUser?.role);
   const [productionDayLocked, setProductionDayLocked] = React.useState(false);
   const canMutate = canEdit && !productionDayLocked;
-  // All authenticated users can VIEW — only canEdit users can add/edit/delete
+  // All authenticated users with menu access can VIEW — Admin and Project Monitor can add/edit/delete.
   const isAuthenticated = !!currentUser;
 
   const [workCentres, setWorkCentres] = React.useState<WorkCentre[]>([]);

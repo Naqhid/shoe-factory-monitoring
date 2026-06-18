@@ -7,7 +7,8 @@ export type UserRole =
   | 'Planner'
   | 'Unit Head'
   | 'Production Manager'
-  | 'Quality';
+  | 'Quality'
+  | 'Project Monitor';
 
 export interface UserSession {
   role?: string | null;
@@ -60,7 +61,14 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Quality': {
     defaultRoute: '/production_tracker',
     allowedMenus: ['production_tracker', 'rework_rejection_tracker', 'missed_actions', 'alert_center']
-  }
+  },
+  'Project Monitor': {
+    defaultRoute: '/production_tracker',
+    allowedMenus: [
+      'overview', 'production_tracker', 'manual_production_entry',
+      'reports', 'missed_actions', 'logs', 'alert_center',
+    ],
+  },
 };
 
 export const ALL_MENU_DEFINITIONS = [
@@ -101,6 +109,7 @@ const ROLE_ALIASES: Record<string, UserRole> = {
   'production manager': 'Production Manager',
   'production_manager': 'Production Manager',
   quality: 'Quality',
+  'project monitor': 'Project Monitor',
 };
 
 const normalizeRole = (role: UserRole | string | null): UserRole | null => {
@@ -210,6 +219,13 @@ export const getDefaultRoute = (
   if (!normalizedRole) return '/overview';
   return normalizeAppRoute(roleConfigs[normalizedRole as UserRole]?.defaultRoute);
 };
+
+/** Roles allowed to add/edit/delete on Manual Production Entry (not view-only). */
+const MANUAL_PRODUCTION_MUTATE_ROLES = new Set(['admin', 'project monitor']);
+
+export function canMutateManualProduction(role: string | null | undefined): boolean {
+  return MANUAL_PRODUCTION_MUTATE_ROLES.has(String(role || '').trim().toLowerCase());
+}
 
 /** Merge fresh permissions from /api/auth/session into stored user_info */
 export function applySessionPermissions(user: UserSession): UserSession {
