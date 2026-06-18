@@ -30,10 +30,7 @@ export const MobileLineSelector: React.FC = () => {
     }
 
     if (getEffectiveRole(user) === 'Machine Centre User' && user?.machine_id) {
-      navigate(
-        `/mobile/${encodeURIComponent(user.machine_id)}/${encodeURIComponent(user.code)}`,
-        { replace: true }
-      );
+      navigate(`/mobile/${encodeURIComponent(user.machine_id)}`, { replace: true });
       return;
     }
 
