@@ -8,7 +8,7 @@ const sqlBind = (value) => (value === undefined ? null : value);
 const headerInsertParams = (header) => [
   header.customer_id,
   header.group_id,
-  header.leather_id,
+  sqlBind(header.leather_id || null),
   header.style_id,
   header.color_id,
   sqlBind(header.created_on),
@@ -90,7 +90,7 @@ class ProductionRoutingController {
 
   validateHeader(header) {
     if (!header) return 'Header is required';
-    const requiredIds = ['customer_id', 'group_id', 'leather_id', 'style_id', 'color_id'];
+    const requiredIds = ['customer_id', 'group_id', 'style_id', 'color_id'];
     for (const key of requiredIds) {
       if (!header[key]) return `Header field "${key}" is required`;
     }
