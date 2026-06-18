@@ -329,6 +329,11 @@ const initDb = async () => {
       await permissionService.addMenusToRole('Admin', ['line_schedule']);
       await permissionService.addMenusToRole('Planner', ['line_schedule']);
     });
+    await permissionService.runOneTimeMigration('project_monitor_masters_v1', async () => {
+      await permissionService.addMenusToRole('Project Monitor', [
+        'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees',
+      ]);
+    });
     await permissionService.bootstrapRoleDefaultsSnapshot();
     logger.info('roles table ready (defaults snapshot initialized when missing)');
 
@@ -354,6 +359,7 @@ const requireTrackerAccess = requirePermission(CAPABILITIES.TRACKER);
 const requireReworkAccess = requirePermission(CAPABILITIES.REWORK);
 const requireLineSetupAccess = requirePermission(CAPABILITIES.LINE_SETUP);
 const requireManualEntryAccess = requirePermission(CAPABILITIES.MANUAL_ENTRY);
+const requireMastersMutateAccess = requirePermission(CAPABILITIES.ADMIN, CAPABILITIES.MASTERS);
 const requireAdminAccess = requirePermission(CAPABILITIES.ADMIN);
 const requireUsersAdminAccess = (req, res, next) => {
   if (req.params.table !== 'users') return next();
@@ -612,13 +618,13 @@ app.get('/api/masters/:table', validate.allowedTable, authenticateUsersTable, re
 app.get('/api/masters/:table/:id', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.numericId, masterController.getById);
 app.get('/api/masters/:table/code/:code', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, masterController.getByCode);
 app.get('/api/masters/:table/:id/usage', validate.allowedTable, authenticateUsersTable, requireUsersAdminAccess, validate.numericId, masterController.getUsage.bind(masterController));
-app.post('/api/masters/:table/:id/restore', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.restore.bind(masterController));
+app.post('/api/masters/:table/:id/restore', validate.allowedTable, authenticate, requireMastersMutateAccess, validate.numericId, masterController.restore.bind(masterController));
 app.get('/api/masters/employees/emp_id/:empId', masterController.getByEmpId);
 app.post('/api/masters/employees/quick-register', masterController.quickRegisterEmployee.bind(masterController));
 app.get('/api/masters/machine_centres/machine_id/:machineId', masterController.getByMachineId);
-app.post('/api/masters/:table', validate.allowedTable, authenticate, requireAdminAccess, masterController.create.bind(masterController));
-app.put('/api/masters/:table/:id', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.update.bind(masterController));
-app.delete('/api/masters/:table/:id', validate.allowedTable, authenticate, requireAdminAccess, validate.numericId, masterController.delete.bind(masterController));
+app.post('/api/masters/:table', validate.allowedTable, authenticate, requireMastersMutateAccess, masterController.create.bind(masterController));
+app.put('/api/masters/:table/:id', validate.allowedTable, authenticate, requireMastersMutateAccess, validate.numericId, masterController.update.bind(masterController));
+app.delete('/api/masters/:table/:id', validate.allowedTable, authenticate, requireMastersMutateAccess, validate.numericId, masterController.delete.bind(masterController));
 
 // Production routing routes
 app.get('/api/production-routing', authenticate, requireProductionRoutingAccess, validate.pagination, productionRoutingController.getAll.bind(productionRoutingController));
