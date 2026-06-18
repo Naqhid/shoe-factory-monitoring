@@ -239,6 +239,14 @@ const initDb = async () => {
     } catch (routingMinsAlterError) {
       logger.error('Failed to migrate production_routing_lines calc columns:', routingMinsAlterError.message);
     }
+    try {
+      await db.execute('ALTER TABLE production_routing_header MODIFY COLUMN leather_id INT NULL');
+      logger.info('production_routing_header.leather_id is nullable');
+    } catch (leatherNullError) {
+      if (leatherNullError.code !== 'ER_BAD_FIELD_ERROR') {
+        logger.warn('Could not make production_routing_header.leather_id nullable:', leatherNullError.message);
+      }
+    }
     await db.execute(`
       CREATE TABLE IF NOT EXISTS tracker_alert_actions (
         issue_key VARCHAR(255) NOT NULL PRIMARY KEY,

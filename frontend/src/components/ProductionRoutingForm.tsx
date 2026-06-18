@@ -363,7 +363,7 @@ export const ProductionRoutingForm: React.FC = () => {
           ...header,
           customer_id: String(header.customer_id),
           group_id: String(header.group_id),
-          leather_id: String(header.leather_id),
+          leather_id: header.leather_id != null ? String(header.leather_id) : '',
           style_id: String(header.style_id),
           color_id: String(header.color_id),
           created_on: header.created_on ? new Date(header.created_on).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -578,13 +578,16 @@ export const ProductionRoutingForm: React.FC = () => {
 
         const customerId = resolveMasterId(customers, customerRaw);
         const groupId = resolveMasterId(groups, groupRaw);
-        const leatherId = resolveMasterId(leathers, leatherRaw);
+        const leatherId = leatherRaw ? resolveMasterId(leathers, leatherRaw) : null;
         const styleId = resolveMasterId(styles, styleRaw);
         const colorId = resolveMasterId(colors, colorRaw);
         const machineId = resolveMachineId(machineRaw);
 
-        if (!customerId || !groupId || !leatherId || !styleId || !colorId) {
-          throw new Error(`Row ${idx + 2}: invalid customer/group/leather/style/color mapping`);
+        if (!customerId || !groupId || !styleId || !colorId) {
+          throw new Error(`Row ${idx + 2}: invalid customer/group/style/color mapping`);
+        }
+        if (leatherRaw && !leatherId) {
+          throw new Error(`Row ${idx + 2}: invalid leather mapping`);
         }
         if (!machineId) {
           throw new Error(`Row ${idx + 2}: invalid machine mapping`);
@@ -596,7 +599,7 @@ export const ProductionRoutingForm: React.FC = () => {
         const header: HeaderData = {
           customer_id: customerId,
           group_id: groupId,
-          leather_id: leatherId,
+          leather_id: leatherId ? String(leatherId) : '',
           style_id: styleId,
           color_id: colorId,
           created_on: String(createdOnRaw).split('T')[0],
@@ -1006,8 +1009,8 @@ export const ProductionRoutingForm: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Leather <span className="text-red-500">*</span></label>
-                    <select value={headerData.leather_id} onChange={(e) => setHeaderData({ ...headerData, leather_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" required>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Leather</label>
+                    <select value={headerData.leather_id} onChange={(e) => setHeaderData({ ...headerData, leather_id: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
                       <option value="">Select Leather</option>
                       {leathers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
