@@ -3,6 +3,8 @@ const logger = require('../utils/logger');
 const { aggregateMachineCycleLosses } = require('../utils/cycleLossMins');
 const wipStateService = require('../services/wipStateService');
 const { activeWorkCentreWhere } = require('../utils/workCentreSql');
+const tvDashboardController = require('./tvDashboardController');
+const hourlyOutputController = require('./hourlyOutputController');
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const AS_OF_LOCAL_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
@@ -38,6 +40,98 @@ async function resolveLastWorkingDayKey(workCentreId, dateKey) {
     if (output > 0) return candidate;
   }
   return null;
+}
+
+function parseWorkCentreIds(query) {
+  const bulk = String(query?.work_centre_ids || '').trim();
+  if (bulk) {
+    return bulk
+      .split(',')
+      .map((part) => Number(part.trim()))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }
+  const single = Number(query?.work_centre_id);
+  if (Number.isFinite(single) && single > 0) return [single];
+  return [];
+}
+
+async function buildMachineTimeLossMachines(workCentreId, dateKey) {
+  const losses = await aggregateMachineCycleLosses(db, workCentreId, dateKey);
+  const [reasonRows] = await db.execute(
+    `SELECT machine_id, reason, updated_by, updated_at
+     FROM machine_time_loss_reasons
+     WHERE work_centre_id = ? AND prod_date = DATE(?)`,
+    [workCentreId, dateKey]
+  );
+
+  const reasonByMachine = new Map();
+  reasonRows.forEach((row) => {
+    reasonByMachine.set(String(row.machine_id), {
+      reason: row.reason,
+      updated_by: row.updated_by,
+      updated_at: row.updated_at,
+    });
+  });
+
+  const lossByMachine = new Map();
+  losses.forEach((row) => {
+    lossByMachine.set(String(row.machine_id), row);
+  });
+
+  const machineIds = new Set([...lossByMachine.keys(), ...reasonByMachine.keys()]);
+  return Array.from(machineIds).map((machineId) => {
+    const loss = lossByMachine.get(machineId);
+    const meta = reasonByMachine.get(machineId);
+    return {
+      machine_id: machineId,
+      machine_name: loss?.machine_name || `Machine ${machineId}`,
+      net_mins: Number(loss?.net_mins ?? 0),
+      reason: meta?.reason || null,
+      updated_by: meta?.updated_by || null,
+      updated_at: meta?.updated_at || null,
+    };
+  });
+}
+
+async function fetchAttendanceForLine(workCentreId, dateKey) {
+  const [[presentRow], [targetRow]] = await Promise.all([
+    db.execute(
+      `SELECT COUNT(DISTINCT emp_id) as present
+       FROM mobile_sessions
+       WHERE work_centre_id = ? AND status = 'active'
+       AND DATE(activated_at) = DATE(?)`,
+      [workCentreId, dateKey]
+    ),
+    db.execute(
+      `SELECT COUNT(*) as total FROM employees WHERE work_centre_id = ?`,
+      [workCentreId]
+    ),
+  ]);
+  return {
+    present: presentRow[0]?.present || 0,
+    target: targetRow[0]?.total || 0,
+  };
+}
+
+function invokeJsonHandler(handler, req) {
+  return new Promise((resolve, reject) => {
+    const res = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        if (this.statusCode >= 400) {
+          reject(new Error(body?.error || body?.message || 'Request failed'));
+          return this;
+        }
+        resolve(body);
+        return this;
+      },
+    };
+    Promise.resolve(handler(req, res)).catch(reject);
+  });
 }
 
 class ProductionTrackerController {
@@ -462,58 +556,104 @@ class ProductionTrackerController {
 
   async getMachineTimeLossMeta(req, res) {
     try {
-      const workCentreId = Number(req.query?.work_centre_id);
       const rawDate = String(req.query?.date || '');
       const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+      const workCentreIds = parseWorkCentreIds(req.query);
+
+      if (workCentreIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'work_centre_id or work_centre_ids is required' });
+      }
+
+      if (workCentreIds.length === 1) {
+        const workCentreId = workCentreIds[0];
+        const machines = await buildMachineTimeLossMachines(workCentreId, dateKey);
+        return res.json({
+          success: true,
+          date: dateKey,
+          work_centre_id: workCentreId,
+          machines,
+        });
+      }
+
+      const lineEntries = await Promise.all(
+        workCentreIds.map(async (workCentreId) => {
+          const machines = await buildMachineTimeLossMachines(workCentreId, dateKey);
+          return [String(workCentreId), machines];
+        })
+      );
+      const lines = Object.fromEntries(lineEntries);
+
+      return res.json({
+        success: true,
+        date: dateKey,
+        work_centre_ids: workCentreIds,
+        lines,
+      });
+    } catch (error) {
+      logger.error('Error getting machine time loss meta:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /** Batched payload for Production Tracker line detail — one round-trip instead of four polls. */
+  async getLineDetail(req, res) {
+    try {
+      const workCentreId = Number(req.query?.work_centre_id);
+      const rawDate = String(req.query?.date || '');
+      const dateKey = DATE_ONLY_RE.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
 
       if (!Number.isFinite(workCentreId) || workCentreId <= 0) {
         return res.status(400).json({ success: false, error: 'work_centre_id is required' });
       }
 
-      const losses = await aggregateMachineCycleLosses(db, workCentreId, dateKey);
-      const [reasonRows] = await db.execute(
-        `SELECT machine_id, reason, updated_by, updated_at
-         FROM machine_time_loss_reasons
-         WHERE work_centre_id = ? AND prod_date = DATE(?)`,
-        [workCentreId, dateKey]
-      );
+      const wcKey = String(workCentreId);
+      const [dashboardResult, machineCentresResult, machines, attendance, hourlyLineResult, hourlyMachinesResult] =
+        await Promise.all([
+        invokeJsonHandler(tvDashboardController.getDashboard, {
+          params: { workCentreId: wcKey },
+          query: { date: dateKey },
+        }),
+        invokeJsonHandler(tvDashboardController.getMachineCentresByWorkCentre, {
+          params: { workCentreId: wcKey },
+          query: { date: dateKey },
+        }),
+        buildMachineTimeLossMachines(workCentreId, dateKey),
+        fetchAttendanceForLine(workCentreId, dateKey),
+        invokeJsonHandler(hourlyOutputController.getHourlyOutput, {
+          params: { workCentreId: wcKey },
+          query: { date: dateKey },
+        }),
+        invokeJsonHandler(hourlyOutputController.getMachineHourlyOutput, {
+          params: { workCentreId: wcKey },
+          query: { date: dateKey },
+        }),
+      ]);
 
-      const reasonByMachine = new Map();
-      reasonRows.forEach((row) => {
-        reasonByMachine.set(String(row.machine_id), {
-          reason: row.reason,
-          updated_by: row.updated_by,
-          updated_at: row.updated_at,
+      if (!dashboardResult?.success) {
+        return res.status(500).json({
+          success: false,
+          error: dashboardResult?.error || 'Failed to load dashboard data',
         });
-      });
-
-      const lossByMachine = new Map();
-      losses.forEach((row) => {
-        lossByMachine.set(String(row.machine_id), row);
-      });
-
-      const machineIds = new Set([...lossByMachine.keys(), ...reasonByMachine.keys()]);
-      const machines = Array.from(machineIds).map((machineId) => {
-        const loss = lossByMachine.get(machineId);
-        const meta = reasonByMachine.get(machineId);
-        return {
-          machine_id: machineId,
-          machine_name: loss?.machine_name || `Machine ${machineId}`,
-          net_mins: Number(loss?.net_mins ?? 0),
-          reason: meta?.reason || null,
-          updated_by: meta?.updated_by || null,
-          updated_at: meta?.updated_at || null,
-        };
-      });
+      }
 
       return res.json({
         success: true,
         date: dateKey,
         work_centre_id: workCentreId,
-        machines,
+        data: {
+          dashboard: dashboardResult.data,
+          attendance: {
+            present: attendance.present,
+            target_employees: attendance.target,
+          },
+          machines: machineCentresResult?.success ? machineCentresResult.data || [] : [],
+          machine_time_loss: machines,
+          hourly_line: hourlyLineResult?.success ? hourlyLineResult.data || null : null,
+          hourly_machines: hourlyMachinesResult?.success ? hourlyMachinesResult.data || [] : [],
+        },
       });
     } catch (error) {
-      logger.error('Error getting machine time loss meta:', error);
+      logger.error('Error getting tracker line detail:', error);
       return res.status(500).json({ success: false, error: error.message });
     }
   }

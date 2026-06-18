@@ -40,6 +40,7 @@ import { TimeLossReasonDialog } from './TimeLossReasonDialog';
 import { ProductionDayLockPanel } from './ProductionDayLockPanel';
 import { LastWorkingDayCompareCard } from './LastWorkingDayCompareCard';
 import { getCompareAsOf } from '../utils/compareDateUtils';
+import { fetchAndCacheAlertCount, subscribeAlertCount } from '../utils/alertCountCache';
 import {
   formatReasonDisplayLabel,
   M4_BADGE_CLASS,
@@ -327,6 +328,9 @@ const getTodayDate = () => {
 export const ProductionTracker: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const detailRouteMatch = location.pathname.match(/^\/production_tracker\/line\/([^/]+)$/);
+  const detailWorkCentreId = detailRouteMatch ? Number(detailRouteMatch[1]) : NaN;
+  const isDetailRoute = Number.isFinite(detailWorkCentreId);
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [workCentres, setWorkCentres] = useState<any[]>([]);
   const [selectedLine, setSelectedLine] = useState('');
@@ -349,6 +353,8 @@ export const ProductionTracker: React.FC = () => {
   const [refreshMode, setRefreshMode] = useState<'10s' | '30s' | 'manual'>('10s');
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
   const [machineLossMeta, setMachineLossMeta] = useState<MachineTimeLossMeta[]>([]);
+  const [hourlyLineData, setHourlyLineData] = useState<any | null>(null);
+  const [hourlyMachineData, setHourlyMachineData] = useState<any[]>([]);
   const [reasonDialog, setReasonDialog] = useState<{ machineId: string; machineName: string } | null>(null);
   const [reasonSaving, setReasonSaving] = useState(false);
   const [yesterdayCompare, setYesterdayCompare] = useState<{
@@ -456,71 +462,23 @@ export const ProductionTracker: React.FC = () => {
     }
   };
 
-  const loadAlertCardCount = async () => {
-    try {
-      // Keep tracker tile count aligned with Realtime Alert Center
-      // (same stale-alert filtering + unacknowledged logic).
-      let res = await apiFetch(
-        `${API_BASE}/api/alerts/center?include_acknowledged=false&limit=1&page=1&date=${selectedDate}`
-      );
-      if (res.status === 404) {
-        // Backward compatibility with older backend.
-        res = await apiFetch(`${API_BASE}/api/alerts?unread_only=false&limit=30`);
-      }
-      if (!res.ok) return;
-      const result = await res.json();
-      if (!result?.success) return;
-
-      const count = Number(
-        result.unacknowledged_count ?? result.unread_count
-      );
-      if (Number.isFinite(count)) {
-        setAlertCardCount(count);
-      } else if (Array.isArray(result.data)) {
-        const openCount = result.data.filter((row: any) =>
-          Number(row.is_acknowledged ?? row.is_read ?? 0) === 0
-        ).length;
-        setAlertCardCount(openCount);
-      }
-    } catch {
-      // Non-blocking: keep previous card count when alerts API is unavailable.
-    }
-  };
+  // Alert count: shared with header bell (leader tab polls; this page reads cache).
+  useEffect(() => subscribeAlertCount(setAlertCardCount), []);
 
   const handleManualRefresh = async () => {
     setManualRefreshing(true);
     logAuditEvent('manual_refresh_clicked', { selectedLine, selectedDate });
     try {
-      await Promise.all([loadDashboardData(), loadAttendanceData(), loadAlertCardCount()]);
+      await Promise.all([
+        loadDashboardData(),
+        loadAttendanceData(),
+        fetchAndCacheAlertCount(),
+      ]);
       toast.success('Dashboard refreshed');
     } finally {
       setManualRefreshing(false);
     }
   };
-
-  useEffect(() => {
-    if (workCentres.length > 0 && selectedLine) {
-      loadDashboardData();
-      loadAttendanceData();
-      if (refreshMode === 'manual') return;
-      const pollMs = refreshMode === '30s' ? 30000 : 10000;
-      const interval = setInterval(() => {
-        loadDashboardData();
-        loadAttendanceData(true);
-      }, pollMs);
-      return () => clearInterval(interval);
-    }
-  }, [selectedDate, selectedLine, workCentres, refreshMode, location.pathname]);
-
-  // Keep alert-card count fresh, but lighter than dashboard polling.
-  useEffect(() => {
-    if (workCentres.length === 0 || !selectedLine) return;
-    loadAlertCardCount();
-    const alertInterval = setInterval(() => {
-      loadAlertCardCount();
-    }, 30000);
-    return () => clearInterval(alertInterval);
-  }, [selectedDate, selectedLine, workCentres]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -645,9 +603,6 @@ export const ProductionTracker: React.FC = () => {
   const alertCount = alertCardCount;
   const currentWorkCentreId = parseInt(selectedLine, 10) || workCentres[0]?.id || 1;
   const currentWorkCentreName = workCentres.find((wc) => String(wc.id) === String(currentWorkCentreId))?.name || 'Unknown Line';
-  const detailRouteMatch = location.pathname.match(/^\/production_tracker\/line\/([^/]+)$/);
-  const detailWorkCentreId = detailRouteMatch ? Number(detailRouteMatch[1]) : NaN;
-  const isDetailRoute = Number.isFinite(detailWorkCentreId);
 
   useEffect(() => {
     if (!isDetailRoute) {
@@ -665,24 +620,92 @@ export const ProductionTracker: React.FC = () => {
     }
   }, [isDetailRoute, detailWorkCentreId, linePerformance, selectedLineDetail]);
 
-  const loadDetailMachines = useCallback(
+  useEffect(() => {
+    if (isDetailRoute) return;
+    setDetailMachineRows([]);
+    setMachineLossMeta([]);
+    setHourlyLineData(null);
+    setHourlyMachineData([]);
+  }, [isDetailRoute]);
+
+  const loadLineDetailBundle = useCallback(
     async (silent = false) => {
       if (!Number.isFinite(detailWorkCentreId)) return;
-      if (!silent) setDetailMachinesLoading(true);
+      if (!silent) {
+        setDetailMachinesLoading(true);
+        if (!dashboardData) setLoading(true);
+      }
       try {
         const res = await apiFetch(
-          `${API_BASE}/api/tv-dashboard/machine-centres/${detailWorkCentreId}?date=${selectedDate}`
+          `${API_BASE}/api/tracker/line-detail?work_centre_id=${detailWorkCentreId}&date=${selectedDate}`
         );
-        const result = await res.json();
-        setDetailMachineRows(result.success ? result.data || [] : []);
+        const json = await res.json();
+        if (!json.success || !json.data) {
+          if (!silent) setDetailMachineRows([]);
+          return;
+        }
+        const { dashboard, attendance, machines, machine_time_loss, hourly_line, hourly_machines } =
+          json.data;
+        if (dashboard) {
+          setDashboardData(dashboard);
+          setDashboardLastUpdated(new Date());
+          setError(null);
+        }
+        if (attendance) {
+          setAttendanceData({
+            present: attendance.present || 0,
+            target_employees: attendance.target_employees || 0,
+          });
+        }
+        setDetailMachineRows(Array.isArray(machines) ? machines : []);
+        setMachineLossMeta(Array.isArray(machine_time_loss) ? machine_time_loss : []);
+        setHourlyLineData(hourly_line ?? null);
+        setHourlyMachineData(Array.isArray(hourly_machines) ? hourly_machines : []);
       } catch {
-        setDetailMachineRows([]);
+        if (!silent) {
+          setDetailMachineRows([]);
+          setMachineLossMeta([]);
+        }
       } finally {
-        if (!silent) setDetailMachinesLoading(false);
+        if (!silent) {
+          setDetailMachinesLoading(false);
+          setLoading(false);
+        }
       }
     },
     [detailWorkCentreId, selectedDate]
   );
+
+  useEffect(() => {
+    if (workCentres.length === 0 || !selectedLine) return;
+
+    if (isDetailRoute) {
+      loadLineDetailBundle();
+      if (refreshMode === 'manual') return;
+      const pollMs = refreshMode === '30s' ? 30000 : 10000;
+      const interval = setInterval(() => loadLineDetailBundle(true), pollMs);
+      return () => clearInterval(interval);
+    }
+
+    loadDashboardData();
+    loadAttendanceData();
+    if (refreshMode === 'manual') return;
+    const pollMs = refreshMode === '30s' ? 30000 : 10000;
+    const interval = setInterval(() => {
+      loadDashboardData();
+      loadAttendanceData(true);
+    }, pollMs);
+    return () => clearInterval(interval);
+  }, [
+    selectedDate,
+    selectedLine,
+    workCentres,
+    refreshMode,
+    location.pathname,
+    isDetailRoute,
+    detailWorkCentreId,
+    loadLineDetailBundle,
+  ]);
 
   const loadMachineTimeLossMeta = useCallback(async () => {
     if (!Number.isFinite(detailWorkCentreId)) return;
@@ -697,33 +720,6 @@ export const ProductionTracker: React.FC = () => {
     }
   }, [detailWorkCentreId, selectedDate]);
 
-  useEffect(() => {
-    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
-      setDetailMachineRows([]);
-      return;
-    }
-    loadDetailMachines(false);
-  }, [isDetailRoute, detailWorkCentreId, selectedDate, loadDetailMachines]);
-
-  useEffect(() => {
-    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
-      setMachineLossMeta([]);
-      return;
-    }
-    loadMachineTimeLossMeta();
-  }, [isDetailRoute, detailWorkCentreId, selectedDate, dashboardLastUpdated, loadMachineTimeLossMeta]);
-
-  useEffect(() => {
-    if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) return;
-    if (refreshMode === 'manual') return;
-    const pollMs = refreshMode === '30s' ? 30000 : 10000;
-    const interval = setInterval(() => {
-      loadDetailMachines(true);
-      loadMachineTimeLossMeta();
-    }, pollMs);
-    return () => clearInterval(interval);
-  }, [isDetailRoute, detailWorkCentreId, selectedDate, refreshMode, loadDetailMachines, loadMachineTimeLossMeta]);
-
   const findLossMetaForMachine = useCallback(
     (machineId: string) =>
       machineLossMeta.find((row) => machineKeysMatch(row.machine_id, machineId)),
@@ -733,12 +729,7 @@ export const ProductionTracker: React.FC = () => {
   const handleDetailRefresh = async () => {
     setManualRefreshing(true);
     try {
-      await Promise.all([
-        loadDashboardData(),
-        loadDetailMachines(true),
-        loadMachineTimeLossMeta(),
-        loadYesterdayCompare(),
-      ]);
+      await Promise.all([loadLineDetailBundle(true), loadYesterdayCompare()]);
     } finally {
       setManualRefreshing(false);
     }
@@ -811,9 +802,21 @@ export const ProductionTracker: React.FC = () => {
     return 'flat' as const;
   }, []);
 
+  const compareAsOf = useMemo(
+    () => getCompareAsOf(selectedDate, currentTime),
+    [
+      selectedDate,
+      currentTime.getFullYear(),
+      currentTime.getMonth(),
+      currentTime.getDate(),
+      currentTime.getHours(),
+      currentTime.getMinutes(),
+    ]
+  );
+
   const loadYesterdayCompare = useCallback(async () => {
     if (!Number.isFinite(detailWorkCentreId)) return;
-    const asOf = encodeURIComponent(getCompareAsOf(selectedDate, currentTime));
+    const asOf = encodeURIComponent(compareAsOf);
     try {
       const res = await apiFetch(
         `${API_BASE}/api/tracker/line-yesterday-compare?work_centre_id=${detailWorkCentreId}&date=${selectedDate}&as_of=${asOf}`
@@ -832,7 +835,7 @@ export const ProductionTracker: React.FC = () => {
     } catch {
       setYesterdayCompare(null);
     }
-  }, [detailWorkCentreId, selectedDate, currentTime]);
+  }, [detailWorkCentreId, selectedDate, compareAsOf]);
 
   useEffect(() => {
     if (!isDetailRoute || !Number.isFinite(detailWorkCentreId)) {
@@ -840,14 +843,13 @@ export const ProductionTracker: React.FC = () => {
       return;
     }
     loadYesterdayCompare();
-  }, [isDetailRoute, detailWorkCentreId, selectedDate, loadYesterdayCompare]);
-
-  useEffect(() => {
-    if (!isDetailRoute || refreshMode === 'manual') return;
-    const pollMs = refreshMode === '30s' ? 30000 : 10000;
-    const interval = setInterval(() => loadYesterdayCompare(), pollMs);
-    return () => clearInterval(interval);
-  }, [isDetailRoute, refreshMode, loadYesterdayCompare]);
+  }, [
+    isDetailRoute,
+    detailWorkCentreId,
+    selectedDate,
+    refreshMode === 'manual' ? 'manual' : compareAsOf,
+    loadYesterdayCompare,
+  ]);
 
   const fixFirstMachines = useMemo(() => {
     const losses = machineLossMeta
@@ -1564,6 +1566,9 @@ export const ProductionTracker: React.FC = () => {
                     hideTitle
                     fitContainer
                     embedded
+                    externalLineData={hourlyLineData}
+                    externalMachineData={hourlyMachineData}
+                    skipFetch
                   />
                 </div>
               </div>

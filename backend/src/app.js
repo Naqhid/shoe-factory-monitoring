@@ -735,6 +735,7 @@ app.post('/api/tracker/alert-actions/query', authenticate, requireTrackerAccess,
 app.post('/api/tracker/alert-actions/ack', authenticate, requireTrackerAccess, productionTrackerController.acknowledgeAlert.bind(productionTrackerController));
 app.post('/api/tracker/alert-actions/escalate', authenticate, requireTrackerAccess, productionTrackerController.escalateAlert.bind(productionTrackerController));
 app.get('/api/tracker/machine-time-loss', authenticate, requireTrackerAccess, productionTrackerController.getMachineTimeLossMeta.bind(productionTrackerController));
+app.get('/api/tracker/line-detail', authenticate, requireTrackerAccess, productionTrackerController.getLineDetail.bind(productionTrackerController));
 app.get('/api/tracker/line-yesterday-compare', authenticate, requireTrackerAccess, productionTrackerController.getLineYesterdayCompare.bind(productionTrackerController));
 app.post('/api/tracker/time-loss-reason', authenticate, requireTrackerAccess, productionTrackerController.saveMachineTimeLossReason.bind(productionTrackerController));
 app.get('/api/missed-actions', authenticate, requireLogsAccess, missedActionsController.getMissedActions);

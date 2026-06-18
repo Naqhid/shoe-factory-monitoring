@@ -8,11 +8,15 @@ export const formatLocalDateTimeForApi = (date: Date) => {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 };
 
-/** Wall-clock as-of for last-working-day compare (today = now; past dates = shift end). */
+/** Wall-clock as-of for last-working-day compare (today = now; past dates = shift end). Seconds zeroed — minute precision is enough. */
 export const getCompareAsOf = (selectedDate: string, now: Date) => {
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  if (selectedDate === todayKey) return formatLocalDateTimeForApi(now);
+  if (selectedDate === todayKey) {
+    const rounded = new Date(now);
+    rounded.setSeconds(0, 0);
+    return formatLocalDateTimeForApi(rounded);
+  }
   return `${selectedDate} 17:35:00`;
 };
 

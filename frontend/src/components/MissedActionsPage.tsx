@@ -578,25 +578,29 @@ export const MissedActionsPage: React.FC = () => {
     let cancelled = false;
     (async () => {
       const merged: Record<string, number> = {};
-      await Promise.all(
-        wcIds.map(async (wcId) => {
-          try {
-            const res = await apiFetch(
-              `${API_BASE}/api/tracker/machine-time-loss?work_centre_id=${wcId}&date=${today}`
-            );
-            const json = await res.json();
-            if (!json.success || !Array.isArray(json.machines)) return;
-            json.machines.forEach((row: { machine_id?: string; net_mins?: number }) => {
-              const mid = String(row.machine_id || '');
-              if (!mid) return;
-              const loss = Number(row.net_mins) || 0;
-              merged[`${wcId}:${mid}`] = loss < 0 ? Math.abs(loss) : 0;
-            });
-          } catch {
-            // non-fatal
-          }
-        })
-      );
+      try {
+        const res = await apiFetch(
+          `${API_BASE}/api/tracker/machine-time-loss?work_centre_ids=${wcIds.join(',')}&date=${today}`
+        );
+        const json = await res.json();
+        if (!json.success) return;
+        const lineBuckets: Record<string, { machine_id?: string; net_mins?: number }[]> =
+          json.lines && typeof json.lines === 'object'
+            ? json.lines
+            : json.machines
+              ? { [String(wcIds[0])]: json.machines }
+              : {};
+        Object.entries(lineBuckets).forEach(([wcId, machines]) => {
+          (machines || []).forEach((row) => {
+            const mid = String(row.machine_id || '');
+            if (!mid) return;
+            const loss = Number(row.net_mins) || 0;
+            merged[`${wcId}:${mid}`] = loss < 0 ? Math.abs(loss) : 0;
+          });
+        });
+      } catch {
+        // non-fatal
+      }
       if (!cancelled) setMachineLossMinsMap(merged);
     })();
     return () => {
