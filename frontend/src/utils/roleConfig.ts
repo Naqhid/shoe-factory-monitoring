@@ -208,6 +208,10 @@ export const getDefaultRoute = (
 
   const normalizedRole = getEffectiveRole(user);
   if (normalizedRole === 'Machine Centre User' && user?.machine_id) {
+    const empCode = user.code || user.emp_code;
+    if (empCode) {
+      return `/mobile/${encodeURIComponent(user.machine_id)}/${encodeURIComponent(empCode)}`;
+    }
     return `/mobile/${encodeURIComponent(user.machine_id)}`;
   }
 

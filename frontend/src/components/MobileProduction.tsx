@@ -4,6 +4,7 @@ import { QrCode, Play, CheckCircle, Loader2, X, RefreshCw, RotateCcw, AlertTrian
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
+import { getEffectiveRole } from '../utils/roleConfig';
 import { classifyLateCycleCategory, computeCycleNetLostMins } from '../utils/cycleLostMins';
 import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours } from '../utils/shiftPaceUtils';
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
@@ -192,22 +193,37 @@ const QRWaitScreen: React.FC<{
     }, [machineId]);
 
     React.useEffect(() => {
-        const interval = setInterval(async () => {
+        let cancelled = false;
+        let interval: ReturnType<typeof setInterval> | undefined;
+
+        const checkActiveSession = async () => {
             try {
                 const ts = Date.now();
                 const res = await apiFetch(`${API_BASE}/api/mobile-session/active-for/${machineId}?_=${ts}`, {
                     cache: 'no-store'
                 });
                 const json = await res.json();
-                if (json.success && json.data?.emp_code) {
-                    clearInterval(interval);
+                if (!cancelled && json.success && json.data?.emp_code) {
+                    if (interval) clearInterval(interval);
                     onSessionActive(json.data.emp_code, json.data.session_id);
+                    return true;
                 }
             } catch (error) {
                 console.warn('Session polling failed while waiting for employee scan:', error);
             }
-        }, 2500);
-        return () => clearInterval(interval);
+            return false;
+        };
+
+        void checkActiveSession().then((found) => {
+            if (!cancelled && !found) {
+                interval = setInterval(checkActiveSession, 2500);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            if (interval) clearInterval(interval);
+        };
     }, [machineId, onSessionActive]);
 
     return (
@@ -236,6 +252,7 @@ export const MobileProduction: React.FC = () => {
     // Production State
     const [loading, setLoading] = useState(false);
     const [initializing, setInitializing] = useState(true);
+    const [resolvingMachineRoute, setResolvingMachineRoute] = useState(false);
     const [productionData, setProductionData] = useState<ProductionData | null>(null);
     const [qrData, setQrData] = useState('');
     const [showQRScanner, setShowQRScanner] = useState(false);
@@ -1369,6 +1386,65 @@ export const MobileProduction: React.FC = () => {
             return;
         }
 
+        // Machine kiosk URL without employee — redirect logged-in operator or active session
+        if (urlMachineId && !urlEmpId) {
+            let cancelled = false;
+            const resolveMachineOnlyRoute = async () => {
+                setResolvingMachineRoute(true);
+                try {
+                    try {
+                        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('user_info') : null;
+                        const user = raw ? JSON.parse(raw) : null;
+                        const userCode = user?.code || user?.emp_code || '';
+                        if (
+                            user &&
+                            getEffectiveRole(user) === 'Machine Centre User' &&
+                            userCode &&
+                            (
+                                !user.machine_id ||
+                                String(user.machine_id) === String(effectiveMachineId) ||
+                                String(user.machine_id) === String(urlMachineId)
+                            )
+                        ) {
+                            if (!cancelled) {
+                                navigate(
+                                    `/mobile/${encodeURIComponent(urlMachineId)}/${encodeURIComponent(userCode)}`,
+                                    { replace: true }
+                                );
+                            }
+                            return;
+                        }
+                    } catch {
+                        // ignore malformed user_info
+                    }
+
+                    const ts = Date.now();
+                    const sessionRes = await apiFetch(
+                        `${API_BASE}/api/mobile-session/active-for/${effectiveMachineId}?_=${ts}`,
+                        { cache: 'no-store' }
+                    );
+                    const sessionJson = await sessionRes.json();
+                    if (!cancelled && sessionJson.success && sessionJson.data?.emp_code) {
+                        const empCode = sessionJson.data.emp_code;
+                        const token = sessionJson.data.session_id;
+                        if (token && typeof sessionStorage !== 'undefined') {
+                            sessionStorage.setItem(`mobile_control_session_${urlMachineId}_${empCode}`, token);
+                        }
+                        const machine = encodeURIComponent(urlMachineId);
+                        const emp = encodeURIComponent(empCode);
+                        const sessionQuery = token ? `?session=${encodeURIComponent(token)}` : '';
+                        navigate(`/mobile/${machine}/${emp}${sessionQuery}`, { replace: true });
+                    }
+                } catch (error) {
+                    console.warn('Failed to resolve machine-only mobile route:', error);
+                } finally {
+                    if (!cancelled) setResolvingMachineRoute(false);
+                }
+            };
+            void resolveMachineOnlyRoute();
+            return () => { cancelled = true; };
+        }
+
         // GLOBAL POLLING MODE - WhatsApp Web style (when no machine/employee specified)
         if (!urlMachineId && !urlEmpId) {
             const globalSyncInterval = setInterval(async () => {
@@ -1982,6 +2058,17 @@ export const MobileProduction: React.FC = () => {
 
     // Show QR code when machine is selected but no employee yet — poll for session in background
     if (urlMachineId && !urlEmpId) {
+        if (resolvingMachineRoute) {
+            return (
+                <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-md p-6 text-center max-w-sm w-full">
+                        <RefreshCw className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-3" />
+                        <p className="text-sm text-gray-600">Loading your session...</p>
+                    </div>
+                </div>
+            );
+        }
+
         const qrCandidates = [
             `/assets/qrcode-Stitching-line-${resolvedMachineId}.jpeg`,
             `/assets/qrcode-${resolvedMachineId}.jpeg`,
