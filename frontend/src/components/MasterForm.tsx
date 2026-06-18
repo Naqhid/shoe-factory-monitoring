@@ -152,6 +152,10 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
       toast.error('Code and name are required');
       return;
     }
+    if (table === 'machine_centres' && !formData.machine_id.trim()) {
+      toast.error('Machine ID is required');
+      return;
+    }
     if (table === 'work_centres' && formData.input_machine_id && formData.eol_machine_id
       && formData.input_machine_id === formData.eol_machine_id) {
       toast.error('Input machine and EOL machine must be different');
@@ -481,9 +485,9 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     type="text"
                     value={formData.machine_id}
                     onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    disabled={editingRecord !== null}
-                    placeholder={editingRecord ? "Machine ID cannot be changed" : "Enter machine ID"}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter machine ID"
+                    required
                   />
                 </div>
               )}

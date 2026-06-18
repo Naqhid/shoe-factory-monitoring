@@ -38,8 +38,29 @@ interface RoutingLine {
   process: string;
   observed_time: string;
   rating_factor: string;
+  normal_time_secs_pr: string;
+  std_time_secs_pr: string;
+  mins_6_prs_box: string;
+  pairs_per_hr: string;
+  pairs_per_day: string;
   manpower: string;
+  _lockedCalcFields?: CalcField[];
 }
+
+type CalcField =
+  | 'normal_time_secs_pr'
+  | 'std_time_secs_pr'
+  | 'mins_6_prs_box'
+  | 'pairs_per_hr'
+  | 'pairs_per_day';
+
+const CALC_FIELDS: CalcField[] = [
+  'normal_time_secs_pr',
+  'std_time_secs_pr',
+  'mins_6_prs_box',
+  'pairs_per_hr',
+  'pairs_per_day',
+];
 
 const buildMachineSelectOptions = (
   machineCentres: MasterOption[],
@@ -109,6 +130,11 @@ export const ProductionRoutingForm: React.FC = () => {
     process: '',
     observed_time: '',
     rating_factor: '',
+    normal_time_secs_pr: '',
+    std_time_secs_pr: '',
+    mins_6_prs_box: '',
+    pairs_per_hr: '',
+    pairs_per_day: '',
     manpower: '',
   });
 
@@ -231,6 +257,60 @@ export const ProductionRoutingForm: React.FC = () => {
     return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_6_prs_box: mins6Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
   };
 
+  const calcToLineFields = (calc: ReturnType<typeof calculateLineValues>) => ({
+    normal_time_secs_pr: String(calc.normal_time_secs_pr),
+    std_time_secs_pr: String(calc.std_time_secs_pr),
+    mins_6_prs_box: calc.mins_6_prs_box.toFixed(1),
+    pairs_per_hr: String(calc.pairs_per_hr),
+    pairs_per_day: String(calc.pairs_per_day),
+  });
+
+  const applyAutoCalc = (line: RoutingLine): RoutingLine => {
+    const calc = calculateLineValues(line);
+    const fields = calcToLineFields(calc);
+    const lockedSet = new Set(line._lockedCalcFields || []);
+    const next = { ...line };
+    for (const key of CALC_FIELDS) {
+      if (!lockedSet.has(key)) {
+        next[key] = fields[key];
+      }
+    }
+    return next;
+  };
+
+  const routingLineFromApi = (l: any): RoutingLine => {
+    const line: RoutingLine = {
+      machine_centre_id: String(l.machine_centre_id),
+      machine_name: l.machine_name || l.machine_centre_name || '',
+      process: l.process || '',
+      observed_time: String(l.observed_time),
+      rating_factor: String(l.rating_factor),
+      manpower: String(l.manpower),
+      normal_time_secs_pr: l.normal_time_secs_pr != null ? String(Math.round(Number(l.normal_time_secs_pr))) : '',
+      std_time_secs_pr: l.std_time_secs_pr != null ? String(Math.round(Number(l.std_time_secs_pr))) : '',
+      mins_6_prs_box: l.mins_6_prs_box != null ? String(Number(l.mins_6_prs_box)) : '',
+      pairs_per_hr: l.pairs_per_hr != null ? String(l.pairs_per_hr) : '',
+      pairs_per_day: l.pairs_per_day != null ? String(l.pairs_per_day) : '',
+    };
+    const auto = calculateLineValues(line);
+    const locked: CalcField[] = [];
+    for (const key of CALC_FIELDS) {
+      const stored = parseFloat(line[key]);
+      const autoVal =
+        key === 'mins_6_prs_box'
+          ? auto.mins_6_prs_box
+          : Number(auto[key as keyof typeof auto]);
+      if (Number.isFinite(stored) && Math.abs(stored - autoVal) > 0.05) {
+        locked.push(key);
+      }
+    }
+    const filled = applyAutoCalc({ ...line, _lockedCalcFields: locked.length ? locked : undefined });
+    for (const key of locked) {
+      filled[key] = line[key];
+    }
+    return filled;
+  };
+
   const addLine = () => {
     const newLine = createEmptyLine();
     setLines((prev) => {
@@ -249,9 +329,19 @@ export const ProductionRoutingForm: React.FC = () => {
     toast('Row removed', { id: 'routing-remove-line', duration: 1200 });
   };
   const updateLine = (index: number, field: keyof RoutingLine, value: string) => {
-    const newLines = [...lines];
-    newLines[index] = { ...newLines[index], [field]: value };
-    setLines(newLines);
+    setLines((prev) => {
+      const newLines = [...prev];
+      let next: RoutingLine = { ...newLines[index], [field]: value };
+      if (field === 'observed_time' || field === 'rating_factor') {
+        next = applyAutoCalc(next);
+      } else if (CALC_FIELDS.includes(field as CalcField)) {
+        const locked = [...(next._lockedCalcFields || [])];
+        if (!locked.includes(field as CalcField)) locked.push(field as CalcField);
+        next._lockedCalcFields = locked;
+      }
+      newLines[index] = next;
+      return newLines;
+    });
   };
 
   const handleAdd = () => {
@@ -280,14 +370,7 @@ export const ProductionRoutingForm: React.FC = () => {
           target_per_day: String(header.target_per_day),
           tot_smv: String(header.tot_smv)
         });
-        setLines(withRowIds(result.data.lines.map((l: any) => ({
-          machine_centre_id: String(l.machine_centre_id),
-          machine_name: l.machine_name || '',
-          process: l.process || '',
-          observed_time: String(l.observed_time),
-          rating_factor: String(l.rating_factor),
-          manpower: String(l.manpower),
-        }))));
+        setLines(withRowIds(result.data.lines.map((l: any) => routingLineFromApi(l))));
         setHighlightedRowId(null);
         setShowModal(true);
       }
@@ -340,7 +423,8 @@ export const ProductionRoutingForm: React.FC = () => {
       toast.error('Please fill all required header fields');
       return;
     }
-    if (lines.some(l => !l.machine_centre_id || !l.observed_time || !l.rating_factor || !l.manpower)) {
+    if (lines.some(l => !l.machine_centre_id || !l.observed_time || !l.rating_factor || !l.manpower
+      || !l.normal_time_secs_pr || !l.std_time_secs_pr || !l.mins_6_prs_box || !l.pairs_per_hr || !l.pairs_per_day)) {
       toast.error('Please fill all line item fields');
       return;
     }
@@ -378,7 +462,18 @@ export const ProductionRoutingForm: React.FC = () => {
     try {
       const payload = {
         header: headerData,
-        lines: lines.map(line => ({ machine_centre_id: line.machine_centre_id, process: line.process || null, observed_time: parseFloat(line.observed_time), rating_factor: parseFloat(line.rating_factor), manpower: parseFloat(line.manpower) })),
+        lines: lines.map(line => ({
+          machine_centre_id: line.machine_centre_id,
+          process: line.process || null,
+          observed_time: parseFloat(line.observed_time),
+          rating_factor: parseFloat(line.rating_factor),
+          normal_time_secs_pr: parseFloat(line.normal_time_secs_pr),
+          std_time_secs_pr: parseFloat(line.std_time_secs_pr),
+          mins_6_prs_box: parseFloat(line.mins_6_prs_box),
+          pairs_per_hr: parseFloat(line.pairs_per_hr),
+          pairs_per_day: parseFloat(line.pairs_per_day),
+          manpower: parseFloat(line.manpower),
+        })),
       };
 
       const url = editingId ? `${API_BASE}/api/production-routing/${editingId}` : `${API_BASE}/api/production-routing`;
@@ -987,7 +1082,6 @@ export const ProductionRoutingForm: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {lines.map((line, index) => {
-                        const calc = calculateLineValues(line);
                         const rowId = line._rowId ?? index;
                         const isHighlighted = highlightedRowId === rowId;
                         const isEmptyRow = !line.machine_centre_id.trim();
@@ -1033,11 +1127,21 @@ export const ProductionRoutingForm: React.FC = () => {
                             <td className="px-2 py-2">
                               <input type="number" min="0.01" max="200" step="0.01" value={line.rating_factor} onChange={(e) => updateLine(index, 'rating_factor', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
                             </td>
-                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.normal_time_secs_pr}</td>
-                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.std_time_secs_pr}</td>
-                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.mins_6_prs_box.toFixed(1)}</td>
-                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.pairs_per_hr}</td>
-                            <td className="px-2 py-2 text-gray-700 tabular-nums">{calc.pairs_per_day}</td>
+                            <td className="px-2 py-2">
+                              <input type="number" min="0" step="any" value={line.normal_time_secs_pr} onChange={(e) => updateLine(index, 'normal_time_secs_pr', e.target.value)} className="w-16 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" min="0" step="any" value={line.std_time_secs_pr} onChange={(e) => updateLine(index, 'std_time_secs_pr', e.target.value)} className="w-16 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" min="0" step="any" value={line.mins_6_prs_box} onChange={(e) => updateLine(index, 'mins_6_prs_box', e.target.value)} className="w-16 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" min="0" step="any" value={line.pairs_per_hr} onChange={(e) => updateLine(index, 'pairs_per_hr', e.target.value)} className="w-16 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" min="0" step="any" value={line.pairs_per_day} onChange={(e) => updateLine(index, 'pairs_per_day', e.target.value)} className="w-16 border border-gray-300 rounded px-2 py-1" required />
+                            </td>
                             <td className="px-2 py-2">
                               <input type="number" min="0.1" step="0.1" value={line.manpower} onChange={(e) => updateLine(index, 'manpower', e.target.value)} className="w-20 border border-gray-300 rounded px-2 py-1" required />
                             </td>

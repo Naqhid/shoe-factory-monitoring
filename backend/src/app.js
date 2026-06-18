@@ -150,40 +150,94 @@ const initDb = async () => {
         throw planAlterError;
       }
     }
-    // Routing: mins per 6 pairs = std sec/pair × 6 ÷ 60 (observed × rating% × 1.15)
+    // Routing lines: editable stored calc columns (normal/std/mins_6 + pairs/day)
     try {
       const [routingCols] = await db.execute(`
-        SELECT COLUMN_NAME, GENERATION_EXPRESSION
+        SELECT COLUMN_NAME, EXTRA
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'production_routing_lines'
-          AND COLUMN_NAME IN ('mins_12_prs_box', 'mins_6_prs_box')
+          AND COLUMN_NAME IN (
+            'mins_12_prs_box', 'mins_6_prs_box',
+            'normal_time_secs_pr', 'std_time_secs_pr',
+            'pairs_per_hr', 'pairs_per_day'
+          )
       `);
       const routingColNames = new Set(routingCols.map((c) => c.COLUMN_NAME));
-      const mins6Row = routingCols.find((c) => c.COLUMN_NAME === 'mins_6_prs_box');
-      const mins6Expr = String(mins6Row?.GENERATION_EXPRESSION || '');
-      const mins6UsesStdFormula =
-        mins6Expr.includes('rating_factor') && mins6Expr.includes('1.15');
+      const hasGeneratedCalc = routingCols.some(
+        (c) =>
+          ['normal_time_secs_pr', 'std_time_secs_pr', 'mins_6_prs_box'].includes(c.COLUMN_NAME) &&
+          String(c.EXTRA || '').toLowerCase().includes('generated')
+      );
 
       if (routingColNames.has('mins_12_prs_box')) {
         await db.execute('ALTER TABLE production_routing_lines DROP COLUMN mins_12_prs_box');
         logger.info('Dropped mins_12_prs_box from production_routing_lines');
       }
-      if (!routingColNames.has('mins_6_prs_box') || !mins6UsesStdFormula) {
-        if (routingColNames.has('mins_6_prs_box')) {
-          await db.execute('ALTER TABLE production_routing_lines DROP COLUMN mins_6_prs_box');
-          logger.info('Recreating mins_6_prs_box with std-time formula (rating factor + 15%)');
-        }
+
+      if (hasGeneratedCalc) {
+        logger.info('Migrating production_routing_lines calculated columns to stored editable fields');
         await db.execute(`
           ALTER TABLE production_routing_lines
-          ADD COLUMN mins_6_prs_box decimal(10,4) GENERATED ALWAYS AS (
-            (((((\`observed_time\` * \`rating_factor\`) / 100) * 1.15) * 6) / 60)
-          ) STORED
+            ADD COLUMN normal_time_secs_pr_stored DECIMAL(10,4) NULL,
+            ADD COLUMN std_time_secs_pr_stored DECIMAL(10,4) NULL,
+            ADD COLUMN mins_6_prs_box_stored DECIMAL(10,4) NULL
         `);
-        logger.info('Added mins_6_prs_box to production_routing_lines');
+        await db.execute(`
+          UPDATE production_routing_lines SET
+            normal_time_secs_pr_stored = ((observed_time * rating_factor) / 100),
+            std_time_secs_pr_stored = (((observed_time * rating_factor) / 100) * 1.15),
+            mins_6_prs_box_stored = (((((observed_time * rating_factor) / 100) * 1.15) * 6) / 60)
+        `);
+        await db.execute(`
+          ALTER TABLE production_routing_lines
+            DROP COLUMN normal_time_secs_pr,
+            DROP COLUMN std_time_secs_pr,
+            DROP COLUMN mins_6_prs_box
+        `);
+        await db.execute(`
+          ALTER TABLE production_routing_lines
+            CHANGE COLUMN normal_time_secs_pr_stored normal_time_secs_pr DECIMAL(10,4) NOT NULL,
+            CHANGE COLUMN std_time_secs_pr_stored std_time_secs_pr DECIMAL(10,4) NOT NULL,
+            CHANGE COLUMN mins_6_prs_box_stored mins_6_prs_box DECIMAL(10,4) NOT NULL
+        `);
+        logger.info('Converted routing line calc columns to stored fields');
+      } else if (!routingColNames.has('mins_6_prs_box')) {
+        await db.execute(`
+          ALTER TABLE production_routing_lines
+          ADD COLUMN mins_6_prs_box DECIMAL(10,4) NOT NULL DEFAULT 0
+        `);
+        await db.execute(`
+          UPDATE production_routing_lines SET
+            mins_6_prs_box = (((((observed_time * rating_factor) / 100) * 1.15) * 6) / 60)
+        `);
+        logger.info('Added stored mins_6_prs_box to production_routing_lines');
+      }
+
+      for (const col of ['pairs_per_hr', 'pairs_per_day']) {
+        try {
+          await db.execute(`ALTER TABLE production_routing_lines ADD COLUMN ${col} INT NULL`);
+          logger.info(`Added ${col} to production_routing_lines`);
+        } catch (pairsAlterError) {
+          if (pairsAlterError.code !== 'ER_DUP_FIELDNAME') throw pairsAlterError;
+        }
+      }
+
+      const { computeRoutingLineDerived } = require('./utils/routingLineCalc');
+      const [rowsMissingPairs] = await db.execute(`
+        SELECT id, observed_time, rating_factor, mins_6_prs_box
+        FROM production_routing_lines
+        WHERE pairs_per_hr IS NULL OR pairs_per_day IS NULL
+      `);
+      for (const row of rowsMissingPairs) {
+        const derived = computeRoutingLineDerived(row);
+        await db.execute(
+          `UPDATE production_routing_lines SET pairs_per_hr = ?, pairs_per_day = ? WHERE id = ?`,
+          [derived.pairs_per_hr, derived.pairs_per_day, row.id]
+        );
       }
     } catch (routingMinsAlterError) {
-      logger.error('Failed to migrate production_routing_lines mins column:', routingMinsAlterError.message);
+      logger.error('Failed to migrate production_routing_lines calc columns:', routingMinsAlterError.message);
     }
     await db.execute(`
       CREATE TABLE IF NOT EXISTS tracker_alert_actions (
