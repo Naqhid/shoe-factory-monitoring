@@ -63,6 +63,14 @@ const CANONICAL_ROLES = [
     default_route: '/production_tracker',
     allowed_menus: ['production_tracker', 'rework_rejection_tracker', 'missed_actions', 'alert_center'],
   },
+  {
+    role_name: 'Project Monitor',
+    default_route: '/production_tracker',
+    allowed_menus: [
+      'overview', 'production_tracker', 'manual_production_entry',
+      'reports', 'missed_actions', 'logs', 'alert_center',
+    ],
+  },
 ];
 
 const ALL_MENU_DEFINITIONS = [
