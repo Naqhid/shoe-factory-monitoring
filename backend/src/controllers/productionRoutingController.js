@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const { resolveRoutingLineDerived } = require('../utils/routingLineCalc');
 
 /** mysql2 rejects `undefined` bind values — use SQL NULL instead. */
 const sqlBind = (value) => (value === undefined ? null : value);
@@ -16,14 +17,29 @@ const headerInsertParams = (header) => [
   header.tot_smv,
 ];
 
-const lineInsertParams = (headerId, line) => [
-  headerId,
-  line.machine_centre_id,
-  sqlBind(line.process) ?? null,
-  line.observed_time,
-  line.rating_factor,
-  line.manpower,
-];
+const lineInsertParams = (headerId, line) => {
+  const derived = resolveRoutingLineDerived(line);
+  return [
+    headerId,
+    line.machine_centre_id,
+    sqlBind(line.process) ?? null,
+    line.observed_time,
+    line.rating_factor,
+    derived.normal_time_secs_pr,
+    derived.std_time_secs_pr,
+    derived.mins_6_prs_box,
+    derived.pairs_per_hr,
+    derived.pairs_per_day,
+    line.manpower,
+  ];
+};
+
+const ROUTING_LINE_INSERT_SQL = `
+  INSERT INTO production_routing_lines
+  (routing_header_id, machine_centre_id, process, observed_time, rating_factor,
+   normal_time_secs_pr, std_time_secs_pr, mins_6_prs_box, pairs_per_hr, pairs_per_day, manpower)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`;
 
 class ProductionRoutingController {
   async ensureUniqueStyle(connection, { styleId, excludeId = null }) {
@@ -58,6 +74,16 @@ class ProductionRoutingController {
       if (!Number.isFinite(observedTime) || observedTime <= 0) return `Line ${i + 1}: observed time must be greater than 0`;
       if (!Number.isFinite(ratingFactor) || ratingFactor <= 0 || ratingFactor > 200) return `Line ${i + 1}: rating factor must be between 0 and 200`;
       if (!Number.isFinite(manpower) || manpower <= 0) return `Line ${i + 1}: manpower must be greater than 0`;
+      const derived = resolveRoutingLineDerived(line);
+      if (!Number.isFinite(derived.normal_time_secs_pr) || derived.normal_time_secs_pr <= 0) {
+        return `Line ${i + 1}: normal time must be greater than 0`;
+      }
+      if (!Number.isFinite(derived.std_time_secs_pr) || derived.std_time_secs_pr <= 0) {
+        return `Line ${i + 1}: std time must be greater than 0`;
+      }
+      if (!Number.isFinite(derived.mins_6_prs_box) || derived.mins_6_prs_box <= 0) {
+        return `Line ${i + 1}: mins for 6 pairs must be greater than 0`;
+      }
     }
     return null;
   }
@@ -268,12 +294,7 @@ class ProductionRoutingController {
       
       // Insert lines
       for (const line of lines) {
-        await connection.execute(
-          `INSERT INTO production_routing_lines 
-          (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower) 
-          VALUES (?, ?, ?, ?, ?, ?)`,
-          lineInsertParams(headerId, line)
-        );
+        await connection.execute(ROUTING_LINE_INSERT_SQL, lineInsertParams(headerId, line));
       }
       
       await connection.commit();
@@ -357,12 +378,7 @@ class ProductionRoutingController {
       
       // Insert new lines
       for (const line of lines) {
-        await connection.execute(
-          `INSERT INTO production_routing_lines 
-          (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower) 
-          VALUES (?, ?, ?, ?, ?, ?)`,
-          lineInsertParams(id, line)
-        );
+        await connection.execute(ROUTING_LINE_INSERT_SQL, lineInsertParams(id, line));
       }
 
       await connection.commit();
@@ -436,12 +452,7 @@ class ProductionRoutingController {
         createdIds.push(headerId);
 
         for (const line of lines) {
-          await connection.execute(
-            `INSERT INTO production_routing_lines
-            (routing_header_id, machine_centre_id, process, observed_time, rating_factor, manpower)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-            lineInsertParams(headerId, line)
-          );
+          await connection.execute(ROUTING_LINE_INSERT_SQL, lineInsertParams(headerId, line));
         }
       }
 
