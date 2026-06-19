@@ -674,7 +674,6 @@ class MasterController {
             `UPDATE work_centres SET code = ?, name = ?, input_machine_id = ?, eol_machine_id = ? WHERE id = ?`,
             [code, name, inputId, eolId, id]
           );
-          clearLineMachineCache(Number(id));
           return;
         }
 
@@ -707,6 +706,8 @@ class MasterController {
           await conn.execute(`UPDATE ${table} SET code = ?, name = ? WHERE id = ?`, [code, name, id]);
         }
       });
+
+      if (table === 'work_centres') clearLineMachineCache(Number(id));
 
       this.logMasterAudit('update', req, {
         recordId: id,

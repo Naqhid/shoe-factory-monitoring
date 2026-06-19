@@ -3,6 +3,7 @@
 const db = require('../../config/database');
 const { withTransaction, assertExists } = require('../utils/transaction');
 const { activeWorkCentreWhere } = require('../utils/workCentreSql');
+const { clearLineMachineCache } = require('./lineMachineResolver');
 
 function getPlanningController() {
   return require('../controllers/productionPlanningController');
@@ -249,6 +250,49 @@ async function applyChangeover(payload = {}) {
         plan: planResult,
       });
     }
+
+    // ── Auto-assign machines to line on changeover ──────────────────────────
+    // 1. Get new article's routing machine IDs
+    const [newRoutingLines] = await conn.execute(
+      'SELECT machine_centre_id FROM production_routing_lines WHERE routing_header_id = ?',
+      [header.id]
+    );
+    const newMachineIds = newRoutingLines.map((r) => r.machine_centre_id);
+
+    // 2. Get ALL machines currently assigned to this work centre
+    const affectedOldWorkCentres = new Set();
+    const [currentlyAssigned] = await conn.execute(
+      'SELECT machine_id FROM machine_centres WHERE work_centre_id = ?',
+      [workCentreId]
+    );
+    const currentMachineIds = currentlyAssigned.map((r) => r.machine_id);
+
+    // 3. Release machines currently on this line that are NOT in new article
+    const newMachineSet = new Set(newMachineIds);
+    const toRelease = currentMachineIds.filter((m) => !newMachineSet.has(m));
+    if (toRelease.length > 0) {
+      const ph = toRelease.map(() => '?').join(',');
+      affectedOldWorkCentres.add(workCentreId);
+      await conn.execute(
+        `UPDATE machine_centres SET work_centre_id = NULL WHERE machine_id IN (${ph}) AND work_centre_id = ?`,
+        [...toRelease, workCentreId]
+      );
+    }
+
+    // 4. Now assign new article machines to this work centre
+    if (newMachineIds.length > 0) {
+      const ph = newMachineIds.map(() => '?').join(',');
+      await conn.execute(
+        `UPDATE machine_centres SET work_centre_id = ? WHERE machine_id IN (${ph})`,
+        [workCentreId, ...newMachineIds]
+      );
+    }
+
+    // 5. Clear resolver cache after transaction commits
+    process.nextTick(() => {
+      clearLineMachineCache(workCentreId);
+      affectedOldWorkCentres.forEach((id) => clearLineMachineCache(id));
+    });
 
     return {
       work_centre_id: workCentreId,
