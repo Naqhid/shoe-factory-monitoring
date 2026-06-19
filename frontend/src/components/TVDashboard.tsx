@@ -710,6 +710,11 @@ export const TVDashboard: React.FC = () => {
                     <div className="flex flex-row justify-between items-center mb-1.5 sm:mb-2 gap-2">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                             <h1 className="text-sm sm:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg tracking-tight truncate">{topSection.workCentreName}</h1>
+                            {topSection.styleName && (
+                                <span className="text-xs sm:text-sm font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full truncate">
+                                    {topSection.styleCode} — {topSection.styleName}
+                                </span>
+                            )}
                             <button
                                 type="button"
                                 onClick={() => setShowStatusBar(v => !v)}
@@ -915,6 +920,7 @@ export const TVDashboard: React.FC = () => {
                         <thead className="sticky top-0 z-10 bg-white">
                             <tr className="border-b-2 border-gray-200">
                                 <th className="px-2 py-1.5 text-left font-bold text-gray-700">LINE</th>
+                                <th className="px-2 py-1.5 text-left font-bold text-gray-500">ARTICLE</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">TARGET</th>
                                 {/* INPUT column — live Heel Grip Machine quantity */}
                                 <th className="px-2 py-1.5 text-center font-bold text-cyan-600">INPUT</th>
@@ -941,6 +947,9 @@ export const TVDashboard: React.FC = () => {
                                         style={{ animationDelay: `${Math.min(index, 12) * 55 + 40}ms` }}
                                     >
                                         <td className="px-2 py-2 font-semibold text-gray-800">{line.line_name}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-500 truncate max-w-[100px]" title={line.style_name || ''}>
+                                            {line.style_code || '—'}
+                                        </td>
                                         <td className="px-2 py-2 text-center font-bold text-blue-600 tabular-nums">{line.target}</td>
                                         {/* INPUT — live Heel Grip Machine quantity for this line */}
                                         <td className="px-2 py-2 text-center font-bold text-cyan-600 tabular-nums">

@@ -97,11 +97,11 @@ exports.getMachineCentresByWorkCentre = async (req, res) => {
                 AND ms.status = 'active'
                 AND DATE(ms.activated_at) = ?
             LEFT JOIN employees e ON e.id = ms.emp_id
-            WHERE (mc.work_centre_id = ? OR mcs_agg.work_centre_id = ?)
+            WHERE mc.work_centre_id = ?
               AND mc.deleted_at IS NULL
               AND COALESCE(mc.is_active, 1) = 1
             ORDER BY mc.machine_id
-        `, [workCentreId, date, date, workCentreId, workCentreId, date, workCentreId, workCentreId]);
+        `, [workCentreId, date, date, workCentreId, workCentreId, date, workCentreId]);
 
         res.json({ success: true, data: rows });
     } catch (error) {
@@ -135,6 +135,15 @@ exports.getDashboard = async (req, res) => {
 
         const [wcData] = await pool.query('SELECT name FROM work_centres WHERE id = ?', [workCentreId]);
 
+        // ── Current article for this work centre ──────────────────────────────
+        const [[currentArticle]] = await pool.query(`
+            SELECT s.code AS style_code, s.name AS style_name
+            FROM line_style_assignments lsa
+            JOIN styles s ON s.id = lsa.style_id
+            WHERE lsa.work_centre_id = ? AND lsa.assignment_date <= ? AND lsa.deleted_at IS NULL
+            ORDER BY lsa.assignment_date DESC, lsa.id DESC
+            LIMIT 1
+        `, [workCentreId, today]);
         const target = planningData[0]?.total_target || 0;
         const output = finalOutput;
         const outputPercent = target > 0 ? (output / target) * 100 : 0;
@@ -360,9 +369,21 @@ exports.getDashboard = async (req, res) => {
                 // Compute and persist MES WIP for this line (EOL output only — not sum of all machines)
                 const lineWip = await wipStateService.computeAndPersistWip(lineWcId, today);
 
+                // Fetch current article for this line
+                const [[lineArticle]] = await pool.query(`
+                    SELECT s.code AS style_code, s.name AS style_name
+                    FROM line_style_assignments lsa
+                    JOIN styles s ON s.id = lsa.style_id
+                    WHERE lsa.work_centre_id = ? AND lsa.assignment_date <= ? AND lsa.deleted_at IS NULL
+                    ORDER BY lsa.assignment_date DESC, lsa.id DESC
+                    LIMIT 1
+                `, [lineWcId, today]);
+
                 return {
                     work_centre_id: lineWcId,
                     line_name: line.line_name,
+                    style_code: lineArticle?.style_code || null,
+                    style_name: lineArticle?.style_name || null,
                     target: Math.round(line.target || 0),
                     input: lineInput,
                     output: Math.round(lineEolOutput),
@@ -382,6 +403,8 @@ exports.getDashboard = async (req, res) => {
             data: {
                 topSection: {
                     workCentreName: 'Overall Performance',
+                    styleCode: currentArticle?.style_code || null,
+                    styleName: currentArticle?.style_name || null,
                     target: Math.round(target),
                     input: overallInput,
                     output: Math.round(output),
