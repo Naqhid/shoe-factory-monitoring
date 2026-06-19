@@ -683,10 +683,26 @@ class MasterController {
             const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
             if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
           }
-          await conn.execute(
-            `UPDATE ${table} SET code = ?, name = ?, machine_id = ?, machine_name = ?, work_centre_id = ? WHERE id = ?`,
-            [code, name, machine_id, machine_name || null, work_centre_id || null, id]
-          );
+          const [[existing_mc]] = await conn.execute('SELECT machine_id FROM machine_centres WHERE id = ?', [id]);
+          const oldMachineId = existing_mc?.machine_id;
+          if (oldMachineId && oldMachineId !== machine_id) {
+            await conn.execute('SET FOREIGN_KEY_CHECKS = 0');
+            await conn.execute('UPDATE machine_centres SET machine_id = ? WHERE id = ?', [machine_id, id]);
+            await conn.execute('UPDATE production_routing_lines SET machine_centre_id = ? WHERE machine_centre_id = ?', [machine_id, oldMachineId]);
+            await conn.execute('UPDATE mobile_sessions SET machine_id = ? WHERE machine_id = ?', [machine_id, oldMachineId]);
+            await conn.execute('UPDATE machine_centre_production SET machine_id = ? WHERE machine_id = ?', [machine_id, oldMachineId]);
+            await conn.execute('UPDATE machine_centre_summary SET machine_id = ? WHERE machine_id = ?', [machine_id, oldMachineId]);
+            await conn.execute('SET FOREIGN_KEY_CHECKS = 1');
+            await conn.execute(
+              `UPDATE ${table} SET code = ?, name = ?, machine_name = ?, work_centre_id = ? WHERE id = ?`,
+              [code, name, machine_name || null, work_centre_id || null, id]
+            );
+          } else {
+            await conn.execute(
+              `UPDATE ${table} SET code = ?, name = ?, machine_id = ?, machine_name = ?, work_centre_id = ? WHERE id = ?`,
+              [code, name, machine_id, machine_name || null, work_centre_id || null, id]
+            );
+          }
         } else {
           await conn.execute(`UPDATE ${table} SET code = ?, name = ? WHERE id = ?`, [code, name, id]);
         }
