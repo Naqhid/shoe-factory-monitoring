@@ -223,12 +223,17 @@ class MasterController {
       const search = String(req.query.search || '').trim();
       const includeArchived = String(req.query.includeArchived || 'false') === 'true';
       const styleId = parseInt(req.query.styleId, 10);
+      const workCentreId = parseInt(req.query.work_centre_id, 10);
       
       let rows, countResult;
 
       if (table === 'machine_centres') {
         const params = [];
         const whereParts = [];
+        if (!Number.isNaN(workCentreId) && workCentreId > 0) {
+          whereParts.push('mc.work_centre_id = ?');
+          params.push(workCentreId);
+        }
         if (search) {
           whereParts.push(`(
             mc.machine_id LIKE ?
