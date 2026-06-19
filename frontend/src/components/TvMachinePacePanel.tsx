@@ -279,7 +279,7 @@ export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines
 
   const tiles: GridTile[] = sorted.map((snap) => ({ kind: 'machine', snap }));
   if (linePlan) {
-    const insertAt = Math.floor((tiles.length + 1) / 2);
+    const insertAt = Math.min(4, tiles.length);
     tiles.splice(insertAt, 0, { kind: 'line-plan', plan: linePlan });
   }
 

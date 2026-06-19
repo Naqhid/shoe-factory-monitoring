@@ -396,6 +396,16 @@ const initDb = async () => {
         'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees',
       ]);
     });
+    await permissionService.runOneTimeMigration('project_monitor_setup_pages_v1', async () => {
+      await permissionService.addMenusToRole('Project Monitor', [
+        'production_routing', 'production_planning', 'line_schedule', 'line_setup_form',
+      ]);
+    });
+    await permissionService.runOneTimeMigration('project_monitor_setup_pages_v2', async () => {
+      await permissionService.addMenusToRole('Project Monitor', [
+        'production_routing', 'production_planning', 'line_schedule', 'line_setup_form',
+      ]);
+    });
     await permissionService.bootstrapRoleDefaultsSnapshot();
     logger.info('roles table ready (defaults snapshot initialized when missing)');
 

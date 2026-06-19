@@ -69,6 +69,7 @@ const CANONICAL_ROLES = [
     allowed_menus: [
       'overview', 'production_tracker', 'manual_production_entry',
       'reports', 'missed_actions', 'logs', 'alert_center',
+      'production_routing', 'production_planning', 'line_schedule', 'line_setup_form',
       'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees',
     ],
   },
