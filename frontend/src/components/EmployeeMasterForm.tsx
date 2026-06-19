@@ -29,8 +29,9 @@ export const EmployeeMasterForm: React.FC = () => {
   });
   const [loading, setLoading] = React.useState(false);
   const [fetchLoading, setFetchLoading] = React.useState(false);
-  const [workCentres, setWorkCentres] = React.useState<EmployeeRecord[]>([]);
-  const [machineCentres, setMachineCentres] = React.useState<EmployeeRecord[]>([]);
+  interface MachineCentreOption { id: number; name: string; work_centre_id: number | null; }
+  const [workCentres, setWorkCentres] = React.useState<{ id: number; name: string }[]>([]);
+  const [machineCentres, setMachineCentres] = React.useState<MachineCentreOption[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
   
   const { currentPage, setCurrentPage, paginatedData, totalPages, totalItems, itemsPerPage } = usePagination(records, 10);
@@ -53,7 +54,7 @@ export const EmployeeMasterForm: React.FC = () => {
 
   const fetchWorkCentres = async () => {
     try {
-      const response = await apiFetch(`${API_BASE}/api/masters/work_centres`);
+      const response = await apiFetch(`${API_BASE}/api/masters/work_centres?limit=1000`);
       const result = await response.json();
       if (result.success) {
         setWorkCentres(result.data);
@@ -65,9 +66,10 @@ export const EmployeeMasterForm: React.FC = () => {
 
   const fetchMachineCentres = async () => {
     try {
-      const response = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
+      const response = await apiFetch(`${API_BASE}/api/masters/machine_centres?limit=1000`);
       const result = await response.json();
       if (result.success) {
+        console.log('machine_centres sample:', result.data.slice(0, 3));
         setMachineCentres(result.data);
       }
     } catch (error) {
@@ -281,7 +283,7 @@ export const EmployeeMasterForm: React.FC = () => {
                 </label>
                 <select
                   value={formData.work_centre_id}
-                  onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value, machine_centre_id: '' })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Work Centre</option>
@@ -303,11 +305,13 @@ export const EmployeeMasterForm: React.FC = () => {
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Machine Centre</option>
-                  {machineCentres.map((mc) => (
-                    <option key={mc.id} value={mc.id}>
-                      {mc.name}
-                    </option>
-                  ))}
+                  {machineCentres
+                    .filter((mc) => !formData.work_centre_id || String(mc.work_centre_id) === formData.work_centre_id)
+                    .map((mc) => (
+                      <option key={mc.id} value={mc.id}>
+                        {mc.name}
+                      </option>
+                    ))}
                 </select>
               </div>
 

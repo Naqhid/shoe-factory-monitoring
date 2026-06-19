@@ -90,9 +90,10 @@ export const UsersMasterForm: React.FC = () => {
     }
   };
 
-  const fetchMachineCentres = async () => {
+  const fetchMachineCentres = async (workCentreId?: string) => {
+    if (!workCentreId) { setMachineCentres([]); return; }
     try {
-      const response = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
+      const response = await apiFetch(`${API_BASE}/api/masters/machine_centres?limit=1000&work_centre_id=${workCentreId}`);
       const result = await response.json();
       if (result.success) {
         setMachineCentres(result.data);
@@ -384,7 +385,7 @@ export const UsersMasterForm: React.FC = () => {
                 </label>
                 <select
                   value={formData.work_centre_id}
-                  onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
+                  onChange={(e) => { setFormData({ ...formData, work_centre_id: e.target.value, machine_id: '' }); fetchMachineCentres(e.target.value); }}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Work Centre</option>
