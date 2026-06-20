@@ -97,5 +97,10 @@ export default defineConfig(({ mode }) => {
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'react-query'],
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{js,ts,tsx}'],
+  },
   }
 })

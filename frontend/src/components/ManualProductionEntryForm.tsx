@@ -412,6 +412,18 @@ export const ManualProductionEntryForm: React.FC = () => {
     [filteredEmployees]
   );
 
+  const loadEmployeeOptions = React.useCallback(async (search: string) => {
+    const params = new URLSearchParams({ page: '1', limit: '10' });
+    if (search.trim()) params.set('search', search.trim());
+    const res = await apiFetch(`${API_BASE_URL}/api/masters/employees?${params.toString()}`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Failed to load employees');
+    return (json.data || []).map((emp: any) => ({
+      value: String(emp.code),
+      label: `${emp.code} - ${emp.name}`,
+    }));
+  }, []);
+
   const hasSlotSelection =
     slotType === 'manual' ? !!manualStartTime && !!manualFinishTime : !!hourlySlot;
   const canSubmit =
@@ -2071,6 +2083,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                       value={empId}
                       onChange={setEmpId}
                       options={employeeSelectOptions}
+                      loadOptions={loadEmployeeOptions}
                       placeholder="Select employee"
                       searchPlaceholder="Search by code or name..."
                       required
@@ -2515,54 +2528,56 @@ export const ManualProductionEntryForm: React.FC = () => {
           </div>
         ) : null}
         <div className="mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <button
-              type="button"
-              onClick={() => withDiscardCheck(() => setActiveTab('entries'))}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'entries' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-            >
-              Manual Entries
-            </button>
-            <button
-              type="button"
-              onClick={() => withDiscardCheck(() => { setActiveTab('coverage'); void loadTodayCoverage(); })}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5 ${activeTab === 'coverage' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100'}`}
-            >
-              Coverage &amp; insights
-              {shiftChecklistItems.length > 0 ? (
-                <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1">
-                  {shiftChecklistItems.length}
-                </span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOpenAudit()}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'audit' ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
-            >
-              Audit Logs
-            </button>
-            <button
-              type="button"
-              onClick={() => withDiscardCheck(() => { setActiveTab('production'); loadProdRecords(); })}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'production' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}
-            >
-              Live Production Records
-            </button>
-            <button
-              type="button"
-              onClick={() => withDiscardCheck(() => setActiveTab('summary'))}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'summary' ? 'bg-teal-600 text-white' : 'bg-teal-100 text-teal-800 hover:bg-teal-200'}`}
-            >
-              Daily Summary
-            </button>
-            <button
-              type="button"
-              onClick={() => withDiscardCheck(() => setActiveTab('wip'))}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'wip' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'}`}
-            >
-              WIP Management
-            </button>
+          <div className="overflow-x-auto">
+            <div className="inline-flex min-w-max items-center gap-2 whitespace-nowrap mb-3">
+              <button
+                type="button"
+                onClick={() => withDiscardCheck(() => setActiveTab('entries'))}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'entries' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                Manual Entries
+              </button>
+              <button
+                type="button"
+                onClick={() => withDiscardCheck(() => { setActiveTab('coverage'); void loadTodayCoverage(); })}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5 ${activeTab === 'coverage' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100'}`}
+              >
+                Coverage &amp; insights
+                {shiftChecklistItems.length > 0 ? (
+                  <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1">
+                    {shiftChecklistItems.length}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenAudit()}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'audit' ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
+              >
+                Audit Logs
+              </button>
+              <button
+                type="button"
+                onClick={() => withDiscardCheck(() => { setActiveTab('production'); loadProdRecords(); })}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'production' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}
+              >
+                Live Production Records
+              </button>
+              <button
+                type="button"
+                onClick={() => withDiscardCheck(() => setActiveTab('summary'))}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'summary' ? 'bg-teal-600 text-white' : 'bg-teal-100 text-teal-800 hover:bg-teal-200'}`}
+              >
+                Daily Summary
+              </button>
+              <button
+                type="button"
+                onClick={() => withDiscardCheck(() => setActiveTab('wip'))}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'wip' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'}`}
+              >
+                WIP Management
+              </button>
+            </div>
           </div>
 
           {activeTab === 'entries' ? (
