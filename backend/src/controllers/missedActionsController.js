@@ -871,3 +871,222 @@ exports.getMachineDailyCycles = async (req, res, next) => {
   }
 };
 
+exports.getMachineStatus = async (req, res, next) => {
+  try {
+    const rawDate = String(req.query?.date || '').trim();
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : new Date().toISOString().slice(0, 10);
+
+    // Pagination params
+    const page = Math.max(1, parseInt(req.query?.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    // Optional line filter
+    const rawLineId = String(req.query?.work_centre_id || '').trim();
+    const lineFilter = rawLineId && /^\d+$/.test(rawLineId) ? parseInt(rawLineId) : null;
+
+    // Get line schedule for today - find most recent assignments up to today (articles stay active until changeover)
+    const [lineScheduleRows] = await db.query(
+      `SELECT 
+        lsa.work_centre_id,
+        s.code AS style_code,
+        s.name AS style_name,
+        c.name AS customer_name,
+        g.name AS group_name,
+        l.name AS leather_name,
+        col.name AS color_name
+      FROM line_style_assignments lsa
+      JOIN styles s ON lsa.style_id = s.id
+      LEFT JOIN customers c ON lsa.customer_id = c.id
+      LEFT JOIN groups_master g ON lsa.group_id = g.id
+      LEFT JOIN leather l ON lsa.leather_id = l.id
+      LEFT JOIN colors col ON lsa.color_id = col.id
+      WHERE lsa.assignment_date <= ? AND lsa.deleted_at IS NULL
+        AND lsa.id IN (
+          SELECT MAX(lsa2.id)
+          FROM line_style_assignments lsa2
+          WHERE lsa2.assignment_date <= ? AND lsa2.deleted_at IS NULL
+          GROUP BY lsa2.work_centre_id
+        )`,
+      [dateKey, dateKey]
+    );
+
+    // Create a map of work_centre_id to article info
+    const articleMap = new Map();
+    lineScheduleRows.forEach((row) => {
+      articleMap.set(Number(row.work_centre_id), {
+        style_code: row.style_code,
+        style_name: row.style_name,
+        customer_name: row.customer_name,
+        group_name: row.group_name,
+        leather_name: row.leather_name,
+        color_name: row.color_name,
+      });
+    });
+
+    // Get only machines with assigned articles for today (optionally filtered by line)
+    let assignedWorkCentreIds = Array.from(articleMap.keys());
+    if (lineFilter !== null) {
+      assignedWorkCentreIds = assignedWorkCentreIds.filter((id) => id === lineFilter);
+    }
+
+    if (assignedWorkCentreIds.length === 0) {
+      return res.json({
+        success: true,
+        date: dateKey,
+        summary: {
+          total: 0,
+          active: 0,
+          inactive: 0,
+        },
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        },
+        data: [],
+        active_articles: [],
+      });
+    }
+
+    const placeholders = assignedWorkCentreIds.map(() => '?').join(',');
+
+    // Count total machines matching the filter (for pagination metadata)
+    const [[{ total: totalCount }]] = await db.query(
+      `SELECT COUNT(*) AS total
+       FROM machine_centres mc
+       JOIN work_centres wc ON mc.work_centre_id = wc.id
+       WHERE wc.id IN (${placeholders})`,
+      [...assignedWorkCentreIds]
+    );
+
+    // Get paginated machines for work centres that have articles assigned today
+    const [rows] = await db.query(
+      `
+      SELECT
+        mc.machine_id,
+        mc.code,
+        mc.machine_name,
+        wc.id AS work_centre_id,
+        wc.name AS work_centre_name,
+        MIN(mcp.start_time) AS first_entry_time,
+        MAX(mcp.finish_time) AS last_entry_time,
+        COUNT(mcp.id) AS cycle_count,
+        COALESCE(SUM(mcp.output_pairs), 0) AS total_pairs
+      FROM machine_centres mc
+      JOIN work_centres wc ON mc.work_centre_id = wc.id
+      LEFT JOIN machine_centre_production mcp ON mcp.machine_id = mc.machine_id
+        AND DATE(mcp.prod_date) = DATE(?)
+        AND mcp.button_status = 2
+      WHERE wc.id IN (${placeholders})
+      GROUP BY mc.id, mc.machine_id, mc.code, mc.machine_name, wc.id, wc.name
+      ORDER BY mc.machine_id
+      LIMIT ? OFFSET ?
+      `,
+      [dateKey, ...assignedWorkCentreIds, limit, offset]
+    );
+
+    const machines = rows.map((row) => ({
+      machine_id: row.machine_id,
+      machine_code: row.code,
+      machine_name: row.machine_name || row.machine_id,
+      work_centre_id: row.work_centre_id,
+      work_centre_name: row.work_centre_name || 'Unassigned',
+      first_entry_time: row.first_entry_time,
+      last_entry_time: row.last_entry_time,
+      cycle_count: Number(row.cycle_count) || 0,
+      total_pairs: Number(row.total_pairs) || 0,
+      active: !!row.first_entry_time, // active if first_entry_time exists (production started)
+    }));
+
+    // Add article info to machines
+    const machinesWithArticles = machines.map((machine) => {
+      const article = articleMap.get(machine.work_centre_id);
+      return {
+        ...machine,
+        article: article || null,
+      };
+    });
+
+    // Get articles for active machines
+    const activeMachineIds = machinesWithArticles.filter((m) => m.active).map((m) => m.machine_id);
+    let activeArticles = [];
+    if (activeMachineIds.length > 0) {
+      const activePlaceholders = activeMachineIds.map(() => '?').join(',');
+      const [articleRows] = await db.query(
+        `
+        SELECT
+          mcp.machine_id,
+          COUNT(DISTINCT mcp.id) AS cycle_count,
+          COALESCE(SUM(mcp.output_pairs), 0) AS output_pairs,
+          MAX(mcp.finish_time) AS last_finish_time
+        FROM machine_centre_production mcp
+        WHERE mcp.machine_id IN (${activePlaceholders})
+          AND DATE(mcp.prod_date) = DATE(?)
+          AND mcp.button_status = 2
+        GROUP BY mcp.machine_id
+        ORDER BY mcp.machine_id
+        `,
+        [...activeMachineIds, dateKey]
+      );
+      activeArticles = articleRows.map((row) => {
+        const machine = machinesWithArticles.find((m) => m.machine_id === row.machine_id);
+        return {
+          machine_id: row.machine_id,
+          machine_name: machine?.machine_name || row.machine_id,
+          cycle_count: Number(row.cycle_count) || 0,
+          output_pairs: Number(row.output_pairs) || 0,
+          last_finish_time: row.last_finish_time,
+          article: machine?.article || null,
+        };
+      });
+    }
+
+    const totalCount2 = machinesWithArticles.length; // unused, summary comes from DB query below
+
+    // Summary counts across ALL assigned work centres (not just the current page)
+    const [summaryRows] = await db.query(
+      `
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN first_entry_time IS NOT NULL THEN 1 ELSE 0 END) AS active
+      FROM (
+        SELECT MIN(mcp.start_time) AS first_entry_time
+        FROM machine_centres mc
+        JOIN work_centres wc ON mc.work_centre_id = wc.id
+        LEFT JOIN machine_centre_production mcp ON mcp.machine_id = mc.machine_id
+          AND DATE(mcp.prod_date) = DATE(?)
+          AND mcp.button_status = 2
+        WHERE wc.id IN (${placeholders})
+        GROUP BY mc.id
+      ) AS sub
+      `,
+      [dateKey, ...assignedWorkCentreIds]
+    );
+    const summaryTotal = Number(summaryRows[0]?.total) || 0;
+    const summaryActive = Number(summaryRows[0]?.active) || 0;
+
+    return res.json({
+      success: true,
+      date: dateKey,
+      summary: {
+        total: summaryTotal,
+        active: summaryActive,
+        inactive: summaryTotal - summaryActive,
+      },
+      pagination: {
+        page,
+        limit,
+        total: Number(totalCount),
+        totalPages: Math.ceil(Number(totalCount) / limit),
+      },
+      data: machinesWithArticles,
+      active_articles: activeArticles,
+    });
+  } catch (error) {
+    logger.error('Error getting machine status:', error);
+    return next(error);
+  }
+};
+

@@ -45,10 +45,11 @@ const LIVE_SORT_LABELS: Record<string, string> = {
   machine: 'Machine A–Z',
 };
 
-type MissedTab = 'live' | 'daily' | 'discipline' | 'operator' | 'reminder';
+type MissedTab = 'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'machines';
 
 const MISSED_TABS: { id: MissedTab; label: string; shortLabel: string; icon: React.ElementType }[] = [
   { id: 'live', label: 'Live Issues', shortLabel: 'Live', icon: Radio },
+  { id: 'machines', label: 'Machine Status', shortLabel: 'Machines', icon: Cpu },
   { id: 'daily', label: 'Daily Inactive Report', shortLabel: 'Daily', icon: CalendarDays },
   { id: 'discipline', label: 'Cycle Discipline', shortLabel: 'Discipline', icon: BarChart2 },
   { id: 'operator', label: 'Operator Report', shortLabel: 'Operators', icon: User },
@@ -277,7 +278,7 @@ type ResolvedIssueFlash = {
 
 export const MissedActionsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder'>('live');
+  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'machines'>('live');
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSilentRefreshing, setIsSilentRefreshing] = React.useState(false);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
@@ -298,6 +299,17 @@ export const MissedActionsPage: React.FC = () => {
   const [contextMachineLoss, setContextMachineLoss] = React.useState<number | null>(null);
   const [showPriorityGuide, setShowPriorityGuide] = React.useState(false);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
+  const [machineStatusData, setMachineStatusData] = React.useState<any[]>([]);
+  const [machineStatusLoading, setMachineStatusLoading] = React.useState(false);
+  const [machineStatusRefresh, setMachineStatusRefresh] = React.useState(0);
+  const [machineStatusFilter, setMachineStatusFilter] = React.useState<'all' | 'active' | 'inactive'>('inactive');
+  const [machineStatusLine, setMachineStatusLine] = React.useState<string>('all');
+  const [machineStatusPage, setMachineStatusPage] = React.useState(1);
+  const [machineStatusPageSize, setMachineStatusPageSize] = React.useState(20);
+  const [machineStatusTotal, setMachineStatusTotal] = React.useState(0);
+  const [machineStatusTotalPages, setMachineStatusTotalPages] = React.useState(1);
+  const [machineStatusSummary, setMachineStatusSummary] = React.useState({ total: 0, active: 0, inactive: 0 });
+  const [activeArticles, setActiveArticles] = React.useState<any[]>([]);
   const [showMuted, setShowMuted] = React.useState(false);
   const [dailyReportDate, setDailyReportDate] = React.useState<string>(new Date().toISOString().slice(0, 10));
   const [dailyDateTo, setDailyDateTo] = React.useState<string>(new Date().toISOString().slice(0, 10));
@@ -774,6 +786,55 @@ export const MissedActionsPage: React.FC = () => {
     if (activeTab !== 'reminder') return;
     fetchReminderSettings();
   }, [activeTab, fetchReminderSettings]);
+
+  const fetchMachineStatus = React.useCallback(async () => {
+    setMachineStatusLoading(true);
+    try {
+      const params = new URLSearchParams({
+        date: new Date().toISOString().slice(0, 10),
+        page: String(machineStatusPage),
+        limit: String(machineStatusPageSize),
+      });
+      if (machineStatusLine !== 'all') {
+        const wc = workCentres.find((w) => w.name === machineStatusLine);
+        if (wc?.id) params.set('work_centre_id', String(wc.id));
+      }
+      const res = await apiFetch(`${API_BASE}/api/machine-status?${params.toString()}`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setMachineStatusData(json.data);
+        setActiveArticles(json.active_articles || []);
+        setMachineStatusSummary(json.summary || { total: 0, active: 0, inactive: 0 });
+        setMachineStatusTotal(json.pagination?.total ?? 0);
+        setMachineStatusTotalPages(json.pagination?.totalPages ?? 1);
+      } else {
+        setMachineStatusData([]);
+        setActiveArticles([]);
+        setMachineStatusSummary({ total: 0, active: 0, inactive: 0 });
+        setMachineStatusTotal(0);
+        setMachineStatusTotalPages(1);
+      }
+    } catch (e) {
+      console.error('Failed to load machine status:', e);
+      setMachineStatusData([]);
+      setActiveArticles([]);
+      setMachineStatusSummary({ total: 0, active: 0, inactive: 0 });
+      setMachineStatusTotal(0);
+      setMachineStatusTotalPages(1);
+    } finally {
+      setMachineStatusLoading(false);
+    }
+  }, [machineStatusPage, machineStatusPageSize, machineStatusLine, workCentres]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'machines') return;
+    fetchMachineStatus();
+  }, [activeTab, fetchMachineStatus]);
+
+  // Reset to page 1 when line filter changes
+  React.useEffect(() => {
+    setMachineStatusPage(1);
+  }, [machineStatusLine]);
 
   const getReminderDraft = React.useCallback((row: IdleReminderSettingRow): IdleReminderDraft => {
     const draft = reminderDrafts[row.machine_id];
@@ -2039,6 +2100,7 @@ export const MissedActionsPage: React.FC = () => {
                 {activeTab === 'daily' && 'Completed-cycle inactive and extra minutes for a date range.'}
                 {activeTab === 'discipline' && 'Late starts and slow finishes per cycle.'}
                 {activeTab === 'operator' && 'Operator-level loss summary and root causes.'}
+                {activeTab === 'machines' && 'Machine activity status: total, active, inactive machines and last entry times.'}
                 {activeTab === 'reminder' && 'Per-machine idle reminder and finish grace on mobile.'}
               </p>
             </div>
@@ -3103,6 +3165,277 @@ export const MissedActionsPage: React.FC = () => {
             </div>
           </div>
         ) : null}
+
+        {activeTab === 'machines' && (
+          <div className="space-y-4">
+            {/* Line Filter */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-wrap gap-3 items-end">
+              <div className="min-w-[200px] flex-1 sm:flex-none sm:max-w-xs">
+                <label className={FILTER_LABEL}>
+                  <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
+                </label>
+                <select
+                  value={machineStatusLine}
+                  onChange={(e) => setMachineStatusLine(e.target.value)}
+                  className={FILTER_CONTROL}
+                >
+                  <option value="all">All lines</option>
+                  {workCentres.map((wc) => (
+                    <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-[100px] flex-none">
+                <label className={FILTER_LABEL}>Per page</label>
+                <select
+                  value={machineStatusPageSize}
+                  onChange={(e) => { setMachineStatusPageSize(Number(e.target.value)); setMachineStatusPage(1); }}
+                  className={FILTER_CONTROL}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchMachineStatus()}
+                disabled={machineStatusLoading}
+                className={BTN_SECONDARY}
+              >
+                {machineStatusLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Refresh
+              </button>
+            </div>
+
+            {machineStatusLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              </div>
+            ) : (
+              <>
+                {/* Summary Filter Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setMachineStatusFilter('all')}
+                    className={`rounded-xl border p-4 shadow-sm transition-all ${
+                      machineStatusFilter === 'all'
+                        ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-400/50'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Total Machines</p>
+                    <p className="text-3xl font-black text-slate-900 mt-1">{machineStatusSummary.total}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMachineStatusFilter('active')}
+                    className={`rounded-xl border p-4 shadow-sm transition-all ${
+                      machineStatusFilter === 'active'
+                        ? 'border-emerald-300 bg-emerald-50 ring-2 ring-emerald-400/50'
+                        : 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/50'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-emerald-700">Active Machines</p>
+                    <p className="text-3xl font-black text-emerald-600 mt-1">{machineStatusSummary.active}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMachineStatusFilter('inactive')}
+                    className={`rounded-xl border p-4 shadow-sm transition-all ${
+                      machineStatusFilter === 'inactive'
+                        ? 'border-slate-400 bg-slate-100 ring-2 ring-slate-400/50'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/50'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-600">Inactive Machines</p>
+                    <p className="text-3xl font-black text-slate-700 mt-1">{machineStatusSummary.inactive}</p>
+                  </button>
+                </div>
+
+                {/* Machine Status Summary Table */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Machine</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Line</th>
+                          <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Last Entry Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {(() => {
+                          const filtered = machineStatusFilter === 'all'
+                            ? machineStatusData
+                            : machineStatusFilter === 'active'
+                            ? machineStatusData.filter((m: any) => m.active)
+                            : machineStatusData.filter((m: any) => !m.active);
+
+                          if (filtered.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                                  {machineStatusData.length === 0 ? 'No machine data available' : `No ${machineStatusFilter} machines`}
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return filtered.map((machine: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-slate-900">{machine.machine_id}</p>
+                                {machine.machine_name && (
+                                  <p className="text-xs text-slate-500">{machine.machine_name}</p>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700">{machine.work_centre_name || '—'}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  machine.active
+                                    ? 'bg-emerald-100/80 text-emerald-700'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  <span className={`h-2 w-2 rounded-full ${machine.active ? 'bg-emerald-600' : 'bg-slate-400'}`}></span>
+                                  {machine.active ? 'Active' : 'Inactive'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {machine.last_entry_time ? (
+                                  <p className="text-slate-700 font-mono text-xs">{new Date(machine.last_entry_time).toLocaleString()}</p>
+                                ) : (
+                                  <p className="text-slate-400 italic">No entries yet</p>
+                                )}
+                              </td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {machineStatusTotalPages > 1 && (
+                    <div className="px-4 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50/50">
+                      <p className="text-xs text-slate-500">
+                        Showing {((machineStatusPage - 1) * machineStatusPageSize) + 1}–{Math.min(machineStatusPage * machineStatusPageSize, machineStatusTotal)} of {machineStatusTotal} machines
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMachineStatusPage((p) => Math.max(1, p - 1))}
+                          disabled={machineStatusPage === 1}
+                          className="px-3 py-1 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Prev
+                        </button>
+                        {Array.from({ length: machineStatusTotalPages }, (_, i) => i + 1)
+                          .filter((p) => p === 1 || p === machineStatusTotalPages || Math.abs(p - machineStatusPage) <= 1)
+                          .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                            if (i > 0 && typeof arr[i - 1] === 'number' && (p as number) - (arr[i - 1] as number) > 1) acc.push('...');
+                            acc.push(p);
+                            return acc;
+                          }, [])
+                          .map((p, i) =>
+                            p === '...' ? (
+                              <span key={`ellipsis-${i}`} className="px-1 text-slate-400 text-sm">…</span>
+                            ) : (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setMachineStatusPage(p as number)}
+                                className={`px-3 py-1 rounded-lg border text-sm font-semibold ${
+                                  machineStatusPage === p
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            )
+                          )}
+                        <button
+                          type="button"
+                          onClick={() => setMachineStatusPage((p) => Math.min(machineStatusTotalPages, p + 1))}
+                          disabled={machineStatusPage === machineStatusTotalPages}
+                          className="px-3 py-1 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Active Machine Production Today Section */}
+                {activeArticles.length > 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 shadow-sm">
+                    <p className="text-sm font-bold text-amber-900 mb-3 flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-amber-600"></span>
+                      Active Machine Production Today
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {activeArticles.map((article: any, idx: number) => (
+                        <div key={idx} className="bg-white rounded-lg border border-amber-100 p-4">
+                          {/* Machine + Operation Header */}
+                          <div className="mb-3">
+                            <p className="text-sm font-bold text-slate-900">{article.machine_id}</p>
+                            {article.machine_name && article.machine_name !== article.machine_id && (
+                              <p className="text-xs text-slate-600 mt-1">{article.machine_name}</p>
+                            )}
+                          </div>
+
+                          {/* Pairs Display */}
+                          <div className="flex items-baseline gap-1 mb-3">
+                            <p className="text-2xl font-black text-slate-900">{article.output_pairs}</p>
+                            <p className="text-xs text-slate-600">pairs</p>
+                          </div>
+
+                          {/* Style Information */}
+                          {article.article && (
+                            <div className="bg-slate-50 rounded p-3 mb-3 space-y-1.5">
+                              <div>
+                                <p className="text-xs text-slate-600 font-medium">Style</p>
+                                <p className="text-sm font-semibold text-slate-900">{article.article.style_code}</p>
+                              </div>
+                              {article.article.customer_name && (
+                                <div>
+                                  <p className="text-xs text-slate-600 font-medium">Customer</p>
+                                  <p className="text-sm text-slate-900">{article.article.customer_name}</p>
+                                </div>
+                              )}
+                              {(article.article.group_name || article.article.leather_name || article.article.color_name) && (
+                                <div>
+                                  <p className="text-xs text-slate-600 font-medium">Details</p>
+                                  <p className="text-xs text-slate-700">
+                                    {[article.article.group_name, article.article.leather_name, article.article.color_name]
+                                      .filter(Boolean)
+                                      .join(' • ')}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Cycles */}
+                          <div className="border-t border-amber-100 pt-2">
+                            <p className="text-xs text-slate-600">
+                              <span className="font-semibold">Cycles:</span> {article.cycle_count}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {activeTab === 'reminder' && (
           <div className="space-y-4">
