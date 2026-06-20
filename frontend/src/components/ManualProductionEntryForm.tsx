@@ -412,6 +412,18 @@ export const ManualProductionEntryForm: React.FC = () => {
     [filteredEmployees]
   );
 
+  const loadEmployeeOptions = React.useCallback(async (search: string) => {
+    const params = new URLSearchParams({ page: '1', limit: '10' });
+    if (search.trim()) params.set('search', search.trim());
+    const res = await apiFetch(`${API_BASE_URL}/api/masters/employees?${params.toString()}`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Failed to load employees');
+    return (json.data || []).map((emp: any) => ({
+      value: String(emp.code),
+      label: `${emp.code} - ${emp.name}`,
+    }));
+  }, []);
+
   const hasSlotSelection =
     slotType === 'manual' ? !!manualStartTime && !!manualFinishTime : !!hourlySlot;
   const canSubmit =
@@ -2071,6 +2083,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                       value={empId}
                       onChange={setEmpId}
                       options={employeeSelectOptions}
+                      loadOptions={loadEmployeeOptions}
                       placeholder="Select employee"
                       searchPlaceholder="Search by code or name..."
                       required
@@ -2516,7 +2529,7 @@ export const ManualProductionEntryForm: React.FC = () => {
         ) : null}
         <div className="mb-4">
           <div className="overflow-x-auto">
-            <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="inline-flex min-w-max items-center gap-2 whitespace-nowrap mb-3">
               <button
                 type="button"
                 onClick={() => withDiscardCheck(() => setActiveTab('entries'))}

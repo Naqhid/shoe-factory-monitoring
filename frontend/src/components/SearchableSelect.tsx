@@ -13,6 +13,7 @@ interface SearchableSelectProps {
   value: string;
   options: SearchableSelectOption[];
   onChange: (value: string) => void;
+  loadOptions?: (search: string) => Promise<SearchableSelectOption[]>;
   placeholder?: string;
   searchPlaceholder?: string;
   footerCountLabel?: string;
@@ -49,6 +50,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   value,
   options,
   onChange,
+  loadOptions,
   placeholder = 'Select',
   searchPlaceholder = 'Search...',
   footerCountLabel = 'options',
@@ -62,24 +64,36 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   const [search, setSearch] = React.useState('');
   const [highlightIndex, setHighlightIndex] = React.useState(0);
   const [panelStyle, setPanelStyle] = React.useState<React.CSSProperties>({});
+  const [remoteOptions, setRemoteOptions] = React.useState<SearchableSelectOption[]>([]);
+  const [loadingOptions, setLoadingOptions] = React.useState(false);
+  const [loadError, setLoadError] = React.useState('');
   const rootRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
   const listRef = React.useRef<HTMLUListElement>(null);
 
-  const selected = options.find((o) => o.value === value);
+  const allOptions = React.useMemo(() => {
+    if (!loadOptions) return options;
+    if (remoteOptions.length > 0 || search.trim()) return remoteOptions;
+    return options;
+  }, [loadOptions, options, remoteOptions, search]);
+
+  const selected = React.useMemo(
+    () => allOptions.find((o) => o.value === value) ?? options.find((o) => o.value === value),
+    [allOptions, options, value]
+  );
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter(
+    if (!q) return allOptions;
+    return allOptions.filter(
       (o) =>
         o.label.toLowerCase().includes(q) ||
         o.value.toLowerCase().includes(q) ||
         (o.subLabel || '').toLowerCase().includes(q)
     );
-  }, [options, search]);
+  }, [allOptions, search]);
 
   const selectableFiltered = React.useMemo(
     () => filtered.filter((o) => !o.disabled),
@@ -149,6 +163,36 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       window.removeEventListener('scroll', onReposition, true);
     };
   }, [open, updatePanelPosition, search]);
+
+  React.useEffect(() => {
+    if (!loadOptions || !open) return;
+    let active = true;
+    const query = search.trim();
+    const timeout = window.setTimeout(() => {
+      setLoadingOptions(true);
+      setLoadError('');
+      loadOptions(query)
+        .then((opts) => {
+          if (!active) return;
+          setRemoteOptions(opts);
+          setHighlightIndex(0);
+        })
+        .catch((err) => {
+          if (!active) return;
+          console.error('SearchableSelect loadOptions failed:', err);
+          setRemoteOptions([]);
+          setLoadError('Failed to load options');
+        })
+        .finally(() => {
+          if (!active) return;
+          setLoadingOptions(false);
+        });
+    }, 200);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [loadOptions, open, search]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -230,6 +274,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           aria-label={searchPlaceholder}
           autoComplete="off"
         />
+        {loadingOptions && (
+          <span className="text-xs text-gray-500">Loading…</span>
+        )}
         {search && (
           <button
             type="button"
@@ -289,9 +336,14 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         )}
       </ul>
 
-      {!search.trim() && options.length > 8 && (
+      {!search.trim() && !loadOptions && options.length > 8 && (
         <div className="px-3 py-1.5 text-[11px] text-gray-400 border-t border-gray-100 bg-gray-50 shrink-0">
           Type to search {options.length} {footerCountLabel}
+        </div>
+      )}
+      {loadError && (
+        <div className="px-3 py-1.5 text-xs text-red-500 border-t border-gray-100 bg-gray-50 shrink-0">
+          {loadError}
         </div>
       )}
     </div>
