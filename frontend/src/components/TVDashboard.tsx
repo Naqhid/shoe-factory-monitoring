@@ -694,6 +694,14 @@ export const TVDashboard: React.FC = () => {
         return { gapToTarget, pairsPerHrNeeded, currentPairsPerHr };
     })();
 
+    const currentArticleCode = currentLinePerformance?.style_code || topSection.styleCode || null;
+    const currentArticleName = currentLinePerformance?.style_name || topSection.styleName || null;
+    const articlePill = currentArticleName ? (
+        <span className="shrink-0 text-[10px] sm:text-xs font-black bg-indigo-600 text-white px-2.5 py-0.5 rounded-full truncate ring-2 ring-indigo-300 shadow-sm">
+            {currentArticleName}
+        </span>
+    ) : null;
+
     const chartData = lowerSection.hourlyData.map((item: any) => ({
         hour: `${item.hour}:00`,
         output: item.output || 0
@@ -884,22 +892,26 @@ export const TVDashboard: React.FC = () => {
                     <div className="flex items-center justify-between gap-2 min-w-0 overflow-hidden">
                     <div className="flex items-center min-w-0 flex-1 overflow-hidden gap-2">
                     {detailCarouselIndex === 2 ? (
-                        <div className="flex items-center min-w-0 flex-1 gap-4 sm:gap-6 text-sm sm:text-base font-bold leading-tight overflow-hidden">
+                        <div className="flex items-center min-w-0 flex-1 gap-2 sm:gap-4 text-sm sm:text-base font-bold leading-tight overflow-hidden">
                             <span className="text-blue-600 truncate min-w-0" title={currentLineName}>
                                 {currentLineName}
                             </span>
+                            {articlePill}
                             <span className="h-4 w-px shrink-0 bg-slate-300" aria-hidden />
                             <TvMachinePaceLegend />
                         </div>
                     ) : (
-                        <h3
-                            className="font-bold text-blue-600 truncate"
-                            style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}
-                        >
-                            {detailCarouselIndex === 0
-                                ? 'LINE PERFORMANCE'
-                                : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
-                        </h3>
+                        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                            <h3
+                                className="font-bold text-blue-600 truncate"
+                                style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.3px' }}
+                            >
+                                {detailCarouselIndex === 0
+                                    ? 'LINE PERFORMANCE'
+                                    : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
+                            </h3>
+                            {articlePill}
+                        </div>
                     )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
