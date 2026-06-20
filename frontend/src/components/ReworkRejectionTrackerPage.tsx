@@ -64,13 +64,13 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   useEffect(() => {
     const fetchMachineCentres = async () => {
       try {
-        const response = await apiFetch(`${API_BASE_URL}/api/masters/machine_centres`);
+        const params = new URLSearchParams();
+        if (selectedWorkCentre) params.set('work_centre_id', selectedWorkCentre);
+        params.set('limit', '500');
+        const response = await apiFetch(`${API_BASE_URL}/api/masters/machine_centres?${params.toString()}`);
         const result = await response.json();
         if (result.success) {
-          const filtered = selectedWorkCentre
-            ? result.data.filter((mc: { work_centre_id: number }) => String(mc.work_centre_id) === String(selectedWorkCentre))
-            : result.data;
-          setMachineCentres(filtered);
+          setMachineCentres(result.data);
         }
       } catch (error) {
         console.error('Error fetching machine centres:', error);

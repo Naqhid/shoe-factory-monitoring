@@ -189,7 +189,8 @@ const formatTimeFromMinutes = (totalMinutes: number) => {
 
 const buildSlotOptions = (slotMinutes: number) => {
   const options: Array<{ value: string; label: string; startMinutes: number; endMinutes: number }> = [];
-  for (let start = 0; start + slotMinutes <= 24 * 60; start += slotMinutes) {
+  // Only show slots from 9 AM (540 minutes) to 7 PM (1140 minutes)
+  for (let start = 540; start + slotMinutes <= 1140; start += slotMinutes) {
     const end = start + slotMinutes;
     options.push({
       value: formatTimeFromMinutes(start),
