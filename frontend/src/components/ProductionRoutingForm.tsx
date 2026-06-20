@@ -21,6 +21,14 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Pagination } from './Pagination';
 import { SearchableSelect, type SearchableSelectOption } from './SearchableSelect';
 import { computeShiftTargetPairs, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
+import {
+  applyAutoCalc,
+  calculateLineValues,
+  calcToLineFields,
+  CALC_FIELDS,
+  type CalcField,
+  type RoutingLine,
+} from './ProductionRoutingForm.helpers';
 import * as XLSX from 'xlsx';
 
 const routingFieldClass =
@@ -50,36 +58,6 @@ interface MasterOption {
   machine_name?: string;
 }
 
-interface RoutingLine {
-  _rowId?: number;
-  machine_centre_id: string;
-  machine_name: string;
-  process: string;
-  observed_time: string;
-  rating_factor: string;
-  normal_time_secs_pr: string;
-  std_time_secs_pr: string;
-  mins_6_prs_box: string;
-  pairs_per_hr: string;
-  pairs_per_day: string;
-  manpower: string;
-  _lockedCalcFields?: CalcField[];
-}
-
-type CalcField =
-  | 'normal_time_secs_pr'
-  | 'std_time_secs_pr'
-  | 'mins_6_prs_box'
-  | 'pairs_per_hr'
-  | 'pairs_per_day';
-
-const CALC_FIELDS: CalcField[] = [
-  'normal_time_secs_pr',
-  'std_time_secs_pr',
-  'mins_6_prs_box',
-  'pairs_per_hr',
-  'pairs_per_day',
-];
 
 const buildMachineSelectOptions = (
   machineCentres: MasterOption[],
@@ -148,6 +126,7 @@ export const ProductionRoutingForm: React.FC = () => {
     machine_name: '',
     process: '',
     observed_time: '',
+    base_observed_time: '',
     rating_factor: '',
     normal_time_secs_pr: '',
     std_time_secs_pr: '',
@@ -256,53 +235,24 @@ export const ProductionRoutingForm: React.FC = () => {
       .map(([machineId]) => machineId);
   };
 
-  const calculateLineValues = (line: RoutingLine) => {
-    const observedTime = parseFloat(line.observed_time) || 0;
-    const ratingFactor = parseFloat(line.rating_factor) || 0;
 
-    const normalTimeSecs = (observedTime * ratingFactor) / 100;
-    const stdTimeSecs = normalTimeSecs * 1.15;
-    // Minutes for 6 pairs at std sec/pair (rating factor + 15% allowance), same as legacy mins_12_prs ÷ 2
-    const mins6Prs = Math.round(((stdTimeSecs * 6) / 60) * 10) / 10;
-    // Pairs/day: round total at end (same as TV dashboard EOD plan), not round hourly × 8
-    const { totalProductiveMins } = getProductiveShiftTotals(new Date());
-    const pairsPerDay = computeShiftTargetPairs(mins6Prs, 6, totalProductiveMins);
-    const pairsPerHr =
-      totalProductiveMins > 0 && pairsPerDay > 0
-        ? Math.round((pairsPerDay / totalProductiveMins) * 60)
-        : 0;
-    const manpower = line.manpower ? (Math.round(parseFloat(line.manpower) * 10) / 10) : 0;
-
-    return { normal_time_secs_pr: Math.round(normalTimeSecs), std_time_secs_pr: Math.round(stdTimeSecs), mins_6_prs_box: mins6Prs, pairs_per_hr: pairsPerHr, pairs_per_day: pairsPerDay, manpower };
-  };
-
-  const calcToLineFields = (calc: ReturnType<typeof calculateLineValues>) => ({
-    normal_time_secs_pr: String(calc.normal_time_secs_pr),
-    std_time_secs_pr: String(calc.std_time_secs_pr),
-    mins_6_prs_box: calc.mins_6_prs_box.toFixed(1),
-    pairs_per_hr: String(calc.pairs_per_hr),
-    pairs_per_day: String(calc.pairs_per_day),
-  });
-
-  const applyAutoCalc = (line: RoutingLine): RoutingLine => {
-    const calc = calculateLineValues(line);
-    const fields = calcToLineFields(calc);
-    const lockedSet = new Set(line._lockedCalcFields || []);
-    const next = { ...line };
-    for (const key of CALC_FIELDS) {
-      if (!lockedSet.has(key)) {
-        next[key] = fields[key];
-      }
-    }
-    return next;
-  };
 
   const routingLineFromApi = (l: any): RoutingLine => {
+    const existingManpower = Number(l.manpower) || 0;
+    const existingObserved = Number(l.observed_time) || 0;
+    const baseObserved =
+      l.base_observed_time != null
+        ? Number(l.base_observed_time)
+        : existingManpower > 0
+          ? existingObserved / existingManpower
+          : existingObserved;
+
     const line: RoutingLine = {
       machine_centre_id: String(l.machine_centre_id),
       machine_name: l.machine_name || l.machine_centre_name || '',
       process: l.process || '',
       observed_time: String(l.observed_time),
+      base_observed_time: String(baseObserved),
       rating_factor: String(l.rating_factor),
       manpower: String(l.manpower),
       normal_time_secs_pr: l.normal_time_secs_pr != null ? String(Math.round(Number(l.normal_time_secs_pr))) : '',
@@ -351,7 +301,14 @@ export const ProductionRoutingForm: React.FC = () => {
     setLines((prev) => {
       const newLines = [...prev];
       let next: RoutingLine = { ...newLines[index], [field]: value };
-      if (field === 'observed_time' || field === 'rating_factor') {
+      if (field === 'observed_time') {
+        next.base_observed_time = value;
+        next = applyAutoCalc(next);
+      } else if (field === 'rating_factor') {
+        next = applyAutoCalc(next);
+      } else if (field === 'manpower') {
+        // Unlock all calc fields so manpower change recalculates everything
+        next._lockedCalcFields = undefined;
         next = applyAutoCalc(next);
       } else if (CALC_FIELDS.includes(field as CalcField)) {
         const locked = [...(next._lockedCalcFields || [])];
