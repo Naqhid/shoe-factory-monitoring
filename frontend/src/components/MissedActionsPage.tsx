@@ -45,10 +45,11 @@ const LIVE_SORT_LABELS: Record<string, string> = {
   machine: 'Machine A–Z',
 };
 
-type MissedTab = 'live' | 'daily' | 'discipline' | 'operator' | 'reminder';
+type MissedTab = 'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'machines';
 
 const MISSED_TABS: { id: MissedTab; label: string; shortLabel: string; icon: React.ElementType }[] = [
   { id: 'live', label: 'Live Issues', shortLabel: 'Live', icon: Radio },
+  { id: 'machines', label: 'Machine Status', shortLabel: 'Machines', icon: Cpu },
   { id: 'daily', label: 'Daily Inactive Report', shortLabel: 'Daily', icon: CalendarDays },
   { id: 'discipline', label: 'Cycle Discipline', shortLabel: 'Discipline', icon: BarChart2 },
   { id: 'operator', label: 'Operator Report', shortLabel: 'Operators', icon: User },
@@ -277,7 +278,7 @@ type ResolvedIssueFlash = {
 
 export const MissedActionsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder'>('live');
+  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'machines'>('live');
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSilentRefreshing, setIsSilentRefreshing] = React.useState(false);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
@@ -298,6 +299,14 @@ export const MissedActionsPage: React.FC = () => {
   const [contextMachineLoss, setContextMachineLoss] = React.useState<number | null>(null);
   const [showPriorityGuide, setShowPriorityGuide] = React.useState(false);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
+  const [machineStatusData, setMachineStatusData] = React.useState<any[]>([]);
+  const [machineStatusLoading, setMachineStatusLoading] = React.useState(false);
+  const [machineStatusRefresh, setMachineStatusRefresh] = React.useState(0);
+  const [machineStatusFilter, setMachineStatusFilter] = React.useState<'all' | 'active' | 'inactive'>('inactive');
+  const [machineStatusLine, setMachineStatusLine] = React.useState<string>('all');
+  const [machineStatusSummary, setMachineStatusSummary] = React.useState({ total: 0, active: 0, inactive: 0 });
+  const [floorMapMachine, setFloorMapMachine] = React.useState<any | null>(null);
+  const [activeArticles, setActiveArticles] = React.useState<any[]>([]);
   const [showMuted, setShowMuted] = React.useState(false);
   const [dailyReportDate, setDailyReportDate] = React.useState<string>(new Date().toISOString().slice(0, 10));
   const [dailyDateTo, setDailyDateTo] = React.useState<string>(new Date().toISOString().slice(0, 10));
@@ -774,6 +783,44 @@ export const MissedActionsPage: React.FC = () => {
     if (activeTab !== 'reminder') return;
     fetchReminderSettings();
   }, [activeTab, fetchReminderSettings]);
+
+  const fetchMachineStatus = React.useCallback(async () => {
+    setMachineStatusLoading(true);
+    try {
+      const params = new URLSearchParams({
+        date: new Date().toISOString().slice(0, 10),
+        page: '1',
+        limit: '200',
+      });
+      if (machineStatusLine !== 'all') {
+        const wc = workCentres.find((w) => w.name === machineStatusLine);
+        if (wc?.id) params.set('work_centre_id', String(wc.id));
+      }
+      const res = await apiFetch(`${API_BASE}/api/machine-status?${params.toString()}`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setMachineStatusData(json.data);
+        setActiveArticles(json.active_articles || []);
+        setMachineStatusSummary(json.summary || { total: 0, active: 0, inactive: 0 });
+      } else {
+        setMachineStatusData([]);
+        setActiveArticles([]);
+        setMachineStatusSummary({ total: 0, active: 0, inactive: 0 });
+      }
+    } catch (e) {
+      console.error('Failed to load machine status:', e);
+      setMachineStatusData([]);
+      setActiveArticles([]);
+      setMachineStatusSummary({ total: 0, active: 0, inactive: 0 });
+    } finally {
+      setMachineStatusLoading(false);
+    }
+  }, [machineStatusLine, workCentres]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'machines') return;
+    fetchMachineStatus();
+  }, [activeTab, fetchMachineStatus]);
 
   const getReminderDraft = React.useCallback((row: IdleReminderSettingRow): IdleReminderDraft => {
     const draft = reminderDrafts[row.machine_id];
@@ -2039,6 +2086,7 @@ export const MissedActionsPage: React.FC = () => {
                 {activeTab === 'daily' && 'Completed-cycle inactive and extra minutes for a date range.'}
                 {activeTab === 'discipline' && 'Late starts and slow finishes per cycle.'}
                 {activeTab === 'operator' && 'Operator-level loss summary and root causes.'}
+                {activeTab === 'machines' && 'Machine activity status: total, active, inactive machines and last entry times.'}
                 {activeTab === 'reminder' && 'Per-machine idle reminder and finish grace on mobile.'}
               </p>
             </div>
@@ -3103,6 +3151,379 @@ export const MissedActionsPage: React.FC = () => {
             </div>
           </div>
         ) : null}
+
+        {activeTab === 'machines' && (
+          <div className="space-y-4">
+            {/* Toolbar */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-wrap gap-3 items-end">
+              <div className="min-w-[200px] flex-1 sm:flex-none sm:max-w-xs">
+                <label className={FILTER_LABEL}>
+                  <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
+                </label>
+                <select
+                  value={machineStatusLine}
+                  onChange={(e) => setMachineStatusLine(e.target.value)}
+                  className={FILTER_CONTROL}
+                >
+                  <option value="all">All lines</option>
+                  {workCentres.map((wc) => (
+                    <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchMachineStatus()}
+                disabled={machineStatusLoading}
+                className={BTN_SECONDARY}
+              >
+                {machineStatusLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Refresh
+              </button>
+            </div>
+
+            {machineStatusLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              </div>
+            ) : (
+              <>
+                {/* Summary + Legend row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setMachineStatusFilter('all')}
+                    className={`rounded-xl border p-4 shadow-sm transition-all ${
+                      machineStatusFilter === 'all'
+                        ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-400/50'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Total Machines</p>
+                    <p className="text-3xl font-black text-slate-900 mt-1">{machineStatusSummary.total}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMachineStatusFilter('active')}
+                    className={`rounded-xl border p-4 shadow-sm transition-all ${
+                      machineStatusFilter === 'active'
+                        ? 'border-emerald-300 bg-emerald-50 ring-2 ring-emerald-400/50'
+                        : 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/50'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-emerald-700">Active Machines</p>
+                    <p className="text-3xl font-black text-emerald-600 mt-1">{machineStatusSummary.active}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMachineStatusFilter('inactive')}
+                    className={`rounded-xl border p-4 shadow-sm transition-all ${
+                      machineStatusFilter === 'inactive'
+                        ? 'border-slate-400 bg-slate-100 ring-2 ring-slate-400/50'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/50'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-600">Inactive Machines</p>
+                    <p className="text-3xl font-black text-slate-700 mt-1">{machineStatusSummary.inactive}</p>
+                  </button>
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap items-center gap-4 px-1">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Legend:</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+                      <span className="h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200 inline-block"></span>
+                      Active (entry ≤15 min)
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+                      <span className="h-3.5 w-3.5 rounded-full bg-amber-400 ring-2 ring-amber-200 inline-block"></span>
+                      Idle &gt;15 min
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+                      <span className="h-3.5 w-3.5 rounded-full bg-slate-300 ring-2 ring-slate-200 inline-block"></span>
+                      No activity today
+                    </span>
+                    <span className="text-xs text-slate-400 ml-auto">Click any machine for details</span>
+                  </div>
+
+                {/* ── Floor Map + Table (combined, per line) ───────────── */}
+                {(() => {
+                  const now = Date.now();
+                  const IDLE_THRESHOLD_MS = 15 * 60 * 1000;
+
+                  const getMachineColor = (m: any): 'green' | 'amber' | 'grey' => {
+                    if (!m.active) return 'grey';
+                    if (!m.last_entry_time) return 'amber';
+                    const msSince = now - new Date(m.last_entry_time).getTime();
+                    return msSince <= IDLE_THRESHOLD_MS ? 'green' : 'amber';
+                  };
+
+                  const colorClasses: Record<string, { dot: string; ring: string; pulse: boolean }> = {
+                    green: { dot: 'bg-emerald-500', ring: 'ring-emerald-200', pulse: true },
+                    amber: { dot: 'bg-amber-400', ring: 'ring-amber-200', pulse: false },
+                    grey:  { dot: 'bg-slate-300', ring: 'ring-slate-200', pulse: false },
+                  };
+
+                  // Group machines by line
+                  const grouped = machineStatusData.reduce<Record<string, any[]>>((acc, m) => {
+                    const key = m.work_centre_name || 'Unknown Line';
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(m);
+                    return acc;
+                  }, {});
+                  const pairsMapForFloor = new Map(activeArticles.map((a: any) => [String(a.machine_id), Number(a.output_pairs) || 0]));
+
+                  // Apply status filter to each line's machines for counting but show all machines in map
+                  const lineEntries = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+
+                  if (lineEntries.length === 0) {
+                    return (
+                      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-6 py-16 text-center text-slate-500">
+                        No machine data available
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {lineEntries.map(([lineName, machines]) => {
+                        const lineActiveCount = machines.filter((m) => m.active).length;
+                        const lineIdleCount = machines.filter((m) => !m.active).length;
+                        const lineGreenCount = machines.filter((m) => getMachineColor(m) === 'green').length;
+                        const lineAmberCount = machines.filter((m) => getMachineColor(m) === 'amber').length;
+
+                        // Apply status filter visibility
+                        const visibleMachines = machineStatusFilter === 'all'
+                          ? machines
+                          : machineStatusFilter === 'active'
+                          ? machines.filter((m) => m.active)
+                          : machines.filter((m) => !m.active);
+
+                        return (
+                          <div key={lineName} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                            {/* Line header */}
+                            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-bold text-slate-900">{lineName}</span>
+                                <span className="text-xs text-slate-500">{machines.length} machines</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                                  <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block"></span>
+                                  {lineGreenCount}
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
+                                  <span className="h-2 w-2 rounded-full bg-amber-400 inline-block"></span>
+                                  {lineAmberCount}
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-slate-500 font-semibold">
+                                  <span className="h-2 w-2 rounded-full bg-slate-300 inline-block"></span>
+                                  {lineIdleCount}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Machine tiles */}
+                            <div className="p-4 flex flex-wrap gap-2">
+                              {visibleMachines.map((machine: any) => {
+                                const color = getMachineColor(machine);
+                                const cls = colorClasses[color];
+                                const idLabel = machine.machine_id.replace(/^0+/, '') || machine.machine_id;
+                                return (
+                                  <button
+                                    key={machine.machine_id}
+                                    type="button"
+                                    onClick={() => setFloorMapMachine(machine)}
+                                    title={`${machine.machine_id}${machine.machine_name ? ' – ' + machine.machine_name : ''}`}
+                                    className={`relative group flex flex-col items-center justify-center w-16 h-16 rounded-xl border transition-all hover:scale-105 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                                      color === 'green'
+                                        ? 'border-emerald-200 bg-emerald-50'
+                                        : color === 'amber'
+                                        ? 'border-amber-200 bg-amber-50'
+                                        : 'border-slate-200 bg-slate-50'
+                                    }`}
+                                  >
+                                    <span className={`relative h-4 w-4 rounded-full ${cls.dot} ring-2 ${cls.ring} mb-1`}>
+                                      {cls.pulse && (
+                                        <span className={`absolute inset-0 rounded-full ${cls.dot} animate-ping opacity-60`}></span>
+                                      )}
+                                    </span>
+                                    <span className={`text-[10px] font-bold leading-tight text-center px-0.5 ${
+                                      color === 'green' ? 'text-emerald-800' : color === 'amber' ? 'text-amber-800' : 'text-slate-500'
+                                    }`}>
+                                      {idLabel}
+                                    </span>
+                                    {pairsMapForFloor.has(String(machine.machine_id)) && (
+                                      <span className={`text-[9px] font-semibold leading-none mt-0.5 ${
+                                        color === 'green' ? 'text-emerald-700' : color === 'amber' ? 'text-amber-700' : 'text-slate-400'
+                                      }`}>
+                                        {pairsMapForFloor.get(String(machine.machine_id))} pairs
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                              {visibleMachines.length === 0 && (
+                                <p className="text-xs text-slate-400 italic py-2">No {machineStatusFilter} machines in this line</p>
+                              )}
+                            </div>
+                            {/* Per-line machine table */}
+                            <div className="overflow-x-auto border-t border-slate-100">
+                              <table className="w-full text-xs">
+                                <thead className="bg-slate-50/80">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase tracking-wide">Machine</th>
+                                    <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                                    <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase tracking-wide">Output</th>
+                                    <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase tracking-wide">Last Entry</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {visibleMachines.map((machine: any) => {
+                                    const color = getMachineColor(machine);
+                                    const pairs = pairsMapForFloor.get(String(machine.machine_id));
+                                    const msSinceEntry = machine.last_entry_time ? Date.now() - new Date(machine.last_entry_time).getTime() : null;
+                                    const minsSinceEntry = msSinceEntry !== null ? Math.floor(msSinceEntry / 60000) : null;
+                                    return (
+                                      <tr
+                                        key={machine.machine_id}
+                                        className="hover:bg-slate-50 cursor-pointer"
+                                        onClick={() => setFloorMapMachine(machine)}
+                                      >
+                                        <td className="px-3 py-2">
+                                          <span className="font-semibold text-slate-900">{machine.machine_id}</span>
+                                          {machine.machine_name && machine.machine_name !== machine.machine_id && (
+                                            <span className="text-slate-400 ml-1.5">{machine.machine_name}</span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                            color === 'green' ? 'bg-emerald-100 text-emerald-700' : color === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                                          }`}>
+                                            <span className={`h-1.5 w-1.5 rounded-full ${color === 'green' ? 'bg-emerald-500' : color === 'amber' ? 'bg-amber-400' : 'bg-slate-300'}`}></span>
+                                            {color === 'green' ? 'Active' : color === 'amber' ? 'Idle' : 'No activity'}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">
+                                          {pairs !== undefined ? pairs : '—'}
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-500">
+                                          {machine.last_entry_time
+                                            ? minsSinceEntry !== null && minsSinceEntry < 1
+                                              ? 'just now'
+                                              : minsSinceEntry !== null && minsSinceEntry < 60
+                                              ? `${minsSinceEntry}m ago`
+                                              : new Date(machine.last_entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                            : '—'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                  {visibleMachines.length === 0 && (
+                                    <tr>
+                                      <td colSpan={4} className="px-3 py-3 text-center text-slate-400 italic">No machines</td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Floor Map Machine Detail Modal ────────────────────────────────── */}
+        {floorMapMachine && (() => {
+          const m = floorMapMachine;
+          const now = Date.now();
+          const msSince = m.last_entry_time ? now - new Date(m.last_entry_time).getTime() : null;
+          const minsSince = msSince !== null ? Math.floor(msSince / 60000) : null;
+          const isGreen = m.active && msSince !== null && msSince <= 15 * 60 * 1000;
+          const isAmber = m.active && (msSince === null || msSince > 15 * 60 * 1000);
+          const colorLabel = isGreen ? 'Active' : isAmber ? 'Idle >15 min' : 'No activity today';
+          const colorBadge = isGreen
+            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+            : isAmber
+            ? 'bg-amber-100 text-amber-800 border-amber-200'
+            : 'bg-slate-100 text-slate-600 border-slate-200';
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => setFloorMapMachine(null)}
+            >
+              <div
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className={`px-5 py-4 flex items-start justify-between gap-3 ${isGreen ? 'bg-emerald-50 border-b border-emerald-100' : isAmber ? 'bg-amber-50 border-b border-amber-100' : 'bg-slate-50 border-b border-slate-200'}`}>
+                  <div>
+                    <p className="text-lg font-black text-slate-900">{m.machine_id}</p>
+                    {m.machine_name && m.machine_name !== m.machine_id && (
+                      <p className="text-sm text-slate-600 mt-0.5">{m.machine_name}</p>
+                    )}
+                    <p className="text-xs text-slate-500 mt-1">{m.work_centre_name || '—'}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${colorBadge}`}>{colorLabel}</span>
+                    <button type="button" onClick={() => setFloorMapMachine(null)} className="text-slate-400 hover:text-slate-700 transition-colors p-1" aria-label="Close">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                      <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">First Entry</p>
+                      <p className="text-sm font-semibold text-slate-900 mt-1">
+                        {m.first_entry_time ? new Date(m.first_entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                      <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Last Entry</p>
+                      <p className="text-sm font-semibold text-slate-900 mt-1">
+                        {m.last_entry_time ? new Date(m.last_entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </p>
+                      {minsSince !== null && (
+                        <p className={`text-xs mt-0.5 font-medium ${isGreen ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {minsSince < 1 ? 'just now' : `${minsSince} min ago`}
+                        </p>
+                      )}
+                    </div>
+                    <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                      <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Cycles Today</p>
+                      <p className="text-2xl font-black text-slate-900 mt-1">{m.cycle_count ?? 0}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                      <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Total Pairs</p>
+                      <p className="text-2xl font-black text-slate-900 mt-1">{m.total_pairs ?? 0}</p>
+                    </div>
+                  </div>
+                  {m.article && (
+                    <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 space-y-1.5">
+                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Style on Line</p>
+                      <p className="text-sm font-bold text-slate-900">{m.article.style_code}</p>
+                      {m.article.customer_name && <p className="text-xs text-slate-700">{m.article.customer_name}</p>}
+                      {(m.article.group_name || m.article.leather_name || m.article.color_name) && (
+                        <p className="text-xs text-slate-500">
+                          {[m.article.group_name, m.article.leather_name, m.article.color_name].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="px-5 py-3 border-t border-slate-100 flex justify-end">
+                  <button type="button" onClick={() => setFloorMapMachine(null)} className={BTN_SECONDARY}>Close</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {activeTab === 'reminder' && (
           <div className="space-y-4">

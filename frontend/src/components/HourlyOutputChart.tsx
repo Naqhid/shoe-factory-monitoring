@@ -339,7 +339,14 @@ export const HourlyOutputChart: React.FC<Props> = ({
   const buildCombinedData = () => {
     const hourSet = new Set<string>();
     machineData.forEach(m => m.hourlyData.forEach(h => hourSet.add(h.hour)));
-    const hours = Array.from(hourSet).sort();
+    // Sort hours chronologically by extracting the starting hour number from labels like "2-3", "10-11", etc.
+    const hours = Array.from(hourSet).sort((a, b) => {
+      const getStartHour = (label: string) => {
+        const match = label.match(/^(\d{1,2})/);
+        return match ? parseInt(match[1], 10) : 0;
+      };
+      return getStartHour(a) - getStartHour(b);
+    });
     return hours.map(hour => {
       const row: any = { hour };
       machineData.forEach(m => {

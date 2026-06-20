@@ -829,6 +829,9 @@ app.get('/api/idle-reminder-settings/machine/:machineId', idleReminderSettingsCo
 app.put('/api/idle-reminder-settings/machine/:machineId', authenticate, requireLogsAccess, idleReminderSettingsController.saveMachineSettings);
 app.delete('/api/idle-reminder-settings/machine/:machineId', authenticate, requireLogsAccess, idleReminderSettingsController.resetMachineSettings);
 
+// Machine status endpoint
+app.get('/api/machine-status', authenticate, requireLogsAccess, missedActionsController.getMachineStatus);
+
 // Machine Centre routes (public - no JWT for factory floor use)
 app.post('/api/machine-centre/start', checkDayLock('prod_date', 'work_centre_id'), machineCentreController.startProduction);
 app.post('/api/machine-centre/stop', machineCentreController.stopProduction);
