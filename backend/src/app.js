@@ -44,6 +44,7 @@ const requestLogger = require('./middleware/requestLogger');
 const sanitize = require('./middleware/sanitize');
 const validate = require('./middleware/validate');
 const healthController = require('./controllers/healthController');
+const globalSearchController = require('./controllers/globalSearchController');
 
 // Path resolution helper
 const getAbsolutePath = (dirPath) => {
@@ -672,6 +673,7 @@ app.post('/api/auth/refresh', authController.refresh.bind(authController));
 //   }
 // });
 
+app.get('/api/global-search', authenticate, globalSearchController.globalSearch.bind(globalSearchController));
 app.get('/api/reports/hourly-production', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getHourlyProductionStatus.bind(apiController));
 app.get('/api/reports/line-efficiency', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getLineProcessEfficiency.bind(apiController));
 app.get('/api/reports/attendance', authenticate, requireLogsAccess, validate(validate.schemas.dateQuery), apiController.getAttendanceReport.bind(apiController));

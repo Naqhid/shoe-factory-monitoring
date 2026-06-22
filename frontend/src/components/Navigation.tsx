@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Users, Layers, Package, Palette, Shirt, Sett
 import { isMenuAllowed, getEffectiveRole } from '../utils/roleConfig';
 import { AlertBell } from './AlertBell';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { GlobalSearch } from './GlobalSearch';
 
 interface NavigationProps {
   activeMenu: string;
@@ -115,7 +116,8 @@ export const Navigation: React.FC<NavigationProps> = ({
               <p className="text-xs text-gray-500" translate="yes">Smart Production Tracking</p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <GlobalSearch />
             {!hideAlertBell && <AlertBell />}
             <button
               type="button"
