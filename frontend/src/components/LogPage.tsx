@@ -193,6 +193,11 @@ const LogPage: React.FC = () => {
   const [yesterdayActivateResults, setYesterdayActivateResults] = React.useState<YesterdayActivateResult[] | null>(null);
   const [editableLoginRows, setEditableLoginRows] = React.useState<EditableLoginRow[]>([]);
   const [employees, setEmployees] = React.useState<EmployeeOption[]>([]);
+  const [sourceDate, setSourceDate] = React.useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString('en-CA');
+  });
 
   const todayKey = React.useMemo(() => new Date().toLocaleDateString('en-CA'), []);
 
@@ -533,6 +538,7 @@ const LogPage: React.FC = () => {
     try {
       const params = new URLSearchParams();
       if (selectedWorkCentre !== 'all') params.set('work_centre_id', selectedWorkCentre);
+      params.set('date', sourceDate);
 
       const [previewRes, employeesRes] = await Promise.all([
         apiFetch(
@@ -730,14 +736,42 @@ const LogPage: React.FC = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
             <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 flex flex-col">
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 sm:px-5 py-4">
-                <div>
+                <div className="flex-1">
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-500">Bulk login</p>
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-1">Login same as yesterday</h2>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-1">Login same as selected date</h2>
                   <p className="text-sm text-slate-600 mt-1">
                     {yesterdayPreview
                       ? `Last operator per machine from ${yesterdayPreview.source_date} → activate for ${yesterdayPreview.today_date}. Edit any row if a new operator joined.`
-                      : 'Loading yesterday assignments…'}
+                      : 'Loading assignments…'}
                   </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <label htmlFor="sourceDate" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                      Copy from date
+                    </label>
+                    <input
+                      id="sourceDate"
+                      type="date"
+                      className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400"
+                      value={sourceDate}
+                      onChange={(e) => setSourceDate(e.target.value)}
+                      max={new Date().toLocaleDateString('en-CA')}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadYesterdayLoginPreview()}
+                    disabled={yesterdayPreviewLoading || yesterdayActivating}
+                    className="mt-5 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
+                  >
+                    {yesterdayPreviewLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    Load
+                  </button>
                 </div>
                 <button
                   type="button"
