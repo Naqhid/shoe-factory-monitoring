@@ -218,13 +218,31 @@ class ApiController {
         resolvedMachineId = await wipStateService.resolveEolMachineId(Number(workCentreId));
       }
       if (!resolvedMachineId) {
-        resolvedMachineId = '07';
+        // No specific work centre — find all EOL machines across all active work centres
+        const [eolRows] = await db.query(
+          `SELECT machine_id FROM machine_centres
+           WHERE deleted_at IS NULL AND COALESCE(is_active, 1) = 1
+             AND (machine_name LIKE '%Final Output%' OR name LIKE '%Final Output%'
+               OR machine_name LIKE '%Final Inspection%' OR name LIKE '%Final Inspection%')`
+        );
+        if (eolRows.length > 0) {
+          // Use IN clause for multiple EOL machines
+          const eolIds = eolRows.map(r => String(r.machine_id));
+          resolvedMachineId = eolIds.length === 1 ? eolIds[0] : eolIds;
+        } else {
+          resolvedMachineId = '07'; // last-resort fallback
+        }
       }
       let where = 'WHERE DATE(mcp.prod_date) BETWEEN ? AND ? AND mcp.button_status = 2';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcp.work_centre_id = ?'; params.push(workCentreId); }
-      where += ' AND mcp.machine_id = ?';
-      params.push(resolvedMachineId);
+      if (Array.isArray(resolvedMachineId)) {
+        where += ` AND mcp.machine_id IN (${resolvedMachineId.map(() => '?').join(',')})`;
+        params.push(...resolvedMachineId);
+      } else {
+        where += ' AND mcp.machine_id = ?';
+        params.push(resolvedMachineId);
+      }
       if (search) { where += ' AND (wc.name LIKE ? OR c.name LIKE ? OR s.name LIKE ? OR col.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
 
       const baseQuery = `
@@ -300,7 +318,7 @@ class ApiController {
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [rawRows] = await db.query(`
-        SELECT mcs.prod_date as date, mcs.work_centre_id, mcs.machine_id,
+        SELECT DATE(mcs.prod_date) as date, mcs.work_centre_id, mcs.machine_id,
           wc.name as line, COALESCE(mc.machine_name, mc.name) as process,
           c.name as customer, s.name as article_no, col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
@@ -483,7 +501,7 @@ class ApiController {
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [rawRows] = await db.query(`
-        SELECT mcs.prod_date as date, mcs.work_centre_id, mcs.machine_id,
+        SELECT DATE(mcs.prod_date) as date, mcs.work_centre_id, mcs.machine_id,
           wc.name as line, e.code as emp_code, e.name as emp_name,
           COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
@@ -556,7 +574,7 @@ class ApiController {
       if (wcId) { where += ' AND mcp.work_centre_id = ?'; params.push(wcId); }
       const [rows] = await db.query(`
         SELECT
-          DATE(mcp.prod_date) AS date,
+          DATE(mcp.prod_date) as date,
           mcp.id, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name AS employee_name,
           wc.name AS work_centre_name,
           mcp.idle_start_time, mcp.idle_stop_time,
@@ -651,7 +669,7 @@ class ApiController {
 
       const [rows] = await db.query(`
         SELECT
-          DATE(mcp.prod_date) AS date,
+          DATE(mcp.prod_date) as date,
           mcp.work_centre_id, wc.name AS work_centre_name,
           mcp.machine_id, mc.machine_name,
           mcp.emp_id, e.name AS employee_name,
@@ -803,7 +821,7 @@ class ApiController {
       const [rows] = await db.query(`
         SELECT
           mcp.id,
-          DATE(mcp.prod_date) AS date,
+          DATE(mcp.prod_date) as date,
           wc.name AS line,
           mcp.machine_id,
           COALESCE(mc.machine_name, mc.name) AS machine_name,

@@ -7,6 +7,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
+  dateStrings: true,          // Return DATE/DATETIME as plain strings (no UTC conversion)
   waitForConnections: true,
   connectionLimit: 30,        // Increased from 10 to handle more concurrent users
   queueLimit: 50,             // Allow queueing when pool exhausted
