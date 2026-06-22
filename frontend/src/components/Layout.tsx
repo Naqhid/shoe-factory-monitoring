@@ -4,6 +4,7 @@ import { Activity, LogOut, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AlertBell } from './AlertBell';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { GlobalSearch } from './GlobalSearch';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -26,6 +27,7 @@ export const Layout: React.FC<LayoutProps> = ({
   hideAlertBell = false
 }) => {
   const [sidebarOpen, setSidebarOpen] = React.useState(() => window.innerWidth >= 1024);
+  const [searchQuery, setSearchQuery] = React.useState('');
   const navigate = useNavigate();
 
   const getUserInfo = () => {
@@ -86,7 +88,12 @@ export const Layout: React.FC<LayoutProps> = ({
               <p className="text-xs text-gray-500" translate="yes">Smart Production Tracking System</p>
             </div>
           </div>
-          
+
+          {/* Search bar in header center */}
+          <div className="flex-1 max-w-md mx-8">
+            <GlobalSearch onSearchChange={setSearchQuery} />
+          </div>
+
           {/* User info and logout */}
           {user && (
             <div className="flex items-center gap-2">
@@ -124,6 +131,8 @@ export const Layout: React.FC<LayoutProps> = ({
           hideSidebarToggleButton={hideSidebarToggleButton}
           hideLogout={hideLogout}
           hideAlertBell={hideAlertBell}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
 
         {/* Main content area */}

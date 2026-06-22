@@ -33,7 +33,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const [machineCentres, setMachineCentres] = useState<MachineCentre[]>([]);
   const [selectedWorkCentre, setSelectedWorkCentre] = useState(isSupervisor ? supervisorWorkCentreId : '');
   const [selectedMachineCentre, setSelectedMachineCentre] = useState('');
-  const [activeTab, setActiveTab] = useState<'rework_rejection' | 'bottleneck' | 'breakdown'>('rework_rejection');
+  const [activeTab, setActiveTab] = useState<'rework_rejection' | 'breakdown'>('rework_rejection');
 
   const effectiveWorkCentreId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
   const workCentreDisplayName = effectiveWorkCentreId
@@ -95,13 +95,6 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
             className={`px-4 py-2 rounded-md text-sm font-semibold ${activeTab === 'rework_rejection' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
           >
             Rework / Rejection
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('bottleneck')}
-            className={`px-4 py-2 rounded-md text-sm font-semibold ${activeTab === 'bottleneck' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-          >
-            Bottleneck
           </button>
           <button
             type="button"
@@ -189,21 +182,6 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
           workCentreDisplayName={workCentreDisplayName}
           canEditRework={canEditRework}
           canDeleteRework={canDeleteRework}
-        />
-      )}
-
-      {activeTab === 'bottleneck' && (
-        <StoppageEntryTab
-          entryKind="bottleneck"
-          selectedDate={selectedDate}
-          selectedWorkCentre={selectedWorkCentre}
-          selectedMachineCentre={selectedMachineCentre}
-          machineCentres={machineCentres}
-          workCentres={workCentres}
-          isSupervisor={isSupervisor}
-          supervisorWorkCentreId={supervisorWorkCentreId}
-          userInfo={userInfo}
-          workCentreDisplayName={workCentreDisplayName}
         />
       )}
 
