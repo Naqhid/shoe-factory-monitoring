@@ -11,11 +11,10 @@ import {
   Button,
   Card,
   Title,
-  Text,
-  ActivityIndicator,
-} from ;
-import { B;
-import AsyncStorage from '@re
+  Paragraph,
+  Divider,
+  IconButton,
+} from 'react-native-paper';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
