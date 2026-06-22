@@ -2023,7 +2023,7 @@ export const MissedActionsPage: React.FC = () => {
         </div>
       )}
       <div className="w-full space-y-5">
-        <div className="sticky top-0 z-30 -mx-3 sm:-mx-4 lg:-mx-6 px-3 sm:px-4 lg:px-6 pt-1 pb-3 bg-gradient-to-b from-slate-100 via-slate-100/95 to-transparent backdrop-blur-md">
+        <div className="sticky top-0 z-10 -mx-3 sm:-mx-4 lg:-mx-6 px-3 sm:px-4 lg:px-6 pt-1 pb-3 bg-gradient-to-b from-slate-100 via-slate-100/95 to-transparent backdrop-blur-md">
           <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm p-3 sm:p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>

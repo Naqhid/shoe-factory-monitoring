@@ -13,6 +13,8 @@ interface NavigationProps {
   hideSidebarToggleButton?: boolean;
   hideLogout?: boolean;
   hideAlertBell?: boolean;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 const processMenus = [
@@ -54,13 +56,15 @@ export const Navigation: React.FC<NavigationProps> = ({
   onToggleSidebar,
   hideSidebarToggleButton = false,
   hideLogout = false,
-  hideAlertBell = false
+  hideAlertBell = false,
+  searchQuery = '',
+  onSearchChange
 }) => {
   const navigate = useNavigate();
   const [mastersExpanded, setMastersExpanded] = React.useState(false);
   const [processExpanded, setProcessExpanded] = React.useState(true);
   const [setupExpanded, setSetupExpanded] = React.useState(false);
-  
+
   const getUserInfo = () => {
     if (typeof localStorage !== 'undefined') {
       const userInfo = localStorage.getItem('user_info');
@@ -70,14 +74,28 @@ export const Navigation: React.FC<NavigationProps> = ({
     }
     return null;
   };
-  
+
   const user = getUserInfo();
   const userRole = getEffectiveRole(user) || 'Admin';
   const menuAccess = user ?? { role: userRole };
 
-  const filteredProcessMenus = processMenus.filter(menu => isMenuAllowed(menu.key, menuAccess));
-  const filteredMasterMenus = masterMenus.filter(menu => isMenuAllowed(menu.key, menuAccess));
-  const filteredSetupMenus = setupMenus.filter(menu => isMenuAllowed(menu.key, menuAccess));
+  // Filter menus based on search query
+  const filterMenus = (menus: typeof processMenus) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      return menus.filter(menu => isMenuAllowed(menu.key, menuAccess));
+    }
+    const searchLower = searchQuery.toLowerCase();
+    return menus.filter(menu => {
+      const isAllowed = isMenuAllowed(menu.key, menuAccess);
+      const matchesSearch = menu.label.toLowerCase().includes(searchLower) ||
+                           menu.key.toLowerCase().includes(searchLower);
+      return isAllowed && matchesSearch;
+    });
+  };
+
+  const filteredProcessMenus = filterMenus(processMenus);
+  const filteredMasterMenus = filterMenus(masterMenus);
+  const filteredSetupMenus = filterMenus(setupMenus);
 
   const handleLogout = () => {
     if (typeof localStorage !== 'undefined') {
@@ -117,7 +135,6 @@ export const Navigation: React.FC<NavigationProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <GlobalSearch />
             {!hideAlertBell && <AlertBell />}
             <button
               type="button"
@@ -131,6 +148,11 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
 
         <nav className="p-4 h-[calc(100vh-73px)] overflow-y-auto">
+          {/* Search bar */}
+          <div className="mb-4">
+            <GlobalSearch onSearchChange={onSearchChange} />
+          </div>
+
           {/* User info section */}
           {user && (
             <div className="mb-6 p-3 bg-blue-50 rounded-lg border border-blue-200">

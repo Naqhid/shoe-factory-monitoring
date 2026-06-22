@@ -134,19 +134,20 @@ class GlobalSearchController {
 
       // Search production routing headers
       const routings = await safeQuery(
-        `SELECT prh.id, CONCAT('R', prh.id) as code, 
-         CONCAT(s.name, ' - ', c.name, ' - ', l.name) as name, 
-         'production_routing' as type, '/production_routing' as route 
+        `SELECT prh.id, CONCAT('R', prh.id) as code,
+         COALESCE(CONCAT(s.name, ' - ', c.name, ' - ', l.name), 'Routing #', prh.id) as name,
+         'production_routing' as type, '/production_routing' as route
          FROM production_routing_header prh
          LEFT JOIN styles s ON prh.style_id = s.id
          LEFT JOIN colors c ON prh.color_id = c.id
          LEFT JOIN leather l ON prh.leather_id = l.id
          WHERE prh.deleted_at IS NULL AND (
-           s.name LIKE ? OR c.name LIKE ? OR l.name LIKE ? OR 
-           CONCAT(s.name, ' - ', c.name) LIKE ?
+           s.name LIKE ? OR c.name LIKE ? OR l.name LIKE ? OR
+           CONCAT(s.name, ' - ', c.name) LIKE ? OR
+           CONCAT(s.name, ' - ', c.name, ' - ', l.name) LIKE ?
          )
          LIMIT ?`,
-        [searchTerm, searchTerm, searchTerm, searchTerm, searchLimit]
+        [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchLimit]
       );
       results.push(...routings);
 
