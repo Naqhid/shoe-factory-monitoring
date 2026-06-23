@@ -303,13 +303,55 @@ export const ProductionRoutingForm: React.FC = () => {
       let next: RoutingLine = { ...newLines[index], [field]: value };
       if (field === 'observed_time') {
         next.base_observed_time = value;
+        next._lockedCalcFields = undefined;
         next = applyAutoCalc(next);
       } else if (field === 'rating_factor') {
+        next._lockedCalcFields = undefined;
         next = applyAutoCalc(next);
       } else if (field === 'manpower') {
         // Unlock all calc fields so manpower change recalculates everything
         next._lockedCalcFields = undefined;
         next = applyAutoCalc(next);
+      } else if (field === 'std_time_secs_pr') {
+        // Reverse-calculate: STD → normal → observed (normal and observed show same value)
+        const stdVal = parseFloat(value) || 0;
+        const normalVal = stdVal / 1.15;
+        const observedVal = normalVal; // Normal and Observed are the same
+        next.normal_time_secs_pr = String(Math.round(normalVal));
+        next.observed_time = String(Math.round(observedVal));
+        next.base_observed_time = next.observed_time;
+        // Recalculate downstream fields (mins/6, pr/hr, pr/day) from the new STD
+        const mins6Prs = Math.round(((stdVal * 6) / 60) * 10) / 10;
+        const { totalProductiveMins } = getProductiveShiftTotals(new Date());
+        const pairsPerDay = computeShiftTargetPairs(mins6Prs, 6, totalProductiveMins);
+        const pairsPerHr = totalProductiveMins > 0 && pairsPerDay > 0
+          ? Math.round((pairsPerDay / totalProductiveMins) * 60)
+          : 0;
+        next.std_time_secs_pr = String(Math.round(stdVal));
+        next.mins_6_prs_box = mins6Prs.toFixed(1);
+        next.pairs_per_hr = String(pairsPerHr);
+        next.pairs_per_day = String(pairsPerDay);
+        next._lockedCalcFields = undefined;
+      } else if (field === 'normal_time_secs_pr') {
+        // Normal and Observed are the same value, update both + forward-calculate STD and downstream
+        const normalVal = parseFloat(value) || 0;
+        const observedVal = normalVal; // Normal and Observed are the same
+        next.normal_time_secs_pr = String(Math.round(normalVal));
+        next.observed_time = String(Math.round(observedVal));
+        next.base_observed_time = next.observed_time;
+        // Forward-calculate STD and downstream
+        const stdVal = normalVal * 1.15;
+        const mins6Prs = Math.round(((stdVal * 6) / 60) * 10) / 10;
+        const { totalProductiveMins } = getProductiveShiftTotals(new Date());
+        const pairsPerDay = computeShiftTargetPairs(mins6Prs, 6, totalProductiveMins);
+        const pairsPerHr = totalProductiveMins > 0 && pairsPerDay > 0
+          ? Math.round((pairsPerDay / totalProductiveMins) * 60)
+          : 0;
+        next.std_time_secs_pr = String(Math.round(stdVal));
+        next.mins_6_prs_box = mins6Prs.toFixed(1);
+        next.pairs_per_hr = String(pairsPerHr);
+        next.pairs_per_day = String(pairsPerDay);
+        next._lockedCalcFields = undefined;
       } else if (CALC_FIELDS.includes(field as CalcField)) {
         const locked = [...(next._lockedCalcFields || [])];
         if (!locked.includes(field as CalcField)) locked.push(field as CalcField);
@@ -1061,7 +1103,6 @@ export const ProductionRoutingForm: React.FC = () => {
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/55 backdrop-blur-[2px] p-0 sm:p-4"
-          onClick={() => setShowModal(false)}
           role="presentation"
         >
           <div
