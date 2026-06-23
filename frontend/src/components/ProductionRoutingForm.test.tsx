@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateLineValues } from './ProductionRoutingForm';
+import { calculateLineValues } from './ProductionRoutingForm.helpers';
 
 describe('ProductionRoutingForm calculateLineValues', () => {
   it('uses base_observed_time when manpower changes', () => {

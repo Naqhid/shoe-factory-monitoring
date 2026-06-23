@@ -139,6 +139,7 @@ type DailyReportEvent = {
   inactive_mins: number;
   lost_mins?: number;
   root_cause?: string | null;
+  output_pairs?: number;
 };
 
 type DailyReportLine = {

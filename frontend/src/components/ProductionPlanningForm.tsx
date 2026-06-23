@@ -952,7 +952,7 @@ export const ProductionPlanningForm: React.FC = () => {
             </label>
             <button
               type="button"
-              onClick={fetchPlans}
+              onClick={() => fetchPlans()}
               disabled={refreshing}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
