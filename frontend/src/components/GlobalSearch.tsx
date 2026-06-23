@@ -81,6 +81,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearchChange }) =>
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -92,8 +93,20 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearchChange }) =>
       }
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+        event.preventDefault();
+        inputRef.current?.focus();
+        setIsOpen(true);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   useEffect(() => {
@@ -123,6 +136,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearchChange }) =>
             // Combine results, prioritizing database results
             const combinedResults = [...dbResults, ...matchingMenuItems];
             setResults(combinedResults);
+            setSelectedIndex(-1); // Reset selection when results change
           }
         } catch (error) {
           console.error('Search error:', error);
@@ -141,11 +155,13 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearchChange }) =>
               route: item.route
             }));
           setResults(matchingMenuItems);
+          setSelectedIndex(-1);
         } finally {
           setIsLoading(false);
         }
       } else {
         setResults([]);
+        setSelectedIndex(-1);
       }
       // Notify parent of search query change
       if (onSearchChange) {
@@ -166,13 +182,39 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearchChange }) =>
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setIsOpen(false);
+      setSelectedIndex(-1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev < results.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === 'Enter' && selectedIndex >= 0 && selectedIndex < results.length) {
+      e.preventDefault();
+      handleResultClick(results[selectedIndex]);
     }
   };
 
   const clearSearch = () => {
     setQuery('');
     setResults([]);
+    setSelectedIndex(-1);
     inputRef.current?.focus();
+  };
+
+  const highlightMatch = (text: string, query: string) => {
+    if (!query) return text;
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-yellow-200 text-gray-900 rounded px-0.5">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
   };
 
   return (
@@ -208,27 +250,46 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearchChange }) =>
             </div>
           ) : results.length > 0 ? (
             <div className="py-2">
-              {results.map((result) => {
-                const Icon = typeIcons[result.type] || Search;
-                return (
-                  <button
-                    key={`${result.type}-${result.id}`}
-                    onClick={() => handleResultClick(result)}
-                    className="w-full px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-left transition-colors"
-                  >
-                    <div className="flex-shrink-0 w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center">
-                      <Icon className="h-4 w-4 text-blue-600" />
+              {(() => {
+                // Group results by type
+                const grouped = results.reduce((acc, result, index) => {
+                  const type = result.type;
+                  if (!acc[type]) {
+                    acc[type] = [];
+                  }
+                  acc[type].push({ ...result, originalIndex: index });
+                  return acc;
+                }, {} as Record<string, (SearchResult & { originalIndex: number })[]>);
+
+                return Object.entries(grouped).map(([type, typeResults]) => (
+                  <div key={type}>
+                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50">
+                      {typeLabels[type] || type}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900 truncate">{result.name}</span>
-                        <span className="text-xs text-gray-500">({result.code})</span>
-                      </div>
-                      <div className="text-xs text-gray-500 capitalize">{typeLabels[result.type] || result.type}</div>
-                    </div>
-                  </button>
-                );
-              })}
+                    {typeResults.map((result) => {
+                      const Icon = typeIcons[result.type] || Search;
+                      const isSelected = result.originalIndex === selectedIndex;
+                      return (
+                        <button
+                          key={`${result.type}-${result.id}`}
+                          onClick={() => handleResultClick(result)}
+                          className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        >
+                          <div className="flex-shrink-0 w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center">
+                            <Icon className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900 truncate">{highlightMatch(result.name, query)}</span>
+                              <span className="text-xs text-gray-500">({highlightMatch(result.code, query)})</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ));
+              })()}
             </div>
           ) : query.length >= 2 ? (
             <div className="p-4 text-center text-gray-500">

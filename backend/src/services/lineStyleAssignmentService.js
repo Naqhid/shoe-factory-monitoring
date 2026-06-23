@@ -407,6 +407,35 @@ async function softDeleteAssignment(id) {
   return { id: Number(id) };
 }
 
+async function getHistory(workCentreId, limit = 20) {
+  const wcId = Number(workCentreId);
+  if (!wcId) {
+    throw Object.assign(new Error('work_centre_id is required'), { status: 400 });
+  }
+  const maxRows = Math.min(Number(limit) || 20, 100);
+  const [rows] = await db.execute(
+    `SELECT
+       lsa.id,
+       DATE_FORMAT(lsa.assignment_date, '%Y-%m-%d') AS assignment_date,
+       lsa.style_id,
+       lsa.notes,
+       lsa.created_at,
+       s.code AS style_code,
+       s.name AS style_name,
+       c.name AS customer_name,
+       col.name AS color_name
+     FROM line_style_assignments lsa
+     JOIN styles s ON lsa.style_id = s.id
+     LEFT JOIN customers c ON lsa.customer_id = c.id
+     LEFT JOIN colors col ON lsa.color_id = col.id
+     WHERE lsa.work_centre_id = ? AND lsa.deleted_at IS NULL
+     ORDER BY lsa.assignment_date DESC, lsa.id DESC
+     LIMIT ${maxRows}`,
+    [wcId]
+  );
+  return rows;
+}
+
 module.exports = {
   parseDateKey,
   enumerateDates,
@@ -414,6 +443,7 @@ module.exports = {
   getBoard,
   listAssignments,
   softDeleteAssignment,
+  getHistory,
   fetchRoutingForStyle,
   buildPlanPayload,
 };

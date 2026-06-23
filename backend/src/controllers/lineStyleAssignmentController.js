@@ -43,6 +43,16 @@ class LineStyleAssignmentController {
       res.status(error.status || 500).json({ success: false, error: error.message });
     }
   }
+
+  async getHistory(req, res) {
+    try {
+      const data = await lineStyleAssignmentService.getHistory(req.params.workCentreId, req.query.limit);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error loading changeover history:', error);
+      res.status(error.status || 500).json({ success: false, error: error.message });
+    }
+  }
 }
 
 module.exports = new LineStyleAssignmentController();

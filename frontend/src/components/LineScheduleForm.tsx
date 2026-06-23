@@ -10,6 +10,9 @@ import {
   X,
   AlertTriangle,
   CheckCircle2,
+  Clock,
+  Filter,
+  GripVertical,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
@@ -50,6 +53,20 @@ interface RoutingPreview {
   lines?: Array<{ observed_time: number; rating_factor: number; manpower: number }>;
 }
 
+interface HistoryEntry {
+  id: number;
+  assignment_date: string;
+  style_id: number;
+  style_code: string;
+  style_name: string;
+  customer_name: string | null;
+  color_name: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+type StatusFilter = 'all' | 'assigned' | 'unassigned' | 'mismatch';
+
 const todayKey = () => new Date().toISOString().split('T')[0];
 
 const formatDateLabel = (value: string) => {
@@ -59,6 +76,29 @@ const formatDateLabel = (value: string) => {
   return new Date(y, m - 1, d).toLocaleDateString();
 };
 
+// Color palette for customer-based color coding
+const CUSTOMER_COLORS: Record<string, { border: string; bg: string; badge: string }> = {};
+const COLOR_PALETTE = [
+  { border: 'border-blue-300', bg: 'bg-blue-50', badge: 'bg-blue-100 text-blue-800 ring-blue-200' },
+  { border: 'border-emerald-300', bg: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-800 ring-emerald-200' },
+  { border: 'border-orange-300', bg: 'bg-orange-50', badge: 'bg-orange-100 text-orange-800 ring-orange-200' },
+  { border: 'border-pink-300', bg: 'bg-pink-50', badge: 'bg-pink-100 text-pink-800 ring-pink-200' },
+  { border: 'border-cyan-300', bg: 'bg-cyan-50', badge: 'bg-cyan-100 text-cyan-800 ring-cyan-200' },
+  { border: 'border-amber-300', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-800 ring-amber-200' },
+  { border: 'border-indigo-300', bg: 'bg-indigo-50', badge: 'bg-indigo-100 text-indigo-800 ring-indigo-200' },
+  { border: 'border-rose-300', bg: 'bg-rose-50', badge: 'bg-rose-100 text-rose-800 ring-rose-200' },
+];
+let nextColorIdx = 0;
+
+function getCustomerColor(customerName: string | null) {
+  if (!customerName) return { border: 'border-slate-200', bg: 'bg-white', badge: 'bg-gray-100 text-gray-700 ring-gray-200' };
+  if (!CUSTOMER_COLORS[customerName]) {
+    CUSTOMER_COLORS[customerName] = COLOR_PALETTE[nextColorIdx % COLOR_PALETTE.length];
+    nextColorIdx++;
+  }
+  return CUSTOMER_COLORS[customerName];
+}
+
 export const LineScheduleForm: React.FC = () => {
   const [boardDate, setBoardDate] = React.useState(todayKey());
   const [lines, setLines] = React.useState<BoardLine[]>([]);
@@ -66,6 +106,7 @@ export const LineScheduleForm: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [styleSearch, setStyleSearch] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
 
   const [showModal, setShowModal] = React.useState(false);
   const [selectedLine, setSelectedLine] = React.useState<BoardLine | null>(null);
@@ -77,6 +118,16 @@ export const LineScheduleForm: React.FC = () => {
   const [notes, setNotes] = React.useState('');
   const [routingPreview, setRoutingPreview] = React.useState<RoutingPreview | null>(null);
   const [loadingRouting, setLoadingRouting] = React.useState(false);
+
+  // History panel state
+  const [showHistory, setShowHistory] = React.useState(false);
+  const [historyLine, setHistoryLine] = React.useState<BoardLine | null>(null);
+  const [history, setHistory] = React.useState<HistoryEntry[]>([]);
+  const [loadingHistory, setLoadingHistory] = React.useState(false);
+
+  // Drag and drop state
+  const [dragSource, setDragSource] = React.useState<number | null>(null);
+  const [dragOver, setDragOver] = React.useState<number | null>(null);
 
   const loadMasters = React.useCallback(async () => {
     try {
@@ -120,9 +171,24 @@ export const LineScheduleForm: React.FC = () => {
   }, [styles, styleSearch]);
 
   const assignedCount = lines.filter((l) => l.assignment_id).length;
+  const unassignedCount = lines.filter((l) => !l.assignment_id).length;
   const mismatchCount = lines.filter(
     (l) => l.assignment_id && l.plan_id && l.style_id !== l.plan_style_id
   ).length;
+
+  // Filter lines by status
+  const filteredLines = React.useMemo(() => {
+    switch (statusFilter) {
+      case 'assigned':
+        return lines.filter((l) => l.assignment_id);
+      case 'unassigned':
+        return lines.filter((l) => !l.assignment_id);
+      case 'mismatch':
+        return lines.filter((l) => l.assignment_id && l.plan_id && l.style_id !== l.plan_style_id);
+      default:
+        return lines;
+    }
+  }, [lines, statusFilter]);
 
   const openChangeover = (line: BoardLine) => {
     setSelectedLine(line);
@@ -175,6 +241,87 @@ export const LineScheduleForm: React.FC = () => {
     loadRoutingPreview(styleId);
   };
 
+  const openHistory = async (line: BoardLine) => {
+    setHistoryLine(line);
+    setShowHistory(true);
+    setLoadingHistory(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/line-schedule/history/${line.work_centre_id}?limit=20`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setHistory(json.data || []);
+      } else {
+        setHistory([]);
+        toast.error(json.error || 'Failed to load history');
+      }
+    } catch {
+      setHistory([]);
+      toast.error('Failed to load changeover history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Drag & drop handlers
+  const handleDragStart = (e: React.DragEvent, workCentreId: number) => {
+    const line = lines.find((l) => l.work_centre_id === workCentreId);
+    if (!line || !line.assignment_id) {
+      e.preventDefault();
+      return;
+    }
+    setDragSource(workCentreId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(workCentreId));
+  };
+
+  const handleDragOver = (e: React.DragEvent, workCentreId: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOver(workCentreId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetWorkCentreId: number) => {
+    e.preventDefault();
+    setDragOver(null);
+    const sourceWorkCentreId = dragSource;
+    setDragSource(null);
+    if (!sourceWorkCentreId || sourceWorkCentreId === targetWorkCentreId) return;
+
+    const sourceLine = lines.find((l) => l.work_centre_id === sourceWorkCentreId);
+    if (!sourceLine || !sourceLine.style_id) return;
+
+    // Perform changeover: assign source's style to target line
+    try {
+      const res = await apiFetch(`${API_BASE}/api/line-schedule/changeover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          work_centre_id: targetWorkCentreId,
+          from_date: boardDate,
+          style_id: sourceLine.style_id,
+          update_plan: true,
+          open_ended: true,
+          notes: `Drag-reassigned from ${sourceLine.work_centre_code}`,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Reassignment failed');
+      toast.success(`Style moved to target line`);
+      loadBoard();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reassign style');
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDragSource(null);
+    setDragOver(null);
+  };
+
   const submitChangeover = async () => {
     if (!selectedLine || !changeoverStyleId) {
       toast.error('Select a style for the changeover');
@@ -224,6 +371,7 @@ export const LineScheduleForm: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-violet-50/40 p-4 sm:p-5 shadow-sm mb-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -233,7 +381,7 @@ export const LineScheduleForm: React.FC = () => {
             </div>
             <h1 className="mt-3 text-xl sm:text-2xl font-bold text-gray-900">Article on Line</h1>
             <p className="text-sm text-gray-600 mt-1 max-w-2xl">
-              Record when a new article <strong>starts</strong> on a line. It stays active until the next changeover — you do not need to know the end date in advance.
+              Record when a new article <strong>starts</strong> on a line. Drag cards to reassign styles between lines.
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-2 shrink-0">
@@ -259,6 +407,7 @@ export const LineScheduleForm: React.FC = () => {
         </div>
       </div>
 
+      {/* Stats cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2 text-violet-700">
@@ -290,37 +439,119 @@ export const LineScheduleForm: React.FC = () => {
         </div>
       </div>
 
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <Filter className="h-4 w-4 text-gray-500" />
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filter:</span>
+        {([
+          { key: 'all', label: 'All', count: lines.length },
+          { key: 'assigned', label: 'Assigned', count: assignedCount },
+          { key: 'unassigned', label: 'Unassigned', count: unassignedCount },
+          { key: 'mismatch', label: 'Mismatch', count: mismatchCount },
+        ] as const).map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setStatusFilter(f.key)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+              statusFilter === f.key
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {f.label}
+            <span className={`tabular-nums ${statusFilter === f.key ? 'text-violet-200' : 'text-gray-400'}`}>
+              {f.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Unassigned lines warning banner */}
+      {unassignedCount > 0 && boardDate === todayKey() && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">
+              {unassignedCount} line{unassignedCount > 1 ? 's' : ''} without an article today
+            </p>
+            <p className="text-xs text-red-600 mt-0.5">
+              These lines should be producing. Assign an article or mark them idle.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('unassigned')}
+            className="ml-auto shrink-0 rounded-lg bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs font-semibold"
+          >
+            Show unassigned
+          </button>
+        </div>
+      )}
+
+      {/* Line cards grid */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {lines.map((line) => {
+          {filteredLines.map((line) => {
             const hasAssignment = Boolean(line.assignment_id);
             const carriedForward = Boolean(
               line.effective_from_date && line.effective_from_date < boardDate
             );
             const planMismatch = hasAssignment && line.plan_id && line.style_id !== line.plan_style_id;
+            const customerColor = getCustomerColor(line.customer_name);
+            const isDragTarget = dragOver === line.work_centre_id;
+            const isDragSource = dragSource === line.work_centre_id;
+
             return (
               <div
                 key={line.work_centre_id}
-                className={`rounded-xl border bg-white p-4 shadow-sm ${
-                  planMismatch ? 'border-amber-300 ring-1 ring-amber-100' : 'border-slate-200'
-                }`}
+                draggable={hasAssignment}
+                onDragStart={(e) => handleDragStart(e, line.work_centre_id)}
+                onDragOver={(e) => handleDragOver(e, line.work_centre_id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, line.work_centre_id)}
+                onDragEnd={handleDragEnd}
+                className={[
+                  'rounded-xl border p-4 shadow-sm transition-all',
+                  hasAssignment ? customerColor.bg : 'bg-white',
+                  planMismatch
+                    ? 'border-amber-300 ring-1 ring-amber-100'
+                    : !hasAssignment
+                      ? 'border-red-200 border-dashed'
+                      : customerColor.border,
+                  isDragTarget ? 'ring-2 ring-violet-400 scale-[1.02]' : '',
+                  isDragSource ? 'opacity-50' : '',
+                  hasAssignment ? 'cursor-grab active:cursor-grabbing' : '',
+                ].join(' ')}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      {line.work_centre_code}
-                    </p>
-                    <h3 className="text-lg font-bold text-gray-900">{line.work_centre_name}</h3>
+                  <div className="flex items-center gap-2">
+                    {hasAssignment && (
+                      <GripVertical className="h-4 w-4 text-gray-300 shrink-0" />
+                    )}
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                        {line.work_centre_code}
+                      </p>
+                      <h3 className="text-lg font-bold text-gray-900">{line.work_centre_name}</h3>
+                    </div>
                   </div>
-                  {planMismatch && (
-                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800 ring-1 ring-amber-200">
-                      Plan differs
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {planMismatch && (
+                      <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800 ring-1 ring-amber-200">
+                        Plan differs
+                      </span>
+                    )}
+                    {!hasAssignment && (
+                      <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700 ring-1 ring-red-200">
+                        Idle
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {hasAssignment ? (
@@ -336,8 +567,13 @@ export const LineScheduleForm: React.FC = () => {
                         {line.style_code} — {line.style_name}
                       </p>
                     </div>
+                    {line.customer_name && (
+                      <span className={`inline-flex items-center ml-6 px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 ${customerColor.badge}`}>
+                        {line.customer_name}
+                      </span>
+                    )}
                     <p className="text-xs text-gray-500 pl-6">
-                      {[line.customer_name, line.leather_name, line.color_name].filter(Boolean).join(' · ') || '—'}
+                      {[line.leather_name, line.color_name].filter(Boolean).join(' · ') || '—'}
                     </p>
                     {line.plan_style_name && (
                       <p className="text-xs text-gray-500 pl-6">
@@ -349,23 +585,37 @@ export const LineScheduleForm: React.FC = () => {
                     )}
                   </div>
                 ) : (
-                  <p className="mt-3 text-sm text-gray-500">No article on this line yet — run a changeover when production starts.</p>
+                  <p className="mt-3 text-sm text-red-600 font-medium">
+                    No article assigned — this line should be producing.
+                  </p>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => openChangeover(line)}
-                  className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-sm font-semibold"
-                >
-                  <Repeat2 className="h-4 w-4" />
-                  {hasAssignment ? 'Change article' : 'Assign article'}
-                </button>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openChangeover(line)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-sm font-semibold"
+                  >
+                    <Repeat2 className="h-4 w-4" />
+                    {hasAssignment ? 'Change' : 'Assign'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openHistory(line)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 text-sm font-semibold"
+                    title="View changeover history"
+                  >
+                    <Clock className="h-4 w-4" />
+                    History
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
+      {/* Changeover modal */}
       {showModal && selectedLine && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl max-h-[90vh] overflow-y-auto">
@@ -518,6 +768,74 @@ export const LineScheduleForm: React.FC = () => {
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Repeat2 className="h-4 w-4" />}
                 Apply changeover
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Changeover History panel */}
+      {showHistory && historyLine && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Changeover history</p>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {historyLine.work_centre_code} — {historyLine.work_centre_name}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowHistory(false); setHistoryLine(null); }}
+                className="rounded-lg p-1 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
+                </div>
+              ) : history.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-10">No changeover history found for this line.</p>
+              ) : (
+                <div className="relative pl-6">
+                  {/* Timeline line */}
+                  <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-violet-200" />
+                  <div className="space-y-4">
+                    {history.map((entry, idx) => (
+                      <div key={entry.id} className="relative">
+                        {/* Timeline dot */}
+                        <div className={`absolute -left-[18px] top-1.5 h-3 w-3 rounded-full border-2 border-white ${
+                          idx === 0 ? 'bg-violet-600' : 'bg-violet-300'
+                        }`} />
+                        <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {entry.style_code} — {entry.style_name}
+                            </p>
+                            {idx === 0 && (
+                              <span className="text-[10px] font-bold uppercase text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded">
+                                Current
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Started: {formatDateLabel(entry.assignment_date)}
+                            {entry.customer_name ? ` · ${entry.customer_name}` : ''}
+                            {entry.color_name ? ` · ${entry.color_name}` : ''}
+                          </p>
+                          {entry.notes && (
+                            <p className="text-xs italic text-gray-400 mt-1">{entry.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

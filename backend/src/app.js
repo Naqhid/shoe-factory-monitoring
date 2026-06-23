@@ -729,6 +729,7 @@ app.delete('/api/production-planning/:id', authenticate, requireProductionPlanni
 // Line schedule (article-on-line assignments)
 app.get('/api/line-schedule/board', authenticate, requireProductionPlanningAccess, lineStyleAssignmentController.getBoard.bind(lineStyleAssignmentController));
 app.get('/api/line-schedule', authenticate, requireProductionPlanningAccess, lineStyleAssignmentController.getList.bind(lineStyleAssignmentController));
+app.get('/api/line-schedule/history/:workCentreId', authenticate, requireProductionPlanningAccess, lineStyleAssignmentController.getHistory.bind(lineStyleAssignmentController));
 app.post('/api/line-schedule/changeover', authenticate, requireProductionPlanningAccess, lineStyleAssignmentController.changeover.bind(lineStyleAssignmentController));
 app.delete('/api/line-schedule/:id', authenticate, requireProductionPlanningAccess, validate.numericId, lineStyleAssignmentController.delete.bind(lineStyleAssignmentController));
 
