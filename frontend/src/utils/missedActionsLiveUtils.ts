@@ -5,7 +5,7 @@ export type MissedActionLike = {
   issue_key: string;
   machine_id?: string;
   machine_name?: string;
-  work_centre_id?: number;
+  work_centre_id?: number | null;
   work_centre_name?: string;
   action_type: 'START_PENDING' | 'FINISH_PENDING';
   overdue_mins: number;

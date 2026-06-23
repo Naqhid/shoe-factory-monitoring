@@ -139,6 +139,7 @@ type DailyReportEvent = {
   inactive_mins: number;
   lost_mins?: number;
   root_cause?: string | null;
+  output_pairs?: number;
 };
 
 type DailyReportLine = {
@@ -1006,7 +1007,9 @@ export const MissedActionsPage: React.FC = () => {
   const sortedFilteredItems = React.useMemo(() => {
     const list = [...filteredItems];
     if (liveSort === 'fix_first') {
-      return list.sort((a, b) => {
+      return list.sort((a: MissedAction, b: MissedAction) => {
+        // a: first item in pairwise comparison
+        // b: second item in pairwise comparison
         const scoreA = getFixFirstScore(a, getMachineLossForItem(a));
         const scoreB = getFixFirstScore(b, getMachineLossForItem(b));
         if (scoreB !== scoreA) return scoreB - scoreA;
