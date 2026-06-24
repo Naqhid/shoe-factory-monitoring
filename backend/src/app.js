@@ -240,12 +240,33 @@ const initDb = async () => {
     } catch (routingMinsAlterError) {
       logger.error('Failed to migrate production_routing_lines calc columns:', routingMinsAlterError.message);
     }
+    // Make leather_id optional: drop FK constraints first, then make columns nullable
+    try {
+      await db.execute('ALTER TABLE production_routing_header DROP FOREIGN KEY production_routing_header_ibfk_3');
+      logger.info('Dropped production_routing_header FK constraint on leather_id');
+    } catch (dropFkError) {
+      // Constraint may already be dropped or not exist — safe to ignore
+    }
     try {
       await db.execute('ALTER TABLE production_routing_header MODIFY COLUMN leather_id INT NULL');
       logger.info('production_routing_header.leather_id is nullable');
     } catch (leatherNullError) {
       if (leatherNullError.code !== 'ER_BAD_FIELD_ERROR') {
         logger.warn('Could not make production_routing_header.leather_id nullable:', leatherNullError.message);
+      }
+    }
+    try {
+      await db.execute('ALTER TABLE production_plan DROP FOREIGN KEY production_plan_ibfk_4');
+      logger.info('Dropped production_plan FK constraint on leather_id');
+    } catch (dropFkError) {
+      // Constraint may already be dropped or not exist — safe to ignore
+    }
+    try {
+      await db.execute('ALTER TABLE production_plan MODIFY COLUMN leather_id INT NULL');
+      logger.info('production_plan.leather_id is nullable');
+    } catch (planLeatherError) {
+      if (planLeatherError.code !== 'ER_BAD_FIELD_ERROR') {
+        logger.warn('Could not make production_plan.leather_id nullable:', planLeatherError.message);
       }
     }
     await db.execute(`

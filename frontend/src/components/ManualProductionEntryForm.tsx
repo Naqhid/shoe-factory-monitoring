@@ -1568,6 +1568,10 @@ export const ManualProductionEntryForm: React.FC = () => {
       const finishMinuteInput = Number(finishMatch[2]);
       slotStartMinutes = slotHour * 60 + slotMinute;
       slotEndMinutes = finishHourInput * 60 + finishMinuteInput;
+      if (slotStartMinutes < 540 || slotEndMinutes > 1140) {
+        toast.error('Time must be between 9:00 AM and 7:00 PM');
+        return;
+      }
       if (slotEndMinutes <= slotStartMinutes) {
         toast.error('Manual finish time must be later than start time');
         return;
@@ -2131,6 +2135,8 @@ export const ManualProductionEntryForm: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Start <span className="text-red-500">*</span></label>
                         <input
                           type="time"
+                          min="09:00"
+                          max="19:00"
                           value={manualStartTime}
                           onChange={(e) => setManualStartTime(e.target.value)}
                           className={MANUAL_ENTRY_FIELD_CLS}
@@ -2142,6 +2148,8 @@ export const ManualProductionEntryForm: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Finish <span className="text-red-500">*</span></label>
                         <input
                           type="time"
+                          min="09:00"
+                          max="19:00"
                           value={manualFinishTime}
                           onChange={(e) => setManualFinishTime(e.target.value)}
                           className={MANUAL_ENTRY_FIELD_CLS}
