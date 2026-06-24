@@ -46,6 +46,9 @@ export const UsersMasterForm: React.FC = () => {
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
   const [searchTerm, setSearchTerm] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
+  const [roleFilter, setRoleFilter] = React.useState('');
+  const [styleFilter, setStyleFilter] = React.useState('');
+  const [stylesList, setStylesList] = React.useState<{ id: number; code: string; name: string }[]>([]);
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -63,6 +66,8 @@ export const UsersMasterForm: React.FC = () => {
         limit: String(itemsPerPage),
       });
       if (debouncedSearch) params.set('search', debouncedSearch);
+      if (roleFilter) params.set('role', roleFilter);
+      if (styleFilter) params.set('style_id', styleFilter);
       const response = await apiFetch(`${API_BASE}/api/masters/users?${params.toString()}`);
       const result = await response.json();
       if (result.success) {
@@ -119,15 +124,26 @@ export const UsersMasterForm: React.FC = () => {
     return roles.find((r) => r.role_name === 'Admin')?.role_name || roles[0]?.role_name || 'Admin';
   }, [roles]);
 
+  const fetchStyles = async () => {
+    try {
+      const response = await apiFetch(`${API_BASE}/api/masters/styles?limit=1000`);
+      const result = await response.json();
+      if (result.success) setStylesList(result.data || []);
+    } catch (error) {
+      console.error('Error fetching styles:', error);
+    }
+  };
+
   React.useEffect(() => {
     fetchWorkCentres();
     fetchMachineCentres();
     fetchRoles();
+    fetchStyles();
   }, []);
 
   React.useEffect(() => {
     fetchRecords();
-  }, [currentPage, itemsPerPage, debouncedSearch]);
+  }, [currentPage, itemsPerPage, debouncedSearch, roleFilter, styleFilter]);
 
   const handleRefresh = async () => {
     await fetchRecords();
@@ -191,6 +207,10 @@ export const UsersMasterForm: React.FC = () => {
       work_centre_id: record.work_centre_id?.toString() || '',
       machine_id: record.machine_id || ''
     });
+    // Fetch machine centres for the user's work centre so the dropdown is populated
+    if (record.work_centre_id) {
+      fetchMachineCentres(record.work_centre_id.toString());
+    }
     setShowForm(true);
   };
 
@@ -257,7 +277,7 @@ export const UsersMasterForm: React.FC = () => {
         confirmText="Delete"
       />
       
-      <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
+      <header className="bg-white border-b border-gray-200 px-4 py-3 mb-6 pl-12 rounded-lg shadow-sm">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Users Master</h1>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
@@ -271,6 +291,28 @@ export const UsersMasterForm: React.FC = () => {
                 className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <select
+              value={roleFilter}
+              onChange={(e) => { setRoleFilter(e.target.value); setStyleFilter(''); setCurrentPage(1); }}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Roles</option>
+              {roles.map((r) => (
+                <option key={r.id ?? r.role_name} value={r.role_name}>{r.role_name}</option>
+              ))}
+            </select>
+            {roleFilter && roleFilter.toLowerCase().includes('machine') && (
+              <select
+                value={styleFilter}
+                onChange={(e) => { setStyleFilter(e.target.value); setCurrentPage(1); }}
+                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Articles</option>
+                {stylesList.map((s) => (
+                  <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               onClick={handleRefresh}

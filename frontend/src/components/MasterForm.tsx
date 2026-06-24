@@ -341,7 +341,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <ConfirmDialog
         isOpen={deleteId !== null}
         title={isArchiveTable ? `Archive ${archiveLabel}` : 'Delete Record'}
@@ -350,43 +350,42 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
         onCancel={() => setDeleteId(null)}
         confirmText={deleteConfirmText}
       />
-      <header className="sticky top-0 bg-white shadow-sm border-b border-gray-200 px-4 py-3 z-40 mb-6 pl-12">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{title}</h1>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
-            <div className="relative w-full sm:w-64">
+
+      {/* Enhanced Header */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-sm ring-1 ring-slate-900/5 mb-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{title}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Manage {title.toLowerCase()} master records</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-56">
               <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={`Search ${title.toLowerCase()}...`}
-                className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
               />
             </div>
             {table === 'machine_centres' && (
               <select
                 value={selectedStyleId}
-                onChange={(e) => {
-                  setSelectedStyleId(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full sm:w-56 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                aria-label="Filter by article"
+                onChange={(e) => { setSelectedStyleId(e.target.value); setCurrentPage(1); }}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 bg-white"
               >
                 <option value="">All articles</option>
                 {styles.map((style) => (
-                  <option key={style.id} value={String(style.id)}>
-                    {style.code} - {style.name}
-                  </option>
+                  <option key={style.id} value={String(style.id)}>{style.code} - {style.name}</option>
                 ))}
               </select>
             )}
             {isArchiveTable && (
               <button
                 onClick={() => setShowArchived((prev) => !prev)}
-                className={`px-3 sm:px-4 py-2 rounded-md flex items-center justify-center gap-2 text-sm sm:text-base ${
-                  showArchived ? 'bg-slate-700 text-white hover:bg-slate-800' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                  showArchived ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 {showArchived ? 'Hide Archived' : 'Show Archived'}
@@ -396,59 +395,58 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
               type="button"
               onClick={() => fetchRecords()}
               disabled={fetchLoading}
-              title="Reload list from server"
-              className="bg-slate-100 text-slate-700 border border-slate-200 px-3 sm:px-4 py-2 rounded-md hover:bg-slate-200 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
-              <span className="sm:inline hidden">Refresh</span>
             </button>
             <button
               onClick={handleExportToExcel}
-              className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-green-700 flex items-center justify-center gap-2 text-sm sm:text-base"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium shadow-sm"
             >
               <Download className="h-4 w-4" />
-              <span className="sm:inline hidden">Export to Excel</span>
-              <span className="sm:hidden">Export</span>
+              <span className="hidden sm:inline">Export</span>
             </button>
             <button
               onClick={() => setShowForm(true)}
-              className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-blue-700 flex items-center justify-center gap-2 text-sm sm:text-base"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm"
             >
               <Plus className="h-4 w-4" />
-              <span className="sm:inline hidden">Add New</span>
-              <span className="sm:hidden">Add</span>
+              Add
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Form Modal */}
+      {/* Form Modal — Enhanced */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">
-                {editingRecord ? 'Edit' : 'Add'} {title}
-              </h2>
-              <button onClick={resetForm}>
-                <X className="h-5 w-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto ring-1 ring-black/10">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600">
+                  {editingRecord ? 'Edit record' : 'New record'}
+                </p>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editingRecord ? 'Edit' : 'Add'} {title}
+                </h2>
+              </div>
+              <button onClick={resetForm} className="p-2 rounded-lg hover:bg-gray-100 transition">
+                <X className="h-5 w-5 text-gray-500" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="p-5 space-y-4">
               {(table === 'machine_centres' || table === 'employees') && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Work Centre (optional)
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Work Centre <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
                   <select
                     value={formData.work_centre_id}
                     onChange={(e) => setFormData({ ...formData, work_centre_id: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                   >
-                    <option value="">
-                      {table === 'machine_centres' || table === 'employees' ? 'No work centre' : 'Select Work Centre'}
-                    </option>
+                    <option value="">No work centre</option>
                     {workCentres.map((wc) => (
                       <option key={wc.id} value={wc.id}>{wc.name}</option>
                     ))}
@@ -458,13 +456,13 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
 
               {table === 'employees' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Machine Centre (optional)
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Machine Centre <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
                   <select
                     value={formData.machine_centre_id}
                     onChange={(e) => setFormData({ ...formData, machine_centre_id: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                   >
                     <option value="">No fixed machine</option>
                     {machineCentres
@@ -478,43 +476,37 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
 
               {table === 'machine_centres' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Machine ID
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Machine ID *</label>
                   <input
                     type="text"
                     value={formData.machine_id}
                     onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter machine ID"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+                    placeholder="e.g., 01"
                     required
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {title} Code
-                </label>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{title} Code *</label>
                 <input
                   type="text"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                   required
                 />
               </div>
 
               {table !== 'machine_centres' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {title} Name
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{title} Name *</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                     required
                   />
                 </div>
@@ -522,14 +514,12 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
 
               {table === 'machine_centres' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Process Name
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Process Name *</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value, machine_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                     placeholder="e.g., Eyelet Attaching"
                     required
                   />
@@ -539,64 +529,56 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
               {table === 'work_centres' && editingRecord && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Input machine
-                    </label>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Input machine</label>
                     <select
                       value={formData.input_machine_id}
                       onChange={(e) => setFormData({ ...formData, input_machine_id: e.target.value })}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                     >
-                      <option value="">Auto-detect (name contains &quot;(Input)&quot;)</option>
+                      <option value="">Auto-detect</option>
                       {lineMachineOptions.map((mc) => (
-                        <option key={mc.id} value={mc.machine_id || ''}>
-                          {mc.machine_id} — {mc.name}
-                        </option>
+                        <option key={mc.id} value={mc.machine_id || ''}>{mc.machine_id} — {mc.name}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-500 mt-1">Feeds WIP input and TV dashboard Input %.</p>
+                    <p className="text-[11px] text-gray-400 mt-1">Feeds WIP input and TV dashboard Input %.</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      EOL machine (line output)
-                    </label>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">EOL machine (line output)</label>
                     <select
                       value={formData.eol_machine_id}
                       onChange={(e) => setFormData({ ...formData, eol_machine_id: e.target.value })}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                     >
-                      <option value="">Auto-detect (Final Output / Inspection)</option>
+                      <option value="">Auto-detect</option>
                       {lineMachineOptions.map((mc) => (
-                        <option key={`eol-${mc.id}`} value={mc.machine_id || ''}>
-                          {mc.machine_id} — {mc.name}
-                        </option>
+                        <option key={`eol-${mc.id}`} value={mc.machine_id || ''}>{mc.machine_id} — {mc.name}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-500 mt-1">Used for Output %, hourly chart, and pacing.</p>
+                    <p className="text-[11px] text-gray-400 mt-1">Used for Output %, hourly chart, and pacing.</p>
                   </div>
                 </>
               )}
 
               {table === 'work_centres' && !editingRecord && (
-                <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">
                   Save the line first, add its machines, then edit to set Input and EOL machines.
                 </p>
               )}
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : 'Save'}
-                </button>
+              <div className="flex gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium transition"
                 >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50 transition"
+                >
+                  {loading ? 'Saving...' : editingRecord ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>
@@ -612,73 +594,73 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
         </div>
       )}
 
-      {/* Records Table */}
-      <div className="bg-white rounded-lg shadow">
+      {/* Records Table — Enhanced */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm ring-1 ring-black/[0.03] overflow-hidden">
         {fetchLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-            <span className="ml-3 text-gray-600 text-lg">Loading data...</span>
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-3 text-gray-500">Loading…</span>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white">
                 {table === 'machine_centres' && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                     Machine ID
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                   Code
                 </th>
                 {table !== 'machine_centres' && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                     Name
                   </th>
                 )}
                 {table === 'work_centres' && (
                   <>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                       Input machine
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                       EOL machine
                     </th>
                   </>
                 )}
                 {table === 'machine_centres' && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                     Process Name
                   </th>
                 )}
                 {table === 'machine_centres' && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                     Work Centre
                   </th>
                 )}
                 {table === 'employees' && (
                   <>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                       Work Centre
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                       Machine Centre
                     </th>
                   </>
                 )}
                 {isArchiveTable && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 sm:px-6 py-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100/80">
               {records.map((record) => (
                 <tr
                   key={record.id}
@@ -741,7 +723,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                       )}
                     </td>
                   )}
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <td className="px-4 sm:px-6 py-3.5 text-right whitespace-nowrap">
                     {isArchiveTable && isArchivedRecord(record) ? (
                       <button
                         type="button"
@@ -749,19 +731,20 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                           e.stopPropagation();
                           handleRestore(record.id);
                         }}
-                        className="text-emerald-600 hover:text-emerald-800 inline-flex items-center gap-1"
+                        className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2 py-1 rounded-lg transition"
                       >
                         <RotateCcw className="h-4 w-4" /> Restore
                       </button>
                     ) : (
-                      <>
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleEdit(record);
                           }}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
+                          className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition"
+                          title="Edit"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
@@ -771,11 +754,12 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                             e.stopPropagation();
                             handleDelete(record.id);
                           }}
-                          className="text-red-600 hover:text-red-900"
+                          className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition"
+                          title="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -785,22 +769,24 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
         </div>
 
         {records.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            {debouncedSearch || selectedStyleId ? 'No matching records found' : 'No records found'}
+          <div className="text-center py-16">
+            <p className="text-gray-400 text-sm">{debouncedSearch || selectedStyleId ? 'No matching records found' : 'No records found'}</p>
           </div>
         )}
 
-        <Pagination
-          currentPage={currentPage}
-          totalPages={pagination.totalPages}
-          totalItems={pagination.total}
-          itemsPerPage={itemsPerPage}
-          onPageChange={setCurrentPage}
-          onItemsPerPageChange={(newLimit) => {
-            setItemsPerPage(newLimit);
-            setCurrentPage(1);
-          }}
-        />
+        <div className="border-t border-gray-100 px-4 sm:px-5 py-3">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newLimit) => {
+              setItemsPerPage(newLimit);
+              setCurrentPage(1);
+            }}
+          />
+        </div>
           </>
         )}
       </div>

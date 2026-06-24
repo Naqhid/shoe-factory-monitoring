@@ -278,20 +278,43 @@ class MasterController {
           params
         );
       } else if (table === 'users') {
-        const where = search
-          ? `WHERE (
+        const whereParts = [];
+        const params = [];
+        if (search) {
+          whereParts.push(`(
               u.code LIKE ?
               OR u.name LIKE ?
               OR u.role LIKE ?
               OR wc.name LIKE ?
               OR u.machine_id LIKE ?
-            )`
-          : '';
-        const params = search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : [];
+            )`);
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        const roleFilter = String(req.query.role || '').trim();
+        if (roleFilter) {
+          whereParts.push('u.role = ?');
+          params.push(roleFilter);
+        }
+        const styleFilter = parseInt(req.query.style_id, 10);
+        let styleJoin = '';
+        if (!Number.isNaN(styleFilter) && styleFilter > 0) {
+          // Filter users whose work_centre currently has this style assigned
+          styleJoin = `INNER JOIN line_style_assignments lsa ON lsa.work_centre_id = u.work_centre_id
+            AND lsa.deleted_at IS NULL
+            AND lsa.id = (
+              SELECT lsa2.id FROM line_style_assignments lsa2
+              WHERE lsa2.work_centre_id = u.work_centre_id AND lsa2.assignment_date <= CURDATE() AND lsa2.deleted_at IS NULL
+              ORDER BY lsa2.assignment_date DESC, lsa2.id DESC LIMIT 1
+            )`;
+          whereParts.push('lsa.style_id = ?');
+          params.push(styleFilter);
+        }
+        const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
         [rows] = await db.query(
           `SELECT u.id, u.code, u.name, u.role, u.work_centre_id, u.machine_id, wc.code as work_centre_code, wc.name as work_centre_name 
            FROM users u 
-           LEFT JOIN work_centres wc ON u.work_centre_id = wc.id 
+           LEFT JOIN work_centres wc ON u.work_centre_id = wc.id
+           ${styleJoin}
            ${where}
            ORDER BY u.code LIMIT ? OFFSET ?`,
           [...params, limit, offset]
@@ -300,6 +323,7 @@ class MasterController {
           `SELECT COUNT(*) as total
            FROM users u
            LEFT JOIN work_centres wc ON u.work_centre_id = wc.id
+           ${styleJoin}
            ${where}`,
           params
         );

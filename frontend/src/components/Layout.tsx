@@ -80,46 +80,56 @@ export const Layout: React.FC<LayoutProps> = ({
     <>
       {/* Fixed header when sidebar is closed */}
       {!sidebarOpen && !hideTopHeader && (
-        <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2">
-            <Activity className="h-6 w-6 text-blue-600 ml-16" />
-            <div>
-              <h1 className="text-lg font-bold text-gray-800" translate="yes">ProdPulse</h1>
-              <p className="text-xs text-gray-500" translate="yes">Smart Production Tracking System</p>
-            </div>
-          </div>
-
-          {/* Search bar in header center */}
-          <div className="flex-1 max-w-md mx-8">
-            <GlobalSearch onSearchChange={setSearchQuery} />
-          </div>
-
-          {/* User info and logout */}
-          {user && (
-            <div className="flex items-center gap-2">
-              <LanguageSwitcher />
-              {!hideAlertBell && <AlertBell />}
-              <div className="hidden sm:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
-                <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full">
-                  <User className="h-3 w-3 text-blue-600" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-gray-800" translate="yes">{user.name}</span>
-                  <span className="text-xs text-gray-500" translate="yes">{user.role || 'Admin'}</span>
-                </div>
+        <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+          {/* Top row: logo + user actions */}
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3">
+            <div className="flex items-center gap-2 pl-10 sm:pl-14">
+              <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-lg font-bold text-gray-800 leading-tight truncate" translate="yes">ProdPulse</h1>
+                <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block" translate="yes">Smart Production Tracking</p>
               </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex items-center gap-1 px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm"
-                title="Logout"
-                aria-label="Logout"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
             </div>
-          )}
+
+            {/* Search bar — hidden on mobile, shown on sm+ */}
+            <div className="hidden sm:block flex-1 max-w-md mx-6">
+              <GlobalSearch onSearchChange={setSearchQuery} />
+            </div>
+
+            {/* User info and logout */}
+            {user && (
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <LanguageSwitcher />
+                {!hideAlertBell && <AlertBell />}
+                <div className="hidden lg:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
+                  <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full">
+                    <User className="h-3 w-3 text-blue-600" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-800" translate="yes">{user.name}</span>
+                    <span className="text-xs text-gray-500" translate="yes">{user.role || 'Admin'}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex items-center gap-1 px-2.5 sm:px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm"
+                  title="Logout"
+                  aria-label="Logout"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile search row — visible only on small screens, centered */}
+          <div className="sm:hidden flex justify-center px-3 pb-2.5">
+            <div className="w-full max-w-sm">
+              <GlobalSearch onSearchChange={setSearchQuery} />
+            </div>
+          </div>
         </div>
       )}
 
@@ -138,7 +148,7 @@ export const Layout: React.FC<LayoutProps> = ({
         {/* Main content area */}
         <div className={`flex-1 flex flex-col min-h-0 min-w-0 ${sidebarOpen ? 'lg:ml-64' : ''}`}>
           {/* Spacer for fixed header when sidebar is closed */}
-          {!sidebarOpen && !hideTopHeader && <div className="h-20 flex-shrink-0"></div>}
+          {!sidebarOpen && !hideTopHeader && <div className="h-24 sm:h-16 flex-shrink-0"></div>}
           
           {/* Content wrapper — sole vertical scroll for app shell (disabled when fitViewport) */}
           <div
