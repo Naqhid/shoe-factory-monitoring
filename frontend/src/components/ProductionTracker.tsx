@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
+import { getEfficiencyColor, loadEfficiencyThresholds } from '../utils/efficiencyColors';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { Reports } from './Reports';
 import { formatInput, formatWip } from '../utils/wipUtils';
@@ -328,6 +329,8 @@ const getTodayDate = () => {
 export const ProductionTracker: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  // Load efficiency thresholds on mount
+  React.useEffect(() => { loadEfficiencyThresholds(); }, []);
   const detailRouteMatch = location.pathname.match(/^\/production_tracker\/line\/([^/]+)$/);
   const detailWorkCentreId = detailRouteMatch ? Number(detailRouteMatch[1]) : NaN;
   const isDetailRoute = Number.isFinite(detailWorkCentreId);
@@ -592,8 +595,17 @@ export const ProductionTracker: React.FC = () => {
         )
       )
     : 0;
-  const efficiencyPctColor = (pct: number) =>
-    pct >= 90 ? 'text-green-600' : pct >= 70 ? 'text-yellow-600' : 'text-red-500';
+  const efficiencyPctColor = (pct: number) => {
+    const color = getEfficiencyColor(pct);
+    const map: Record<string, string> = {
+      '#22c55e': 'text-green-600', '#16a34a': 'text-green-700',
+      '#eab308': 'text-yellow-600', '#f97316': 'text-orange-600',
+      '#ef4444': 'text-red-500', '#dc2626': 'text-red-600',
+      '#3b82f6': 'text-blue-600', '#8b5cf6': 'text-purple-600',
+      '#06b6d4': 'text-cyan-600', '#ec4899': 'text-pink-600',
+    };
+    return map[color] || 'text-gray-600';
+  };
   const outputPercent = Number(topSection?.outputPercent) || 0;
   const efficiencyPercent = Number(topSection?.efficiencyPercent) || 0;
   const efficiencyGaugePercent = Math.min(Math.max(efficiencyPercent, 0), 100);

@@ -32,7 +32,7 @@ export const HIDDEN_MENU_KEYS = ['forms_master', 'user_rights'] as const;
 export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Admin': {
     defaultRoute: '/overview',
-    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_schedule', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'roles', 'monitoring']
+    allowedMenus: ['overview', 'reports', 'missed_actions', 'logs', 'alert_center', 'production_routing', 'production_planning', 'line_schedule', 'line_setup_form', 'manual_production_entry', 'production_tracker', 'rework_rejection_tracker', 'mobile', 'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees', 'users', 'roles', 'monitoring', 'settings']
   },
   'Line Supervisor': {
     defaultRoute: '/line_setup_form',
@@ -97,6 +97,7 @@ export const ALL_MENU_DEFINITIONS = [
   { key: 'users', label: 'Users' },
   { key: 'roles', label: 'Roles' },
   { key: 'monitoring', label: 'Monitoring' },
+  { key: 'settings', label: 'Settings' },
 ].filter((item) => !HIDDEN_MENU_KEYS.includes(item.key as typeof HIDDEN_MENU_KEYS[number]));
 
 const ROLE_ALIASES: Record<string, UserRole> = {

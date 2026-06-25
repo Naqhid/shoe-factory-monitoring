@@ -352,6 +352,7 @@ exports.getMissedActions = async (req, res, next) => {
       LEFT JOIN employees e ON e.code = ms.emp_code
       WHERE ms.status = 'active'
         AND ms.activated_at >= DATE_SUB(CURDATE(), INTERVAL ? HOUR)
+        AND wc.deleted_at IS NULL AND COALESCE(wc.is_active, 1) = 1
         ${workCentreFilterSql}
         AND NOT EXISTS (
           SELECT 1 FROM machine_centre_production m
@@ -627,6 +628,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         AND mcp.button_status = 2
         AND mcp.start_time IS NOT NULL
         AND mcp.finish_time IS NOT NULL
+        AND wc.deleted_at IS NULL AND COALESCE(wc.is_active, 1) = 1
       ORDER BY wc.name, mcp.machine_id, mcp.start_time
       `,
       [dateFrom, dateTo]
@@ -697,10 +699,10 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
     const dateKeys = enumerateDateKeys(dateFrom, dateTo);
     let workCentres = [];
     if (lineFilter === 'all') {
-      const [wcRows] = await db.query('SELECT id, name FROM work_centres ORDER BY id');
+      const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE deleted_at IS NULL AND COALESCE(is_active, 1) = 1 ORDER BY id');
       workCentres = wcRows;
     } else {
-      const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE name = ? LIMIT 1', [lineFilter]);
+      const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE name = ? AND deleted_at IS NULL AND COALESCE(is_active, 1) = 1 LIMIT 1', [lineFilter]);
       workCentres = wcRows;
     }
 

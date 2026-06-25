@@ -31,6 +31,7 @@ const UsersMasterForm = lazy(() => import('./components/UsersMasterForm').then(m
 const FormsMasterForm = lazy(() => import('./components/FormsMasterForm').then(m => ({ default: m.FormsMasterForm })));
 const UserRightsForm = lazy(() => import('./components/UserRightsForm').then(m => ({ default: m.UserRightsForm })));
 const RolesMasterForm = lazy(() => import('./components/RolesMasterForm').then(m => ({ default: m.RolesMasterForm })));
+const DashboardSettings = lazy(() => import('./components/DashboardSettings').then(m => ({ default: m.DashboardSettings })));
 const TVDashboard = lazy(() => import('./components/TVDashboard').then(m => ({ default: m.TVDashboard })));
 const ReworkRejectionTrackerPage = lazy(() => import('./components/ReworkRejectionTrackerPage').then(m => ({ default: m.ReworkRejectionTrackerPage })));
 const MonitoringDashboard = lazy(() => import('./components/MonitoringDashboard').then(m => ({ default: m.MonitoringDashboard })));
@@ -206,6 +207,7 @@ function App() {
   const isUserRights = activeMenu === 'user_rights';
   const isRoles = activeMenu === 'roles';
   const isMonitoring = activeMenu === 'monitoring';
+  const isSettings = activeMenu === 'settings';
   const isAlertCenter = activeMenu === 'alert_center';
   const isLogs = activeMenu === 'logs';
   const isMasterView = Object.keys(masterConfigs).includes(activeMenu);
@@ -230,6 +232,7 @@ function App() {
     'user_rights',
     'roles',
     'monitoring',
+    'settings',
     'alert_center',
     'logs',
     ...Object.keys(masterConfigs),
@@ -363,6 +366,8 @@ function App() {
         <RolesMasterForm />
       ) : isMonitoring ? (
         <MonitoringDashboard />
+      ) : isSettings ? (
+        <DashboardSettings />
       ) : isAlertCenter ? (
         <RealtimeAlertCenter />
       ) : isLogs ? (

@@ -179,7 +179,7 @@ const QRWaitScreen: React.FC<{
     React.useEffect(() => {
         const fetchMachineName = async () => {
             try {
-                const res = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
+                const res = await apiFetch(`${API_BASE}/api/masters/machine_centres?limit=1000`);
                 const json = await res.json();
                 if (json.success && json.data) {
                     const record = json.data.find((m: any) => m.machine_id === machineId);
@@ -1299,7 +1299,7 @@ export const MobileProduction: React.FC = () => {
                         // If button_status = 2 (finished), create new record instead
                         const [empRes, macRes, wcRes, initRes] = await Promise.all([
                             apiFetch(`${API_BASE}/api/masters/employees`).then(r => r.json()),
-                            apiFetch(`${API_BASE}/api/masters/machine_centres`).then(r => r.json()),
+                            apiFetch(`${API_BASE}/api/masters/machine_centres?limit=1000`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/masters/work_centres`).then(r => r.json()),
                             apiFetch(`${API_BASE}/api/mobile-production/init/${effectiveMachineId}/${urlEmpId}`).then(r => r.json())
                         ]);
@@ -1343,7 +1343,7 @@ export const MobileProduction: React.FC = () => {
                             ''
                         );
                         // Get machine centre name from machine centres data
-                        const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
+                        const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres?limit=1000`);
                         const machineData = await machineRes.json();
                         let machineCentreName = machine?.machine_name || machine?.name || urlMachineId;
                         if (machineData.success) {
@@ -1413,7 +1413,7 @@ export const MobileProduction: React.FC = () => {
                         setQrData(effectiveMachineId);
                         setEmployeeName(employee.name);
                         // Get machine centre name from machine centres data
-                        const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres`);
+                        const machineRes = await apiFetch(`${API_BASE}/api/masters/machine_centres?limit=1000`);
                         const machineData = await machineRes.json();
                         let machineCentreName = machine.machine_name || machine.name;
                         if (machineData.success) {

@@ -15,7 +15,7 @@ const CANONICAL_ROLES = [
       'production_routing', 'production_planning', 'line_schedule', 'line_setup_form', 'manual_production_entry',
       'production_tracker', 'rework_rejection_tracker', 'mobile',
       'customers', 'groups', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees',
-      'users', 'roles', 'monitoring',
+      'users', 'roles', 'monitoring', 'settings',
     ],
   },
   {
@@ -100,6 +100,7 @@ const ALL_MENU_DEFINITIONS = [
   { key: 'users', label: 'Users' },
   { key: 'roles', label: 'Roles' },
   { key: 'monitoring', label: 'Monitoring' },
+  { key: 'settings', label: 'Settings' },
 ].filter((item) => !HIDDEN_MENU_KEYS.has(item.key));
 
 function filterHiddenMenus(menus) {
