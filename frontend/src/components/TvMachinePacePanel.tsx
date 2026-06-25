@@ -1,5 +1,6 @@
 import React from 'react';
 import type { MachinePaceSnapshot } from '../utils/shiftPaceUtils';
+import { getEfficiencyColor, loadEfficiencyThresholds } from '../utils/efficiencyColors';
 
 export interface TvLinePlanSummary {
   lineName: string;
@@ -84,10 +85,21 @@ const paceEfficiencyPct = (actual: number, expected: number): number | null => {
 
 const paceEfficiencyCircleClass = (pct: number | null): string => {
   if (pct == null) return 'bg-slate-300 ring-slate-400/50';
-  if (pct > 90) return 'bg-emerald-500 ring-emerald-600/50';
-  if (pct >= 70) return 'bg-orange-400 ring-orange-500/50';
-  if (pct >= 50) return 'bg-amber-400 ring-amber-500/50';
-  return 'bg-red-500 ring-red-600/50';
+  const color = getEfficiencyColor(pct);
+  // Map hex color to Tailwind bg + ring classes
+  const map: Record<string, string> = {
+    '#22c55e': 'bg-emerald-500 ring-emerald-600/50',
+    '#16a34a': 'bg-green-600 ring-green-700/50',
+    '#eab308': 'bg-amber-400 ring-amber-500/50',
+    '#f97316': 'bg-orange-400 ring-orange-500/50',
+    '#ef4444': 'bg-red-500 ring-red-600/50',
+    '#dc2626': 'bg-red-600 ring-red-700/50',
+    '#3b82f6': 'bg-blue-500 ring-blue-600/50',
+    '#8b5cf6': 'bg-purple-500 ring-purple-600/50',
+    '#06b6d4': 'bg-cyan-500 ring-cyan-600/50',
+    '#ec4899': 'bg-pink-500 ring-pink-600/50',
+  };
+  return map[color] || 'bg-slate-400 ring-slate-500/50';
 };
 
 const PaceEfficiencyBadge: React.FC<{ snap: MachinePaceSnapshot }> = ({ snap }) => {
@@ -273,6 +285,8 @@ type GridTile =
   | { kind: 'line-plan'; plan: TvLinePlanSummary };
 
 export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines, linePlan }) => {
+  // Ensure thresholds are loaded (cached after first call)
+  React.useEffect(() => { loadEfficiencyThresholds(); }, []);
   const sorted = [...machines].sort((a, b) =>
     String(a.machineId).localeCompare(String(b.machineId), undefined, { numeric: true })
   );

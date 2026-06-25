@@ -295,6 +295,15 @@ const initDb = async () => {
       )
     `);
     logger.info('manual_entry_audit_logs table ready');
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS dashboard_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        setting_key VARCHAR(100) NOT NULL UNIQUE,
+        setting_value TEXT NOT NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    logger.info('dashboard_settings table ready');
     for (const [col, def] of [
       ['input_machine_id', 'VARCHAR(64) NULL'],
       ['eol_machine_id', 'VARCHAR(64) NULL'],
@@ -427,6 +436,9 @@ const initDb = async () => {
       await permissionService.addMenusToRole('Project Monitor', [
         'production_routing', 'production_planning', 'line_schedule', 'line_setup_form',
       ]);
+    });
+    await permissionService.runOneTimeMigration('admin_settings_menu_v1', async () => {
+      await permissionService.addMenusToRole('Admin', ['settings']);
     });
     await permissionService.bootstrapRoleDefaultsSnapshot();
     logger.info('roles table ready (defaults snapshot initialized when missing)');
@@ -757,6 +769,35 @@ app.delete('/api/line-schedule/:id', authenticate, requireProductionPlanningAcce
 // Line setup routes
 app.get('/api/line-setup', authenticate, requireLineSetupAccess, lineSetupController.getAll);
 app.get('/api/line-setup/:id', authenticate, requireLineSetupAccess, lineSetupController.getById);
+
+// Dashboard settings routes
+app.get('/api/dashboard-settings', authenticate, async (req, res) => {
+  try {
+    const [rows] = await db.execute('SELECT setting_key, setting_value FROM dashboard_settings');
+    const settings = {};
+    rows.forEach(row => { settings[row.setting_key] = JSON.parse(row.setting_value); });
+    res.json({ success: true, data: settings });
+  } catch (error) {
+    logger.error('Error fetching dashboard settings:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+app.put('/api/dashboard-settings', authenticate, async (req, res) => {
+  try {
+    const settings = req.body;
+    for (const [key, value] of Object.entries(settings)) {
+      await db.execute(
+        `INSERT INTO dashboard_settings (setting_key, setting_value) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = NOW()`,
+        [key, JSON.stringify(value), JSON.stringify(value)]
+      );
+    }
+    res.json({ success: true, message: 'Settings saved' });
+  } catch (error) {
+    logger.error('Error saving dashboard settings:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 app.post('/api/line-setup', authenticate, requireLineSetupAccess, lineSetupController.create);
 app.put('/api/line-setup/:id', authenticate, requireLineSetupAccess, lineSetupController.update);
 app.delete('/api/line-setup/:id', authenticate, requireLineSetupAccess, lineSetupController.delete);

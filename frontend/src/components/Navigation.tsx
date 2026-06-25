@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   PencilRuler,
   Repeat2,
+  Sliders,
 } from 'lucide-react';
 import { isMenuAllowed, getEffectiveRole } from '../utils/roleConfig';
 import { AlertBell } from './AlertBell';
@@ -77,6 +78,7 @@ const setupMenus = [
   { key: 'users', label: 'Users', icon: User },
   { key: 'roles', label: 'Roles', icon: Shield },
   { key: 'monitoring', label: 'Monitoring', icon: MonitorDot },
+  { key: 'settings', label: 'Settings', icon: Sliders },
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({

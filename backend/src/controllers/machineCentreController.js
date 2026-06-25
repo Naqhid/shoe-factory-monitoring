@@ -146,10 +146,12 @@ exports.getMachineStatus = async (req, res) => {
          mca.*,
          e.name as operator_name,
          wc.name as line_name,
+         mc.name as process_name,
          mca.updated_at as last_activity
        FROM machine_centre_app mca
        LEFT JOIN employees e ON mca.emp_id = e.code
        LEFT JOIN work_centres wc ON mca.work_centre_id = wc.id
+       LEFT JOIN machine_centres mc ON mca.machine_id = mc.machine_id
        WHERE mca.machine_id = ? 
          AND mca.prod_date = CURDATE()
          AND mca.button_status IN (1, 3)

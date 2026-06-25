@@ -23,6 +23,7 @@ interface ProductionStatus {
   button_status: number;
   operator_name?: string;
   line_name?: string;
+  process_name?: string;
   updated_at?: string;
 }
 
@@ -271,7 +272,7 @@ export const MachineCentreProduction: React.FC = () => {
         {/* Header Section */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl shadow-xl p-4 md:p-6">
           <h1 className="text-xl md:text-2xl font-bold text-center mb-3">MACHINE CENTRE PRODUCTION</h1>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
             <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
               <Factory className="h-4 w-4 flex-shrink-0" />
               <div className="min-w-0">
@@ -291,6 +292,13 @@ export const MachineCentreProduction: React.FC = () => {
               <div className="min-w-0">
                 <p className="text-xs opacity-80">Machine ID</p>
                 <p className="font-semibold truncate">{status.machine_id}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">
+              <Factory className="h-4 w-4 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs opacity-80">Process</p>
+                <p className="font-semibold truncate">{status.process_name || 'N/A'}</p>
               </div>
             </div>
             <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2">

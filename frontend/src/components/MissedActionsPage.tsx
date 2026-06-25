@@ -279,7 +279,16 @@ type ResolvedIssueFlash = {
 
 export const MissedActionsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'machines'>('live');
+  const [activeTab, setActiveTab] = React.useState<'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'machines'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'daily') return 'daily';
+    if (tab === 'live') return 'live';
+    if (tab === 'discipline') return 'discipline';
+    if (tab === 'reminder' || tab === 'settings') return 'reminder';
+    if (tab === 'machines') return 'machines';
+    return 'live';
+  });
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSilentRefreshing, setIsSilentRefreshing] = React.useState(false);
   const [isActionLoading, setIsActionLoading] = React.useState<string | null>(null);
@@ -395,15 +404,14 @@ export const MissedActionsPage: React.FC = () => {
     }
   }, [activeTab]);
 
+  // Persist active tab in URL so it survives page refresh
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab');
-    if (tab === 'daily') setActiveTab('daily');
-    else if (tab === 'live') setActiveTab('live');
-    else if (tab === 'discipline') setActiveTab('discipline');
-    else if (tab === 'reminder' || tab === 'settings') setActiveTab('reminder');
-    else if (tab === 'operator') setActiveTab(DEFAULT_VISIBLE_MISSED_TAB);
-  }, []);
+    if (params.get('tab') !== activeTab) {
+      params.set('tab', activeTab);
+      window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+    }
+  }, [activeTab]);
 
   React.useEffect(() => {
     setOperatorRootScope({});

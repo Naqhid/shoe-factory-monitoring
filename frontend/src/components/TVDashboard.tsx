@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock, ClipboardList, RotateCcw, XCircle } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { HourlyOutputChart } from './HourlyOutputChart';
+import { loadEfficiencyThresholds, getEfficiencyBgClass } from '../utils/efficiencyColors';
 // import { TvPlanPacePanel } from './TvPlanPacePanel';
 import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
@@ -26,6 +27,9 @@ export const TVDashboard: React.FC = () => {
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(new Date());
+
+    // Load efficiency color thresholds on mount
+    useEffect(() => { loadEfficiencyThresholds(); }, []);
 
     const formatStoppageDetail = (detail?: string | null) => {
         if (!detail) return '';
@@ -968,15 +972,11 @@ export const TVDashboard: React.FC = () => {
                                             {formatInput(line.input)}
                                         </td>
                                         <td className="px-2 py-2 text-center">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
-                                                lineInputPercent >= 90 ? 'bg-green-500' : lineInputPercent >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`}>{lineInputPercent}%</span>
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${getEfficiencyBgClass(lineInputPercent)}`}>{lineInputPercent}%</span>
                                         </td>
                                         <td className="px-2 py-2 text-center font-bold text-green-600 tabular-nums">{line.output}</td>
                                         <td className="px-2 py-2 text-center">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${
-                                                Number(line.output_percentage) >= 90 ? 'bg-green-500' : Number(line.output_percentage) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`}>{line.output_percentage}%</span>
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${getEfficiencyBgClass(Number(line.output_percentage))}`}>{line.output_percentage}%</span>
                                         </td>
                                         {/* WIP — MES formula: Opening WIP + Input - Output */}
                                         <td className={`px-2 py-2 text-center font-bold tabular-nums ${
