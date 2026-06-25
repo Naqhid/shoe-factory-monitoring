@@ -32,7 +32,6 @@ const alertTypeLabel: Record<string, string> = {
   machine_offline: 'Machine Offline',
   machine_idle: 'Machine Idle',
   efficiency_low: 'Efficiency Low',
-  headcount_low: 'Headcount Low',
   target_at_risk: 'Target At Risk',
 };
 
@@ -41,6 +40,9 @@ const severityBadgeClass: Record<Severity, string> = {
   warning: 'bg-yellow-100 text-yellow-700',
   info: 'bg-blue-100 text-blue-700',
 };
+
+// Alert types to hide from the alert center
+const EXCLUDED_ALERT_TYPES = new Set(['headcount_low']);
 
 const severityIcon = (severity: Severity) => {
   if (severity === 'critical') return <AlertCircle className="h-4 w-4 text-red-500" />;
@@ -235,6 +237,7 @@ export const RealtimeAlertCenter: React.FC = () => {
         }
         const rows = mapLegacyAlertShape(Array.isArray(legacyJson.data) ? legacyJson.data : []);
         const filtered = rows.filter((row) => {
+          if (EXCLUDED_ALERT_TYPES.has(row.alert_type)) return false;
           const severityOk = severity === 'all' ? true : row.severity === severity;
           const typeOk = type === 'all' ? true : row.alert_type === type;
           const ackOk = includeAcknowledged ? true : Number(row.is_acknowledged || 0) === 0;
@@ -258,9 +261,10 @@ export const RealtimeAlertCenter: React.FC = () => {
         throw new Error(json.message || json.error || 'Failed to load realtime alerts');
       }
       const baseRows = Array.isArray(json.data) ? json.data : [];
-      setAlerts(enableGrouping ? normalizeAndGroupAlerts(baseRows) : baseRows);
+      const visibleRows = baseRows.filter((row: any) => !EXCLUDED_ALERT_TYPES.has(row.alert_type));
+      setAlerts(enableGrouping ? normalizeAndGroupAlerts(visibleRows) : visibleRows);
       const pagination = json.pagination || {};
-      const safeTotal = Number(pagination.total || baseRows.length || 0);
+      const safeTotal = Number(pagination.total || visibleRows.length || 0);
       const safeTotalPages = Number(pagination.totalPages || Math.max(1, Math.ceil(safeTotal / pageSize)));
       setTotalAlerts(safeTotal);
       setTotalPages(safeTotalPages);

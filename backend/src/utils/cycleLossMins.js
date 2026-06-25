@@ -106,6 +106,10 @@ async function aggregateWorkCentreCycleLoss(pool, workCentreId, date) {
       AND mcp.button_status = 2
       AND mcp.start_time IS NOT NULL
       AND mcp.finish_time IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM machine_centres mc2
+        WHERE mc2.machine_id = mcp.machine_id AND mc2.work_centre_id = mcp.work_centre_id
+      )
     ORDER BY mcp.machine_id, mcp.start_time
     `,
     [workCentreId, date]
@@ -255,6 +259,10 @@ async function aggregateMachineCycleLosses(pool, workCentreId, date, now = new D
       AND mcp.button_status = 2
       AND mcp.start_time IS NOT NULL
       AND mcp.finish_time IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM machine_centres mc2
+        WHERE mc2.machine_id = mcp.machine_id AND mc2.work_centre_id = mcp.work_centre_id
+      )
     ORDER BY mcp.machine_id, mcp.start_time
     `,
     [workCentreId, date]
