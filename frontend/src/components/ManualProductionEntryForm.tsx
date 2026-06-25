@@ -2854,83 +2854,94 @@ export const ManualProductionEntryForm: React.FC = () => {
               ) : auditLogs.length === 0 ? (
                 <p className="text-sm text-gray-500">No audit logs found.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {auditLogs.map((log) => (
-                    <div key={log.id} className="border border-gray-200 rounded-lg p-3">
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
-                        <div className="col-span-2 md:col-span-1">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${getAuditActionBadgeClass(log.action)}`}>
-                            {log.action}
-                          </span>
-                        </div>
-                        <div><strong>Entry:</strong> {log.entry_id ?? '-'}</div>
-                        <div><strong>User:</strong> {log.actor_username || '-'}</div>
-                        <div><strong>Role:</strong> {log.actor_role || '-'}</div>
-                        <div><strong>Time:</strong> {formatDisplayDateTime(log.created_at)} IST</div>
+                    <div key={log.id} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                      {/* Header row */}
+                      <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-gray-100">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide ${getAuditActionBadgeClass(log.action)}`}>
+                          {log.action}
+                        </span>
+                        <span className="text-sm text-gray-700"><span className="font-semibold text-gray-500">Entry:</span> #{log.entry_id ?? '-'}</span>
+                        <span className="text-sm text-gray-700"><span className="font-semibold text-gray-500">User:</span> {log.actor_username || '-'}</span>
+                        <span className="text-sm text-gray-700"><span className="font-semibold text-gray-500">Role:</span> {log.actor_role || '-'}</span>
+                        <span className="ml-auto text-xs text-gray-500">{formatDisplayDateTime(log.created_at)} IST</span>
                       </div>
-                      {log.action === 'DELETE' ? (
-                        <div className="mt-2">
-                          <button
-                            type="button"
-                            onClick={() => setRestoreCandidate(log)}
-                            disabled={loading}
-                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2.5 py-1 rounded text-xs font-semibold disabled:opacity-50"
-                          >
-                            Restore Entry
-                          </button>
-                        </div>
-                      ) : null}
-                      {log.reason ? <p className="text-sm mt-1"><strong>Reason:</strong> {log.reason}</p> : null}
-                      <div className="mt-2 overflow-x-auto">
-                        <table className="min-w-full text-xs border border-gray-200 rounded">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="text-left px-2 py-1 border-b">Field</th>
-                              <th className="text-left px-2 py-1 border-b">Before</th>
-                              <th className="text-left px-2 py-1 border-b">After</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {toAuditChanges(log).map((row) => (
-                              <tr key={`${log.id}-${row.key}`} className="border-b">
-                                <td className="px-2 py-1 font-medium text-gray-700">{row.label}</td>
-                                <td className="px-2 py-1 text-gray-600">{row.beforeValue}</td>
-                                <td className="px-2 py-1 text-gray-900">{row.afterValue}</td>
+                      {/* Body */}
+                      <div className="px-4 py-3">
+                        {log.reason && (
+                          <p className="text-sm text-gray-700 mb-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                            <span className="font-semibold text-amber-800">Reason:</span> {log.reason}
+                          </p>
+                        )}
+                        {log.action === 'DELETE' && (
+                          <div className="mb-3">
+                            <button
+                              type="button"
+                              onClick={() => setRestoreCandidate(log)}
+                              disabled={loading}
+                              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm disabled:opacity-50"
+                            >
+                              Restore Entry
+                            </button>
+                          </div>
+                        )}
+                        {/* Changes table */}
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                          <table className="min-w-full text-sm">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-gray-200">
+                                <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">Field</th>
+                                <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">Before</th>
+                                <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">After</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      {showRawAuditJson ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 text-xs">
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="font-semibold text-gray-700">Before (Raw)</p>
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.before_data), null, 2), 'Before JSON copied')}
-                                className="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                              >
-                                Copy JSON
-                              </button>
-                            </div>
-                            <pre className="bg-gray-100 rounded p-2 overflow-auto max-h-40 font-mono text-[11px] leading-4">{JSON.stringify(parseAuditJson(log.before_data), null, 2)}</pre>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="font-semibold text-gray-700">After (Raw)</p>
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.after_data), null, 2), 'After JSON copied')}
-                                className="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                              >
-                                Copy JSON
-                              </button>
-                            </div>
-                            <pre className="bg-gray-100 rounded p-2 overflow-auto max-h-40 font-mono text-[11px] leading-4">{JSON.stringify(parseAuditJson(log.after_data), null, 2)}</pre>
-                          </div>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {toAuditChanges(log).map((row) => {
+                                const changed = row.beforeValue !== row.afterValue && row.afterValue !== '-';
+                                return (
+                                  <tr key={`${log.id}-${row.key}`} className={changed ? 'bg-blue-50/40' : ''}>
+                                    <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{row.label}</td>
+                                    <td className="px-3 py-2 text-gray-500 font-mono text-xs">{row.beforeValue}</td>
+                                    <td className={`px-3 py-2 font-mono text-xs ${changed ? 'text-blue-700 font-semibold' : 'text-gray-500'}`}>{row.afterValue}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
-                      ) : null}
+                        {/* Raw JSON (toggle) */}
+                        {showRawAuditJson && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-xs font-semibold text-gray-600">Before (Raw)</p>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.before_data), null, 2), 'Before JSON copied')}
+                                  className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                              <pre className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 overflow-auto max-h-36 font-mono text-[11px] leading-4 text-slate-700">{JSON.stringify(parseAuditJson(log.before_data), null, 2)}</pre>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-xs font-semibold text-gray-600">After (Raw)</p>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.after_data), null, 2), 'After JSON copied')}
+                                  className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                              <pre className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 overflow-auto max-h-36 font-mono text-[11px] leading-4 text-slate-700">{JSON.stringify(parseAuditJson(log.after_data), null, 2)}</pre>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

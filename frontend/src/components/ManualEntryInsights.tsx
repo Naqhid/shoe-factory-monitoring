@@ -35,15 +35,18 @@ export const ManualEntryReconciliationStrip: React.FC<{
   const show = rows.length === 1 ? rows : rows;
   return (
     <div className="mb-3 rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 via-white to-cyan-50 px-3 py-3 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-wider text-teal-800 mb-2">Today reconciliation</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-teal-800 mb-1">Today reconciliation</p>
+      <p className="text-[11px] text-teal-600 mb-2">
+        Mobile = total cycles from QR scan · Manual = total cycles from manual entries · Combined = Mobile + Manual · Plan = daily target from planning
+      </p>
       <div className={`grid gap-2 ${show.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
         {show.map((row) => (
           <div
             key={row.work_centre_id}
-            className="rounded-lg border border-teal-100 bg-white/90 px-3 py-2.5 grid grid-cols-2 sm:grid-cols-3 gap-2 text-center"
+            className="rounded-lg border border-teal-100 bg-white/90 px-3 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center"
           >
             {show.length > 1 && (
-              <p className="col-span-2 sm:col-span-3 text-left text-xs font-bold text-teal-900 truncate">
+              <p className="col-span-2 sm:col-span-4 text-left text-xs font-bold text-teal-900 truncate">
                 {row.line_name}
               </p>
             )}
@@ -62,27 +65,6 @@ export const ManualEntryReconciliationStrip: React.FC<{
             <div>
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Plan</p>
               <p className="text-lg font-black tabular-nums text-blue-700">{row.planTarget || '—'}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">Gap</p>
-              <p
-                className={`text-lg font-black tabular-nums ${
-                  row.planTarget > 0 && row.gap > 0 ? 'text-red-600' : row.gap < 0 ? 'text-emerald-600' : 'text-slate-700'
-                }`}
-              >
-                {row.planTarget > 0 ? (row.gap > 0 ? `-${row.gap}` : row.gap < 0 ? `+${Math.abs(row.gap)}` : '0') : '—'}
-              </p>
-            </div>
-            <div className="col-span-2 sm:col-span-1 flex items-center justify-center">
-              {row.planTarget > 0 && row.gap <= 0 ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full ring-1 ring-emerald-200">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> On plan
-                </span>
-              ) : row.planTarget > 0 ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 bg-red-50 px-2 py-1 rounded-full ring-1 ring-red-200">
-                  <AlertTriangle className="h-3.5 w-3.5" /> Behind
-                </span>
-              ) : null}
             </div>
           </div>
         ))}

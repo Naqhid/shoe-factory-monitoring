@@ -192,10 +192,12 @@ export function buildLineReconciliation(input: {
     let mesTotal = 0;
 
     input.cycles.forEach((c) => {
-      if (!machineIds.has(String(c.machine_id))) return;
+      // Include cycles by machine assignment OR by work_centre_id in the production record
+      const belongsToLine = machineIds.has(String(c.machine_id)) || Number((c as any).work_centre_id) === wcId;
+      if (!belongsToLine) return;
       if (rowDateKey(c.start_time) !== input.dateKey) return;
       if (isManualProductionRow(c)) return;
-      mesTotal += Number(c.output_pairs || 0);
+      mesTotal += 1;
     });
 
     const manualTotal = input.manualEntries
@@ -203,8 +205,7 @@ export function buildLineReconciliation(input: {
         (m) =>
           (Number(m.work_centre_id) === wcId || machineIds.has(String(m.machine_id))) &&
           rowDateKey(m.prod_date || m.start_time) === input.dateKey
-      )
-      .reduce((s, m) => s + Number(m.output_pairs || 0), 0);
+      ).length;
 
     const combinedTotal = mesTotal + manualTotal;
     const planTarget = Number(input.planTargets[wcId] || 0);

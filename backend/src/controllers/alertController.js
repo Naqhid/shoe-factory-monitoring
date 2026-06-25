@@ -439,6 +439,9 @@ class AlertController {
         }
       }
 
+      // Exclude headcount_low alerts from the alert center
+      filteredRows = filteredRows.filter((row) => row.alert_type !== 'headcount_low');
+
       const totalCount = filteredRows.length;
       const start = (pageInt - 1) * limitInt;
       const end = start + limitInt;
