@@ -722,7 +722,7 @@ export const TVDashboard: React.FC = () => {
                     <div className="flex flex-row justify-between items-center mb-1.5 sm:mb-2 gap-2">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                             <h1 className="text-sm sm:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg tracking-tight truncate">{topSection.workCentreName}</h1>
-                            {topSection.styleName && (
+                            {topSection.styleName && topSection.workCentreName !== 'Overall Performance' && (
                                 <span className="text-xs sm:text-sm font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full truncate">
                                     {topSection.styleCode} — {topSection.styleName}
                                 </span>
@@ -834,44 +834,44 @@ export const TVDashboard: React.FC = () => {
                         {/* ── Target ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-0 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Target className="h-4 w-4 sm:h-7 sm:w-7 text-white mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Target</div>
+                            <div className="text-white text-[9px] sm:text-xs mb-0.5 font-medium truncate">Target</div>
                             <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.target}</div>
                         </div>
                         {/* ── Input (line input machine, e.g. 01 Quarter Zig Zag) ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-[50ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-cyan-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input</div>
-                            <div className="text-cyan-300 text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
+                            <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-[#67E8F9] mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input</div>
+                            <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
                                 {formatInput(topSection.input)}
                             </div>
                         </div>
                         {/* ── Input % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-75 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-sky-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input %</div>
-                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${overallInputPercent >= 90 ? 'text-green-300' : overallInputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                            <ArrowDownToLine className="h-4 w-4 sm:h-7 sm:w-7 text-[#FCD34D] mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white text-[9px] sm:text-xs mb-0.5 font-medium truncate">Input %</div>
+                            <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
                                 {overallInputPercent}%
                             </div>
                         </div>
                         {/* ── Output ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-100 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <TrendingUp className="h-4 w-4 sm:h-7 sm:w-7 text-green-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output</div>
+                            <TrendingUp className="h-4 w-4 sm:h-7 sm:w-7 text-[#4ADE80] mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output</div>
                             <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">{topSection.output}</div>
                         </div>
                         {/* ── Output % ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-150 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <Activity className="h-4 w-4 sm:h-7 sm:w-7 text-purple-300 mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output %</div>
-                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${topSection.outputPercent >= 90 ? 'text-green-300' : topSection.outputPercent >= 70 ? 'text-yellow-300' : 'text-red-300'}`}>
+                            <Activity className="h-4 w-4 sm:h-7 sm:w-7 text-[#FDA4AF] mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white text-[9px] sm:text-xs mb-0.5 font-medium truncate">Output %</div>
+                            <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
                                 {topSection.outputPercent}%
                             </div>
                         </div>
                         {/* ── WIP (MES formula) — replaces emoji slot, emoji moves inline ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-200 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
-                            <PackageOpen className={`h-4 w-4 sm:h-7 sm:w-7 mx-auto mb-0.5 sm:mb-1 drop-shadow-md ${wipTextClass(topSection.currentWip ?? 0, topSection.target)}`} />
-                            <div className="text-white/90 text-[9px] sm:text-xs mb-0.5 font-medium truncate">WIP</div>
-                            <div className={`text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none ${wipTextClass(topSection.currentWip ?? 0, topSection.target)}`}>
+                            <PackageOpen className="h-4 w-4 sm:h-7 sm:w-7 text-[#FCA5A5] mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
+                            <div className="text-white text-[9px] sm:text-xs mb-0.5 font-medium truncate">WIP</div>
+                            <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
                                 {formatWip(topSection.currentWip)}
                             </div>
                         </div>
@@ -914,7 +914,7 @@ export const TVDashboard: React.FC = () => {
                                     ? 'LINE PERFORMANCE'
                                     : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
                             </h3>
-                            {articlePill}
+                            {detailCarouselIndex !== 0 && articlePill}
                         </div>
                     )}
                     </div>
@@ -963,8 +963,12 @@ export const TVDashboard: React.FC = () => {
                                         style={{ animationDelay: `${Math.min(index, 12) * 55 + 40}ms` }}
                                     >
                                         <td className="px-2 py-2 font-semibold text-gray-800">{line.line_name}</td>
-                                        <td className="px-2 py-2 text-xs text-gray-500 truncate max-w-[100px]" title={line.style_name || ''}>
-                                            {line.style_code || '—'}
+                                        <td className="px-2 py-2 truncate max-w-[100px]" title={line.style_name || ''}>
+                                            {line.style_code ? (
+                                                <span className="inline-flex px-2.5 py-1 rounded-lg text-xs font-black bg-indigo-600 text-white shadow-sm">
+                                                    {line.style_code}
+                                                </span>
+                                            ) : '—'}
                                         </td>
                                         <td className="px-2 py-2 text-center font-bold text-blue-600 tabular-nums">{line.target}</td>
                                         {/* INPUT — live Heel Grip Machine quantity for this line */}
