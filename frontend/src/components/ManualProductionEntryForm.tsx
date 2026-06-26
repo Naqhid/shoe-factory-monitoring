@@ -70,6 +70,7 @@ import {
 interface WorkCentre {
   id: number;
   name: string;
+  eol_machine_id?: string | null;
 }
 
 interface MachineCentre {

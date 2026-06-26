@@ -1839,7 +1839,11 @@ export const Reports: React.FC = () => {
                   <Td center><span className="font-mono font-semibold text-slate-600">{row.machine_id}</span></Td>
                   <Td><span className="font-medium">{row.machine_name || '—'}</span></Td>
                   <Td center>{netBalanceBadge(net)}</Td>
-                  <Td muted>{row.time_loss_reason?.trim() ? row.time_loss_reason : '—'}</Td>
+                  <Td>{row.time_loss_reason?.trim() ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-100 text-amber-800 ring-1 ring-amber-200/80">
+                      {row.time_loss_reason}
+                    </span>
+                  ) : '—'}</Td>
                 </tr>
               );
             })}

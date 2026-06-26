@@ -507,6 +507,10 @@ const LogPage: React.FC = () => {
     );
   };
 
+  const removeLoginRow = (machineId: string) => {
+    setEditableLoginRows((prev) => prev.filter((row) => String(row.machine_id) !== String(machineId)));
+  };
+
   const operatorSelectOptions = React.useCallback(
     (row: EditableLoginRow) => {
       const lineEmployees = employeesForWorkCentre(row.work_centre_id);
@@ -807,6 +811,9 @@ const LogPage: React.FC = () => {
                             {yesterdayActivateResults && (
                               <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Result</th>
                             )}
+                            {!yesterdayActivateResults && (
+                              <th className="px-3 py-2 text-center text-[10px] font-bold text-slate-500 uppercase w-10"></th>
+                            )}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -869,6 +876,18 @@ const LogPage: React.FC = () => {
                                     ) : (
                                       '—'
                                     )}
+                                  </td>
+                                )}
+                                {!yesterdayActivateResults && (
+                                  <td className="px-3 py-2 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => removeLoginRow(String(row.machine_id))}
+                                      className="p-1 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition"
+                                      title="Remove this row from login"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
                                   </td>
                                 )}
                               </tr>
