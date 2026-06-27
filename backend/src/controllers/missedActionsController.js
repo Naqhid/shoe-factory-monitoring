@@ -8,7 +8,10 @@ const {
   effectiveAsOfForDateKey,
 } = require('../utils/cycleLossMins');
 
-const getIssueKey = (row, actionType) => `${row.session_id}__${row.machine_id}__${row.emp_code || 'NA'}__${actionType}`;
+const getIssueKey = (row, actionType) => {
+  const dateKey = new Date().toISOString().slice(0, 10);
+  return `${row.session_id}__${row.machine_id}__${row.emp_code || 'NA'}__${actionType}__${dateKey}`;
+};
 
 const toNumber = (value, fallback = 0) => {
   const n = Number(value);
@@ -554,13 +557,9 @@ exports.getWeeklyTrend = async (req, res, next) => {
       [endDate, endDate]
     );
     const inactiveByDay = {};
-    const lostByDay = {};
     cycleRows.forEach((r) => {
       const day = r.prod_date instanceof Date ? r.prod_date.toISOString().slice(0, 10) : String(r.prod_date).slice(0, 10);
       const startTs = new Date(r.start_time);
-      const finishTs = new Date(r.finish_time);
-      const actualMins = Math.max(0, (finishTs.getTime() - startTs.getTime()) / 60000);
-      const targetMins = Math.max(0, toNumber(r.target_mins, 0));
       const shiftStart = new Date(startTs); shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
       const baseline = r.prev_finish ? new Date(r.prev_finish) : shiftStart;
       const inactive = computeShiftInactiveMinutes({
@@ -569,9 +568,23 @@ exports.getWeeklyTrend = async (req, res, next) => {
         startReminderSecs: TIME_LOSS_START_GRACE_SECS,
       });
       inactiveByDay[day] = (inactiveByDay[day] || 0) + inactive;
-      const netLost = computeCycleNetLostMins(inactive, targetMins, actualMins);
-      lostByDay[day] = (lostByDay[day] || 0) + netLost;
     });
+
+    // Use dashboard-style machine loss calculation (same as TV dashboard & Reports time-loss)
+    const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE deleted_at IS NULL AND COALESCE(is_active, 1) = 1 ORDER BY id');
+    const dateKeys = enumerateDateKeys(
+      new Date(new Date(endDate + 'T00:00:00').getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      endDate
+    );
+    const lostByDay = {};
+    for (const dayKey of dateKeys) {
+      let dayLoss = 0;
+      for (const wc of wcRows) {
+        const machineLosses = await aggregateMachineCycleLosses(db, Number(wc.id), dayKey);
+        dayLoss += sumDashboardMachineLossMins(machineLosses);
+      }
+      lostByDay[dayKey] = dayLoss;
+    }
 
     const trend = rows.map((r) => {
       const day = r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day);

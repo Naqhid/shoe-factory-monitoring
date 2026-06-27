@@ -20,7 +20,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
   const effectiveRole = getEffectiveRole(userInfo);
   const isSupervisor = effectiveRole === 'Line Supervisor';
-  const canEditRework = effectiveRole === 'Admin' || effectiveRole === 'Line Supervisor' || effectiveRole === 'Quality';
+  const canEditRework = effectiveRole === 'Admin' || effectiveRole === 'Line Supervisor' || effectiveRole === 'Quality' || effectiveRole === 'Project Monitor';
   const canDeleteRework = effectiveRole === 'Admin';
   const supervisorWorkCentreId = userInfo?.work_centre_id ? String(userInfo.work_centre_id) : '';
 

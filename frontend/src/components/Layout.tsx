@@ -82,11 +82,11 @@ export const Layout: React.FC<LayoutProps> = ({
       {!sidebarOpen && !hideTopHeader && (
         <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 shadow-sm">
           {/* Top row: logo + user actions */}
-          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3">
-            <div className="flex items-center gap-2 pl-10 sm:pl-14">
+          <div className="flex items-center justify-between px-4 sm:px-4 py-2.5 sm:py-3">
+            <div className="flex items-center gap-2 pl-10 sm:pl-14 min-w-0 shrink">
               <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 shrink-0" />
               <div className="min-w-0">
-                <h1 className="text-sm sm:text-lg font-bold text-gray-800 leading-tight truncate" translate="yes">ProdPulse</h1>
+                <h1 className="text-lg sm:text-lg font-bold text-gray-800 leading-tight truncate" translate="yes">ProdPulse</h1>
                 <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block" translate="yes">Smart Production Tracking</p>
               </div>
             </div>
@@ -98,8 +98,10 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {/* User info and logout */}
             {user && (
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <LanguageSwitcher />
+              <div className="flex items-center gap-2 sm:gap-2 shrink-0">
+                <div className="hidden sm:block">
+                  <LanguageSwitcher />
+                </div>
                 {!hideAlertBell && <AlertBell />}
                 <div className="hidden lg:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
                   <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full">
@@ -113,21 +115,24 @@ export const Layout: React.FC<LayoutProps> = ({
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex items-center gap-1 px-2.5 sm:px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm"
+                  className="flex items-center justify-center gap-1 p-2 sm:px-3 sm:py-2 text-sm text-white bg-red-500 hover:bg-red-600 active:bg-red-700 rounded-lg transition-colors shadow-sm touch-manipulation"
                   title="Logout"
                   aria-label="Logout"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
                   <span className="hidden sm:inline">Logout</span>
                 </button>
               </div>
             )}
           </div>
 
-          {/* Mobile search row — visible only on small screens, centered */}
-          <div className="sm:hidden flex justify-center px-3 pb-2.5">
-            <div className="w-full max-w-sm">
+          {/* Mobile search + language row — visible only on small screens */}
+          <div className="sm:hidden flex items-center gap-2 px-4 pb-2.5">
+            <div className="flex-1 min-w-0">
               <GlobalSearch onSearchChange={setSearchQuery} />
+            </div>
+            <div className="shrink-0">
+              <LanguageSwitcher />
             </div>
           </div>
         </div>

@@ -1839,7 +1839,11 @@ export const Reports: React.FC = () => {
                   <Td center><span className="font-mono font-semibold text-slate-600">{row.machine_id}</span></Td>
                   <Td><span className="font-medium">{row.machine_name || '—'}</span></Td>
                   <Td center>{netBalanceBadge(net)}</Td>
-                  <Td muted>{row.time_loss_reason?.trim() ? row.time_loss_reason : '—'}</Td>
+                  <Td>{row.time_loss_reason?.trim() ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-100 text-amber-800 ring-1 ring-amber-200/80">
+                      {row.time_loss_reason}
+                    </span>
+                  ) : '—'}</Td>
                 </tr>
               );
             })}
@@ -2806,7 +2810,7 @@ export const Reports: React.FC = () => {
                         {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
                       </span>
                       <span className="text-[11px] font-medium text-slate-600">
-                        {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
+                        {pagination.total ? `${pagination.total} total ${pagination.total === 1 ? 'record' : 'records'}` : `${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
                       </span>
                     </div>
                   </div>
@@ -2852,7 +2856,7 @@ export const Reports: React.FC = () => {
                   <p className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
                     <ChevronRight className="h-3 w-3 shrink-0 rotate-90" />
                     {reportType === 'hourly-production'
-                      ? 'Scroll for hour columns · Date & line stay fixed on the left'
+                      ? 'Scroll for hourly output columns (9 AM – 7 PM) · Date & line stay fixed on the left'
                       : reportType === 'line-efficiency'
                         ? 'Scroll for all columns · Date, line & machine on the left'
                         : 'Scroll horizontally for all columns'}

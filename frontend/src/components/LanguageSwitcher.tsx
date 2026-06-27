@@ -76,26 +76,26 @@ export const LanguageSwitcher: React.FC = () => {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors text-sm w-full"
+          className="flex items-center gap-2 px-3 py-2.5 sm:px-2.5 sm:py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors text-sm w-full touch-manipulation"
           title="Select language"
         >
-          <Languages className="h-4 w-4 text-gray-500" />
-          <span>{currentLang.flag}</span>
-          <span className="hidden sm:inline text-gray-700 font-medium">{currentLang.label}</span>
+          <Languages className="h-5 w-5 sm:h-4 sm:w-4 text-gray-600" />
+          <span className="text-base sm:text-sm">{currentLang.flag}</span>
+          <span className="text-gray-700 font-medium text-sm">{currentLang.label}</span>
         </button>
 
         {open && (
-          <div className="absolute right-0 top-10 bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[140px] overflow-hidden">
+          <div className="absolute left-0 sm:right-0 sm:left-auto top-12 sm:top-10 bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] min-w-[160px] overflow-hidden">
             {LANGUAGES.map((lang) => (
               <button
                 key={lang.code}
                 type="button"
                 onClick={() => select(lang.code)}
-                className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${
+                className={`flex items-center gap-2.5 w-full px-4 py-3.5 sm:py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation ${
                   current === lang.code ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700'
                 }`}
               >
-                <span>{lang.flag}</span>
+                <span className="text-base">{lang.flag}</span>
                 <span>{lang.label}</span>
                 {current === lang.code && <span className="ml-auto text-blue-500">✓</span>}
               </button>

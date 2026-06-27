@@ -555,10 +555,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                       type="number"
                       min="0"
                       value={form.totalOutput}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, totalOutput: Number(e.target.value) || 0 }))
-                      }
-                      className={fieldCls}
+                      disabled
+                      className={`${fieldCls} bg-gray-100 cursor-not-allowed`}
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Bins completed: {binsCompleted(form.totalOutput, form.targetPairs)}

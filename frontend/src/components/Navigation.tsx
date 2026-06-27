@@ -209,9 +209,9 @@ export const Navigation: React.FC<NavigationProps> = ({
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      className="flex items-center justify-between w-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition-colors"
+      className="flex items-center justify-between w-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-700 hover:text-gray-900 transition-colors"
     >
-      <span>{label} <span className="text-gray-300 font-normal">({count})</span></span>
+      <span>{label} <span className="text-blue-500 font-semibold">({count})</span></span>
       <ChevronDown
         className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`}
       />

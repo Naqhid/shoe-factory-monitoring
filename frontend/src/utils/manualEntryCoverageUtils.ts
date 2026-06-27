@@ -166,13 +166,14 @@ export type LineReconciliation = {
   mesTotal: number;
   manualTotal: number;
   combinedTotal: number;
+  eolOutput: number;
   planTarget: number;
   gap: number;
 };
 
 export function buildLineReconciliation(input: {
   dateKey: string;
-  workCentres: Array<{ id: number; name: string }>;
+  workCentres: Array<{ id: number; name: string; eol_machine_id?: string | null }>;
   machines: Array<{ machine_id: string; work_centre_id?: number }>;
   manualEntries: ManualRow[];
   cycles: ProdRow[];
@@ -190,6 +191,8 @@ export function buildLineReconciliation(input: {
     );
 
     let mesTotal = 0;
+    let eolOutput = 0;
+    const eolMachineId = (wc as any).eol_machine_id || null;
 
     input.cycles.forEach((c) => {
       // Include cycles by machine assignment OR by work_centre_id in the production record
@@ -198,7 +201,25 @@ export function buildLineReconciliation(input: {
       if (rowDateKey(c.start_time) !== input.dateKey) return;
       if (isManualProductionRow(c)) return;
       mesTotal += 1;
+      // Count EOL machine output pairs for plan comparison
+      if (eolMachineId && String(c.machine_id) === String(eolMachineId)) {
+        eolOutput += Number(c.output_pairs || 0);
+      }
     });
+
+    // If no explicit EOL machine, fall back to checking machine name containing "output" or "final"
+    if (!eolMachineId && eolOutput === 0) {
+      input.cycles.forEach((c) => {
+        const belongsToLine = machineIds.has(String(c.machine_id)) || Number((c as any).work_centre_id) === wcId;
+        if (!belongsToLine) return;
+        if (rowDateKey(c.start_time) !== input.dateKey) return;
+        if (isManualProductionRow(c)) return;
+        const machineName = String((c as any).machine_name || '').toLowerCase();
+        if (machineName.includes('final output') || machineName.includes('output')) {
+          eolOutput += Number(c.output_pairs || 0);
+        }
+      });
+    }
 
     const manualTotal = input.manualEntries
       .filter(
@@ -209,7 +230,8 @@ export function buildLineReconciliation(input: {
 
     const combinedTotal = mesTotal + manualTotal;
     const planTarget = Number(input.planTargets[wcId] || 0);
-    const gap = planTarget > 0 ? planTarget - combinedTotal : 0;
+    // Gap is based on EOL output vs plan, not cycle count
+    const gap = planTarget > 0 ? planTarget - eolOutput : 0;
 
     return {
       work_centre_id: wcId,
@@ -217,6 +239,7 @@ export function buildLineReconciliation(input: {
       mesTotal,
       manualTotal,
       combinedTotal,
+      eolOutput,
       planTarget,
       gap,
     };
@@ -365,7 +388,7 @@ export function buildEndOfShiftChecklist(input: {
       id: 'plan-gap',
       severity: 'medium',
       title: 'Behind daily plan',
-      detail: `${behindPlan.map((r) => r.line_name).join(', ')} — combined output below plan target.`,
+      detail: `${behindPlan.map((r) => `${r.line_name} — EOL output ${r.eolOutput} vs plan ${r.planTarget}`).join('; ')}.`,
       count: totalGap,
       actionLabel: 'View totals',
     });

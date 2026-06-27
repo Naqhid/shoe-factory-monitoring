@@ -1180,38 +1180,45 @@ export const MissedActionsPage: React.FC = () => {
   }, [sortedFilteredItems]);
 
   const lineLossTrend = React.useMemo(() => {
-    const now = new Date();
+    // Fixed shift hours: 9 AM to 7 PM (10 hourly buckets)
+    const baseDate = new Date(dailyReportDate + 'T00:00:00');
     const bucketStarts: Date[] = [];
-    for (let i = 5; i >= 0; i -= 1) {
-      bucketStarts.push(new Date(now.getTime() - i * 60 * 60 * 1000));
+    for (let hour = 9; hour <= 18; hour++) {
+      const d = new Date(baseDate);
+      d.setHours(hour, 0, 0, 0);
+      bucketStarts.push(d);
     }
-    const rows = bucketStarts.map((start, idx) => {
-      const end = idx === bucketStarts.length - 1 ? now : bucketStarts[idx + 1];
+    const rawRows = bucketStarts.map((start) => {
+      const end = new Date(start);
+      end.setHours(start.getHours() + 1, 0, 0, 0);
       let inactive = 0;
       let extra = 0;
+      let total = 0;
       dailyEvents.forEach((event) => {
         const eventStart = event.start_time ? new Date(event.start_time) : null;
         if (!eventStart || Number.isNaN(eventStart.getTime())) return;
         if (eventStart >= start && eventStart < end) {
           inactive += Number(event.inactive_mins || 0);
           extra += Number(event.extra_mins || 0);
+          total += eventLostMins(event);
         }
       });
-      const total = dailyEvents.reduce((sum, event) => {
-        const eventStart = event.start_time ? new Date(event.start_time) : null;
-        if (!eventStart || Number.isNaN(eventStart.getTime())) return sum;
-        if (eventStart >= start && eventStart < end) return sum + eventLostMins(event);
-        return sum;
-      }, 0);
-      return {
-        label: `${start.getHours().toString().padStart(2, '0')}:00`,
-        inactive,
-        extra,
-        total,
-      };
+      const h = start.getHours();
+      const nextH = h + 1;
+      const fmt = (hr: number) => hr > 12 ? hr - 12 : hr;
+      const label = `${fmt(h)}-${fmt(nextH)}`;
+      return { label, inactive, extra, total };
     });
-    return rows;
-  }, [dailyEvents]);
+
+    // Normalize to match dashboard total (by_line lost_mins uses capped machine-level formula)
+    const rawSum = rawRows.reduce((s, r) => s + r.total, 0);
+    const dashboardTotal = totalLineLoss;
+    const scale = rawSum > 0 && dashboardTotal > 0 ? dashboardTotal / rawSum : 1;
+    return rawRows.map((r) => ({
+      ...r,
+      total: r.total * scale,
+    }));
+  }, [dailyEvents, dailyReportDate, totalLineLoss]);
 
   const dailyFilteredEvents = React.useMemo(() => {
     let rows = [...dailyEvents];
@@ -1229,8 +1236,11 @@ export const MissedActionsPage: React.FC = () => {
     if (dailyMyLineOnly && preferredDailyLine) {
       rows = rows.filter((r) => r.work_centre_name === preferredDailyLine);
     }
+    if (dailyBreachedOnly) {
+      rows = rows.filter((r) => r.inactive >= 15 || r.extra > 0);
+    }
     return rows;
-  }, [lineLossRows, dailyMyLineOnly, preferredDailyLine]);
+  }, [lineLossRows, dailyMyLineOnly, preferredDailyLine, dailyBreachedOnly]);
 
   const dailyVisibleSummary = React.useMemo(() => ({
     total_cycles: dailyVisibleLineRows.reduce((sum, r) => sum + Number(r.cycles || 0), 0),
@@ -1291,7 +1301,7 @@ export const MissedActionsPage: React.FC = () => {
       rootCauseCounts: Map<string, number>;
     };
     const map = new Map<string, Agg>();
-    dailyEvents.forEach((e) => {
+    dailyFilteredEvents.forEach((e) => {
       const key = e.employee_code || 'N/A';
       if (!map.has(key)) map.set(key, {
         employee_code: key,
@@ -1325,10 +1335,11 @@ export const MissedActionsPage: React.FC = () => {
         row.rootCauseCounts.set(rcLabel, (row.rootCauseCounts.get(rcLabel) || 0) + 1);
       }
     });
-    return Array.from(map.values())
+    let result = Array.from(map.values())
       .filter((r) => r.total_lost_mins > 0)
-      .sort((a, b) => b.total_lost_mins - a.total_lost_mins)
-      .map((r) => {
+      .sort((a, b) => b.total_lost_mins - a.total_lost_mins);
+    if (dailyTopOffendersOnly) result = result.slice(0, 5);
+    return result.map((r) => {
         const parts = [...r.rootCauseCounts.entries()]
           .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
           .map(([label, n]) => `${label} (${n}×)`);
@@ -1339,7 +1350,7 @@ export const MissedActionsPage: React.FC = () => {
         } = r;
         return { ...rest, root_cause_summary };
       });
-  }, [dailyEvents]);
+  }, [dailyFilteredEvents, dailyTopOffendersOnly]);
 
   const previousDayTrend = React.useMemo(() => {
     if (!weeklyTrend || weeklyTrend.length < 2) return null;
@@ -2034,7 +2045,7 @@ export const MissedActionsPage: React.FC = () => {
         </div>
       )}
       <div className="w-full space-y-5">
-        <div className="sticky top-0 z-10 -mx-3 sm:-mx-4 lg:-mx-6 px-3 sm:px-4 lg:px-6 pt-1 pb-3 bg-gradient-to-b from-slate-100 via-slate-100/95 to-transparent backdrop-blur-md">
+        <div className="-mx-3 sm:-mx-4 lg:-mx-6 px-3 sm:px-4 lg:px-6 pt-1 pb-3">
           <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm p-3 sm:p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -2846,6 +2857,7 @@ export const MissedActionsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setDailyTopOffendersOnly((v) => !v)}
+                  title="Show only the top 5 lines/operators with the highest time loss"
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyTopOffendersOnly ? 'bg-red-100 text-red-800 border-red-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
                 >
                   Top offenders only
@@ -2853,6 +2865,7 @@ export const MissedActionsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setDailyBreachedOnly((v) => !v)}
+                  title="Show only cycles that breached the 15-min start grace or exceeded target duration"
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyBreachedOnly ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
                 >
                   Breached only
@@ -2965,7 +2978,7 @@ export const MissedActionsPage: React.FC = () => {
                   <div className="p-3 space-y-3">
                     {dailyReportDate === dailyDateTo && (
                       <div>
-                        <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Today (Hourly)</p>
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Today (9 AM – 7 PM)</p>
                         <div className="space-y-2">
                           {lineLossTrend.map((bucket) => {
                             const max = Math.max(1, ...lineLossTrend.map((x) => x.total));
@@ -2974,7 +2987,7 @@ export const MissedActionsPage: React.FC = () => {
                               <div key={bucket.label}>
                                 <div className="flex items-center justify-between text-xs mb-1">
                                   <span className="text-gray-600">{bucket.label}</span>
-                                  <span className="font-semibold text-gray-800">{formatMinutes(bucket.total)}m</span>
+                                  <span className="font-semibold text-gray-800">{Math.round(bucket.total)}m</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div className="h-full bg-blue-500 rounded-full" style={{ width }} />
