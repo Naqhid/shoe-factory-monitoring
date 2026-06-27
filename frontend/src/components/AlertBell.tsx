@@ -58,12 +58,13 @@ export const AlertBell: React.FC = () => {
     <div className="relative">
       <button
         onClick={() => navigate('/alert_center')}
-        className="relative flex items-center justify-center w-9 h-9 rounded-full hover:bg-gray-100 transition-colors"
+        className="relative flex items-center justify-center w-11 h-11 sm:w-9 sm:h-9 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
         title="Open Alert Center"
+        aria-label={unreadCount > 0 ? `Notifications: ${unreadCount} unread` : 'Notifications'}
       >
-        <Bell className="h-5 w-5 text-gray-600" />
+        <Bell className="h-6 w-6 sm:h-5 sm:w-5 text-gray-700" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
+          <span className="absolute top-0 right-0 sm:-top-0.5 sm:-right-0.5 flex items-center justify-center min-w-[20px] h-[20px] sm:min-w-[18px] sm:h-[18px] px-1 text-[11px] sm:text-[10px] font-bold text-white bg-red-500 rounded-full leading-none shadow-sm animate-pulse">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

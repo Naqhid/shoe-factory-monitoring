@@ -2810,7 +2810,7 @@ export const Reports: React.FC = () => {
                         {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
                       </span>
                       <span className="text-[11px] font-medium text-slate-600">
-                        {pagination.total ? `${pagination.total} total records` : `${data.length} rows`}
+                        {pagination.total ? `${pagination.total} total ${pagination.total === 1 ? 'record' : 'records'}` : `${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
                       </span>
                     </div>
                   </div>
@@ -2856,7 +2856,7 @@ export const Reports: React.FC = () => {
                   <p className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
                     <ChevronRight className="h-3 w-3 shrink-0 rotate-90" />
                     {reportType === 'hourly-production'
-                      ? 'Scroll for hour columns · Date & line stay fixed on the left'
+                      ? 'Scroll for hourly output columns (9 AM – 7 PM) · Date & line stay fixed on the left'
                       : reportType === 'line-efficiency'
                         ? 'Scroll for all columns · Date, line & machine on the left'
                         : 'Scroll horizontally for all columns'}
