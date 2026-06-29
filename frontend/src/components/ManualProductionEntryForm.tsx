@@ -281,7 +281,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [prodFinishedView, setProdFinishedView] = React.useState<'all' | 'recent_finished' | 'last_finished'>('all');
   const [prodToDateFilter, setProdToDateFilter] = React.useState(getTodayLocalDate());
   const [prodPage, setProdPage] = React.useState(0);
-  const [prodPageSize, setProdPageSize] = React.useState(20);
+  const [prodPageSize, setProdPageSize] = React.useState(10);
   /** Which machine accordions are expanded (persisted across refresh after edit/save) */
   const [prodMachineAccordionOpen, setProdMachineAccordionOpen] = React.useState<Record<string, boolean>>({});
   const [editingProdId, setEditingProdId] = React.useState<number | null>(null);
@@ -526,6 +526,10 @@ export const ManualProductionEntryForm: React.FC = () => {
     if (value === null || value === undefined || value === '') return '-';
     if (key === 'machine_id') {
       return formatMachineDisplay(value);
+    }
+    if (key === 'target_mins') {
+      const num = Number(value);
+      return Number.isFinite(num) ? num.toFixed(1) : String(value);
     }
     if (key.includes('time') || key.includes('date')) {
       const parsed = new Date(value);
@@ -2542,7 +2546,7 @@ export const ManualProductionEntryForm: React.FC = () => {
           </div>
         ) : null}
         <div className="mb-4">
-          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3">
               <button
                 type="button"
                 onClick={() => withDiscardCheck(() => setActiveTab('entries'))}
@@ -2796,19 +2800,19 @@ export const ManualProductionEntryForm: React.FC = () => {
           </div>
           </>
           ) : activeTab === 'audit' ? (
-            <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5 sm:p-4">
+              <div className="flex flex-col gap-2 mb-3">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Manual Entry Audit Logs</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {auditEntryId ? `Showing history for entry #${auditEntryId}` : 'Showing latest manual entry audit history'}
+                  <h3 className="text-base sm:text-lg font-bold text-gray-900">Audit Logs</h3>
+                  <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                    {auditEntryId ? `History for entry #${auditEntryId}` : 'Latest manual entry audit history'}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <button
                     type="button"
                     onClick={() => loadAuditLogs(auditEntryId || undefined)}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold"
                   >
                     Refresh
                   </button>
@@ -2816,8 +2820,8 @@ export const ManualProductionEntryForm: React.FC = () => {
                     type="text"
                     value={auditSearchInput}
                     onChange={(e) => setAuditSearchInput(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm w-40"
-                    placeholder="Search audit logs"
+                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs w-28 sm:w-40 min-w-0"
+                    placeholder="Search…"
                     title="Search by entry/user/role/reason/action"
                   />
                   <select
@@ -2826,29 +2830,28 @@ export const ManualProductionEntryForm: React.FC = () => {
                       setAuditLimit(e.target.value);
                       setAuditPage(1);
                     }}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white"
+                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
                     title="Rows per page"
                   >
-                    <option value="10">10 / page</option>
-                    <option value="20">20 / page</option>
-                    <option value="50">50 / page</option>
-                    <option value="100">100 / page</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
                     <option value="all">All</option>
                   </select>
                   <button
                     type="button"
                     onClick={handleExportAuditCsv}
-                    className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    className="bg-green-100 hover:bg-green-200 text-green-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold"
                     disabled={auditLogs.length === 0}
                   >
-                    Export Audit CSV
+                    CSV
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowRawAuditJson((prev) => !prev)}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold"
                   >
-                    {showRawAuditJson ? 'Hide Raw JSON' : 'Show Raw JSON'}
+                    {showRawAuditJson ? 'Hide JSON' : 'JSON'}
                   </button>
                 </div>
               </div>
@@ -2857,28 +2860,27 @@ export const ManualProductionEntryForm: React.FC = () => {
               ) : auditLogs.length === 0 ? (
                 <p className="text-sm text-gray-500">No audit logs found.</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {auditLogs.map((log) => (
                     <div key={log.id} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                       {/* Header row */}
-                      <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-gray-100">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide ${getAuditActionBadgeClass(log.action)}`}>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-slate-50 to-white border-b border-gray-100">
+                        <span className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wide ${getAuditActionBadgeClass(log.action)}`}>
                           {log.action}
                         </span>
-                        <span className="text-sm text-gray-700"><span className="font-semibold text-gray-500">Entry:</span> #{log.entry_id ?? '-'}</span>
-                        <span className="text-sm text-gray-700"><span className="font-semibold text-gray-500">User:</span> {log.actor_username || '-'}</span>
-                        <span className="text-sm text-gray-700"><span className="font-semibold text-gray-500">Role:</span> {log.actor_role || '-'}</span>
-                        <span className="ml-auto text-xs text-gray-500">{formatDisplayDateTime(log.created_at)} IST</span>
+                        <span className="text-xs sm:text-sm text-gray-700"><span className="font-semibold text-gray-500">#{log.entry_id ?? '-'}</span></span>
+                        <span className="text-xs text-gray-600">{log.actor_username || '-'} · {log.actor_role || '-'}</span>
+                        <span className="ml-auto text-[10px] sm:text-xs text-gray-500">{formatDisplayDateTime(log.created_at)}</span>
                       </div>
                       {/* Body */}
-                      <div className="px-4 py-3">
+                      <div className="px-3 sm:px-4 py-2.5 sm:py-3">
                         {log.reason && (
-                          <p className="text-sm text-gray-700 mb-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                          <p className="text-xs sm:text-sm text-gray-700 mb-2.5 bg-amber-50 border border-amber-100 rounded-lg px-2.5 sm:px-3 py-2">
                             <span className="font-semibold text-amber-800">Reason:</span> {log.reason}
                           </p>
                         )}
                         {log.action === 'DELETE' && (
-                          <div className="mb-3">
+                          <div className="mb-2.5">
                             <button
                               type="button"
                               onClick={() => setRestoreCandidate(log)}
@@ -2891,12 +2893,12 @@ export const ManualProductionEntryForm: React.FC = () => {
                         )}
                         {/* Changes table */}
                         <div className="overflow-x-auto rounded-lg border border-gray-200">
-                          <table className="min-w-full text-sm">
+                          <table className="min-w-full text-xs sm:text-sm">
                             <thead>
                               <tr className="bg-slate-50 border-b border-gray-200">
-                                <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">Field</th>
-                                <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">Before</th>
-                                <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">After</th>
+                                <th className="text-left px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-gray-500">Field</th>
+                                <th className="text-left px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-gray-500">Before</th>
+                                <th className="text-left px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-gray-500">After</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -2904,9 +2906,9 @@ export const ManualProductionEntryForm: React.FC = () => {
                                 const changed = row.beforeValue !== row.afterValue && row.afterValue !== '-';
                                 return (
                                   <tr key={`${log.id}-${row.key}`} className={changed ? 'bg-blue-50/40' : ''}>
-                                    <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{row.label}</td>
-                                    <td className="px-3 py-2 text-gray-500 font-mono text-xs">{row.beforeValue}</td>
-                                    <td className={`px-3 py-2 font-mono text-xs ${changed ? 'text-blue-700 font-semibold' : 'text-gray-500'}`}>{row.afterValue}</td>
+                                    <td className="px-2 sm:px-3 py-1.5 sm:py-2 font-medium text-gray-700 whitespace-nowrap text-xs">{row.label}</td>
+                                    <td className="px-2 sm:px-3 py-1.5 sm:py-2 text-gray-500 font-mono text-[10px] sm:text-xs break-all">{row.beforeValue}</td>
+                                    <td className={`px-2 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs break-all ${changed ? 'text-blue-700 font-semibold' : 'text-gray-500'}`}>{row.afterValue}</td>
                                   </tr>
                                 );
                               })}
@@ -3260,12 +3262,13 @@ export const ManualProductionEntryForm: React.FC = () => {
             </>
           )}
         </div>
+        {tableTotal > 10 && (
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-4 px-1 text-sm text-gray-600">
           <div className="text-xs sm:text-sm">
             Page <span className="font-semibold text-gray-800">{tablePage}</span> of{' '}
             <span className="font-semibold text-gray-800">{tableTotalPages}</span>
             <span className="text-gray-400 mx-1">·</span>
-            {manualEntries.length} on this page, {tableTotal} total
+            {tableTotal} total
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -3274,55 +3277,35 @@ export const ManualProductionEntryForm: React.FC = () => {
                 setTableLimit(e.target.value);
                 setTablePage(1);
               }}
-              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white shadow-sm"
+              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm bg-white shadow-sm"
               title="Rows per page"
             >
-              <option value="5">5 / page</option>
-              <option value="10">10 / page</option>
-              <option value="20">20 / page</option>
-              <option value="30">30 / page</option>
+              <option value="5">5/page</option>
+              <option value="10">10/page</option>
+              <option value="20">20/page</option>
+              <option value="30">30/page</option>
               <option value="all">All</option>
             </select>
             <button
               type="button"
               onClick={() => setTablePage((p) => Math.max(1, p - 1))}
               disabled={tableLimit === 'all' || tablePage <= 1 || loadingEntries}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-xs sm:text-sm shadow-sm"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-xs sm:text-sm shadow-sm"
             >
-              Previous
+              Prev
             </button>
-            <input
-              type="number"
-              min={1}
-              max={tableTotalPages}
-              value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
-              onBlur={() => {
-                const next = Math.max(1, Math.min(tableTotalPages, parseInt(pageInput, 10) || tablePage));
-                setTablePage(next);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const next = Math.max(1, Math.min(tableTotalPages, parseInt(pageInput, 10) || tablePage));
-                  setTablePage(next);
-                }
-              }}
-              disabled={tableLimit === 'all' || loadingEntries}
-              className="w-14 sm:w-16 px-2 py-1.5 rounded-lg border border-gray-200 text-center disabled:opacity-50 text-xs sm:text-sm bg-white shadow-sm"
-              title="Go to page"
-              aria-label="Page number"
-            />
-            <span className="text-xs text-gray-400">/ {tableTotalPages}</span>
+            <span className="text-xs tabular-nums">{tablePage}/{tableTotalPages}</span>
             <button
               type="button"
               onClick={() => setTablePage((p) => Math.min(tableTotalPages, p + 1))}
               disabled={tableLimit === 'all' || tablePage >= tableTotalPages || loadingEntries}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-xs sm:text-sm shadow-sm"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-xs sm:text-sm shadow-sm"
             >
               Next
             </button>
           </div>
         </div>
+        )}
         </>
         ) : null}
 
@@ -3844,7 +3827,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                           className="border border-gray-200 rounded-lg bg-white overflow-hidden"
                         >
                           <summary
-                            className="cursor-pointer list-none px-4 py-3 bg-gray-50 hover:bg-gray-100 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-gray-900 [&::-webkit-details-marker]:hidden"
+                            className="cursor-pointer list-none px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-50 hover:bg-gray-100 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm font-semibold text-gray-900 [&::-webkit-details-marker]:hidden"
                             onClick={(e) => {
                               e.preventDefault();
                               setProdMachineAccordionOpen((prev) => ({
@@ -3853,19 +3836,19 @@ export const ManualProductionEntryForm: React.FC = () => {
                               }));
                             }}
                           >
-                            <span className="flex items-start gap-2 min-w-0">
+                            <span className="flex items-start gap-1.5 sm:gap-2 min-w-0">
                               <ChevronRight
-                                className={`h-5 w-5 shrink-0 text-gray-500 mt-0.5 transition-transform duration-200 ${accOpen ? 'rotate-90' : ''}`}
+                                className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-gray-500 mt-0.5 transition-transform duration-200 ${accOpen ? 'rotate-90' : ''}`}
                                 aria-hidden
                               />
-                              <span>
-                                Machine {mid}{mName ? ` — ${mName}` : ''}
-                                <span className="font-normal text-gray-600 ml-2">
+                              <span className="min-w-0">
+                                <span className="font-mono text-[11px] sm:text-sm">{mid}</span>{mName ? <span className="text-gray-600 font-normal"> — {mName}</span> : ''}
+                                <span className="font-normal text-gray-500 ml-1.5 text-[10px] sm:text-xs">
                                   ({machineRows.length} cycle{machineRows.length !== 1 ? 's' : ''})
                                 </span>
                               </span>
                             </span>
-                            <span className="flex flex-wrap items-center gap-3 text-xs font-normal">
+                            <span className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-normal">
                               {machineHasLive ? (
                                 <span className="inline-flex items-center gap-1 text-amber-800 font-semibold">
                                   <span className="relative flex h-2 w-2">
@@ -3875,11 +3858,11 @@ export const ManualProductionEntryForm: React.FC = () => {
                                   Live
                                 </span>
                               ) : null}
-                              <span>Output: <strong className="text-gray-900">{sectionOutput}</strong></span>
-                              <span>Avg eff: {effBadge(sectionAvgEff)}</span>
+                              <span>Out: <strong className="text-gray-900">{sectionOutput}</strong></span>
+                              <span>Eff: {effBadge(sectionAvgEff)}</span>
                             </span>
                           </summary>
-                          <div className="overflow-x-auto">
+                          <div className="hidden sm:block overflow-x-auto">
                             <table className="min-w-full text-sm">
                               <thead className="bg-gray-50">
                                 <tr>
@@ -4025,6 +4008,45 @@ export const ManualProductionEntryForm: React.FC = () => {
                               </tbody>
                             </table>
                           </div>
+                          {/* Mobile cycle cards */}
+                          <div className="sm:hidden divide-y divide-gray-100">
+                            {machineRows.map((row: any) => {
+                              const rowStatus = Number(row.button_status || 0);
+                              const isActive = isProdCycleActive(rowStatus);
+                              const ctx = cycleContextMap.get(Number(row.id)) ?? {
+                                prevFinishTime: null,
+                                cycleNumber: 1,
+                                operatorChanged: false,
+                              };
+                              const metrics = analyzeProdCycle(row, ctx, prodLiveNow);
+                              const eff = isActive ? null : metrics.efficiencyPct;
+                              return (
+                                <div key={row.id} className={`px-3 py-2.5 ${isActive ? 'bg-amber-50/70' : metrics.isSuspicious ? 'bg-red-50/60' : ''}`}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-[10px] font-bold text-gray-400 tabular-nums">#{metrics.cycleNumber}</span>
+                                      <span className="text-xs text-gray-700 truncate">{row.emp_id}{row.employee_name ? ` – ${row.employee_name}` : ''}</span>
+                                      {isActive && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                          Live
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-xs font-bold tabular-nums text-blue-700">{Number(row.output_pairs || 0)} prs</span>
+                                  </div>
+                                  <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-500">
+                                    <span>{formatShortTime(row.start_time)} → {isActive ? 'now' : formatShortTime(row.finish_time)}</span>
+                                    <span>{metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
+                                    {eff != null && <span>Eff: {effBadge(eff)}</span>}
+                                    {metrics.anomalies.length > 0 && (
+                                      <span className="text-red-600 font-semibold">{metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </details>
                       );
                     })}
@@ -4052,22 +4074,22 @@ export const ManualProductionEntryForm: React.FC = () => {
                 <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-sm text-gray-600">
                   <span className="text-xs">
                     {machineCount} machine{machineCount !== 1 ? 's' : ''} · {visibleRows.length} cycle{visibleRows.length !== 1 ? 's' : ''}
-                    {prodPageSize !== -1 ? (
+                    {prodPageSize !== -1 && machineCount > prodPageSize ? (
                       <> · showing {groupedByMachine.length} machine{groupedByMachine.length !== 1 ? 's' : ''} on this page · page {safePage + 1} of {totalPages}</>
-                    ) : (
-                      <> · page {safePage + 1} of {totalPages}</>
-                    )}
+                    ) : null}
                   </span>
+                  {machineCount > 10 && (
                   <div className="flex items-center gap-2">
                     <select value={prodPageSize} onChange={e => { setProdPageSize(Number(e.target.value)); setProdPage(0); }} className="border border-gray-300 rounded px-2 py-1 text-xs bg-white">
-                      <option value={10}>10 machines/page</option>
-                      <option value={20}>20 machines/page</option>
-                      <option value={50}>50 machines/page</option>
-                      <option value={-1}>All machines</option>
+                      <option value={5}>5/page</option>
+                      <option value={10}>10/page</option>
+                      <option value={20}>20/page</option>
+                      <option value={-1}>All</option>
                     </select>
                     <button onClick={() => setProdPage(p => Math.max(0, p - 1))} disabled={safePage === 0 || prodPageSize === -1} className="px-2 py-1 rounded border border-gray-300 disabled:opacity-50 text-xs">Prev</button>
                     <button onClick={() => setProdPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1 || prodPageSize === -1} className="px-2 py-1 rounded border border-gray-300 disabled:opacity-50 text-xs">Next</button>
                   </div>
+                  )}
                 </div>
                 </>
               );
@@ -4110,7 +4132,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                 );
                 return null;
               })()}
-              <div className="overflow-x-auto">
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="min-w-full text-sm border border-gray-200 rounded-lg">
                   <thead className="bg-gray-50">
                     <tr>
@@ -4175,6 +4197,59 @@ export const ManualProductionEntryForm: React.FC = () => {
                     </tr>
                   </tfoot>
                 </table>
+              </div>
+              {/* Mobile card view for daily summary */}
+              <div className="sm:hidden space-y-2">
+                {summaryData.map((row: any) => {
+                  const pct = row.total_output > 0 ? Math.round((row.manual_output / row.total_output) * 100) : 0;
+                  const pctCls = pct > 50 ? 'bg-red-100 text-red-700' : pct > 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+                  return (
+                    <div key={row.machine_id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-gray-900">{row.machine_id}</span>
+                          {row.machine_name && <span className="text-[11px] text-gray-600 ml-1">{row.machine_name}</span>}
+                          <p className="text-[10px] text-gray-500 mt-0.5">{row.work_centre_name}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-lg font-black text-gray-900 tabular-nums leading-none">{row.total_output}</p>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">total out</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-4 gap-2 text-center">
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-gray-400">Real</p>
+                          <p className="text-xs font-semibold text-gray-700 tabular-nums">{row.real_output}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-orange-500">Manual</p>
+                          <p className="text-xs font-semibold text-orange-700 tabular-nums">{row.manual_output || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-gray-400">Manual%</p>
+                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${pctCls}`}>{pct}%</span>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-gray-400">Eff</p>
+                          {effBadge(row.avg_eff)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {summaryData.length > 0 && (
+                  <div className="rounded-xl border border-gray-300 bg-gray-50 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-700">Totals</span>
+                      <span className="text-sm font-black text-gray-900 tabular-nums">{summaryData.reduce((s: number, r: any) => s + r.total_output, 0)} pairs</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-600">
+                      <span>Real: {summaryData.reduce((s: number, r: any) => s + r.real_output, 0)}</span>
+                      <span>Manual: {summaryData.reduce((s: number, r: any) => s + r.manual_output, 0)}</span>
+                      <span>Cycles: {summaryData.reduce((s: number, r: any) => s + r.total_cycles, 0)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
             )}
