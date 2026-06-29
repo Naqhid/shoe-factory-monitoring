@@ -889,8 +889,8 @@ export const TVDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 grid grid-cols-4 gap-2 sm:gap-3 overflow-hidden min-w-0">
-            <div className="col-span-3 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
+            <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3 overflow-hidden min-w-0">
+            <div className="sm:col-span-3 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:80ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
             <div className="h-full min-h-0 flex flex-col bg-white rounded-xl shadow-lg border border-gray-100 ring-1 ring-slate-200/60 overflow-hidden">
                 <div className="flex-shrink-0 border-b border-gray-100 px-3 sm:px-4 pt-3 pb-2">
                     <div className="flex items-center justify-between gap-2 min-w-0 overflow-hidden">
@@ -1101,7 +1101,7 @@ export const TVDashboard: React.FC = () => {
             </div>
             </div>
 
-            <div className="col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
+            <div className="sm:col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
                 <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-gradient-to-b from-white to-slate-50 ring-1 ring-slate-200/60 overflow-hidden">
                     <div className="flex-shrink-0 mb-1 min-w-0">
                         <div className={`grid ${insightGridCols} gap-1 min-w-0`} role="tablist" aria-label="Time loss, rework, and breakdown">

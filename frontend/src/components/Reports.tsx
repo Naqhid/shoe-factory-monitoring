@@ -200,7 +200,7 @@ const REPORT_SUB_VIEWS: Partial<Record<ReportType, { value: ReportSubView; label
     { value: 'performance', label: 'Performance & efficiency' },
   ],
   'idle-stoppages': [
-    { value: 'time-loss', label: 'Time loss (TV)' },
+    { value: 'time-loss', label: 'Time loss' },
     { value: 'bottleneck', label: 'Bottleneck' },
     { value: 'breakdown', label: 'Breakdown' },
   ],
@@ -645,23 +645,88 @@ const formatExportCellValue = (key: string, value: unknown, fmtDateFn: (d: strin
 };
 
 export const Reports: React.FC = () => {
-  const defaultRange = getPresetRange('today');
-  const [fromDate, setFromDate] = React.useState(defaultRange.from);
-  const [toDate, setToDate] = React.useState(defaultRange.to);
-  const [datePreset, setDatePreset] = React.useState<DatePreset>('today');
-  const [reportType, setReportType] = React.useState<ReportType>(DEFAULT_VISIBLE_REPORT_TYPE);
-  const [reportSubView, setReportSubView] = React.useState<ReportSubView>(() => defaultSubViewFor('hourly-production'));
+  // Restore report tab from URL params or sessionStorage on mount to survive page refresh
+  const initialState = React.useMemo(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlReportType = params.get('reportType');
+      const urlSubView = params.get('subView');
+      const urlFromDate = params.get('fromDate');
+      const urlToDate = params.get('toDate');
+      const urlPreset = params.get('datePreset') as DatePreset | null;
+      const urlLine = params.get('workCentreId');
+      const urlMachine = params.get('machineId');
+      const urlSearch = params.get('search');
+      const urlLimit = params.get('limit');
+
+      if (urlReportType) {
+        const migrated = migrateReportTab(urlReportType);
+        const subViews = REPORT_SUB_VIEWS[migrated.tab];
+        const validSub = urlSubView && subViews?.some((s) => s.value === urlSubView) ? urlSubView : migrated.subView;
+        const range = urlFromDate && urlToDate ? { from: urlFromDate, to: urlToDate } : getPresetRange(urlPreset || 'today');
+        return {
+          reportType: migrated.tab,
+          reportSubView: validSub,
+          fromDate: range.from,
+          toDate: range.to,
+          datePreset: urlPreset || 'today' as DatePreset,
+          selectedLine: urlLine || '',
+          selectedMachine: urlMachine || '',
+          search: urlSearch || '',
+          limit: urlLimit && !Number.isNaN(Number(urlLimit)) ? Number(urlLimit) : 50,
+        };
+      }
+
+      // Fallback to sessionStorage
+      const session = sessionStorage.getItem('reports_active_tab');
+      if (session) {
+        const saved = JSON.parse(session);
+        const migrated = migrateReportTab(saved.reportType || '');
+        const subViews = REPORT_SUB_VIEWS[migrated.tab];
+        const validSub = saved.reportSubView && subViews?.some((s: any) => s.value === saved.reportSubView) ? saved.reportSubView : migrated.subView;
+        return {
+          reportType: migrated.tab,
+          reportSubView: validSub,
+          fromDate: saved.fromDate || getPresetRange('today').from,
+          toDate: saved.toDate || getPresetRange('today').to,
+          datePreset: saved.datePreset || 'today' as DatePreset,
+          selectedLine: saved.selectedLine || '',
+          selectedMachine: saved.selectedMachine || '',
+          search: saved.search || '',
+          limit: saved.limit || 50,
+        };
+      }
+    } catch { /* ignore */ }
+    const range = getPresetRange('today');
+    return {
+      reportType: DEFAULT_VISIBLE_REPORT_TYPE,
+      reportSubView: defaultSubViewFor(DEFAULT_VISIBLE_REPORT_TYPE),
+      fromDate: range.from,
+      toDate: range.to,
+      datePreset: 'today' as DatePreset,
+      selectedLine: '',
+      selectedMachine: '',
+      search: '',
+      limit: 50,
+    };
+  }, []);
+
+  const [fromDate, setFromDate] = React.useState(initialState.fromDate);
+  const [toDate, setToDate] = React.useState(initialState.toDate);
+  const [datePreset, setDatePreset] = React.useState<DatePreset>(initialState.datePreset);
+  const [reportType, setReportType] = React.useState<ReportType>(initialState.reportType);
+  const [reportSubView, setReportSubView] = React.useState<ReportSubView>(initialState.reportSubView);
   const apiReportType = React.useMemo(
     () => resolveApiReportType(reportType, reportSubView),
     [reportType, reportSubView]
   );
   const [workCentres, setWorkCentres] = React.useState<any[]>([]);
   const [machines, setMachines] = React.useState<any[]>([]);
-  const [selectedLine, setSelectedLine] = React.useState('');
-  const [selectedMachine, setSelectedMachine] = React.useState('');
-  const [search, setSearch] = React.useState('');
+  const [selectedLine, setSelectedLine] = React.useState(initialState.selectedLine);
+  const [selectedMachine, setSelectedMachine] = React.useState(initialState.selectedMachine);
+  const [search, setSearch] = React.useState(initialState.search);
   const [page, setPage] = React.useState(1);
-  const [limit, setLimit] = React.useState(50);
+  const [limit, setLimit] = React.useState(initialState.limit);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
   const searchTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [data, setData] = React.useState<any[] | null>(null);
@@ -784,53 +849,11 @@ export const Reports: React.FC = () => {
   }, [data, currentFilterSnapshot]);
 
   React.useEffect(() => {
+    // Restore compareMode from localStorage (other state is handled by initialState)
     try {
-      const params = new URLSearchParams(window.location.search);
-      const urlReportType = params.get('reportType');
-      const urlSubView = params.get('subView');
-      const urlFromDate = params.get('fromDate');
-      const urlToDate = params.get('toDate');
-      const urlSelectedLine = params.get('workCentreId');
-      const urlSelectedMachine = params.get('machineId');
-      const urlSearch = params.get('search');
-      const urlLimit = params.get('limit');
-      const urlPreset = params.get('datePreset') as DatePreset | null;
-
-      if (urlReportType) {
-        const migrated = migrateReportTab(urlReportType);
-        setReportType(migrated.tab);
-        const subViews = REPORT_SUB_VIEWS[migrated.tab];
-        const validSub = urlSubView && subViews?.some((s) => s.value === urlSubView) ? urlSubView : migrated.subView;
-        setReportSubView(validSub);
-      }
-      if (urlFromDate) setFromDate(urlFromDate);
-      if (urlToDate) setToDate(urlToDate);
-      if (urlSelectedLine) setSelectedLine(urlSelectedLine);
-      if (urlSelectedMachine) setSelectedMachine(urlSelectedMachine);
-      if (urlSearch) setSearch(urlSearch);
-      if (urlLimit && !Number.isNaN(Number(urlLimit))) setLimit(Number(urlLimit));
-      if (urlPreset) setDatePreset(urlPreset);
-
-      // If URL has report params, treat it as source-of-truth and skip localStorage restore.
-      if (urlReportType || urlFromDate || urlToDate || urlSelectedLine || urlSelectedMachine || urlSearch) return;
-
       const raw = localStorage.getItem(FILTER_STORAGE_KEY);
       if (!raw) return;
       const saved = JSON.parse(raw);
-      if (saved.reportType) {
-        const migrated = migrateReportTab(saved.reportType);
-        setReportType(migrated.tab);
-        setReportSubView(saved.reportSubView && REPORT_SUB_VIEWS[migrated.tab]?.some((s) => s.value === saved.reportSubView)
-          ? saved.reportSubView
-          : migrated.subView);
-      }
-      if (saved.fromDate) setFromDate(saved.fromDate);
-      if (saved.toDate) setToDate(saved.toDate);
-      if (saved.selectedLine) setSelectedLine(saved.selectedLine);
-      if (saved.selectedMachine) setSelectedMachine(saved.selectedMachine);
-      if (saved.search) setSearch(saved.search);
-      if (saved.limit) setLimit(saved.limit);
-      if (saved.datePreset) setDatePreset(saved.datePreset);
       if (saved.compareMode) setCompareMode(saved.compareMode);
     } catch {
       // ignore invalid stored state
@@ -860,6 +883,19 @@ export const Reports: React.FC = () => {
         compareMode,
       })
     );
+
+    // Save to sessionStorage so refresh always restores the active tab
+    sessionStorage.setItem('reports_active_tab', JSON.stringify({
+      reportType,
+      reportSubView,
+      fromDate,
+      toDate,
+      datePreset,
+      selectedLine,
+      selectedMachine,
+      search,
+      limit,
+    }));
 
     const params = new URLSearchParams();
     params.set('reportType', reportType);
@@ -1340,17 +1376,17 @@ export const Reports: React.FC = () => {
   const activeSubViewLabel = REPORT_SUB_VIEWS[reportType]?.find((s) => s.value === reportSubView)?.label;
 
   const filterLabelClass =
-    'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500';
+    'mb-1 block text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500';
   const filterInputClass =
-    'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm transition-shadow focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25';
+    'w-full rounded-lg sm:rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 py-2 sm:py-2.5 text-sm shadow-sm transition-shadow focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25';
   const presetBtnClass = (active: boolean) =>
-    `rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all ${
+    `rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all ${
       active
         ? `${activeColor.activeBg} ${activeColor.activeText} border-transparent shadow-sm`
-        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+        : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 shadow-sm'
     }`;
   const actionBtnBase =
-    'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50';
+    'inline-flex items-center justify-center gap-2 rounded-xl min-h-[2.5rem] px-4 py-2 text-sm font-semibold shadow-sm transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50';
   const secondaryBtnClass = `${actionBtnBase} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`;
   const exportBtnClass = `${actionBtnBase} border border-slate-700 bg-slate-800 text-white hover:bg-slate-900 disabled:bg-slate-300 disabled:text-slate-500 disabled:border-slate-300`;
 
@@ -1517,30 +1553,30 @@ export const Reports: React.FC = () => {
     const shareKpi = forceShareCapture && isMobile;
     return (
       <div
-        className={`grid gap-2 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-3 ${
+        className={`grid gap-1.5 sm:gap-2 border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-3 sm:px-4 py-2.5 sm:py-3 ${
           shareKpi
             ? 'grid-cols-2 gap-3 py-4'
-            : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 lg:gap-3'
+            : 'grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-3'
         }`}
       >
         {reportSummaryStats.map((stat) => (
           <div
             key={stat.label}
-            className={`rounded-xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-inset ring-white ${activeColor.border} ${
-              shareKpi ? 'px-4 py-3' : 'px-3 py-2.5'
+            className={`rounded-lg sm:rounded-xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-inset ring-white ${activeColor.border} ${
+              shareKpi ? 'px-4 py-3' : 'px-2 sm:px-3 py-2 sm:py-2.5'
             }`}
             style={{ borderLeftWidth: 3 }}
           >
             <p
               className={`font-bold uppercase tracking-[0.14em] text-slate-500 ${
-                shareKpi ? 'text-xs' : 'text-[10px]'
+                shareKpi ? 'text-xs' : 'text-[9px] sm:text-[10px]'
               }`}
             >
               {stat.label}
             </p>
             <p
-              className={`mt-1 font-black tabular-nums leading-none ${activeColor.text} ${
-                shareKpi ? 'text-3xl' : 'mt-0.5 text-xl sm:text-2xl'
+              className={`mt-0.5 font-black tabular-nums leading-none ${activeColor.text} ${
+                shareKpi ? 'text-3xl' : 'text-lg sm:text-2xl'
               }`}
             >
               {stat.value}
@@ -2379,29 +2415,29 @@ export const Reports: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-200/40 via-slate-50 to-slate-100 p-3 sm:p-6">
-      <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-5">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-b from-slate-200/40 via-slate-50 to-slate-100 p-2 sm:p-6">
+      <div className="mx-auto max-w-[1600px] space-y-3 sm:space-y-5">
 
         {/* Hero */}
-        <div className="overflow-hidden rounded-2xl border border-slate-800/50 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl">
+        <div className="overflow-hidden rounded-xl sm:rounded-2xl border border-slate-800/50 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl">
           <div className={`h-1 ${activeColor.activeBg}`} />
-          <div className="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="flex items-start gap-3">
-              <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/15">
-                <Sparkles className="h-6 w-6 text-amber-300" />
+          <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5 sm:gap-4">
+            <div className="flex items-start gap-2.5 sm:gap-3">
+              <div className="rounded-xl sm:rounded-2xl bg-white/10 p-2 sm:p-3 ring-1 ring-white/15">
+                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-amber-300" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Reports</h1>
-                <p className="mt-0.5 text-sm text-slate-300">Production analytics · export · share</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-white/20 ${activeColor.activeBg} text-white`}>
-                    <span className="flex h-4 w-4 items-center justify-center [&>svg]:h-3.5 [&>svg]:w-3.5">
+              <div className="min-w-0">
+                <h1 className="text-lg font-bold tracking-tight sm:text-2xl">Reports</h1>
+                <p className="mt-0.5 text-xs sm:text-sm text-slate-300 hidden sm:block">Production analytics · export · share</p>
+                <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-semibold ring-1 ring-white/20 ${activeColor.activeBg} text-white`}>
+                    <span className="flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center [&>svg]:h-3 [&>svg]:w-3 sm:[&>svg]:h-3.5 sm:[&>svg]:w-3.5">
                       {activeOption.icon}
                     </span>
                     {activeOption.label}
                     {activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
                   </span>
-                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-slate-200 ring-1 ring-white/10">
+                  <span className="rounded-full bg-white/10 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-medium text-slate-200 ring-1 ring-white/10">
                     {fmtDate(fromDate)} — {fmtDate(toDate)}
                   </span>
                 </div>
@@ -2409,7 +2445,7 @@ export const Reports: React.FC = () => {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {data && data.length > 0 && (
-                <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm ring-1 ring-white/15">
+                <div className="flex items-center gap-2 rounded-lg sm:rounded-xl bg-white/10 px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm ring-1 ring-white/15">
                   <span className={`h-2 w-2 rounded-full ${activeColor.activeBg}`} />
                   <span className="font-semibold tabular-nums">
                     {data.length} / {pagination.total || data.length} rows
@@ -2447,7 +2483,7 @@ export const Reports: React.FC = () => {
         )}
 
         {/* Report type picker */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-4 py-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <p className="shrink-0 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Report type</p>
@@ -2475,7 +2511,7 @@ export const Reports: React.FC = () => {
               </span>
             </div>
           </div>
-          <div className="flex gap-2.5 overflow-x-auto p-3 snap-x snap-mandatory [scrollbar-width:thin] sm:p-4">
+          <div className="grid grid-cols-2 gap-2 p-3 overflow-hidden sm:flex sm:flex-wrap sm:gap-2.5 sm:overflow-x-auto sm:snap-x sm:snap-mandatory sm:[scrollbar-width:thin] sm:p-4">
             {filteredReportOptions.map((opt) => {
               const c = COLOR_MAP[opt.color];
               const hoverBg = HOVER_BG_MAP[opt.color] || 'hover:bg-slate-50';
@@ -2485,16 +2521,16 @@ export const Reports: React.FC = () => {
                   key={opt.value}
                   type="button"
                   onClick={() => selectReportTab(opt.value)}
-                  className={`snap-start flex min-w-[118px] max-w-[128px] shrink-0 flex-col items-center gap-2 rounded-2xl border-2 p-3.5 text-center transition-all ${
+                  className={`min-w-0 flex flex-col items-center gap-1 rounded-xl border-2 p-2 text-center transition-all sm:snap-start sm:min-w-[118px] sm:max-w-[128px] sm:shrink-0 sm:gap-2 sm:rounded-2xl sm:p-3.5 ${
                     isActive
-                      ? `${c.activeBg} ${c.activeText} border-transparent shadow-lg ring-2 ring-offset-2 ring-slate-200`
+                      ? `${c.activeBg} ${c.activeText} border-transparent shadow-lg ring-2 ring-offset-1 ring-slate-200 sm:ring-offset-2`
                       : `border-slate-200/80 bg-white ${c.text} ${hoverBg} hover:border-slate-300 hover:shadow-md`
                   }`}
                 >
-                  <div className={`rounded-xl p-2 ${isActive ? 'bg-white/20 ring-1 ring-white/25' : c.bg}`}>
-                    {opt.icon}
+                  <div className={`rounded-lg p-1.5 sm:rounded-xl sm:p-2 ${isActive ? 'bg-white/20 ring-1 ring-white/25' : c.bg}`}>
+                    <span className="[&>svg]:h-4 [&>svg]:w-4 sm:[&>svg]:h-5 sm:[&>svg]:w-5">{opt.icon}</span>
                   </div>
-                  <span className="text-[11px] font-bold leading-tight tracking-tight">{opt.label}</span>
+                  <span className="line-clamp-2 text-[9px] font-bold leading-tight tracking-tight sm:text-[11px]">{opt.label}</span>
                 </button>
               );
             })}
@@ -2505,17 +2541,19 @@ export const Reports: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className={`border-b border-slate-100 px-4 py-3 ${activeColor.bg}`}>
             <div className="flex flex-wrap items-center gap-2">
               <Filter className={`h-4 w-4 ${activeColor.text}`} />
-              <span className={`text-sm font-bold ${activeColor.text}`}>
-                {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
-              </span>
-              <span className="text-xs font-medium text-slate-500">Filters & actions</span>
+              {reportType !== 'rework-rejection' && reportType !== 'idle-stoppages' && (
+                <span className={`text-sm font-bold ${activeColor.text}`}>
+                  {activeOption.label}{activeSubViewLabel ? ` · ${activeSubViewLabel}` : ''}
+                </span>
+              )}
+              <span className={`text-xs font-medium ${(reportType === 'rework-rejection' || reportType === 'idle-stoppages') ? `text-sm font-bold ${activeColor.text}` : 'text-slate-500'}`}>Filters & actions</span>
             </div>
           </div>
-          <div className="p-4 sm:p-5">
+          <div className="p-3 sm:p-5">
           {REPORT_SUB_VIEWS[reportType] && (
             <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-100 pb-4">
               <span className="w-full self-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500 sm:mr-1 sm:w-auto">
@@ -2533,7 +2571,7 @@ export const Reports: React.FC = () => {
               ))}
             </div>
           )}
-          <div className="mb-4 flex flex-wrap gap-2">
+          <div className="mb-3 sm:mb-4 flex flex-wrap gap-1.5 sm:gap-2">
             {([
               { key: 'today', label: 'Today' },
               { key: 'yesterday', label: 'Yesterday' },
@@ -2552,7 +2590,7 @@ export const Reports: React.FC = () => {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+          <div className="grid grid-cols-2 items-end gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             <div>
               <label className={filterLabelClass}>Line</label>
               <select value={selectedLine} onChange={(e) => setSelectedLine(e.target.value)} className={filterInputClass}>
@@ -2661,7 +2699,7 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5">
+          <div className="mt-4 sm:mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:pt-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <button
                 type="button"
@@ -2675,12 +2713,12 @@ export const Reports: React.FC = () => {
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart2 className="h-4 w-4" />}
                 Generate report
               </button>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
                 <button
                   type="button"
                   onClick={shareViaWhatsApp}
                   disabled={!data || data.length === 0 || isShareLoading}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#1da851] bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#20BD5A] active:scale-[0.98] disabled:opacity-40"
+                  className={`${actionBtnBase} border border-[#1da851] bg-[#25D366] text-white hover:bg-[#20BD5A]`}
                 >
                   {isShareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <WhatsAppIcon className="h-4 w-4 shrink-0" />}
                   WhatsApp
@@ -2800,7 +2838,7 @@ export const Reports: React.FC = () => {
                 : undefined
             }
           >
-            {!forceShareCapture && (
+            {!forceShareCapture && !(isMobile && (reportType === 'rework-rejection' || reportType === 'idle-stoppages')) && (
               <div className={`border-b px-4 py-3 ${activeColor.bg} ${activeColor.border}`}>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2.5">

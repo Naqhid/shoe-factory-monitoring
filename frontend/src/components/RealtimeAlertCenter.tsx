@@ -365,41 +365,41 @@ export const RealtimeAlertCenter: React.FC = () => {
   const unacknowledgedVisibleCount = alerts.filter((a) => Number(a.is_acknowledged || 0) === 0).length;
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+    <div className="p-2 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-3 sm:space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Realtime Alert Center</h2>
-          <p className="text-sm text-gray-500">Critical production alerts with acknowledge flow.</p>
+          <h2 className="text-base sm:text-xl font-bold text-gray-900">Alert Center</h2>
+          <p className="text-xs sm:text-sm text-gray-500">Critical production alerts with acknowledge flow.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
-            Unacknowledged Total: {unacknowledgedCount}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="px-2 sm:px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[11px] sm:text-xs font-semibold">
+            Unack: {unacknowledgedCount}
           </span>
           <button
             type="button"
             onClick={() => { void loadAlerts(); }}
-            className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+            className="px-2.5 sm:px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1.5"
           >
             <RefreshCw className="h-4 w-4" />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           {unacknowledgedVisibleCount > 0 && (
             <button
               type="button"
               onClick={() => openAcknowledgeDialog(visibleAlertIds)}
-              className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+              className="px-2.5 sm:px-3 py-2 rounded-lg bg-blue-600 text-white text-xs sm:text-sm hover:bg-blue-700"
             >
-              Acknowledge Visible ({unacknowledgedVisibleCount})
+              Ack All ({unacknowledgedVisibleCount})
             </button>
           )}
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border p-3 md:p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="bg-white rounded-xl border p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
         <select
           value={severity}
           onChange={(e) => setSeverity(e.target.value as 'all' | Severity)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          className="border border-gray-300 rounded-lg px-2.5 sm:px-3 py-2 text-sm"
         >
           <option value="all">All severities</option>
           <option value="critical">Critical</option>
@@ -409,71 +409,69 @@ export const RealtimeAlertCenter: React.FC = () => {
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          className="border border-gray-300 rounded-lg px-2.5 sm:px-3 py-2 text-sm"
         >
-          <option value="all">All alert types</option>
+          <option value="all">All types</option>
           <option value="over_target">Over Target</option>
           <option value="idle_too_long">Idle Too Long</option>
-          <option value="no_scan_heartbeat">No Cycle Update (Finish Pending)</option>
+          <option value="no_scan_heartbeat">Finish Pending</option>
           <option value="machine_offline">Machine Offline</option>
         </select>
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={includeAcknowledged}
-            onChange={(e) => setIncludeAcknowledged(e.target.checked)}
-          />
-          Show acknowledged
-        </label>
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
-          Auto-refresh (30s)
-        </label>
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={enableGrouping} onChange={(e) => setEnableGrouping(e.target.checked)} />
-          Group duplicates
-        </label>
         <select
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as 'sla' | 'newest')}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          className="border border-gray-300 rounded-lg px-2.5 sm:px-3 py-2 text-sm"
         >
-          <option value="sla">Sort by SLA severity</option>
-          <option value="newest">Sort by newest</option>
+          <option value="sla">Sort: SLA</option>
+          <option value="newest">Sort: Newest</option>
         </select>
         <select
           value={String(pageSize)}
           onChange={(e) => setPageSize(Number(e.target.value))}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          className="border border-gray-300 rounded-lg px-2.5 sm:px-3 py-2 text-sm"
         >
-          <option value="10">10 per page</option>
-          <option value="25">25 per page</option>
-          <option value="50">50 per page</option>
-          <option value="100">100 per page</option>
+          <option value="10">10/page</option>
+          <option value="25">25/page</option>
+          <option value="50">50/page</option>
+          <option value="100">100/page</option>
         </select>
+        <label className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-gray-700 col-span-1">
+          <input
+            type="checkbox"
+            checked={includeAcknowledged}
+            onChange={(e) => setIncludeAcknowledged(e.target.checked)}
+            className="h-3.5 w-3.5 rounded"
+          />
+          Acknowledged
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-gray-700 col-span-1">
+          <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="h-3.5 w-3.5 rounded" />
+          Auto-refresh
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-gray-700 col-span-1">
+          <input type="checkbox" checked={enableGrouping} onChange={(e) => setEnableGrouping(e.target.checked)} className="h-3.5 w-3.5 rounded" />
+          Group dupes
+        </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-gray-600">
         <span>
-          Showing page {page} of {totalPages} ({alerts.length} on this page, {totalAlerts} total)
-        </span>
-        <span className="font-medium text-gray-700">
-          Bell-matched unacknowledged count: {unacknowledgedCount}
+          Page {page}/{totalPages} · {totalAlerts} total
         </span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
+            className="px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50 text-xs sm:text-sm"
           >
-            Previous
+            Prev
           </button>
           <button
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
+            className="px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50 text-xs sm:text-sm"
           >
             Next
           </button>
@@ -525,46 +523,45 @@ export const RealtimeAlertCenter: React.FC = () => {
       ) : alerts.length === 0 ? (
         <div className="bg-white rounded-xl border p-10 text-center text-gray-500">No alerts for selected filters.</div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {alerts.map((alert) => (
-            <div key={alert.id} className="bg-white rounded-xl border p-4">
-              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                <div className="flex items-start gap-2">
-                  <div className="mt-0.5">{severityIcon(alert.severity)}</div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass[alert.severity]}`}>
+            <div key={alert.id} className="bg-white rounded-xl border p-3 sm:p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                <div className="flex items-start gap-2 min-w-0">
+                  <div className="mt-0.5 shrink-0">{severityIcon(alert.severity)}</div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass[alert.severity]}`}>
                         {alert.severity.toUpperCase()}
                       </span>
-                      <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] sm:text-xs bg-gray-100 text-gray-700 px-1.5 sm:px-2 py-0.5 rounded-full">
                         {alertTypeLabel[alert.alert_type] || alert.alert_type}
                       </span>
                       {Number(alert.occurrence_count || 0) > 1 && (
-                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                          {alert.occurrence_count} occurrences
+                        <span className="text-[10px] sm:text-xs bg-purple-100 text-purple-700 px-1.5 sm:px-2 py-0.5 rounded-full">
+                          ×{alert.occurrence_count}
                         </span>
                       )}
                       {Number(alert.is_acknowledged || 0) === 1 && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <span className="text-[10px] sm:text-xs bg-green-100 text-green-700 px-1.5 sm:px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
                           <CheckCircle2 className="h-3 w-3" />
-                          Acknowledged
+                          Ack
                         </span>
                       )}
                       {getSlaBadge(alert) && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${getSlaBadge(alert)?.cls}`}>
+                        <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full ${getSlaBadge(alert)?.cls}`}>
                           {getSlaBadge(alert)?.text}
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-900 mt-2">{formatAlertMessage(alert)}</p>
-                    <div className="text-xs text-gray-500 mt-2 flex flex-wrap gap-3">
+                    <p className="text-xs sm:text-sm text-gray-900 mt-1.5 sm:mt-2 break-words">{formatAlertMessage(alert)}</p>
+                    <div className="text-[10px] sm:text-xs text-gray-500 mt-1.5 sm:mt-2 flex flex-wrap gap-x-3 gap-y-1">
                       <span>Line: {alert.work_centre_name || '-'}</span>
                       <span>
                         Machine: {alert.machine_id || '-'}
                         {alert.machine_name ? ` - ${alert.machine_name}` : ''}
                       </span>
-                      <span>First seen: {new Date(alert.first_seen_at || alert.created_at).toLocaleString()}</span>
-                      <span>Last seen: {new Date(alert.last_seen_at || alert.created_at).toLocaleString()}</span>
+                      <span>First: {new Date(alert.first_seen_at || alert.created_at).toLocaleString()}</span>
                       {getAlertContextHint(alert) && <span>{getAlertContextHint(alert)}</span>}
                       {Number(alert.is_acknowledged || 0) === 1 && alert.acknowledged_at && (
                         <span>
@@ -573,22 +570,13 @@ export const RealtimeAlertCenter: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <div className="mt-2">
-                      <a
-                        href="/production_tracker"
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                        title="Open production tracker context"
-                      >
-                        Open in Production Tracker
-                      </a>
-                    </div>
                   </div>
                 </div>
                 {Number(alert.is_acknowledged || 0) === 0 && (
                   <button
                     type="button"
                     onClick={() => openAcknowledgeDialog(alert.alert_ids && alert.alert_ids.length ? alert.alert_ids : [alert.id])}
-                    className="px-3 py-2 rounded-lg border border-blue-300 text-blue-700 text-sm hover:bg-blue-50"
+                    className="self-start px-3 py-1.5 sm:py-2 rounded-lg border border-blue-300 text-blue-700 text-xs sm:text-sm hover:bg-blue-50 shrink-0"
                   >
                     Acknowledge
                   </button>

@@ -75,6 +75,13 @@ const gridLayout = (count: number) => {
   return { cols: 4, rows: Math.ceil(count / 4) };
 };
 
+/** Mobile: narrower grid (fewer columns) */
+const gridLayoutMobile = (count: number) => {
+  if (count <= 0) return { cols: 1, rows: 1 };
+  if (count <= 2) return { cols: 1, rows: count };
+  return { cols: 2, rows: Math.ceil(count / 2) };
+};
+
 const numClass = 'text-[clamp(0.65rem,1.65vw,1rem)] font-black leading-none';
 const slashClass = 'text-[clamp(0.6rem,1.5vw,0.9rem)] font-black text-slate-800 leading-none';
 
@@ -287,6 +294,14 @@ type GridTile =
 export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines, linePlan }) => {
   // Ensure thresholds are loaded (cached after first call)
   React.useEffect(() => { loadEfficiencyThresholds(); }, []);
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 640);
+
+  React.useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   const sorted = [...machines].sort((a, b) =>
     String(a.machineId).localeCompare(String(b.machineId), undefined, { numeric: true })
   );
@@ -297,11 +312,11 @@ export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines
     tiles.splice(insertAt, 0, { kind: 'line-plan', plan: linePlan });
   }
 
-  const { cols, rows } = gridLayout(tiles.length);
+  const { cols, rows } = isMobile ? gridLayoutMobile(tiles.length) : gridLayout(tiles.length);
 
   return (
-    <div className="w-full h-full min-h-0 flex flex-col overflow-hidden px-1.5 py-0.5">
-      <div className="flex-1 min-h-0 overflow-hidden">
+    <div className="w-full h-full min-h-0 flex flex-col overflow-hidden px-1 sm:px-1.5 py-0.5">
+      <div className="flex-1 min-h-0 overflow-auto sm:overflow-hidden">
         {tiles.length === 0 ? (
           <div className="h-full flex items-center justify-center text-sm text-slate-500 font-medium">
             No machines on this line.
@@ -311,7 +326,8 @@ export const TvMachinePacePanel: React.FC<TvMachinePacePanelProps> = ({ machines
             className="h-full grid gap-1 min-h-0"
             style={{
               gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+              gridTemplateRows: isMobile ? undefined : `repeat(${rows}, minmax(0, 1fr))`,
+              gridAutoRows: isMobile ? 'minmax(70px, auto)' : undefined,
             }}
           >
             {tiles.map((tile, idx) =>

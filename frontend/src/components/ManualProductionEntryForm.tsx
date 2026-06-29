@@ -1710,15 +1710,19 @@ export const ManualProductionEntryForm: React.FC = () => {
 
   const handleEdit = (row: ManualEntryRow) => {
     const start = new Date(row.start_time);
-    const derivedHour = Number.isNaN(start.getTime()) ? 0 : start.getHours();
-    const derivedMinute = Number.isNaN(start.getTime()) ? 0 : start.getMinutes();
+    const finish = new Date(row.finish_time);
+    const startValid = !Number.isNaN(start.getTime());
+    const finishValid = !Number.isNaN(finish.getTime());
     setShowForm(true);
     setEditingId(row.id);
     setEntryDate(parseProdDateKey(row.prod_date) || getTodayLocalDate());
     setWorkCentreId(String(row.work_centre_id));
     setMachineId(row.machine_id);
     setEmpId(row.emp_id);
-    setHourlySlot(`${pad2(Math.max(0, Math.min(23, derivedHour)))}:${pad2(derivedMinute)}`);
+    setSlotType('manual');
+    setManualStartTime(startValid ? `${pad2(start.getHours())}:${pad2(start.getMinutes())}` : '');
+    setManualFinishTime(finishValid ? `${pad2(finish.getHours())}:${pad2(finish.getMinutes())}` : '');
+    setHourlySlot('');
     setTargetMins(String(Number(row.target_mins || 0)));
     setOutputPairs(String(Number(row.output_pairs || 0)));
     setStoppageReason(
@@ -2538,21 +2542,20 @@ export const ManualProductionEntryForm: React.FC = () => {
           </div>
         ) : null}
         <div className="mb-4">
-          <div className="overflow-x-auto">
-            <div className="inline-flex min-w-max items-center gap-2 whitespace-nowrap mb-3">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => withDiscardCheck(() => setActiveTab('entries'))}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'entries' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold ${activeTab === 'entries' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
               >
-                Manual Entries
+                Entries
               </button>
               <button
                 type="button"
                 onClick={() => withDiscardCheck(() => { setActiveTab('coverage'); void loadTodayCoverage(); })}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5 ${activeTab === 'coverage' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100'}`}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold inline-flex items-center gap-1 sm:gap-1.5 ${activeTab === 'coverage' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100'}`}
               >
-                Coverage &amp; insights
+                Coverage
                 {shiftChecklistItems.length > 0 ? (
                   <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1">
                     {shiftChecklistItems.length}
@@ -2562,32 +2565,31 @@ export const ManualProductionEntryForm: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleOpenAudit()}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'audit' ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold ${activeTab === 'audit' ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}
               >
-                Audit Logs
+                Audit
               </button>
               <button
                 type="button"
                 onClick={() => withDiscardCheck(() => { setActiveTab('production'); loadProdRecords(); })}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'production' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold ${activeTab === 'production' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}
               >
-                Live Production Records
+                Live Production
               </button>
               <button
                 type="button"
                 onClick={() => withDiscardCheck(() => setActiveTab('summary'))}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'summary' ? 'bg-teal-600 text-white' : 'bg-teal-100 text-teal-800 hover:bg-teal-200'}`}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold ${activeTab === 'summary' ? 'bg-teal-600 text-white' : 'bg-teal-100 text-teal-800 hover:bg-teal-200'}`}
               >
                 Daily Summary
               </button>
               <button
                 type="button"
                 onClick={() => withDiscardCheck(() => setActiveTab('wip'))}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeTab === 'wip' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'}`}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold ${activeTab === 'wip' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'}`}
               >
-                WIP Management
+                WIP
               </button>
-            </div>
           </div>
 
           {activeTab === 'entries' ? (
@@ -3044,7 +3046,8 @@ export const ManualProductionEntryForm: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-[960px] w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -3204,6 +3207,57 @@ export const ManualProductionEntryForm: React.FC = () => {
                 </tfoot>
               </table>
             </div>
+            {/* Mobile card view */}
+            <div className="sm:hidden space-y-2 p-2">
+              {manualEntries.map((row) => (
+                <div key={row.id} className={`rounded-xl border p-3 shadow-sm ${conflictIds.has(row.id) ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-[11px] font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded-md ring-1 ring-blue-200">{row.machine_id}</span>
+                        {row.machine_name && <span className="text-[11px] font-medium text-gray-700">{row.machine_name}</span>}
+                        {conflictIds.has(row.id) && (
+                          <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold ring-1 ring-red-200">⚠ Conflict</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        <span className="font-medium text-gray-700">{row.work_centre_name || row.work_centre_id}</span>
+                        <span className="mx-1 text-gray-300">·</span>
+                        <span>{row.emp_id}{row.employee_name ? ` – ${row.employee_name}` : ''}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {canMutate && (
+                        <button type="button" onClick={() => handleEdit(row)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100" title="Edit">
+                          <Edit className="h-4 w-4" aria-hidden />
+                        </button>
+                      )}
+                      {canMutate && (
+                        <button type="button" onClick={() => { setDeleteCandidate(row); setDeleteReason(''); }} className="p-2 rounded-lg text-red-500 hover:bg-red-50 active:bg-red-100" title="Delete">
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-3 border-t border-gray-100 pt-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Date & Time</p>
+                      <p className="text-[11px] font-semibold text-gray-800 mt-0.5">{formatDisplayDate(row.prod_date)}</p>
+                      <p className="text-[11px] text-gray-600 tabular-nums">{formatShortTime(row.start_time)} → {formatShortTime(row.finish_time)}</p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Target</p>
+                      <p className="text-sm font-bold tabular-nums text-gray-700 mt-0.5">{Number(row.target_mins || 0).toFixed(1)}<span className="text-[10px] text-gray-400 ml-0.5">m</span></p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-blue-500">Output</p>
+                      <p className="text-lg font-black tabular-nums text-blue-700 mt-0.5 leading-none">{Number(row.output_pairs || 0)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            </>
           )}
         </div>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-4 px-1 text-sm text-gray-600">
@@ -4124,7 +4178,7 @@ export const ManualProductionEntryForm: React.FC = () => {
               </div>
             </>
             )}
-          </div>
+        </div>
         )}
       </div>
       </>

@@ -21,7 +21,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   const effectiveRole = getEffectiveRole(userInfo);
   const isSupervisor = effectiveRole === 'Line Supervisor';
   const canEditRework = effectiveRole === 'Admin' || effectiveRole === 'Line Supervisor' || effectiveRole === 'Quality' || effectiveRole === 'Project Monitor';
-  const canDeleteRework = effectiveRole === 'Admin';
+  const canDeleteRework = effectiveRole === 'Admin' || effectiveRole === 'Project Monitor';
   const supervisorWorkCentreId = userInfo?.work_centre_id ? String(userInfo.work_centre_id) : '';
 
   const [selectedDate, setSelectedDate] = useState(() => {
