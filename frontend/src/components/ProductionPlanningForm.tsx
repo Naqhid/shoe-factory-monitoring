@@ -718,25 +718,25 @@ export const ProductionPlanningForm: React.FC = () => {
       />
 
       <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 p-4 sm:p-5 shadow-sm mb-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-3 sm:gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 ring-1 ring-emerald-200">
-              <ClipboardList className="h-3.5 w-3.5 text-emerald-700" aria-hidden />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Daily plans</span>
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-0.5 sm:py-1 ring-1 ring-emerald-200">
+              <ClipboardList className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-700" aria-hidden />
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-800">Daily plans</span>
             </div>
-            <h1 className="mt-3 text-xl sm:text-2xl font-bold text-gray-900">Production Planning</h1>
-            <p className="text-sm text-gray-600 mt-1 max-w-2xl">
+            <h1 className="mt-2 sm:mt-3 text-xl sm:text-2xl font-bold text-gray-900">Production Planning</h1>
+            <p className="text-xs sm:text-sm text-gray-600 mt-1 max-w-2xl hidden sm:block">
               Set daily line targets by style and work centre — feeds TV dashboard EOD targets and production tracking.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handleAdd}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold shadow-sm"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold shadow-sm"
             >
               <Plus className="h-4 w-4" aria-hidden />
-              Add plan
+              <span>Add</span>
             </button>
             <input
               ref={fileInputRef}
@@ -749,16 +749,17 @@ export const ProductionPlanningForm: React.FC = () => {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={importing}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold shadow-sm disabled:opacity-50"
               title="Upload Excel: style, work_centre, plan_date, total_target_per_day, target_pairs_per_tray"
             >
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden />}
-              {importing ? 'Importing…' : 'Import Excel'}
+              <span className="sm:hidden">{importing ? '…' : 'Import'}</span>
+              <span className="hidden sm:inline">{importing ? 'Importing…' : 'Import Excel'}</span>
             </button>
             <button
               type="button"
               onClick={() => setShowTemplatePreview(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 text-sm font-semibold"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold"
             >
               <Download className="h-4 w-4" aria-hidden />
               Template
@@ -768,34 +769,34 @@ export const ProductionPlanningForm: React.FC = () => {
       </div>
 
       <>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-2 text-indigo-700">
-            <Layers className="h-4 w-4" aria-hidden />
-            <p className="text-[11px] font-bold uppercase tracking-wide">Total records</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <div className="rounded-xl border border-indigo-200 bg-white p-3 sm:p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-indigo-700">
+            <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+            <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-wide">Total records</p>
           </div>
-          <p className="text-3xl font-black text-indigo-900 mt-2 tabular-nums">{pagination.total}</p>
+          <p className="text-xl sm:text-3xl font-black text-indigo-900 mt-1.5 sm:mt-2 tabular-nums">{pagination.total}</p>
         </div>
-        <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-2 text-emerald-700">
-            <Calendar className="h-4 w-4" aria-hidden />
-            <p className="text-[11px] font-bold uppercase tracking-wide">Active (page)</p>
+        <div className="rounded-xl border border-emerald-200 bg-white p-3 sm:p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-emerald-700">
+            <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+            <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-wide">Active (page)</p>
           </div>
-          <p className="text-3xl font-black text-emerald-900 mt-2 tabular-nums">{pageStats.activeOnPage}</p>
+          <p className="text-xl sm:text-3xl font-black text-emerald-900 mt-1.5 sm:mt-2 tabular-nums">{pageStats.activeOnPage}</p>
         </div>
-        <div className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm col-span-2 lg:col-span-1">
-          <div className="flex items-center gap-2 text-blue-700">
-            <Target className="h-4 w-4" aria-hidden />
-            <p className="text-[11px] font-bold uppercase tracking-wide">Target sum (active)</p>
+        <div className="rounded-xl border border-blue-200 bg-white p-3 sm:p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-blue-700">
+            <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+            <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-wide">Target (active)</p>
           </div>
-          <p className="text-3xl font-black text-blue-900 mt-2 tabular-nums">{pageStats.targetOnPage.toLocaleString()}</p>
+          <p className="text-xl sm:text-3xl font-black text-blue-900 mt-1.5 sm:mt-2 tabular-nums">{pageStats.targetOnPage.toLocaleString()}</p>
         </div>
-        <div className="rounded-xl border border-rose-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-2 text-rose-700">
-            <Trash2 className="h-4 w-4" aria-hidden />
-            <p className="text-[11px] font-bold uppercase tracking-wide">Deleted (page)</p>
+        <div className="rounded-xl border border-rose-200 bg-white p-3 sm:p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-rose-700">
+            <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+            <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-wide">Deleted (page)</p>
           </div>
-          <p className="text-3xl font-black text-rose-900 mt-2 tabular-nums">{pageStats.deletedOnPage}</p>
+          <p className="text-xl sm:text-3xl font-black text-rose-900 mt-1.5 sm:mt-2 tabular-nums">{pageStats.deletedOnPage}</p>
         </div>
       </div>
 
@@ -976,7 +977,7 @@ export const ProductionPlanningForm: React.FC = () => {
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden sm:block">
           <table className="min-w-full">
             <thead className="bg-slate-50 border-b border-gray-200 sticky top-0 z-[1]">
               <tr>
@@ -1056,6 +1057,67 @@ export const ProductionPlanningForm: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile card view */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {plans.length === 0 && !refreshing && (
+            <div className="px-4 py-14 text-center">
+              <ClipboardList className="h-10 w-10 text-gray-300 mx-auto mb-2" aria-hidden />
+              <p className="text-sm font-semibold text-gray-700">No planning records found</p>
+              <p className="text-xs text-gray-500 mt-1">Add a plan or adjust filters.</p>
+            </div>
+          )}
+          {plans.map((p) => (
+            <div key={p.id} className={`p-3.5 ${p.is_deleted ? 'bg-rose-50/40' : 'bg-white'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold text-gray-900 truncate">{p.style_name}</span>
+                    {p.is_deleted ? (
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 ring-1 ring-rose-200">Deleted</span>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Active</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                    <Factory className="h-3 w-3 shrink-0" aria-hidden />
+                    {p.work_centre_name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {p.is_deleted ? (
+                    <button type="button" onClick={() => setRestoreId(p.id)} className="p-2 rounded-lg text-emerald-700 hover:bg-emerald-50" title="Restore">
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => handleEdit(p.id)} className="p-2 rounded-lg text-blue-700 hover:bg-blue-50" title="Edit">
+                        <Edit className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button type="button" onClick={() => handleDelete(p.id)} className="p-2 rounded-lg text-red-700 hover:bg-red-50" title="Delete">
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <div>
+                  <p className="text-[9px] font-bold uppercase text-gray-400">Target/day</p>
+                  <p className="text-sm font-bold text-blue-800 tabular-nums">{Number(p.total_target_per_day || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase text-gray-400">Pairs/tray</p>
+                  <p className="text-sm tabular-nums text-gray-700">{p.target_pairs_per_tray}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase text-gray-400">Date</p>
+                  <p className="text-xs tabular-nums text-gray-600">{formatPlanDateLabel(p.plan_date)}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
         <div className="border-t border-gray-200 px-3 py-2">
           <Pagination
             currentPage={currentPage}
@@ -1081,12 +1143,12 @@ export const ProductionPlanningForm: React.FC = () => {
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-2 sm:p-4"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4"
             onClick={() => setShowModal(false)}
             role="presentation"
           >
             <div
-              className="bg-white rounded-2xl w-full max-w-[min(100vw,1400px)] max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-[min(100vw,1400px)] h-[95vh] sm:h-auto sm:max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -1167,7 +1229,8 @@ export const ProductionPlanningForm: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  {/* Desktop table view */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-200 bg-white">
@@ -1290,6 +1353,140 @@ export const ProductionPlanningForm: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile stacked card view */}
+                  <div className="sm:hidden p-3 space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Plan date</label>
+                      <input
+                        type="date"
+                        value={planDate}
+                        onChange={(e) => setPlanDate(e.target.value)}
+                        className={cellInput}
+                        required
+                      />
+                    </div>
+                    {modalLines.map((line, idx) => (
+                      <div key={`plan-line-mobile-${idx}-${line.work_centre_id || 'new'}`} className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
+                        {modalLines.length > 1 && (
+                          <p className="text-[10px] font-bold uppercase text-gray-400">Line {idx + 1}</p>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="col-span-2">
+                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Style *</label>
+                            <select
+                              value={line.style_id}
+                              onChange={(e) => handleStyleChange(idx, e.target.value)}
+                              className={`${cellInput} ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50 focus:ring-red-300' : ''}`}
+                              required
+                            >
+                              <option value="">Select style</option>
+                              {styles.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                            {line.style_id && !line.smv_per_pair && (
+                              <p className="text-[10px] text-red-600 mt-0.5">No routing found</p>
+                            )}
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Work centre *</label>
+                            <select
+                              value={line.work_centre_id}
+                              onChange={(e) => updateLine(idx, { work_centre_id: e.target.value })}
+                              className={cellInput}
+                              required
+                            >
+                              <option value="">Select work centre</option>
+                              {workCentres.map((c) => (
+                                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Target *</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={line.total_target_per_day}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const tray = line.target_pairs_per_tray;
+                                const trayCount = val && tray ? String(Math.ceil(parseInt(val) / parseInt(tray))) : line.tray_count;
+                                updateLine(idx, { total_target_per_day: val, tray_count: trayCount });
+                              }}
+                              className={`${cellInput} tabular-nums`}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Pairs/tray *</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={line.target_pairs_per_tray}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const target = line.total_target_per_day;
+                                const trayCount = val && target ? String(Math.ceil(parseInt(target) / parseInt(val))) : line.tray_count;
+                                updateLine(idx, { target_pairs_per_tray: val, tray_count: trayCount });
+                              }}
+                              className={`${cellInput} tabular-nums`}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Trays</label>
+                            <input readOnly value={line.tray_count} className={`${cellReadOnly} tabular-nums font-semibold`} />
+                          </div>
+                        </div>
+                        {(line.customer_name || line.leather_name || line.color_name || line.group_name || line.man_hours_minutes || line.smv_per_pair) && (
+                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                            {line.customer_name && (
+                              <div>
+                                <p className="text-[9px] font-bold uppercase text-gray-400">Customer</p>
+                                <p className="text-xs text-gray-700 truncate">{line.customer_name}</p>
+                              </div>
+                            )}
+                            {line.color_name && (
+                              <div>
+                                <p className="text-[9px] font-bold uppercase text-gray-400">Color</p>
+                                <p className="text-xs text-gray-700 truncate">{line.color_name}</p>
+                              </div>
+                            )}
+                            {line.group_name && (
+                              <div>
+                                <p className="text-[9px] font-bold uppercase text-gray-400">Group</p>
+                                <p className="text-xs text-gray-700 truncate">{line.group_name}</p>
+                              </div>
+                            )}
+                            {line.man_hours_minutes && (
+                              <div>
+                                <p className="text-[9px] font-bold uppercase text-gray-400">Man hrs</p>
+                                <p className="text-xs font-semibold tabular-nums text-gray-700">{line.man_hours_minutes}</p>
+                              </div>
+                            )}
+                            {line.smv_per_pair && (
+                              <div>
+                                <p className="text-[9px] font-bold uppercase text-gray-400">SMV</p>
+                                <p className="text-xs font-semibold tabular-nums text-gray-700">{line.smv_per_pair}</p>
+                              </div>
+                            )}
+                            {line.leather_name && (
+                              <div>
+                                <p className="text-[9px] font-bold uppercase text-gray-400">Leather</p>
+                                <p className="text-xs text-gray-700 truncate">{line.leather_name}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
                   <p className="px-4 py-2.5 text-xs text-gray-500 border-t border-gray-100 bg-gray-50/80">

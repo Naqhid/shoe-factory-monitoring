@@ -297,6 +297,7 @@ export const MissedActionsPage: React.FC = () => {
   const [summary, setSummary] = React.useState({ total: 0, start_pending: 0, finish_pending: 0 });
   const [selectedLine, setSelectedLine] = React.useState<string>('all');
   const [issueFilter, setIssueFilter] = React.useState<'all' | 'START_PENDING' | 'FINISH_PENDING'>('all');
+  const [minOverdueMins, setMinOverdueMins] = React.useState<number>(5);
   const [liveSort, setLiveSort] = React.useState<'fix_first' | 'priority' | 'overdue' | 'machine'>('priority');
   const [liveAutoRefresh, setLiveAutoRefresh] = React.useState(true);
   const [liveLiveTick, setLiveLiveTick] = React.useState(0);
@@ -921,11 +922,12 @@ export const MissedActionsPage: React.FC = () => {
     wc.code ? `${wc.code} - ${wc.name}` : wc.name;
 
   const hasLiveFilters =
-    selectedLine !== 'all' || issueFilter !== 'all' || liveSort !== 'priority' || showMuted;
+    selectedLine !== 'all' || issueFilter !== 'all' || minOverdueMins > 0 || liveSort !== 'priority' || showMuted;
 
   const clearLiveFilters = () => {
     setSelectedLine('all');
     setIssueFilter('all');
+    setMinOverdueMins(0);
     setLiveSort('priority');
     setShowMuted(false);
   };
@@ -999,9 +1001,10 @@ export const MissedActionsPage: React.FC = () => {
     return visibleItems.filter((item) => {
       if (selectedLine !== 'all' && item.work_centre_name !== selectedLine) return false;
       if (issueFilter !== 'all' && item.action_type !== issueFilter) return false;
+      if (minOverdueMins > 0 && Number(item.overdue_mins || 0) < minOverdueMins) return false;
       return true;
     });
-  }, [visibleItems, selectedLine, issueFilter]);
+  }, [visibleItems, selectedLine, issueFilter, minOverdueMins]);
 
   const recurrenceMap = React.useMemo(() => {
     const map = new Map<string, number>();
@@ -2334,6 +2337,23 @@ export const MissedActionsPage: React.FC = () => {
                 ))}
               </select>
             </div>
+            <div className="w-full sm:w-auto sm:min-w-[140px]">
+              <label className={FILTER_LABEL}>Min overdue</label>
+              <select
+                value={minOverdueMins}
+                onChange={(e) => setMinOverdueMins(Number(e.target.value))}
+                className={FILTER_CONTROL}
+              >
+                <option value={0}>All</option>
+                <option value={5}>5+ mins</option>
+                <option value={10}>10+ mins</option>
+                <option value={15}>15+ mins</option>
+                <option value={20}>20+ mins</option>
+                <option value={30}>30+ mins</option>
+                <option value={45}>45+ mins</option>
+                <option value={60}>60+ mins</option>
+              </select>
+            </div>
             <div className="w-full md:w-auto md:flex-1">
               <label className={FILTER_LABEL}>Issue type</label>
               <div className="grid grid-cols-3 gap-2">
@@ -2409,9 +2429,10 @@ export const MissedActionsPage: React.FC = () => {
               </button>
             </div>
             </div>
-            {(selectedLine !== 'all' || issueFilter !== 'all' || liveSort !== 'priority') && (
+            {(selectedLine !== 'all' || issueFilter !== 'all' || minOverdueMins > 0 || liveSort !== 'priority') && (
               <div className="w-full flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-100">
                 {selectedLine !== 'all' && <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">Line: {selectedLine}</span>}
+                {minOverdueMins > 0 && <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-xs font-semibold">Overdue: {minOverdueMins}+ mins</span>}
                 {issueFilter !== 'all' && <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">Issue: {issueFilter === 'START_PENDING' ? 'Start pending' : 'Finish pending'}</span>}
                 {liveSort !== 'priority' && <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">Sort: {LIVE_SORT_LABELS[liveSort] || liveSort}</span>}
               </div>
@@ -3257,11 +3278,11 @@ export const MissedActionsPage: React.FC = () => {
                     <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Legend:</span>
                     <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
                       <span className="h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200 inline-block"></span>
-                      Active (entry ≤15 min)
+                      Active (entry ≤5 min)
                     </span>
                     <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
                       <span className="h-3.5 w-3.5 rounded-full bg-amber-400 ring-2 ring-amber-200 inline-block"></span>
-                      Idle &gt;15 min
+                      Idle &gt;5 min
                     </span>
                     <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
                       <span className="h-3.5 w-3.5 rounded-full bg-slate-300 ring-2 ring-slate-200 inline-block"></span>
@@ -3273,7 +3294,7 @@ export const MissedActionsPage: React.FC = () => {
                 {/* ── Floor Map + Table (combined, per line) ───────────── */}
                 {(() => {
                   const now = Date.now();
-                  const IDLE_THRESHOLD_MS = 15 * 60 * 1000;
+                  const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 
                   const getMachineColor = (m: any): 'green' | 'amber' | 'grey' => {
                     if (!m.active) return 'grey';
@@ -3358,7 +3379,7 @@ export const MissedActionsPage: React.FC = () => {
                                     type="button"
                                     onClick={() => setFloorMapMachine(machine)}
                                     title={`${machine.machine_id}${machine.machine_name ? ' – ' + machine.machine_name : ''}`}
-                                    className={`relative group flex flex-col items-center justify-center w-16 h-16 rounded-xl border transition-all hover:scale-105 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                                    className={`relative group flex flex-col items-center justify-center min-w-[4.5rem] max-w-[6.5rem] h-[4.5rem] px-1.5 rounded-xl border transition-all hover:scale-105 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 ${
                                       color === 'green'
                                         ? 'border-emerald-200 bg-emerald-50'
                                         : color === 'amber'
@@ -3366,21 +3387,21 @@ export const MissedActionsPage: React.FC = () => {
                                         : 'border-slate-200 bg-slate-50'
                                     }`}
                                   >
-                                    <span className={`relative h-4 w-4 rounded-full ${cls.dot} ring-2 ${cls.ring} mb-1`}>
+                                    <span className={`relative h-3.5 w-3.5 rounded-full ${cls.dot} ring-2 ${cls.ring} mb-0.5`}>
                                       {cls.pulse && (
                                         <span className={`absolute inset-0 rounded-full ${cls.dot} animate-ping opacity-60`}></span>
                                       )}
                                     </span>
-                                    <span className={`text-[10px] font-bold leading-tight text-center px-0.5 ${
+                                    <span className={`text-[9px] font-bold leading-tight text-center ${
                                       color === 'green' ? 'text-emerald-800' : color === 'amber' ? 'text-amber-800' : 'text-slate-500'
                                     }`}>
                                       {idLabel}
                                     </span>
-                                    {pairsMapForFloor.has(String(machine.machine_id)) && (
-                                      <span className={`text-[9px] font-semibold leading-none mt-0.5 ${
+                                    {machine.machine_name && (
+                                      <span className={`text-[8px] font-semibold leading-tight mt-0.5 text-center break-words ${
                                         color === 'green' ? 'text-emerald-700' : color === 'amber' ? 'text-amber-700' : 'text-slate-400'
                                       }`}>
-                                        {pairsMapForFloor.get(String(machine.machine_id))} pairs
+                                        {machine.machine_name}
                                       </span>
                                     )}
                                   </button>
@@ -3468,9 +3489,9 @@ export const MissedActionsPage: React.FC = () => {
           const now = Date.now();
           const msSince = m.last_entry_time ? now - new Date(m.last_entry_time).getTime() : null;
           const minsSince = msSince !== null ? Math.floor(msSince / 60000) : null;
-          const isGreen = m.active && msSince !== null && msSince <= 15 * 60 * 1000;
-          const isAmber = m.active && (msSince === null || msSince > 15 * 60 * 1000);
-          const colorLabel = isGreen ? 'Active' : isAmber ? 'Idle >15 min' : 'No activity today';
+          const isGreen = m.active && msSince !== null && msSince <= 5 * 60 * 1000;
+          const isAmber = m.active && (msSince === null || msSince > 5 * 60 * 1000);
+          const colorLabel = isGreen ? 'Active' : isAmber ? 'Idle >5 min' : 'No activity today';
           const colorBadge = isGreen
             ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
             : isAmber
@@ -3610,7 +3631,8 @@ export const MissedActionsPage: React.FC = () => {
                   Loading machines…
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                       <tr>
@@ -3715,6 +3737,102 @@ export const MissedActionsPage: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Mobile card view */}
+                <div className="sm:hidden divide-y divide-gray-100">
+                  {filteredReminderSettings.length === 0 && (
+                    <div className="px-4 py-10 text-center text-gray-500">No machines found.</div>
+                  )}
+                  {filteredReminderSettings.map((row) => {
+                    const draft = getReminderDraft(row);
+                    const isSaving = reminderSavingId === row.machine_id;
+                    const hasDraft = !!reminderDrafts[row.machine_id];
+                    return (
+                      <div key={row.machine_id} className="p-3 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-sm font-bold text-gray-900">{row.machine_id}</span>
+                            {row.machine_name && <span className="text-xs text-gray-500 ml-1.5">{row.machine_name}</span>}
+                            <p className="text-xs text-gray-500 mt-0.5">{row.work_centre_name || '—'}</p>
+                          </div>
+                          <div className="shrink-0">
+                            {row.is_custom || hasDraft ? (
+                              <span className="inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold">Custom</span>
+                            ) : (
+                              <span className="inline-flex px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold">Default</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-gray-400 mb-0.5">Idle min</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={120}
+                              value={draft.idle_interval_mins}
+                              onChange={(e) => patchReminderDraft(row.machine_id, { idle_interval_mins: Number(e.target.value) })}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-gray-400 mb-0.5">Idle sec</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={59}
+                              value={draft.idle_interval_secs_part}
+                              onChange={(e) => patchReminderDraft(row.machine_id, { idle_interval_secs_part: Number(e.target.value) })}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-gray-400 mb-0.5">Alarm sec</label>
+                            <input
+                              type="number"
+                              min={3}
+                              max={60}
+                              value={draft.alarm_duration_secs}
+                              onChange={(e) => patchReminderDraft(row.machine_id, { alarm_duration_secs: Number(e.target.value) })}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-gray-400 mb-0.5">Grace min</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={60}
+                              value={draft.finish_grace_mins}
+                              onChange={(e) => patchReminderDraft(row.machine_id, { finish_grace_mins: Number(e.target.value) })}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() => { void saveReminderSettings(row.machine_id); }}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSaving || (!row.is_custom && !hasDraft)}
+                            onClick={() => { void resetReminderSettings(row.machine_id); }}
+                            className="inline-flex px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                </>
               )}
             </div>
           </div>

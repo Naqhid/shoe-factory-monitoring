@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigation } from './Navigation';
-import { Activity, LogOut, User } from 'lucide-react';
+import { Activity, LogOut, RefreshCw, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AlertBell } from './AlertBell';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -80,7 +80,7 @@ export const Layout: React.FC<LayoutProps> = ({
     <>
       {/* Fixed header when sidebar is closed */}
       {!sidebarOpen && !hideTopHeader && (
-        <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 shadow-sm overflow-hidden">
           {/* Top row: logo + user actions */}
           <div className="flex items-center justify-between px-4 sm:px-4 py-2.5 sm:py-3">
             <div className="flex items-center gap-2 pl-10 sm:pl-14 min-w-0 shrink">
@@ -99,6 +99,19 @@ export const Layout: React.FC<LayoutProps> = ({
             {/* User info and logout */}
             {user && (
               <div className="flex items-center gap-2 sm:gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Force reload preserving current URL (bypasses beforeunload)
+                    window.onbeforeunload = null;
+                    window.location.reload();
+                  }}
+                  className="flex items-center justify-center p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 active:bg-blue-100 rounded-lg transition-colors touch-manipulation"
+                  title="Refresh page"
+                  aria-label="Refresh page"
+                >
+                  <RefreshCw className="h-5 w-5 sm:h-4 sm:w-4" />
+                </button>
                 <div className="hidden sm:block">
                   <LanguageSwitcher />
                 </div>
@@ -138,7 +151,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </div>
       )}
 
-      <div className="flex h-[100dvh] min-h-0 max-h-[100dvh] bg-gray-100 overflow-hidden">
+      <div className="flex h-[100dvh] min-h-0 max-h-[100dvh] bg-gray-100 overflow-hidden max-w-[100vw]">
         <Navigation
           activeMenu={activeMenu}
           sidebarOpen={sidebarOpen}
@@ -153,7 +166,7 @@ export const Layout: React.FC<LayoutProps> = ({
         {/* Main content area */}
         <div className={`flex-1 flex flex-col min-h-0 min-w-0 ${sidebarOpen ? 'lg:ml-64' : ''}`}>
           {/* Spacer for fixed header when sidebar is closed */}
-          {!sidebarOpen && !hideTopHeader && <div className="h-24 sm:h-16 flex-shrink-0"></div>}
+          {!sidebarOpen && !hideTopHeader && <div className="h-28 sm:h-16 flex-shrink-0"></div>}
           
           {/* Content wrapper — sole vertical scroll for app shell (disabled when fitViewport) */}
           <div

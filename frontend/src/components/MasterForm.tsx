@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Pagination } from './Pagination';
+import { getEffectiveRole } from '../utils/roleConfig';
 
 interface MasterRecord {
   id: number;
@@ -33,6 +34,9 @@ const USAGE_CHECK_TABLES = ['groups_master', 'leather', 'styles', 'colors', 'wor
 
 export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   const navigate = useNavigate();
+  const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
+  const effectiveRole = getEffectiveRole(userInfo);
+  const canCreate = !(table === 'work_centres' && effectiveRole === 'Project Monitor');
   const [records, setRecords] = React.useState<MasterRecord[]>([]);
   const [showForm, setShowForm] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<MasterRecord | null>(null);
@@ -408,7 +412,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
             </button>
             <button
               onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm"
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm ${!canCreate ? 'hidden' : ''}`}
             >
               <Plus className="h-4 w-4" />
               Add

@@ -64,7 +64,7 @@ export const AlertBell: React.FC = () => {
       >
         <Bell className="h-6 w-6 sm:h-5 sm:w-5 text-gray-700" />
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 sm:-top-0.5 sm:-right-0.5 flex items-center justify-center min-w-[20px] h-[20px] sm:min-w-[18px] sm:h-[18px] px-1 text-[11px] sm:text-[10px] font-bold text-white bg-red-500 rounded-full leading-none shadow-sm animate-pulse">
+          <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-[16px] sm:min-w-[14px] sm:h-[14px] px-0.5 text-[9px] sm:text-[8px] font-bold text-white bg-red-500 rounded-full leading-none shadow-sm animate-pulse">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

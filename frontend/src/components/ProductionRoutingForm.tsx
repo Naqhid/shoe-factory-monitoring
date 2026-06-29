@@ -762,27 +762,27 @@ export const ProductionRoutingForm: React.FC = () => {
         confirmText="Restore"
       />
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-6 shadow-sm ring-1 ring-slate-900/5 mb-5 overflow-hidden relative">
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-6 shadow-sm ring-1 ring-slate-900/5 mb-4 sm:mb-5 overflow-hidden relative">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/[0.03] via-transparent to-emerald-500/[0.04] pointer-events-none" aria-hidden />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="relative flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 ring-1 ring-indigo-100">
-              <Route className="h-3.5 w-3.5 text-indigo-600" aria-hidden />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-700">Style routing</span>
+            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-2.5 py-0.5 sm:px-3 sm:py-1 ring-1 ring-indigo-100">
+              <Route className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-indigo-600" aria-hidden />
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-indigo-700">Style routing</span>
             </div>
-            <h1 className="mt-3 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Production Routing</h1>
-            <p className="text-sm text-gray-600 mt-1.5 max-w-2xl leading-relaxed">
+            <h1 className="mt-2 sm:mt-3 text-xl sm:text-3xl font-bold text-gray-900 tracking-tight">Production Routing</h1>
+            <p className="text-xs sm:text-sm text-gray-600 mt-1 sm:mt-1.5 max-w-2xl leading-relaxed hidden sm:block">
               Define machine sequence, observed times, and SMV per style — feeds planning, targets, and production tracking.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handleAdd}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-sm font-semibold shadow-sm shadow-indigo-600/25 transition"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold shadow-sm shadow-indigo-600/25 transition"
             >
               <Plus className="h-4 w-4" aria-hidden />
-              Add routing
+              <span>Add</span>
             </button>
             <input
               ref={fileInputRef}
@@ -795,16 +795,17 @@ export const ProductionRoutingForm: React.FC = () => {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={importing}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-sm font-semibold shadow-sm shadow-emerald-600/20 disabled:opacity-50 transition"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold shadow-sm shadow-emerald-600/20 disabled:opacity-50 transition"
               title="Upload Excel with customer, style, machine, observed time, rating, manpower columns"
             >
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden />}
-              {importing ? 'Importing…' : 'Import Excel'}
+              <span className="sm:hidden">{importing ? '…' : 'Import'}</span>
+              <span className="hidden sm:inline">{importing ? 'Importing…' : 'Import Excel'}</span>
             </button>
             <button
               type="button"
               onClick={() => setShowTemplatePreview(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2.5 text-sm font-semibold shadow-sm transition"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold shadow-sm transition"
             >
               <Download className="h-4 w-4" aria-hidden />
               Template
@@ -813,7 +814,7 @@ export const ProductionRoutingForm: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-5">
         {(
           [
             {
@@ -858,15 +859,15 @@ export const ProductionRoutingForm: React.FC = () => {
           return (
             <div
               key={stat.label}
-              className={`rounded-2xl border bg-gradient-to-br p-4 shadow-sm ring-1 ring-black/[0.03] ${stat.card}`}
+              className={`rounded-xl sm:rounded-2xl border bg-gradient-to-br p-3 sm:p-4 shadow-sm ring-1 ring-black/[0.03] ${stat.card}`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className={`text-[10px] font-bold uppercase tracking-wider ${stat.labelCls}`}>{stat.label}</p>
-                  <p className={`text-2xl sm:text-3xl font-black mt-1.5 tabular-nums ${stat.valueCls}`}>{stat.value}</p>
+                  <p className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${stat.labelCls}`}>{stat.label}</p>
+                  <p className={`text-xl sm:text-3xl font-black mt-1 sm:mt-1.5 tabular-nums ${stat.valueCls}`}>{stat.value}</p>
                 </div>
-                <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center ${stat.iconWrap}`}>
-                  <Icon className="h-5 w-5" aria-hidden />
+                <div className={`h-8 w-8 sm:h-10 sm:w-10 shrink-0 rounded-lg sm:rounded-xl flex items-center justify-center ${stat.iconWrap}`}>
+                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden />
                 </div>
               </div>
             </div>
@@ -875,11 +876,11 @@ export const ProductionRoutingForm: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm ring-1 ring-black/[0.03] overflow-hidden relative min-h-[420px]">
-        <div className="px-4 sm:px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white flex flex-col gap-3">
           <div className="flex-1 min-w-0">
             <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Search routings</label>
             <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden />
+              <Search className="absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden />
               <input
                 type="text"
                 value={searchTerm}
@@ -887,14 +888,14 @@ export const ProductionRoutingForm: React.FC = () => {
                   setSearchTerm(e.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder="Style, customer, color, target, SMV…"
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/25"
+                placeholder="Style, customer, color…"
+                className="w-full pl-9 sm:pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/25"
               />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 lg:pt-5">
+          <div className="flex items-center gap-2">
             <label
-              className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-medium cursor-pointer select-none transition ${
+              className={`inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border px-3 sm:px-3.5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium cursor-pointer select-none transition flex-1 sm:flex-none justify-center sm:justify-start ${
                 showDeleted
                   ? 'border-rose-200 bg-rose-50 text-rose-800 ring-1 ring-rose-100'
                   : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -915,10 +916,10 @@ export const ProductionRoutingForm: React.FC = () => {
               type="button"
               onClick={fetchRoutings}
               disabled={refreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-4 py-2.5 text-sm font-semibold disabled:opacity-50 transition"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold disabled:opacity-50 transition flex-1 sm:flex-none"
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
-              {refreshing ? 'Refreshing…' : 'Refresh'}
+              {refreshing ? '…' : 'Refresh'}
             </button>
           </div>
         </div>
@@ -932,7 +933,7 @@ export const ProductionRoutingForm: React.FC = () => {
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden sm:block">
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-200 bg-gradient-to-r from-slate-100/90 to-slate-50/50">
@@ -1085,6 +1086,76 @@ export const ProductionRoutingForm: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile card view */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {routings.length === 0 && !refreshing && (
+            <div className="px-4 py-16 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
+                <Route className="h-7 w-7 text-indigo-400" aria-hidden />
+              </div>
+              <p className="mt-4 text-base font-semibold text-gray-800">No routing records found</p>
+              <p className="text-sm text-gray-500 mt-1.5">
+                {searchTerm || showDeleted ? 'Try adjusting your search or filters.' : 'Add a routing or import from Excel.'}
+              </p>
+            </div>
+          )}
+          {routings.map((r) => (
+            <div
+              key={r.id}
+              className={`p-4 ${r.is_deleted ? 'bg-rose-50/40' : 'bg-white'}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold text-gray-900 truncate">{r.style_name || '—'}</span>
+                    {r.is_deleted ? (
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 ring-1 ring-rose-200/80">Deleted</span>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80">Active</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-0.5 truncate">{r.customer_name}{r.group_name ? ` · ${r.group_name}` : ''}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {r.is_deleted ? (
+                    <button type="button" onClick={() => setRestoreId(r.id)} className="p-2 rounded-lg text-emerald-700 hover:bg-emerald-50" title="Restore">
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => handleEdit(r.id)} className="p-2 rounded-lg text-indigo-700 hover:bg-indigo-50" title="Edit">
+                        <Edit className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button type="button" onClick={() => handleDelete(r.id)} className="p-2 rounded-lg text-rose-700 hover:bg-rose-50" title="Delete">
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2.5 grid grid-cols-4 gap-2">
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-gray-400">Target</p>
+                  <p className="text-sm font-bold text-indigo-700 tabular-nums">{Number(r.target_per_day || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-gray-400">SMV</p>
+                  <p className="text-sm font-mono tabular-nums text-gray-700">{r.tot_smv ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-gray-400">Machines</p>
+                  <p className="text-sm font-bold tabular-nums text-violet-700">{r.line_count}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-gray-400">Color</p>
+                  <p className="text-xs font-medium text-gray-700 truncate">{r.color_name || '—'}</p>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-400 tabular-nums">{new Date(r.created_on).toLocaleDateString()}{r.leather_name ? ` · ${r.leather_name}` : ''}</p>
+            </div>
+          ))}
+        </div>
         <div className="border-t border-gray-100 bg-slate-50/50 px-4 sm:px-5 py-3">
           <Pagination
             currentPage={currentPage}
@@ -1106,7 +1177,7 @@ export const ProductionRoutingForm: React.FC = () => {
           role="presentation"
         >
           <div
-            className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-[min(100vw,1440px)] max-h-[96vh] sm:max-h-[94vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/10"
+            className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-[min(100vw,1440px)] h-[95vh] sm:h-auto sm:max-h-[94vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/10"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -1246,7 +1317,8 @@ export const ProductionRoutingForm: React.FC = () => {
                     </button>
                   </div>
 
-                  <div ref={routingTableRef} className="overflow-x-auto max-h-[min(52vh,520px)] overflow-y-auto overscroll-x-contain">
+                  {/* Desktop table view */}
+                  <div ref={routingTableRef} className="hidden sm:block overflow-x-auto max-h-[min(52vh,520px)] overflow-y-auto overscroll-x-contain">
                     <table className="w-full min-w-[1040px] text-sm table-fixed border-separate border-spacing-0">
                       <colgroup>
                         <col className="w-12" />
@@ -1384,6 +1456,96 @@ export const ProductionRoutingForm: React.FC = () => {
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile card view for routing lines */}
+                  <div ref={routingTableRef} className="sm:hidden max-h-[min(52vh,520px)] overflow-y-auto p-3 space-y-3">
+                    {lines.map((line, index) => {
+                      const rowId = line._rowId ?? index;
+                      const isHighlighted = highlightedRowId === rowId;
+                      const isEmptyRow = !line.machine_centre_id.trim();
+                      const machineName = machineCentres.find(m => (m.machine_id || String(m.id)) === line.machine_centre_id)?.machine_name || machineCentres.find(m => (m.machine_id || String(m.id)) === line.machine_centre_id)?.name || '';
+                      return (
+                        <div
+                          key={rowId}
+                          data-row-id={rowId}
+                          className={`rounded-xl border p-3 transition-colors duration-300 ${
+                            isHighlighted
+                              ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-200'
+                              : isEmptyRow
+                                ? 'border-amber-200 bg-amber-50/50'
+                                : 'border-gray-200 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-2.5">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">{index + 1}</span>
+                              {isHighlighted && <span className="rounded bg-indigo-600 px-1.5 py-px text-[8px] font-bold uppercase text-white shrink-0">New</span>}
+                              <div className="min-w-0 flex-1">
+                                <SearchableSelect
+                                  value={line.machine_centre_id}
+                                  options={buildMachineSelectOptions(machineCentres, lines, index)}
+                                  onChange={(val) => updateLine(index, 'machine_centre_id', val)}
+                                  placeholder="Select machine"
+                                  searchPlaceholder="Search by ID or name…"
+                                  footerCountLabel="machines"
+                                  compact
+                                  required
+                                  className="min-w-0 w-full"
+                                />
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeLine(index)}
+                              disabled={lines.length <= 1}
+                              className="inline-flex items-center justify-center rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:opacity-30 shrink-0"
+                              title="Remove line"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-sky-700 mb-0.5">Observed</label>
+                              <input type="number" min="0.01" step="0.01" value={line.observed_time} onChange={(e) => updateLine(index, 'observed_time', e.target.value)} className={routingTableInputClass} required />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-sky-700 mb-0.5">Rating %</label>
+                              <input type="number" min="0.01" max="200" step="0.01" value={line.rating_factor} onChange={(e) => updateLine(index, 'rating_factor', e.target.value)} className={routingTableInputClass} required />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-gray-500 mb-0.5">Manpower</label>
+                              <input type="number" min="0.1" step="0.1" value={line.manpower} onChange={(e) => updateLine(index, 'manpower', e.target.value)} className={routingTableInputClass} required />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-x-2 gap-y-1.5 mt-2 pt-2 border-t border-gray-100">
+                            <div>
+                              <label className="block text-[8px] font-bold uppercase text-violet-600 mb-0.5">Normal</label>
+                              <input type="number" min="0" step="any" value={line.normal_time_secs_pr} onChange={(e) => updateLine(index, 'normal_time_secs_pr', e.target.value)} className={calcCellClass(line, 'normal_time_secs_pr')} required />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold uppercase text-violet-600 mb-0.5">Std</label>
+                              <input type="number" min="0" step="any" value={line.std_time_secs_pr} onChange={(e) => updateLine(index, 'std_time_secs_pr', e.target.value)} className={calcCellClass(line, 'std_time_secs_pr')} required />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold uppercase text-violet-600 mb-0.5">Mins/6</label>
+                              <input type="number" min="0" step="any" value={line.mins_6_prs_box} onChange={(e) => updateLine(index, 'mins_6_prs_box', e.target.value)} className={calcCellClass(line, 'mins_6_prs_box')} required />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold uppercase text-violet-600 mb-0.5">Pr/hr</label>
+                              <input type="number" min="0" step="any" value={line.pairs_per_hr} onChange={(e) => updateLine(index, 'pairs_per_hr', e.target.value)} className={calcCellClass(line, 'pairs_per_hr')} required />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold uppercase text-violet-600 mb-0.5">Pr/day</label>
+                              <input type="number" min="0" step="any" value={line.pairs_per_day} onChange={(e) => updateLine(index, 'pairs_per_day', e.target.value)} className={calcCellClass(line, 'pairs_per_day')} required />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               </div>
