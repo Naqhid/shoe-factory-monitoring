@@ -800,7 +800,7 @@ export const ProductionPlanningForm: React.FC = () => {
         </div>
       </div>
 
-      {!planGaps.loading && (planGaps.today?.missingCount || planGaps.tomorrow?.missingCount) ? (
+      {!planGaps.loading && ((planGaps.today?.missingCount ?? 0) > 0 || (planGaps.tomorrow?.missingCount ?? 0) > 0) ? (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden />
@@ -1059,7 +1059,7 @@ export const ProductionPlanningForm: React.FC = () => {
         </div>
 
         {/* Mobile card view */}
-        <div className="sm:hidden divide-y divide-gray-100">
+        <div className="sm:hidden space-y-2 p-2">
           {plans.length === 0 && !refreshing && (
             <div className="px-4 py-14 text-center">
               <ClipboardList className="h-10 w-10 text-gray-300 mx-auto mb-2" aria-hidden />
@@ -1068,56 +1068,59 @@ export const ProductionPlanningForm: React.FC = () => {
             </div>
           )}
           {plans.map((p) => (
-            <div key={p.id} className={`p-3.5 ${p.is_deleted ? 'bg-rose-50/40' : 'bg-white'}`}>
+            <div key={p.id} className={`rounded-xl border p-3 shadow-sm ${p.is_deleted ? 'border-rose-200 bg-rose-50/40' : 'border-gray-200 bg-white'}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-gray-900 truncate">{p.style_name}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-sm font-bold text-gray-900">{p.style_name}</span>
                     {p.is_deleted ? (
-                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 ring-1 ring-rose-200">Deleted</span>
+                      <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 ring-1 ring-rose-200">Deleted</span>
                     ) : (
-                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Active</span>
+                      <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Active</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                    <Factory className="h-3 w-3 shrink-0" aria-hidden />
-                    {p.work_centre_name}
+                  <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
+                    <Factory className="h-3 w-3 shrink-0 text-gray-400" aria-hidden />
+                    <span className="font-medium text-gray-700">{p.work_centre_name}</span>
+                    <span className="text-gray-300 mx-0.5">·</span>
+                    <span className="tabular-nums">{formatPlanDateLabel(p.plan_date)}</span>
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-0.5 shrink-0">
                   {p.is_deleted ? (
-                    <button type="button" onClick={() => setRestoreId(p.id)} className="p-2 rounded-lg text-emerald-700 hover:bg-emerald-50" title="Restore">
+                    <button type="button" onClick={() => setRestoreId(p.id)} className="p-2 rounded-lg text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100" title="Restore">
                       <RotateCcw className="h-4 w-4" aria-hidden />
                     </button>
                   ) : (
                     <>
-                      <button type="button" onClick={() => handleEdit(p.id)} className="p-2 rounded-lg text-blue-700 hover:bg-blue-50" title="Edit">
+                      <button type="button" onClick={() => handleEdit(p.id)} className="p-2 rounded-lg text-blue-700 hover:bg-blue-50 active:bg-blue-100" title="Edit">
                         <Edit className="h-4 w-4" aria-hidden />
                       </button>
-                      <button type="button" onClick={() => handleDelete(p.id)} className="p-2 rounded-lg text-red-700 hover:bg-red-50" title="Delete">
+                      <button type="button" onClick={() => handleDelete(p.id)} className="p-2 rounded-lg text-red-500 hover:bg-red-50 active:bg-red-100" title="Delete">
                         <Trash2 className="h-4 w-4" aria-hidden />
                       </button>
                     </>
                   )}
                 </div>
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                <div>
-                  <p className="text-[9px] font-bold uppercase text-gray-400">Target/day</p>
-                  <p className="text-sm font-bold text-blue-800 tabular-nums">{Number(p.total_target_per_day || 0).toLocaleString()}</p>
+              <div className="mt-2.5 flex items-center border-t border-gray-100 pt-2.5">
+                <div className="flex-1">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-blue-500">Target/day</p>
+                  <p className="text-lg font-black text-blue-800 tabular-nums leading-none mt-0.5">{Number(p.total_target_per_day || 0).toLocaleString()}</p>
                 </div>
-                <div>
-                  <p className="text-[9px] font-bold uppercase text-gray-400">Pairs/tray</p>
-                  <p className="text-sm tabular-nums text-gray-700">{p.target_pairs_per_tray}</p>
+                <div className="px-4 text-center border-l border-gray-100">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Pairs/tray</p>
+                  <p className="text-sm font-bold tabular-nums text-gray-700 mt-0.5">{p.target_pairs_per_tray}</p>
                 </div>
-                <div>
-                  <p className="text-[9px] font-bold uppercase text-gray-400">Date</p>
-                  <p className="text-xs tabular-nums text-gray-600">{formatPlanDateLabel(p.plan_date)}</p>
+                <div className="px-4 text-center border-l border-gray-100">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Trays</p>
+                  <p className="text-sm font-bold tabular-nums text-gray-700 mt-0.5">{p.tray_count || '—'}</p>
                 </div>
               </div>
             </div>
           ))}
         </div>
+        {pagination.total > 10 && (
         <div className="border-t border-gray-200 px-3 py-2">
           <Pagination
             currentPage={currentPage}
@@ -1131,6 +1134,7 @@ export const ProductionPlanningForm: React.FC = () => {
             }}
           />
         </div>
+        )}
       </div>
       </>
 
@@ -1148,13 +1152,13 @@ export const ProductionPlanningForm: React.FC = () => {
             role="presentation"
           >
             <div
-              className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-[min(100vw,1400px)] h-[95vh] sm:h-auto sm:max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-[min(100vw,1400px)] max-h-[100dvh] sm:h-auto sm:max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
               aria-labelledby="plan-modal-title"
             >
-              <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-emerald-50/80 via-slate-50 to-white px-4 sm:px-6 py-4 flex justify-between items-start gap-3">
+              <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-emerald-50/80 via-slate-50 to-white px-4 sm:px-6 py-3 sm:py-4 pt-[max(0.75rem,env(safe-area-inset-top))] flex justify-between items-start gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
                     <ClipboardList className="h-5 w-5" aria-hidden />
@@ -1445,46 +1449,32 @@ export const ProductionPlanningForm: React.FC = () => {
                             <input readOnly value={line.tray_count} className={`${cellReadOnly} tabular-nums font-semibold`} />
                           </div>
                         </div>
-                        {(line.customer_name || line.leather_name || line.color_name || line.group_name || line.man_hours_minutes || line.smv_per_pair) && (
-                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
-                            {line.customer_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Customer</p>
-                                <p className="text-xs text-gray-700 truncate">{line.customer_name}</p>
-                              </div>
-                            )}
-                            {line.color_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Color</p>
-                                <p className="text-xs text-gray-700 truncate">{line.color_name}</p>
-                              </div>
-                            )}
-                            {line.group_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Group</p>
-                                <p className="text-xs text-gray-700 truncate">{line.group_name}</p>
-                              </div>
-                            )}
-                            {line.man_hours_minutes && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Man hrs</p>
-                                <p className="text-xs font-semibold tabular-nums text-gray-700">{line.man_hours_minutes}</p>
-                              </div>
-                            )}
-                            {line.smv_per_pair && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">SMV</p>
-                                <p className="text-xs font-semibold tabular-nums text-gray-700">{line.smv_per_pair}</p>
-                              </div>
-                            )}
-                            {line.leather_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Leather</p>
-                                <p className="text-xs text-gray-700 truncate">{line.leather_name}</p>
-                              </div>
-                            )}
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Customer</p>
+                              <p className="text-xs text-gray-700 truncate">{line.customer_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Color</p>
+                              <p className="text-xs text-gray-700 truncate">{line.color_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Group</p>
+                              <p className="text-xs text-gray-700 truncate">{line.group_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Man hrs</p>
+                              <p className="text-xs font-semibold tabular-nums text-gray-700">{line.man_hours_minutes || <span className="text-gray-300 font-normal">—</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">SMV</p>
+                              <p className="text-xs font-semibold tabular-nums text-gray-700">{line.smv_per_pair || <span className="text-gray-300 font-normal">—</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Leather</p>
+                              <p className="text-xs text-gray-700 truncate">{line.leather_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
                           </div>
-                        )}
                       </div>
                     ))}
                   </div>

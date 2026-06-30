@@ -1716,7 +1716,7 @@ export const Reports: React.FC = () => {
                 let value: any = row[key];
                 if (key === 'login_time') value = fmtTime(value);
                 if (HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])) {
-                  value = r(value) || '—';
+                  value = r(value) || '0';
                 }
                 if (key === 'input_percent' || key === 'output_percent' || key === 'shift_efficiency_pct') {
                   value =
@@ -2138,7 +2138,7 @@ export const Reports: React.FC = () => {
                   <Td center>{r(row.avg_hourly_output)}</Td>
                   {HOURLY_HOUR_KEYS.map((k) => (
                     <Td key={k} center>
-                      <span className={row[k] > 0 ? 'text-gray-700' : 'text-gray-300'}>{r(row[k]) || '—'}</span>
+                      <span className="text-gray-700">{r(row[k]) || '0'}</span>
                     </Td>
                   ))}
                 </tr>

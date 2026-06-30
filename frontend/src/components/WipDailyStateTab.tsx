@@ -60,6 +60,7 @@ export const WipDailyStateTab: React.FC<WipDailyStateTabProps> = ({ workCentres,
   const [toDate, setToDate] = React.useState('');
   const [lineFilter, setLineFilter] = React.useState('');
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
   const [totalPages, setTotalPages] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -106,7 +107,7 @@ export const WipDailyStateTab: React.FC<WipDailyStateTabProps> = ({ workCentres,
     try {
       const params = new URLSearchParams({
         page: String(page),
-        limit: '50',
+        limit: String(pageSize),
         sort_order: 'desc',
       });
       if (fromDate) params.set('from_date', fromDate);
@@ -128,7 +129,7 @@ export const WipDailyStateTab: React.FC<WipDailyStateTabProps> = ({ workCentres,
     } finally {
       setLoading(false);
     }
-  }, [page, fromDate, toDate, lineFilter]);
+  }, [page, pageSize, fromDate, toDate, lineFilter]);
 
   React.useEffect(() => {
     loadRows();
@@ -432,7 +433,7 @@ export const WipDailyStateTab: React.FC<WipDailyStateTabProps> = ({ workCentres,
         Future dates are hidden here. Checking Day closed at end of shift carries closing WIP to the next day only when closing WIP is greater than zero.
       </p>
 
-      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+      <div className="hidden sm:block overflow-x-auto border border-gray-200 rounded-lg">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 text-gray-700">
             <tr>
@@ -505,29 +506,97 @@ export const WipDailyStateTab: React.FC<WipDailyStateTabProps> = ({ workCentres,
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-600">
-          <span>{total} record{total === 1 ? '' : 's'}</span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <span className="px-2 py-1">Page {page} / {totalPages}</span>
-            <button
-              type="button"
-              disabled={page >= totalPages || loading}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-            >
-              Next
-            </button>
+      {/* Mobile card view */}
+      <div className="sm:hidden space-y-2">
+        {loading && rows.length === 0 ? (
+          <div className="px-3 py-8 text-center text-gray-500">
+            <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+            Loading...
           </div>
+        ) : rows.length === 0 ? (
+          <div className="px-3 py-8 text-center text-gray-500">No WIP records found</div>
+        ) : (
+          rows.map((row) => (
+            <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-gray-900">{row.work_centre_name || row.work_centre_id}</span>
+                  <p className="text-[10px] text-gray-500 mt-0.5 tabular-nums">{row.state_date}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {row.is_closed ? (
+                    <span className="text-[9px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">Closed</span>
+                  ) : (
+                    <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">Open</span>
+                  )}
+                  {canEdit && (
+                    <>
+                      <button type="button" onClick={() => openEdit(row)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-50" title="Edit">
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button type="button" onClick={() => setDeleteCandidate(row)} className="p-2 rounded-lg text-red-500 hover:bg-red-50" title="Delete">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <p className="text-[9px] font-bold uppercase text-gray-400">Opening</p>
+                  <p className="text-xs font-semibold tabular-nums text-gray-700">{formatWip(row.opening_wip)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase text-cyan-500">Input</p>
+                  <p className="text-xs font-semibold tabular-nums text-cyan-700">{formatWip(row.today_input)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase text-amber-500">Current</p>
+                  <p className="text-sm font-black tabular-nums text-amber-700">{formatWip(row.current_wip)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase text-gray-400">Closing</p>
+                  <p className="text-xs font-semibold tabular-nums text-gray-700">{formatWip(row.closing_wip)}</p>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {total > 10 && (
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-gray-600 mt-3">
+        <span>{total} record{total === 1 ? '' : 's'}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
+          >
+            <option value={5}>5/page</option>
+            <option value={10}>10/page</option>
+            <option value={20}>20/page</option>
+            <option value={50}>50/page</option>
+          </select>
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-xs sm:text-sm"
+          >
+            Prev
+          </button>
+          <span className="px-2 py-1 tabular-nums text-xs">{page}/{totalPages}</span>
+          <button
+            type="button"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-xs sm:text-sm"
+          >
+            Next
+          </button>
         </div>
+      </div>
       )}
 
       {showForm && canEdit && (

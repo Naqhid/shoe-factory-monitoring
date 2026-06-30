@@ -1156,6 +1156,7 @@ export const ProductionRoutingForm: React.FC = () => {
             </div>
           ))}
         </div>
+        {pagination.total > 10 && (
         <div className="border-t border-gray-100 bg-slate-50/50 px-4 sm:px-5 py-3">
           <Pagination
             currentPage={currentPage}
@@ -1169,6 +1170,7 @@ export const ProductionRoutingForm: React.FC = () => {
             }}
           />
         </div>
+        )}
       </div>
 
       {showModal && (
@@ -1177,13 +1179,13 @@ export const ProductionRoutingForm: React.FC = () => {
           role="presentation"
         >
           <div
-            className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-[min(100vw,1440px)] h-[95vh] sm:h-auto sm:max-h-[94vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/10"
+            className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-[min(100vw,1440px)] max-h-[100dvh] sm:h-auto sm:max-h-[94vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/10"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="routing-modal-title"
           >
-            <div className="shrink-0 border-b border-gray-200 bg-gradient-to-r from-indigo-50 via-white to-emerald-50 px-4 sm:px-6 py-4">
+            <div className="shrink-0 border-b border-gray-200 bg-gradient-to-r from-indigo-50 via-white to-emerald-50 px-4 sm:px-6 py-3 sm:py-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
               <div className="flex justify-between items-start gap-4">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-600/25">
@@ -1459,7 +1461,7 @@ export const ProductionRoutingForm: React.FC = () => {
                   </div>
 
                   {/* Mobile card view for routing lines */}
-                  <div ref={routingTableRef} className="sm:hidden max-h-[min(52vh,520px)] overflow-y-auto p-3 space-y-3">
+                  <div ref={routingTableRef} className="sm:hidden p-3 space-y-3">
                     {lines.map((line, index) => {
                       const rowId = line._rowId ?? index;
                       const isHighlighted = highlightedRowId === rowId;

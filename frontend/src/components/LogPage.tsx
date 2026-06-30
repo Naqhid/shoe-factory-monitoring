@@ -539,6 +539,8 @@ const LogPage: React.FC = () => {
   const loadYesterdayLoginPreview = async () => {
     setYesterdayPreviewLoading(true);
     setYesterdayActivateResults(null);
+    setYesterdayPreview(null);
+    setEditableLoginRows([]);
     try {
       const params = new URLSearchParams();
       if (selectedWorkCentre !== 'all') params.set('work_centre_id', selectedWorkCentre);

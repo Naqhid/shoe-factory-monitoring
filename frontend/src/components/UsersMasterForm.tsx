@@ -42,7 +42,7 @@ export const UsersMasterForm: React.FC = () => {
   const [machineCentres, setMachineCentres] = React.useState<any[]>([]);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [itemsPerPage, setItemsPerPage] = React.useState(5);
+  const [itemsPerPage, setItemsPerPage] = React.useState(10);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
   const [searchTerm, setSearchTerm] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
@@ -557,6 +557,7 @@ export const UsersMasterForm: React.FC = () => {
           </div>
         )}
 
+        {pagination.total > 10 && (
         <Pagination
           currentPage={currentPage}
           totalPages={pagination.totalPages}
@@ -568,6 +569,7 @@ export const UsersMasterForm: React.FC = () => {
             setCurrentPage(1);
           }}
         />
+        )}
           </>
         )}
       </div>

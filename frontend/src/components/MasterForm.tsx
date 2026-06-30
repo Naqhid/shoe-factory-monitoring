@@ -778,6 +778,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
           </div>
         )}
 
+        {pagination.total > 10 && (
         <div className="border-t border-gray-100 px-4 sm:px-5 py-3">
           <Pagination
             currentPage={currentPage}
@@ -791,6 +792,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
             }}
           />
         </div>
+        )}
           </>
         )}
       </div>
