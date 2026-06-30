@@ -673,7 +673,7 @@ export const Reports: React.FC = () => {
           selectedLine: urlLine || '',
           selectedMachine: urlMachine || '',
           search: urlSearch || '',
-          limit: urlLimit && !Number.isNaN(Number(urlLimit)) ? Number(urlLimit) : 50,
+          limit: urlLimit && !Number.isNaN(Number(urlLimit)) ? Number(urlLimit) : 10,
         };
       }
 
@@ -693,7 +693,7 @@ export const Reports: React.FC = () => {
           selectedLine: saved.selectedLine || '',
           selectedMachine: saved.selectedMachine || '',
           search: saved.search || '',
-          limit: saved.limit || 50,
+          limit: saved.limit || 10,
         };
       }
     } catch { /* ignore */ }
@@ -707,7 +707,7 @@ export const Reports: React.FC = () => {
       selectedLine: '',
       selectedMachine: '',
       search: '',
-      limit: 50,
+      limit: 10,
     };
   }, []);
 
@@ -1664,25 +1664,25 @@ export const Reports: React.FC = () => {
           <div
             key={i}
             className={`overflow-hidden rounded-xl border bg-white shadow-sm border-l-4 ${activeColor.border} ${
-              shareCard ? 'shadow-md' : ''
+              shareCard ? 'shadow-md' : 'hover:shadow-md transition-shadow'
             }`}
           >
             <div
-              className={`${activeColor.bg} ${
+              className={`${activeColor.activeBg} ${
                 shareCard
                   ? 'flex flex-col items-stretch gap-1.5 px-4 py-3'
-                  : 'flex items-center justify-between gap-2 px-3 py-2'
+                  : 'flex items-center justify-between gap-2 px-3 py-2.5'
               }`}
             >
-              <span className={`font-bold ${activeColor.text} ${shareCard ? 'text-base' : 'text-xs'}`}>
+              <span className={`font-bold text-white ${shareCard ? 'text-base' : 'text-xs'}`}>
                 {fmtDate(row.date) || '—'}
               </span>
               {(row.line || row.work_centre_name) && (
                 <span
                   className={
                     shareCard
-                      ? 'text-base font-semibold leading-snug text-slate-800 break-words'
-                      : 'max-w-[60%] truncate text-xs font-semibold text-slate-600'
+                      ? 'text-base font-semibold leading-snug text-white/90 break-words'
+                      : 'max-w-[60%] truncate text-xs font-semibold text-white/90'
                   }
                 >
                   {shareCard ? `Line: ${row.line || row.work_centre_name}` : row.line || row.work_centre_name}
@@ -1690,7 +1690,7 @@ export const Reports: React.FC = () => {
               )}
             </div>
             <div className={shareCard ? 'space-y-0 p-4' : 'space-y-0 p-3'}>
-              {keys.filter((k) => k !== 'date' && k !== 'line' && k !== 'work_centre_name').map((key) => {
+              {keys.filter((k) => k !== 'date' && k !== 'line' && k !== 'work_centre_name').map((key, ki) => {
                 if (key.startsWith('__cmp_')) {
                   const [, metric, period] = key.match(/^__cmp_(out|outpct|eff)_(yesterday|last_week)$/) || [];
                   const metricKey =
@@ -1699,8 +1699,8 @@ export const Reports: React.FC = () => {
                     period === 'yesterday' ? compareMaps?.yesterday : compareMaps?.lastWeek;
                   const prev = map?.get(rowCompareKey(row))?.[metricKey];
                   return (
-                    <div key={key} className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0 bg-slate-50/60 -mx-1 px-1 rounded">
-                      <span className="text-xs font-semibold text-slate-500">
+                    <div key={key} className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0 bg-violet-50/50 -mx-1 px-1 rounded">
+                      <span className="text-xs font-semibold text-violet-600">
                         {metricKey === 'total_output' ? 'Output' : metricKey === 'output_percent' ? 'Out %' : 'Eff %'} vs{' '}
                         {comparePeriodHeaderLabel(period as 'yesterday' | 'last_week')}
                       </span>
@@ -1735,12 +1735,14 @@ export const Reports: React.FC = () => {
                 return (
                   <div
                     key={key}
-                    className={`flex justify-between border-b border-slate-100 py-2 last:border-b-0 ${
-                      shareCard ? 'items-center gap-4 py-3' : 'items-start gap-3'
+                    className={`flex justify-between border-b border-slate-100 last:border-b-0 ${
+                      ki % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'
+                    } ${
+                      shareCard ? 'items-center gap-4 py-3 px-1' : 'items-start gap-3 py-2 px-1 rounded'
                     }`}
                   >
                     <span
-                      className={`shrink-0 font-semibold text-slate-500 ${
+                      className={`shrink-0 font-semibold text-indigo-600 ${
                         shareCard ? 'text-sm leading-snug' : 'text-xs'
                       }`}
                     >
@@ -1755,8 +1757,8 @@ export const Reports: React.FC = () => {
                             ? 'flex items-center justify-end'
                             : ''
                           : shareCard
-                            ? 'text-base font-semibold text-slate-800'
-                            : 'text-sm font-medium text-slate-800'
+                            ? 'text-base font-bold text-slate-900'
+                            : 'text-sm font-semibold text-slate-900'
                       }`}
                     >
                       {typeof value === 'object' ? value : String(value)}
@@ -2916,7 +2918,7 @@ export const Reports: React.FC = () => {
             )}
           </div>
         )}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && pagination.total > 10 && (
           <Pagination
             currentPage={page}
             totalPages={pagination.totalPages}

@@ -150,7 +150,7 @@ const queryDailyCycleEvents = async (dateFrom, dateTo) => {
       mcp.start_time,
       mcp.finish_time,
       mcp.target_mins,
-      TIMESTAMPDIFF(MINUTE, mcp.start_time, mcp.finish_time) AS actual_mins,
+      ROUND(TIMESTAMPDIFF(SECOND, mcp.start_time, mcp.finish_time) / 60.0, 1) AS actual_mins,
       LAG(mcp.finish_time) OVER (
         PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
         ORDER BY mcp.start_time
@@ -626,7 +626,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         mcp.start_time,
         mcp.finish_time,
         mcp.target_mins,
-        TIMESTAMPDIFF(MINUTE, mcp.start_time, mcp.finish_time) AS actual_mins,
+        ROUND(TIMESTAMPDIFF(SECOND, mcp.start_time, mcp.finish_time) / 60.0, 1) AS actual_mins,
         LAG(mcp.finish_time) OVER (
           PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
           ORDER BY mcp.start_time
