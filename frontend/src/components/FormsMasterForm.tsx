@@ -459,7 +459,7 @@ export const FormsMasterForm: React.FC = () => {
       )}
 
       {/* Records Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm ring-1 ring-black/[0.03] overflow-hidden">
         {fetchLoading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
@@ -468,42 +468,46 @@ export const FormsMasterForm: React.FC = () => {
         ) : (
           <>
             <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-gradient-to-r from-emerald-600 to-teal-600">
+                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                   Form Code
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                   Form Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {records.map((record) => (
-                <tr key={record.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+            <tbody className="divide-y divide-gray-100">
+              {records.map((record, idx) => (
+                <tr key={record.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-emerald-50/40'}>
+                  <td className="px-6 py-3.5 whitespace-nowrap text-sm font-semibold text-gray-900">
                     {record.code}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-3.5 whitespace-nowrap text-sm text-gray-600">
                     {record.name}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(record)}
-                      className="text-blue-600 hover:text-blue-900 mr-3"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(record.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleEdit(record)}
+                        className="p-2 rounded-lg text-blue-600 hover:bg-blue-100 transition"
+                        title="Edit"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(record.id)}
+                        className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

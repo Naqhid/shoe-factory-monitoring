@@ -334,7 +334,7 @@ export const RolesMasterForm: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm ring-1 ring-black/[0.03] overflow-hidden">
         {fetchLoading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
@@ -346,27 +346,32 @@ export const RolesMasterForm: React.FC = () => {
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Default Route</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Menus Count</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <thead>
+              <tr className="bg-gradient-to-r from-violet-600 to-purple-600">
+                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Role Name</th>
+                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Default Route</th>
+                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Menus Count</th>
+                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {roles.map(role => (
-                <tr key={role.id}>
-                  <td className="px-6 py-4">{role.role_name}</td>
-                  <td className="px-6 py-4">{role.default_route}</td>
-                  <td className="px-6 py-4">{role.allowed_menus.length}</td>
-                  <td className="px-6 py-4 flex gap-2">
-                    <button onClick={() => handleEdit(role)} className="text-blue-600 hover:text-blue-800">
+            <tbody className="divide-y divide-gray-100">
+              {roles.map((role, idx) => (
+                <tr key={role.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/40'}>
+                  <td className="px-6 py-3.5 text-sm font-semibold text-gray-900">{role.role_name}</td>
+                  <td className="px-6 py-3.5 text-sm text-gray-600">{role.default_route}</td>
+                  <td className="px-6 py-3.5">
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                      {role.allowed_menus.length}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3.5 flex gap-1">
+                    <button onClick={() => handleEdit(role)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-100 transition" title="Edit">
                       <Edit2 className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => setConfirmDialog({ action: 'delete', roleId: role.id, roleName: role.role_name })}
-                      className="text-red-600 hover:text-red-800"
+                      className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition"
+                      title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

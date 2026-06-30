@@ -607,91 +607,95 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {/* Desktop table — hidden on mobile */}
+            <div className="hidden sm:block overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
           <table className="min-w-full">
             <thead>
-              <tr className="border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white">
+              <tr className="bg-gradient-to-r from-blue-600 to-indigo-600">
                 {table === 'machine_centres' && (
-                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                     Machine ID
                   </th>
                 )}
-                <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                   Code
                 </th>
                 {table !== 'machine_centres' && (
-                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                     Name
                   </th>
                 )}
                 {table === 'work_centres' && (
                   <>
-                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                       Input machine
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                       EOL machine
                     </th>
                   </>
                 )}
                 {table === 'machine_centres' && (
-                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                     Process Name
                   </th>
                 )}
                 {table === 'machine_centres' && (
-                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                     Work Centre
                   </th>
                 )}
                 {table === 'employees' && (
                   <>
-                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                       Work Centre
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                       Machine Centre
                     </th>
                   </>
                 )}
                 {isArchiveTable && (
-                  <th className="px-4 sm:px-6 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">
                     Status
                   </th>
                 )}
-                <th className="px-4 sm:px-6 py-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                <th className="px-4 sm:px-6 py-3.5 text-right text-[11px] font-bold text-white uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100/80">
-              {records.map((record) => (
+            <tbody className="divide-y divide-gray-100">
+              {records.map((record, idx) => (
                 <tr
                   key={record.id}
                   onClick={table === 'work_centres' && !isArchivedRecord(record) ? () => navigate(`/mobile?line=${encodeURIComponent(record.name)}`) : undefined}
-                  className={table === 'work_centres' && !isArchivedRecord(record) ? 'cursor-pointer hover:bg-blue-50 transition-colors' : ''}
+                  className={[
+                    idx % 2 === 0 ? 'bg-white' : 'bg-blue-50/50',
+                    table === 'work_centres' && !isArchivedRecord(record) ? 'cursor-pointer hover:bg-blue-100/60 transition-colors' : 'hover:bg-blue-50/60 transition-colors',
+                  ].join(' ')}
                 >
                   {table === 'machine_centres' && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-indigo-600">
                       {record.machine_id || 'N/A'}
                     </td>
                   )}
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-6 py-3.5 whitespace-nowrap text-sm font-semibold text-blue-700">
                     {record.code}
                   </td>
                   {table !== 'machine_centres' && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-gray-800">
                       {record.name}
                     </td>
                   )}
                   {table === 'work_centres' && (
                     <>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-teal-600">
                         {record.input_machine_id
                           ? `${record.input_machine_id}${record.input_machine_label ? ` — ${record.input_machine_label}` : ''}`
                           : 'Auto'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-violet-600">
                         {record.eol_machine_id
                           ? `${record.eol_machine_id}${record.eol_machine_label ? ` — ${record.eol_machine_label}` : ''}`
                           : 'Auto'}
@@ -699,31 +703,31 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                     </>
                   )}
                   {table === 'machine_centres' && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-emerald-700">
                       {record.machine_name || 'N/A'}
                     </td>
                   )}
                   {table === 'machine_centres' && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-amber-700">
                       {record.work_centre_name || 'N/A'}
                     </td>
                   )}
                   {table === 'employees' && (
                     <>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-teal-600">
                         {record.work_centre_name || 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-3.5 whitespace-nowrap text-sm font-medium text-violet-600">
                         {record.machine_centre_name || 'N/A'}
                       </td>
                     </>
                   )}
                   {isArchiveTable && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-3.5 whitespace-nowrap text-sm">
                       {isArchivedRecord(record) ? (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">Archived</span>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold ring-1 ring-amber-200/60">Archived</span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">Active</span>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold ring-1 ring-emerald-200/60">Active</span>
                       )}
                     </td>
                   )}
@@ -735,9 +739,9 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                           e.stopPropagation();
                           handleRestore(record.id);
                         }}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2 py-1 rounded-lg transition"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition ring-1 ring-emerald-200/60"
                       >
-                        <RotateCcw className="h-4 w-4" /> Restore
+                        <RotateCcw className="h-3.5 w-3.5" /> Restore
                       </button>
                     ) : (
                       <div className="flex items-center justify-end gap-1">
@@ -747,7 +751,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                             e.stopPropagation();
                             handleEdit(record);
                           }}
-                          className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition"
+                          className="p-2 rounded-lg text-blue-600 hover:bg-blue-100 transition"
                           title="Edit"
                         >
                           <Edit className="h-4 w-4" />
@@ -758,7 +762,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                             e.stopPropagation();
                             handleDelete(record.id);
                           }}
-                          className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition"
+                          className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition"
                           title="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -771,6 +775,120 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
             </tbody>
           </table>
         </div>
+
+            {/* Mobile card list — visible only on small screens */}
+            <div className="sm:hidden p-3 space-y-2.5">
+              {records.map((record) => {
+                const archived = isArchivedRecord(record);
+                return (
+                  <div
+                    key={record.id}
+                    onClick={table === 'work_centres' && !archived ? () => navigate(`/mobile?line=${encodeURIComponent(record.name)}`) : undefined}
+                    className={[
+                      'rounded-xl border bg-white p-3.5 shadow-sm transition-all',
+                      archived
+                        ? 'border-amber-200/80 bg-amber-50/30 opacity-75'
+                        : 'border-gray-200/80 hover:shadow-md active:scale-[0.99]',
+                      table === 'work_centres' && !archived ? 'cursor-pointer' : '',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      {/* Left: avatar + info */}
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className={`flex items-center justify-center h-9 w-9 rounded-lg shrink-0 text-xs font-bold ${
+                          archived
+                            ? 'bg-amber-100 text-amber-600'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {record.code.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-gray-900">{record.code}</span>
+                            {isArchiveTable && (
+                              archived ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold ring-1 ring-amber-200/60">Archived</span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold ring-1 ring-emerald-200/60">Active</span>
+                              )
+                            )}
+                          </div>
+                          {table !== 'machine_centres' && (
+                            <p className="text-[13px] text-gray-600 truncate mt-0.5">{record.name}</p>
+                          )}
+                          {table === 'machine_centres' && (
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                ID: {record.machine_id || 'N/A'}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-violet-400"></span>
+                                {record.machine_name || 'N/A'}
+                              </span>
+                              <span className="text-gray-400">{record.work_centre_name || 'No WC'}</span>
+                            </div>
+                          )}
+                          {table === 'work_centres' && (
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                              <span>Input: <span className="font-medium text-gray-700">{record.input_machine_id || 'Auto'}</span></span>
+                              <span>EOL: <span className="font-medium text-gray-700">{record.eol_machine_id || 'Auto'}</span></span>
+                            </div>
+                          )}
+                          {table === 'employees' && (
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                              <span>WC: <span className="font-medium text-gray-700">{record.work_centre_name || 'N/A'}</span></span>
+                              <span>MC: <span className="font-medium text-gray-700">{record.machine_centre_name || 'N/A'}</span></span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right: actions */}
+                      <div className="flex items-center gap-0.5 shrink-0 -mr-1">
+                        {isArchiveTable && archived ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestore(record.id);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Restore
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(record);
+                              }}
+                              className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100 transition"
+                              title="Edit"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(record.id);
+                              }}
+                              className="p-2 rounded-lg text-red-500 hover:bg-red-50 active:bg-red-100 transition"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
         {records.length === 0 && (
           <div className="text-center py-16">

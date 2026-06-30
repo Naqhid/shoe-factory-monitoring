@@ -680,17 +680,6 @@ export const MobileLineSetupForm: React.FC = () => {
                 <p className="mt-0.5 text-sm text-slate-300">Connect a machine and operator to the shop-floor display</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                localStorage.clear();
-                navigate('/');
-              }}
-              className="shrink-0 rounded-xl bg-white/10 p-2.5 ring-1 ring-white/15 transition-colors hover:bg-white/15 touch-manipulation"
-              aria-label="Log out"
-            >
-              <LogOut className="h-5 w-5 text-slate-200" />
-            </button>
           </div>
         </div>
 
