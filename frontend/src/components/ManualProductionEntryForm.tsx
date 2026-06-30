@@ -261,13 +261,18 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
   const [auditSearchInput, setAuditSearchInput] = React.useState('');
+  const [auditFromDate, setAuditFromDate] = React.useState(() => new Date().toLocaleDateString('en-CA'));
+  const [auditToDate, setAuditToDate] = React.useState(() => new Date().toLocaleDateString('en-CA'));
+  const [auditLineFilter, setAuditLineFilter] = React.useState('');
+  const [auditMachineFilter, setAuditMachineFilter] = React.useState('');
   const [auditSearch, setAuditSearch] = React.useState('');
   const [auditPage, setAuditPage] = React.useState(1);
-  const [auditLimit, setAuditLimit] = React.useState<string>('20');
+  const [auditLimit, setAuditLimit] = React.useState<string>('10');
   const [auditTotal, setAuditTotal] = React.useState(0);
   const [auditTotalPages, setAuditTotalPages] = React.useState(1);
   const [auditPageInput, setAuditPageInput] = React.useState('1');
   const [showRawAuditJson, setShowRawAuditJson] = React.useState(false);
+  const [expandedAuditIds, setExpandedAuditIds] = React.useState<Set<number>>(new Set());
   const [restoreCandidate, setRestoreCandidate] = React.useState<ManualEntryAuditRow | null>(null);
   const [deleteCandidate, setDeleteCandidate] = React.useState<ManualEntryRow | null>(null);
   const [pageInput, setPageInput] = React.useState('1');
@@ -1779,6 +1784,10 @@ export const ManualProductionEntryForm: React.FC = () => {
       const params = new URLSearchParams();
       if (entryId) params.set('entry_id', String(entryId));
       if (auditSearch.trim()) params.set('search', auditSearch.trim());
+      if (auditFromDate) params.set('from_date', auditFromDate);
+      if (auditToDate) params.set('to_date', auditToDate);
+      if (auditLineFilter) params.set('work_centre_id', auditLineFilter);
+      if (auditMachineFilter) params.set('machine_id', auditMachineFilter);
       params.set('page', String(auditPage));
       params.set('limit', auditLimit);
       const res = await apiFetch(`${API_BASE_URL}/api/mobile-production/manual-entry/audit-logs?${params.toString()}`);
@@ -1806,7 +1815,7 @@ export const ManualProductionEntryForm: React.FC = () => {
     } finally {
       setAuditLoading(false);
     }
-  }, [auditSearch, auditPage, auditLimit, handleUnauthorized]);
+  }, [auditSearch, auditFromDate, auditToDate, auditLineFilter, auditMachineFilter, auditPage, auditLimit, handleUnauthorized]);
 
   const handleOpenAudit = async (entryId?: number) => {
     if (!requestDiscardManualFormChanges()) return;
@@ -2801,58 +2810,100 @@ export const ManualProductionEntryForm: React.FC = () => {
           </>
           ) : activeTab === 'audit' ? (
             <div className="bg-white border border-gray-200 rounded-lg p-2.5 sm:p-4">
-              <div className="flex flex-col gap-2 mb-3">
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-gray-900">Audit Logs</h3>
-                  <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                    {auditEntryId ? `History for entry #${auditEntryId}` : 'Latest manual entry audit history'}
-                  </p>
+              <div className="flex flex-col gap-3 mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900">Audit Logs</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {auditEntryId ? `History for entry #${auditEntryId}` : 'Manual entry change history'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => loadAuditLogs(auditEntryId || undefined)}
+                      className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportAuditCsv}
+                      className="bg-green-100 hover:bg-green-200 text-green-800 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
+                      disabled={auditLogs.length === 0}
+                    >
+                      CSV
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  <button
-                    type="button"
-                    onClick={() => loadAuditLogs(auditEntryId || undefined)}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  >
-                    Refresh
-                  </button>
-                  <input
-                    type="text"
-                    value={auditSearchInput}
-                    onChange={(e) => setAuditSearchInput(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs w-28 sm:w-40 min-w-0"
-                    placeholder="Search…"
-                    title="Search by entry/user/role/reason/action"
-                  />
-                  <select
-                    value={auditLimit}
-                    onChange={(e) => {
-                      setAuditLimit(e.target.value);
-                      setAuditPage(1);
-                    }}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
-                    title="Rows per page"
-                  >
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                    <option value="all">All</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleExportAuditCsv}
-                    className="bg-green-100 hover:bg-green-200 text-green-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold"
-                    disabled={auditLogs.length === 0}
-                  >
-                    CSV
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowRawAuditJson((prev) => !prev)}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  >
-                    {showRawAuditJson ? 'Hide JSON' : 'JSON'}
-                  </button>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">From</label>
+                    <input
+                      type="date"
+                      value={auditFromDate}
+                      onChange={(e) => { setAuditFromDate(e.target.value); setAuditPage(1); }}
+                      className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">To</label>
+                    <input
+                      type="date"
+                      value={auditToDate}
+                      onChange={(e) => { setAuditToDate(e.target.value); setAuditPage(1); }}
+                      className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Line</label>
+                    <select
+                      value={auditLineFilter}
+                      onChange={(e) => { setAuditLineFilter(e.target.value); setAuditPage(1); }}
+                      className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
+                    >
+                      <option value="">All Lines</option>
+                      {workCentres.map((wc) => (
+                        <option key={wc.id} value={wc.id}>{wc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Machine</label>
+                    <select
+                      value={auditMachineFilter}
+                      onChange={(e) => { setAuditMachineFilter(e.target.value); setAuditPage(1); }}
+                      className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
+                    >
+                      <option value="">All Machines</option>
+                      {(auditLineFilter ? machines.filter(m => String(m.work_centre_id) === auditLineFilter) : machines).map((m) => (
+                        <option key={m.machine_id} value={m.machine_id}>{m.machine_id}{m.machine_name ? ` - ${m.machine_name}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Search</label>
+                    <input
+                      type="text"
+                      value={auditSearchInput}
+                      onChange={(e) => setAuditSearchInput(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                      placeholder="Machine / Employee"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Per page</label>
+                    <select
+                      value={auditLimit}
+                      onChange={(e) => { setAuditLimit(e.target.value); setAuditPage(1); }}
+                      className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
+                    >
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                      <option value="all">All</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               {auditLoading ? (
@@ -2860,141 +2911,183 @@ export const ManualProductionEntryForm: React.FC = () => {
               ) : auditLogs.length === 0 ? (
                 <p className="text-sm text-gray-500">No audit logs found.</p>
               ) : (
-                <div className="space-y-3">
-                  {auditLogs.map((log) => (
-                    <div key={log.id} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                      {/* Header row */}
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-slate-50 to-white border-b border-gray-100">
-                        <span className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wide ${getAuditActionBadgeClass(log.action)}`}>
-                          {log.action}
-                        </span>
-                        <span className="text-xs sm:text-sm text-gray-700"><span className="font-semibold text-gray-500">#{log.entry_id ?? '-'}</span></span>
-                        <span className="text-xs text-gray-600">{log.actor_username || '-'} · {log.actor_role || '-'}</span>
-                        <span className="ml-auto text-[10px] sm:text-xs text-gray-500">{formatDisplayDateTime(log.created_at)}</span>
-                      </div>
-                      {/* Body */}
-                      <div className="px-3 sm:px-4 py-2.5 sm:py-3">
-                        {log.reason && (
-                          <p className="text-xs sm:text-sm text-gray-700 mb-2.5 bg-amber-50 border border-amber-100 rounded-lg px-2.5 sm:px-3 py-2">
-                            <span className="font-semibold text-amber-800">Reason:</span> {log.reason}
-                          </p>
-                        )}
-                        {log.action === 'DELETE' && (
-                          <div className="mb-2.5">
+                <>
+                <div className="hidden sm:block overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-3 py-2 w-8"></th>
+                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-500">Action</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-500">Entry</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-500">User</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-500">Date</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-500">Reason</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-gray-500">Changes</th>
+                        {canMutate && <th className="px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-gray-500">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {auditLogs.map((log) => {
+                        const changes = toAuditChanges(log);
+                        const changedFields = changes.filter(c => c.beforeValue !== c.afterValue && c.afterValue !== '-');
+                        const isExpanded = expandedAuditIds.has(log.id);
+                        return (
+                          <React.Fragment key={log.id}>
+                          <tr
+                            className="hover:bg-gray-50 cursor-pointer"
+                            onClick={() => setExpandedAuditIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(log.id)) next.delete(log.id);
+                              else next.add(log.id);
+                              return next;
+                            })}
+                          >
+                            <td className="px-3 py-2 text-gray-400">
+                              <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${getAuditActionBadgeClass(log.action)}`}>
+                                {log.action}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-sm font-medium text-gray-800">#{log.entry_id ?? '-'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-700">
+                              {log.actor_username || '-'}
+                              <span className="block text-[10px] text-gray-400">{log.actor_role || '-'}</span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{formatDisplayDateTime(log.created_at)}</td>
+                            <td className="px-3 py-2 text-xs text-gray-700 max-w-[200px] truncate" title={log.reason || ''}>{log.reason || '—'}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600">
+                              {changedFields.length > 0 ? (
+                                <span className="space-x-1">
+                                  {changedFields.slice(0, 3).map(c => (
+                                    <span key={c.key} className="inline-flex px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-medium">{c.label}</span>
+                                  ))}
+                                  {changedFields.length > 3 && <span className="text-[10px] text-gray-400">+{changedFields.length - 3}</span>}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
+                            {canMutate && (
+                              <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                {log.action === 'DELETE' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setRestoreCandidate(log)}
+                                    disabled={loading}
+                                    className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded text-[10px] font-semibold disabled:opacity-50"
+                                  >
+                                    Restore
+                                  </button>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={canMutate ? 8 : 7} className="px-4 py-3 bg-slate-50/80">
+                                <table className="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                                  <thead>
+                                    <tr className="bg-white border-b border-gray-200">
+                                      <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase text-gray-500">Field</th>
+                                      <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase text-gray-500">Before</th>
+                                      <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase text-gray-500">After</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {changes.map((row) => {
+                                      const changed = row.beforeValue !== row.afterValue && row.afterValue !== '-';
+                                      return (
+                                        <tr key={row.key} className={changed ? 'bg-blue-50/40' : ''}>
+                                          <td className="px-3 py-1.5 font-medium text-gray-700">{row.label}</td>
+                                          <td className="px-3 py-1.5 text-gray-500 font-mono text-[11px]">{row.beforeValue}</td>
+                                          <td className={`px-3 py-1.5 font-mono text-[11px] ${changed ? 'text-blue-700 font-semibold' : 'text-gray-500'}`}>{row.afterValue}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Mobile card view */}
+                <div className="sm:hidden space-y-2">
+                  {auditLogs.map((log) => {
+                    const changes = toAuditChanges(log);
+                    const changedFields = changes.filter(c => c.beforeValue !== c.afterValue && c.afterValue !== '-');
+                    return (
+                      <div key={log.id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase ${getAuditActionBadgeClass(log.action)}`}>
+                              {log.action}
+                            </span>
+                            <span className="text-xs font-medium text-gray-700">#{log.entry_id ?? '-'}</span>
+                            <span className="text-[10px] text-gray-500">{log.actor_username || '-'}</span>
+                          </div>
+                          {canMutate && log.action === 'DELETE' && (
                             <button
                               type="button"
                               onClick={() => setRestoreCandidate(log)}
                               disabled={loading}
-                              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm disabled:opacity-50"
+                              className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100"
                             >
-                              Restore Entry
+                              Restore
                             </button>
-                          </div>
-                        )}
-                        {/* Changes table */}
-                        <div className="overflow-x-auto rounded-lg border border-gray-200">
-                          <table className="min-w-full text-xs sm:text-sm">
-                            <thead>
-                              <tr className="bg-slate-50 border-b border-gray-200">
-                                <th className="text-left px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-gray-500">Field</th>
-                                <th className="text-left px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-gray-500">Before</th>
-                                <th className="text-left px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-gray-500">After</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {toAuditChanges(log).map((row) => {
-                                const changed = row.beforeValue !== row.afterValue && row.afterValue !== '-';
-                                return (
-                                  <tr key={`${log.id}-${row.key}`} className={changed ? 'bg-blue-50/40' : ''}>
-                                    <td className="px-2 sm:px-3 py-1.5 sm:py-2 font-medium text-gray-700 whitespace-nowrap text-xs">{row.label}</td>
-                                    <td className="px-2 sm:px-3 py-1.5 sm:py-2 text-gray-500 font-mono text-[10px] sm:text-xs break-all">{row.beforeValue}</td>
-                                    <td className={`px-2 sm:px-3 py-1.5 sm:py-2 font-mono text-[10px] sm:text-xs break-all ${changed ? 'text-blue-700 font-semibold' : 'text-gray-500'}`}>{row.afterValue}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                          )}
                         </div>
-                        {/* Raw JSON (toggle) */}
-                        {showRawAuditJson && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <p className="text-xs font-semibold text-gray-600">Before (Raw)</p>
-                                <button
-                                  type="button"
-                                  onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.before_data), null, 2), 'Before JSON copied')}
-                                  className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
-                                >
-                                  Copy
-                                </button>
-                              </div>
-                              <pre className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 overflow-auto max-h-36 font-mono text-[11px] leading-4 text-slate-700">{JSON.stringify(parseAuditJson(log.before_data), null, 2)}</pre>
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <p className="text-xs font-semibold text-gray-600">After (Raw)</p>
-                                <button
-                                  type="button"
-                                  onClick={() => copyToClipboard(JSON.stringify(parseAuditJson(log.after_data), null, 2), 'After JSON copied')}
-                                  className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
-                                >
-                                  Copy
-                                </button>
-                              </div>
-                              <pre className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 overflow-auto max-h-36 font-mono text-[11px] leading-4 text-slate-700">{JSON.stringify(parseAuditJson(log.after_data), null, 2)}</pre>
-                            </div>
+                        <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-500">
+                          <span>{formatDisplayDateTime(log.created_at)}</span>
+                          {log.reason && <span className="truncate max-w-[150px] text-amber-700" title={log.reason}>Reason: {log.reason}</span>}
+                        </div>
+                        {changedFields.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {changedFields.map(c => (
+                              <span key={c.key} className="inline-flex px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-medium">
+                                {c.label}: {c.afterValue}
+                              </span>
+                            ))}
                           </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+                </>
               )}
+              {auditTotal > 10 && (
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-3 text-sm text-gray-600">
                 <div className="text-xs sm:text-sm">
-                  Showing page {auditPage} of {auditTotalPages} ({auditLogs.length} rows on this page, {auditTotal} total)
+                  Page {auditPage}/{auditTotalPages} · {auditTotal} total
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
                     disabled={auditLimit === 'all' || auditPage <= 1 || auditLoading}
-                    className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
+                    className="px-2.5 sm:px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
                   >
-                    Previous
+                    Prev
                   </button>
-                  <span className="min-w-[70px] sm:min-w-[90px] text-center text-xs sm:text-sm">Page {auditPage}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={auditTotalPages}
-                    value={auditPageInput}
-                    onChange={(e) => setAuditPageInput(e.target.value)}
-                    onBlur={() => {
-                      const next = Math.max(1, Math.min(auditTotalPages, parseInt(auditPageInput, 10) || auditPage));
-                      setAuditPage(next);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const next = Math.max(1, Math.min(auditTotalPages, parseInt(auditPageInput, 10) || auditPage));
-                        setAuditPage(next);
-                      }
-                    }}
-                    disabled={auditLimit === 'all' || auditLoading}
-                    className="w-14 sm:w-16 px-2 py-1.5 rounded border border-gray-300 text-center disabled:opacity-50 text-xs sm:text-sm"
-                    title="Go to page"
-                  />
+                  <span className="text-xs tabular-nums">{auditPage}/{auditTotalPages}</span>
                   <button
                     type="button"
                     onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
                     disabled={auditLimit === 'all' || auditPage >= auditTotalPages || auditLoading}
-                    className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
+                    className="px-2.5 sm:px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 text-xs sm:text-sm"
                   >
                     Next
                   </button>
                 </div>
               </div>
+              )}
             </div>
           ) : null}
         </div>

@@ -800,7 +800,7 @@ export const ProductionPlanningForm: React.FC = () => {
         </div>
       </div>
 
-      {!planGaps.loading && (planGaps.today?.missingCount || planGaps.tomorrow?.missingCount) ? (
+      {!planGaps.loading && ((planGaps.today?.missingCount ?? 0) > 0 || (planGaps.tomorrow?.missingCount ?? 0) > 0) ? (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden />
@@ -1120,6 +1120,7 @@ export const ProductionPlanningForm: React.FC = () => {
             </div>
           ))}
         </div>
+        {pagination.total > 10 && (
         <div className="border-t border-gray-200 px-3 py-2">
           <Pagination
             currentPage={currentPage}
@@ -1133,6 +1134,7 @@ export const ProductionPlanningForm: React.FC = () => {
             }}
           />
         </div>
+        )}
       </div>
       </>
 
@@ -1447,46 +1449,32 @@ export const ProductionPlanningForm: React.FC = () => {
                             <input readOnly value={line.tray_count} className={`${cellReadOnly} tabular-nums font-semibold`} />
                           </div>
                         </div>
-                        {(line.customer_name || line.leather_name || line.color_name || line.group_name || line.man_hours_minutes || line.smv_per_pair) && (
-                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
-                            {line.customer_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Customer</p>
-                                <p className="text-xs text-gray-700 truncate">{line.customer_name}</p>
-                              </div>
-                            )}
-                            {line.color_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Color</p>
-                                <p className="text-xs text-gray-700 truncate">{line.color_name}</p>
-                              </div>
-                            )}
-                            {line.group_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Group</p>
-                                <p className="text-xs text-gray-700 truncate">{line.group_name}</p>
-                              </div>
-                            )}
-                            {line.man_hours_minutes && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Man hrs</p>
-                                <p className="text-xs font-semibold tabular-nums text-gray-700">{line.man_hours_minutes}</p>
-                              </div>
-                            )}
-                            {line.smv_per_pair && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">SMV</p>
-                                <p className="text-xs font-semibold tabular-nums text-gray-700">{line.smv_per_pair}</p>
-                              </div>
-                            )}
-                            {line.leather_name && (
-                              <div>
-                                <p className="text-[9px] font-bold uppercase text-gray-400">Leather</p>
-                                <p className="text-xs text-gray-700 truncate">{line.leather_name}</p>
-                              </div>
-                            )}
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Customer</p>
+                              <p className="text-xs text-gray-700 truncate">{line.customer_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Color</p>
+                              <p className="text-xs text-gray-700 truncate">{line.color_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Group</p>
+                              <p className="text-xs text-gray-700 truncate">{line.group_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Man hrs</p>
+                              <p className="text-xs font-semibold tabular-nums text-gray-700">{line.man_hours_minutes || <span className="text-gray-300 font-normal">—</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">SMV</p>
+                              <p className="text-xs font-semibold tabular-nums text-gray-700">{line.smv_per_pair || <span className="text-gray-300 font-normal">—</span>}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Leather</p>
+                              <p className="text-xs text-gray-700 truncate">{line.leather_name || <span className="text-gray-300 italic">Auto-fill</span>}</p>
+                            </div>
                           </div>
-                        )}
                       </div>
                     ))}
                   </div>

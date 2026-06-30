@@ -18,7 +18,18 @@ export const MobileLineSelector: React.FC = () => {
   const [machines, setMachines] = useState<MachineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [lines, setLines] = useState<string[]>([]);
-  const [selectedLine, setSelectedLine] = useState<string>('');
+  const [selectedLine, setSelectedLine] = useState<string>(() => {
+    return sessionStorage.getItem('mobile_selected_line') || '';
+  });
+
+  // Persist selected line to sessionStorage
+  useEffect(() => {
+    if (selectedLine) {
+      sessionStorage.setItem('mobile_selected_line', selectedLine);
+    } else {
+      sessionStorage.removeItem('mobile_selected_line');
+    }
+  }, [selectedLine]);
 
   useEffect(() => {
     const userInfo = localStorage.getItem('user_info');

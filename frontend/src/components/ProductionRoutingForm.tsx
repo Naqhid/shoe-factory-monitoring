@@ -1156,6 +1156,7 @@ export const ProductionRoutingForm: React.FC = () => {
             </div>
           ))}
         </div>
+        {pagination.total > 10 && (
         <div className="border-t border-gray-100 bg-slate-50/50 px-4 sm:px-5 py-3">
           <Pagination
             currentPage={currentPage}
@@ -1169,6 +1170,7 @@ export const ProductionRoutingForm: React.FC = () => {
             }}
           />
         </div>
+        )}
       </div>
 
       {showModal && (
@@ -1459,7 +1461,7 @@ export const ProductionRoutingForm: React.FC = () => {
                   </div>
 
                   {/* Mobile card view for routing lines */}
-                  <div ref={routingTableRef} className="sm:hidden max-h-[min(52vh,520px)] overflow-y-auto p-3 space-y-3">
+                  <div ref={routingTableRef} className="sm:hidden p-3 space-y-3">
                     {lines.map((line, index) => {
                       const rowId = line._rowId ?? index;
                       const isHighlighted = highlightedRowId === rowId;

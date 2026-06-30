@@ -24,7 +24,7 @@ export const FormsMasterForm: React.FC = () => {
   const [nextCode, setNextCode] = React.useState('FRM001');
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [itemsPerPage, setItemsPerPage] = React.useState(5);
+  const [itemsPerPage, setItemsPerPage] = React.useState(10);
   const [pagination, setPagination] = React.useState({ total: 0, totalPages: 1 });
   const [isBroadcasting, setIsBroadcasting] = React.useState(false);
   const [broadcastId, setBroadcastId] = React.useState('forms-master-live');
@@ -516,6 +516,7 @@ export const FormsMasterForm: React.FC = () => {
             </div>
           )}
         </div>
+        {pagination.total > 10 && (
         <Pagination
           currentPage={currentPage}
           totalPages={pagination.totalPages}
@@ -527,6 +528,7 @@ export const FormsMasterForm: React.FC = () => {
             setCurrentPage(1);
           }}
         />
+        )}
           </>
         )}
       </div>
