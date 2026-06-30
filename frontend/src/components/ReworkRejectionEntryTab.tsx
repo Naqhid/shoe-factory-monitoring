@@ -366,7 +366,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Saved Entries</h3>
             <p className="text-sm text-gray-600">
-              Showing entries for {workCentreDisplayName || 'no work centre selected'} on {selectedDate}
+              Showing entries for {workCentreDisplayName || 'no work centre selected'} on {(() => { const [y, m, d] = selectedDate.split('-'); return `${m}/${d}/${y}`; })()}
             </p>
           </div>
           <button
@@ -387,7 +387,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
             No rework / rejection entries for this date and work centre
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden sm:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -478,6 +479,69 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
               </tfoot>
             </table>
           </div>
+          {/* Mobile card view */}
+          <div className="sm:hidden space-y-2 p-2">
+            {savedRecords.map((rec) => (
+              <div key={rec.id} className={`rounded-xl border p-3 shadow-sm ${rec.rejection_qty > 10 ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-bold text-gray-900">{rec.machine_centre_name}</span>
+                    {rec.reason_category && (
+                      <span className={`ml-2 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold ring-1 ${M4_BADGE_CLASS[rec.reason_category] || 'bg-gray-100 text-gray-700 ring-gray-200'}`}>
+                        {rec.reason_category}
+                      </span>
+                    )}
+                    <p className="text-[10px] text-gray-500 mt-0.5">{formatDateTime(rec.saved_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {canEditRework && (
+                      <button type="button" onClick={() => openModal(rec)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-50" title="Edit">
+                        <Edit className="h-4 w-4" />
+                      </button>
+                    )}
+                    {canDeleteRework && (
+                      <button type="button" onClick={() => deleteEntry(rec)} className="p-2 rounded-lg text-red-500 hover:bg-red-50" title="Delete">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase text-gray-400">Output</p>
+                    <p className="text-sm font-bold text-gray-900 tabular-nums">{rec.total_output_pairs}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase text-gray-400">Bins</p>
+                    <p className="text-sm tabular-nums text-gray-700">{rec.bins_completed}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase text-yellow-600">Rework</p>
+                    <p className="text-sm font-bold tabular-nums text-yellow-700">{rec.rework_qty}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase text-red-500">Rejection</p>
+                    <p className="text-sm font-bold tabular-nums text-red-700">{rec.rejection_qty}</p>
+                  </div>
+                </div>
+                {rec.reason && (
+                  <p className="mt-2 text-xs text-gray-600 truncate" title={rec.reason}>
+                    <span className="font-medium">Reason:</span> {formatReasonDisplayLabel(rec.reason)}
+                  </p>
+                )}
+              </div>
+            ))}
+            {savedRecords.length > 0 && (
+              <div className="rounded-xl border border-gray-300 bg-gray-50 p-3 flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-700">Totals</span>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-bold text-yellow-700">Rework: {savedRecords.reduce((s, r) => s + r.rework_qty, 0)}</span>
+                  <span className="text-xs font-bold text-red-700">Rejection: {savedRecords.reduce((s, r) => s + r.rejection_qty, 0)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          </>
         )}
       </div>
 

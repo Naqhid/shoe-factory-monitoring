@@ -1793,10 +1793,8 @@ export const MissedActionsPage: React.FC = () => {
   const formatMinutes = (value: number) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n)) return '0';
-    return (Math.round(n * 100) / 100).toLocaleString(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
+    if (Number.isInteger(n)) return String(n);
+    return n.toFixed(1);
   };
 
   const formatDashboardLoss = (value: number) => {
@@ -3116,8 +3114,12 @@ export const MissedActionsPage: React.FC = () => {
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finish</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Target</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Actual</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Output</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Started Late</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Late</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Early</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">On Time</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Time Loss</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Root Cause</th>
                                     </tr>
                                   </thead>
@@ -3128,19 +3130,35 @@ export const MissedActionsPage: React.FC = () => {
                                         Cycles: {machine.events.length}
                                       </td>
                                       <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-green-800">{machine.events.filter((e) => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
                                       <td className="px-3 py-2 text-xs text-gray-500">—</td>
                                     </tr>
-                                    {machine.events.map((row) => (
+                                    {machine.events.map((row) => {
+                                      const actual = Number(row.actual_mins || 0);
+                                      const target = Number(row.target_mins || 0);
+                                      const inactive = Number(row.inactive_mins || 0);
+                                      const extra = Number(row.extra_mins || 0);
+                                      const finishedEarly = target > actual ? target - actual : 0;
+                                      const isOnTime = actual <= target && inactive === 0;
+                                      const timeLoss = inactive + extra;
+                                      return (
                                       <tr key={row.id}>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.employee_name} ({row.employee_code})</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.start_time ? new Date(row.start_time).toLocaleTimeString() : '-'}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.finish_time ? new Date(row.finish_time).toLocaleTimeString() : '-'}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.target_mins)}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.actual_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-700">{row.output_pairs ?? 0}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold text-blue-700">{formatMinutes(row.inactive_mins)}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold text-amber-700">{formatMinutes(row.extra_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-600">{finishedEarly > 0 ? formatMinutes(finishedEarly) : '—'}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold">{isOnTime ? <span className="text-green-600">✓</span> : <span className="text-gray-300">—</span>}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-red-600">{timeLoss > 0 ? formatMinutes(timeLoss) : '—'}</td>
                                         <td className="px-3 py-2.5 text-sm">
                                           <RootCauseSelect
                                             value={row.root_cause}
@@ -3159,7 +3177,8 @@ export const MissedActionsPage: React.FC = () => {
                                           />
                                         </td>
                                       </tr>
-                                    ))}
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>

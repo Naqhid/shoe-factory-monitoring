@@ -379,7 +379,7 @@ export const StoppageEntryTab: React.FC<Props> = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">{cfg.label} Entries</h3>
             <p className="text-sm text-gray-600">
-              Showing entries for {workCentreDisplayName || 'no work centre selected'} on {selectedDate}
+              Showing entries for {workCentreDisplayName || 'no work centre selected'} on {(() => { const [y, m, d] = selectedDate.split('-'); return `${m}/${d}/${y}`; })()}
             </p>
           </div>
           <button
@@ -400,7 +400,8 @@ export const StoppageEntryTab: React.FC<Props> = ({
             No {cfg.label.toLowerCase()} entries found for this date and work centre
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden sm:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -484,6 +485,54 @@ export const StoppageEntryTab: React.FC<Props> = ({
               </tbody>
             </table>
           </div>
+          {/* Mobile card view */}
+          <div className="sm:hidden space-y-2 p-2">
+            {entries.map((entry) => {
+              const parsed = parseM4FromDetail(stripStoppagePrefix(entry.stoppage_reason, cfg.prefix));
+              const startTime = formatTimeHHMM(entry.start_time) || formatTimeHHMM(entry.idle_start_time) || '—';
+              const inProgress = isEntryInProgress(entry);
+              return (
+                <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-gray-900">{entry.machine_id}</span>
+                        {entry.machine_name && <span className="text-[11px] text-gray-600">{entry.machine_name}</span>}
+                        {inProgress && (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 ring-1 ring-amber-200">
+                            In progress
+                          </span>
+                        )}
+                        {parsed.reasonCategory && (
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold ring-1 ${M4_BADGE_CLASS[parsed.reasonCategory] || 'bg-gray-100 text-gray-700 ring-gray-200'}`}>
+                            {parsed.reasonCategory}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        {new Date(entry.prod_date).toLocaleDateString('en-GB')} · {startTime}{inProgress ? '' : ` → ${formatTimeHHMM(entry.finish_time)}`} · Emp: {entry.emp_id}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button type="button" onClick={() => openModal(entry)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-50" title="Edit">
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button type="button" onClick={() => deleteEntry(entry)} className="p-2 rounded-lg text-red-500 hover:bg-red-50" title="Delete">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  {(parsed.reason || parsed.notes) && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-700">
+                      {parsed.reason && <p><span className="font-semibold text-gray-500">Reason:</span> {parsed.reason}</p>}
+                      {parsed.notes && <p className="mt-0.5 text-gray-500">{parsed.notes}</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
 

@@ -534,9 +534,6 @@ export const LineScheduleForm: React.FC = () => {
                       <GripVertical className="h-4 w-4 text-gray-300 shrink-0" />
                     )}
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                        {line.work_centre_code}
-                      </p>
                       <h3 className="text-lg font-bold text-gray-900">{line.work_centre_name}</h3>
                     </div>
                   </div>
