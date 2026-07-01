@@ -50,7 +50,7 @@ type MissedTab = 'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'ma
 const MISSED_TABS: { id: MissedTab; label: string; shortLabel: string; icon: React.ElementType }[] = [
   { id: 'live', label: 'Live Issues', shortLabel: 'Live', icon: Radio },
   { id: 'machines', label: 'Machine Status', shortLabel: 'Machines', icon: Cpu },
-  { id: 'daily', label: 'Daily Inactive Report', shortLabel: 'Daily', icon: CalendarDays },
+  { id: 'daily', label: 'Time Loss Details Report', shortLabel: 'Time Loss', icon: CalendarDays },
   { id: 'discipline', label: 'Cycle Discipline', shortLabel: 'Discipline', icon: BarChart2 },
   { id: 'operator', label: 'Operator Report', shortLabel: 'Operators', icon: User },
   { id: 'reminder', label: 'Reminder Settings', shortLabel: 'Reminders', icon: Settings2 },
@@ -1803,7 +1803,7 @@ export const MissedActionsPage: React.FC = () => {
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
-        doc.text('Daily Inactive Report', margin + 13, 19);
+        doc.text('Time Loss Details Report', margin + 13, 19);
 
         // Subtitle
         doc.setFontSize(9);
@@ -2035,7 +2035,7 @@ export const MissedActionsPage: React.FC = () => {
                 // Footer
                 doc.setFontSize(6.5);
                 doc.setTextColor(148, 163, 184);
-                doc.text(`ProdPulse  ·  Daily Inactive Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
+                doc.text(`ProdPulse  ·  Time Loss Details Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
               },
             });
             y = (doc as any).lastAutoTable.finalY + 5;
@@ -2160,7 +2160,7 @@ export const MissedActionsPage: React.FC = () => {
             didDrawPage: () => {
               doc.setFontSize(6.5);
               doc.setTextColor(148, 163, 184);
-              doc.text(`ProdPulse  ·  Daily Inactive Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
+              doc.text(`ProdPulse  ·  Time Loss Details Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
             },
           });
         }
@@ -2684,7 +2684,7 @@ export const MissedActionsPage: React.FC = () => {
               <p className="text-sm font-bold text-slate-900">{activeTabMeta.label}</p>
               <p className="text-xs text-slate-500">
                 {activeTab === 'live' && 'Real-time missed START and FINISH alerts across all lines.'}
-                {activeTab === 'daily' && 'Completed-cycle inactive and extra minutes for a date range.'}
+                {activeTab === 'daily' && 'Time loss breakdown by line, machine, and cycle for a date range.'}
                 {activeTab === 'discipline' && 'Late starts and slow finishes per cycle.'}
                 {activeTab === 'operator' && 'Operator-level loss summary and root causes.'}
                 {activeTab === 'machines' && 'Machine activity status: total, active, inactive machines and last entry times.'}
@@ -3499,12 +3499,11 @@ export const MissedActionsPage: React.FC = () => {
                 <p className="text-2xl sm:text-3xl xl:text-4xl font-black text-red-800 mt-1 tabular-nums">
                   {formatDashboardLoss(dailyVisibleSummary.total_lost_mins)} <span className="text-base sm:text-lg xl:text-xl">loss</span>
                 </p>
-                {previousDayTrend && (
-                  <p className={`text-[10px] sm:text-xs mt-1 font-semibold ${dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? '↓' : '↑'} vs previous day ({formatDashboardLoss(previousDayTrend.lost_mins)})
+                {dailySummary.yesterday_same_time && (
+                  <p className={`text-[10px] sm:text-xs mt-1 font-semibold ${dailyVisibleSummary.total_lost_mins <= dailySummary.yesterday_same_time.total_lost_mins ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {dailyVisibleSummary.total_lost_mins <= dailySummary.yesterday_same_time.total_lost_mins ? '↓' : '↑'} vs yesterday up to {dailySummary.yesterday_same_time.compared_up_to} ({formatDashboardLoss(dailySummary.yesterday_same_time.total_lost_mins)})
                   </p>
                 )}
-                <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Same calculation as TV dashboard time loss</p>
               </div>
               <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-200 p-3 sm:p-4 shadow-sm">
                 <p className="text-[10px] sm:text-[11px] text-blue-700 font-semibold uppercase tracking-wide">Started Late</p>
