@@ -2171,12 +2171,10 @@ export const MissedActionsPage: React.FC = () => {
         doc.setFillColor(240, 253, 244); // green-50
         doc.setDrawColor(34, 197, 94); // green-500
         doc.setLineWidth(0.3);
-        doc.roundedRect(margin, y, pageW - margin * 2, 35, 2, 2, 'FD');
 
         doc.setTextColor(22, 101, 52); // green-800
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.text('KEY INSIGHTS', margin + 4, y + 6);
 
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
@@ -2206,29 +2204,103 @@ export const MissedActionsPage: React.FC = () => {
         const totalMachinesPdf = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
         const allMachinesPdf = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
         const gainMachinesPdf = allMachinesPdf.filter(m => {
+          const totalGain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
           const netLoss = m.events.reduce((t, e) => t + eventLostMins(e), 0);
-          const hasEarlyFinish = m.events.some(e => Number(e.target_mins || 0) > Number(e.actual_mins || 0));
-          return netLoss === 0 && hasEarlyFinish && m.cycles > 0;
+          return totalGain > netLoss && m.cycles > 0;
         });
         if (gainMachinesPdf.length > 0) {
-          const gainNames = gainMachinesPdf.map(m => m.machineName).join(', ');
-          insights.push(`✓ Time gain machines: ${gainNames} (finished early, offsetting late starts).`);
-        }
-        const zeroLossMachinesPdf = allMachinesPdf.filter(m => m.events.reduce((t, e) => t + eventLostMins(e), 0) === 0).length;
-        if (zeroLossMachinesPdf > 0) {
-          insights.push(`→ ${zeroLossMachinesPdf} out of ${totalMachinesPdf} machines had zero net loss.`);
-        } else if (gainMachinesPdf.length === 0) {
+          const gainDetails = gainMachinesPdf.map(m => {
+            const gain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+            return `${m.machineName} (+${formatMinutes(gain)}m)`;
+          }).join(', ');
+          insights.push(`✓ Time gain: ${gainDetails}`);
+          insights.push(`→ ${gainMachinesPdf.length} out of ${totalMachinesPdf} machines had net time gain.`);
+        } else {
           insights.push(`→ No machines with zero loss today.`);
         }
 
         let insightY = y + 11;
+        // Draw box with dynamic height based on number of insights
+        const insightBoxHeight = 10 + insights.length * 5.5 + 4;
+        if (y + insightBoxHeight > pageH - 15) { doc.addPage(); y = margin; insightY = y + 11; }
+        doc.setFillColor(240, 253, 244);
+        doc.setDrawColor(34, 197, 94);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(margin, y, pageW - margin * 2, insightBoxHeight, 2, 2, 'FD');
+        doc.setTextColor(22, 101, 52);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('KEY INSIGHTS', margin + 4, y + 6);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(21, 128, 61);
+        insightY = y + 11;
         insights.forEach((line) => {
           doc.text(line, margin + 5, insightY);
           insightY += 5.5;
         });
 
-        // === FOOTER NOTE ===
+        // === HOW TO IMPROVE ===
         y = insightY + 8;
+        if (y > pageH - 50) { doc.addPage(); y = margin; }
+
+        const tips: string[] = [];
+        // Peak hour tip
+        if (lineLossTrend.length > 0) {
+          const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+          if (peak.total > 20) tips.push(`Reduce shift-start delay — ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
+        }
+        // Late starts vs finishes
+        const inactPdf = dailyVisibleSummary.total_inactive_mins;
+        const extPdf = dailyVisibleSummary.total_extra_mins;
+        if (inactPdf > extPdf * 2 && inactPdf > 30) {
+          tips.push(`Focus on start discipline — Late starts (${formatMinutes(inactPdf)}m) are ${extPdf > 0 ? (inactPdf / extPdf).toFixed(1) : '∞'}x more than late finishes. Click START immediately.`);
+        } else if (extPdf > inactPdf * 2 && extPdf > 30) {
+          tips.push(`Speed up cycle completion — Late finishes (${formatMinutes(extPdf)}m) dominate. Review target times or operator technique.`);
+        }
+        // Worst machine
+        const worstMachinePdf = allMachinesPdf.sort((a, b) => b.events.reduce((t, e) => t + eventLostMins(e), 0) - a.events.reduce((t, e) => t + eventLostMins(e), 0))[0];
+        if (worstMachinePdf && worstMachinePdf.events.reduce((t, e) => t + eventLostMins(e), 0) > 20) {
+          const wLoss = formatMinutes(worstMachinePdf.events.reduce((t, e) => t + eventLostMins(e), 0));
+          tips.push(`Investigate ${worstMachinePdf.machineName} — Highest loss (${wLoss}m). Check target or operator support.`);
+        }
+        // Time gain replication
+        if (gainMachinesPdf.length > 0) {
+          tips.push(`Replicate ${gainMachinesPdf[0].machineName}'s approach — This machine gains time by finishing early. Study its workflow.`);
+        }
+        // Tomorrow target
+        const totalLossPdf = dailyVisibleSummary.total_lost_mins;
+        if (totalLossPdf > 10) {
+          const target20Pdf = Math.round(totalLossPdf * 0.8);
+          tips.push(`Tomorrow's target — Reduce loss by 20% (from ${formatMinutes(totalLossPdf)}m to ${formatMinutes(target20Pdf)}m).`);
+        }
+
+        if (tips.length > 0) {
+          const tipBoxHeight = 14 + tips.length * 5.5 + 2;
+          if (y + tipBoxHeight > pageH - 15) { doc.addPage(); y = margin; }
+          doc.setFillColor(239, 246, 255); // blue-50
+          doc.setDrawColor(59, 130, 246); // blue-500
+          doc.setLineWidth(0.3);
+          doc.roundedRect(margin, y, pageW - margin * 2, tipBoxHeight, 2, 2, 'FD');
+          doc.setTextColor(30, 64, 175); // blue-800
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.text('HOW TO IMPROVE', margin + 4, y + 6);
+          doc.setFontSize(6);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(59, 130, 246);
+          doc.text('Actionable steps to reduce time loss and boost productivity', margin + 42, y + 6);
+          doc.setFontSize(7);
+          doc.setTextColor(30, 58, 138); // blue-900
+          let tipY = y + 12;
+          tips.forEach((tip) => {
+            doc.text(`⚡ ${tip}`, margin + 5, tipY);
+            tipY += 5.5;
+          });
+          y = tipY + 4;
+        }
+
+        // === FOOTER NOTE ===
         if (y > pageH - 15) { doc.addPage(); y = margin; }
         doc.setFillColor(248, 250, 252);
         doc.roundedRect(margin, y, pageW - margin * 2, 8, 1.5, 1.5, 'F');
@@ -3436,13 +3508,6 @@ export const MissedActionsPage: React.FC = () => {
                 </p>
                 <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">From current live missed issues</p>
               </div>
-              <div className="bg-gradient-to-br from-emerald-50 to-green-100/50 rounded-xl border border-emerald-200 p-3 sm:p-4 shadow-sm">
-                <p className="text-[10px] sm:text-[11px] text-emerald-700 font-semibold uppercase tracking-wide">Time Gain</p>
-                <p className="text-2xl sm:text-3xl font-black text-emerald-800 mt-1 tabular-nums">
-                  {formatDashboardLoss(dailyFilteredEvents.reduce((s, e) => s + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0))}
-                </p>
-                <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Recovered by finishing early</p>
-              </div>
               <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-xl border border-amber-200 p-3 sm:p-4 shadow-sm col-span-2 sm:col-span-3 xl:col-span-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
@@ -3565,21 +3630,67 @@ export const MissedActionsPage: React.FC = () => {
                             const totalMachines = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
                             const allMachines = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
                             const gainMachines = allMachines.filter(m => {
+                              const totalGain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
                               const netLoss = m.events.reduce((t, e) => t + eventLostMins(e), 0);
-                              const hasEarlyFinish = m.events.some(e => Number(e.target_mins || 0) > Number(e.actual_mins || 0));
-                              return netLoss === 0 && hasEarlyFinish && m.cycles > 0;
+                              return totalGain > netLoss && m.cycles > 0;
                             });
                             if (gainMachines.length > 0) {
-                              const gainNames = gainMachines.map(m => m.machineName).join(', ');
-                              items.push(`✓ Time gain machines: ${gainNames} (finished early, offsetting late starts).`);
-                            }
-                            const zeroLossMachines = allMachines.filter(m => m.events.reduce((t, e) => t + eventLostMins(e), 0) === 0).length;
-                            if (zeroLossMachines > 0) {
-                              items.push(`→ ${zeroLossMachines} out of ${totalMachines} machines had zero net loss.`);
-                            } else if (gainMachines.length === 0) {
+                              const gainDetails = gainMachines.map(m => {
+                                const gain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+                                return `${m.machineName} (+${formatMinutes(gain)}m)`;
+                              }).join(', ');
+                              items.push(`✓ Time gain: ${gainDetails}`);
+                              items.push(`→ ${gainMachines.length} out of ${totalMachines} machines had net time gain.`);
+                            } else {
                               items.push(`→ No machines with zero loss today.`);
                             }
                             return items.map((item, i) => <li key={i}>{item}</li>);
+                          })()}
+                        </ul>
+                      </div>
+                      {/* How to Improve */}
+                      <div className="rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 mt-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">How to Improve</p>
+                        <p className="text-[9px] text-blue-500 mb-2">Actionable steps to reduce time loss and boost productivity</p>
+                        <ul className="space-y-1.5 text-xs text-blue-800">
+                          {(() => {
+                            const tips: string[] = [];
+                            // Peak hour tip
+                            if (lineLossTrend.length > 0) {
+                              const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+                              if (peak.total > 20) tips.push(`⚡ Reduce shift-start delay — ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
+                            }
+                            // Late starts vs finishes
+                            const inact = dailyVisibleSummary.total_inactive_mins;
+                            const ext = dailyVisibleSummary.total_extra_mins;
+                            if (inact > ext * 2 && inact > 30) {
+                              tips.push(`⚡ Focus on start discipline — Late starts (${formatMinutes(inact)}m) are ${ext > 0 ? (inact / ext).toFixed(1) : '∞'}x more than late finishes. Click START immediately.`);
+                            } else if (ext > inact * 2 && ext > 30) {
+                              tips.push(`⚡ Speed up cycle completion — Late finishes (${formatMinutes(ext)}m) dominate. Review target times or operator technique.`);
+                            }
+                            // Worst machine tip
+                            const worstMachine = dailyVisibleLineMachineGroups.flatMap(l => l.machines).sort((a, b) => b.events.reduce((t, e) => t + eventLostMins(e), 0) - a.events.reduce((t, e) => t + eventLostMins(e), 0))[0];
+                            if (worstMachine && worstMachine.events.reduce((t, e) => t + eventLostMins(e), 0) > 20) {
+                              const worstLoss = formatMinutes(worstMachine.events.reduce((t, e) => t + eventLostMins(e), 0));
+                              tips.push(`⚡ Investigate ${worstMachine.machineName} — Highest loss (${worstLoss}m). Check if target is realistic or operator needs support.`);
+                            }
+                            // Time gain replication
+                            const allM = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
+                            const gainM = allM.filter(m => {
+                              const g = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+                              const l = m.events.reduce((t, e) => t + eventLostMins(e), 0);
+                              return g > l && m.cycles > 0;
+                            });
+                            if (gainM.length > 0) {
+                              tips.push(`⚡ Replicate ${gainM[0].machineName}'s approach — This machine gains time by finishing early. Study its workflow for other machines.`);
+                            }
+                            // Tomorrow target
+                            const totalLoss = dailyVisibleSummary.total_lost_mins;
+                            if (totalLoss > 10) {
+                              const target20 = Math.round(totalLoss * 0.8);
+                              tips.push(`⚡ Tomorrow's target — Reduce loss by 20% (from ${formatMinutes(totalLoss)}m to ${formatMinutes(target20)}m). Eliminate top machine's late starts first.`);
+                            }
+                            return tips.map((tip, i) => <li key={i}>{tip}</li>);
                           })()}
                         </ul>
                       </div>
