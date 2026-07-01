@@ -173,6 +173,7 @@ type ReportType =
   | 'rework-rejection'
   | 'employee'
   | 'idle-stoppages'
+  | 'time-loss-details'
   | 'shift-summary';
 
 type ApiReportType =
@@ -257,6 +258,7 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
   { value: 'rework-rejection', label: 'Rework & Rejection', icon: <AlertTriangle className="h-5 w-5" />, color: 'yellow' },
   { value: 'employee', label: 'Employee Reports', icon: <UserCheck className="h-5 w-5" />, color: 'teal', keywords: 'output performance efficiency grade' },
   { value: 'idle-stoppages', label: 'Time Loss & Stoppages', icon: <Wrench className="h-5 w-5" />, color: 'orange', keywords: 'time loss cycle late start bottleneck breakdown M4 stoppage' },
+  { value: 'time-loss-details', label: 'Time Loss Details', icon: <Clock className="h-5 w-5" />, color: 'indigo', keywords: 'time loss details daily inactive cycle machine gain insights' },
   { value: 'shift-summary', label: 'Shift Summary', icon: <BarChart2 className="h-5 w-5" />, color: 'slate' },
 ];
 
@@ -1391,6 +1393,10 @@ export const Reports: React.FC = () => {
   const exportBtnClass = `${actionBtnBase} border border-slate-700 bg-slate-800 text-white hover:bg-slate-900 disabled:bg-slate-300 disabled:text-slate-500 disabled:border-slate-300`;
 
   const selectReportTab = (tab: ReportType) => {
+    if (tab === 'time-loss-details') {
+      window.location.href = '/missed_actions?tab=daily';
+      return;
+    }
     setReportType(tab);
     setReportSubView(defaultSubViewFor(tab));
     setData(null);
