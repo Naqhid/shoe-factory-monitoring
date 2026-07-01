@@ -173,6 +173,7 @@ type ReportType =
   | 'rework-rejection'
   | 'employee'
   | 'idle-stoppages'
+  | 'time-loss-details'
   | 'shift-summary';
 
 type ApiReportType =
@@ -257,18 +258,19 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
   { value: 'rework-rejection', label: 'Rework & Rejection', icon: <AlertTriangle className="h-5 w-5" />, color: 'yellow' },
   { value: 'employee', label: 'Employee Reports', icon: <UserCheck className="h-5 w-5" />, color: 'teal', keywords: 'output performance efficiency grade' },
   { value: 'idle-stoppages', label: 'Time Loss & Stoppages', icon: <Wrench className="h-5 w-5" />, color: 'orange', keywords: 'time loss cycle late start bottleneck breakdown M4 stoppage' },
+  { value: 'time-loss-details', label: 'Time Loss Details', icon: <Clock className="h-5 w-5" />, color: 'indigo', keywords: 'time loss details daily inactive cycle machine gain insights' },
   { value: 'shift-summary', label: 'Shift Summary', icon: <BarChart2 className="h-5 w-5" />, color: 'slate' },
 ];
 
 /** Temporarily hidden from the report picker — remove entries to re-enable. */
 const HIDDEN_REPORT_TYPES: ReadonlySet<ReportType> = new Set(['attendance', 'employee']);
-const SHOW_DAILY_INACTIVE_REPORT_CALLOUT = false;
+const SHOW_DAILY_INACTIVE_REPORT_CALLOUT = true;
 
 const VISIBLE_REPORT_OPTIONS = REPORT_OPTIONS.filter((o) => !HIDDEN_REPORT_TYPES.has(o.value));
 const DEFAULT_VISIBLE_REPORT_TYPE: ReportType = VISIBLE_REPORT_OPTIONS[0]?.value ?? 'hourly-production';
 
 const normalizeVisibleReportTab = (tab: ReportType): ReportType =>
-  HIDDEN_REPORT_TYPES.has(tab) ? DEFAULT_VISIBLE_REPORT_TYPE : tab;
+  HIDDEN_REPORT_TYPES.has(tab) || tab === 'time-loss-details' ? DEFAULT_VISIBLE_REPORT_TYPE : tab;
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; activeBg: string; activeText: string }> = {
   blue:   { bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-200',   activeBg: 'bg-blue-600',   activeText: 'text-white' },
@@ -1391,6 +1393,10 @@ export const Reports: React.FC = () => {
   const exportBtnClass = `${actionBtnBase} border border-slate-700 bg-slate-800 text-white hover:bg-slate-900 disabled:bg-slate-300 disabled:text-slate-500 disabled:border-slate-300`;
 
   const selectReportTab = (tab: ReportType) => {
+    if (tab === 'time-loss-details') {
+      window.location.href = '/missed_actions?tab=daily';
+      return;
+    }
     setReportType(tab);
     setReportSubView(defaultSubViewFor(tab));
     setData(null);
@@ -2464,21 +2470,21 @@ export const Reports: React.FC = () => {
         </div>
 
         {SHOW_DAILY_INACTIVE_REPORT_CALLOUT && (
-        <div className="rounded-xl bg-white/90 backdrop-blur border border-blue-200/80 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200/80 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-              <AlertTriangle className="h-4 w-4" />
+            <div className="p-2 rounded-lg bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
+              <Clock className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">Daily lost minutes</p>
-              <p className="text-xs text-slate-500">Drill down in Missed Actions → Daily Inactive Report.</p>
+              <p className="text-sm font-bold text-slate-800">Time Loss Details Report</p>
+              <p className="text-xs text-slate-500">Detailed cycle-level time loss breakdown with insights, machine grouping, and PDF export.</p>
             </div>
           </div>
           <a
             href="/missed_actions?tab=daily"
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-colors"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition-colors"
           >
-            Open Missed Actions
+            Open Time Loss Report
             <ChevronRight className="h-3.5 w-3.5" />
           </a>
         </div>

@@ -28,7 +28,7 @@ import {
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
-import { computeCycleNetLostMins } from '../utils/cycleLostMins';
+import { computeCycleNetLostMins, computeCycleNetGainMins } from '../utils/cycleLostMins';
 import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import {
   formatOverdueLabel,
@@ -50,7 +50,7 @@ type MissedTab = 'live' | 'daily' | 'discipline' | 'operator' | 'reminder' | 'ma
 const MISSED_TABS: { id: MissedTab; label: string; shortLabel: string; icon: React.ElementType }[] = [
   { id: 'live', label: 'Live Issues', shortLabel: 'Live', icon: Radio },
   { id: 'machines', label: 'Machine Status', shortLabel: 'Machines', icon: Cpu },
-  { id: 'daily', label: 'Daily Inactive Report', shortLabel: 'Daily', icon: CalendarDays },
+  { id: 'daily', label: 'Time Loss Details Report', shortLabel: 'Time Loss', icon: CalendarDays },
   { id: 'discipline', label: 'Cycle Discipline', shortLabel: 'Discipline', icon: BarChart2 },
   { id: 'operator', label: 'Operator Report', shortLabel: 'Operators', icon: User },
   { id: 'reminder', label: 'Reminder Settings', shortLabel: 'Reminders', icon: Settings2 },
@@ -329,6 +329,7 @@ export const MissedActionsPage: React.FC = () => {
     total_inactive_mins: 0,
     total_extra_mins: 0,
     total_lost_mins: 0,
+    yesterday_same_time: null as null | { total_cycles: number; total_inactive_mins: number; total_extra_mins: number; total_lost_mins: number; compared_up_to: string },
   });
   const [dailyByLine, setDailyByLine] = React.useState<DailyReportLine[]>([]);
   const [dailyEvents, setDailyEvents] = React.useState<DailyReportEvent[]>([]);
@@ -1758,6 +1759,583 @@ export const MissedActionsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const exportDailyPdf = () => {
+    if (dailyFilteredEvents.length === 0) return;
+    // Dynamically import jsPDF for grouped PDF
+    import('jspdf').then(({ jsPDF }) => {
+      import('jspdf-autotable').then(({ default: autoTable }) => {
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const margin = 10;
+        const primary: [number, number, number] = [37, 99, 235];
+        const indigo: [number, number, number] = [79, 70, 229];
+        const light: [number, number, number] = [239, 246, 255];
+
+        // === PAGE HEADER ===
+        // Background gradient effect (dark to slightly lighter)
+        doc.setFillColor(15, 23, 42); // slate-900
+        doc.rect(0, 0, pageW, 36, 'F');
+        // Decorative side accent bar
+        doc.setFillColor(99, 102, 241); // indigo-500
+        doc.rect(0, 0, 3, 36, 'F');
+        // Bottom gradient stripe
+        doc.setFillColor(primary[0], primary[1], primary[2]);
+        doc.rect(0, 36, pageW, 2, 'F');
+        doc.setFillColor(79, 70, 229); // indigo
+        doc.rect(0, 38, pageW, 0.5, 'F');
+
+        // Logo area (circle badge)
+        doc.setFillColor(59, 130, 246); // blue-500
+        doc.circle(margin + 5, 14, 5, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.text('PP', margin + 3.2, 15.5);
+
+        // Brand text
+        doc.setTextColor(148, 163, 184); // slate-400
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.text('ProdPulse · Smart Production Tracking', margin + 13, 9);
+
+        // Title
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Time Loss Details Report', margin + 13, 19);
+
+        // Subtitle
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(165, 180, 252); // indigo-300
+        doc.text('Cycle discipline & time loss breakdown', margin + 13, 26);
+
+        // Confidential badge
+        doc.setFontSize(6);
+        doc.setTextColor(100, 116, 139);
+        doc.text('CONFIDENTIAL', margin + 13, 32);
+
+        // Right side info panel
+        const dateRange = dailyReportDate === dailyDateTo ? dailyReportDate : `${dailyReportDate} to ${dailyDateTo}`;
+        // Date badge
+        doc.setFillColor(30, 58, 138); // blue-900
+        doc.roundedRect(pageW - margin - 55, 6, 55, 10, 2, 2, 'F');
+        doc.setTextColor(147, 197, 253); // blue-300
+        doc.setFontSize(6);
+        doc.text('REPORT PERIOD', pageW - margin - 52, 10);
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text(dateRange, pageW - margin - 52, 14.5);
+
+        // Stats line
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`${dailyFilteredEvents.length} cycles recorded`, pageW - margin, 22, { align: 'right' });
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pageW - margin, 27, { align: 'right' });
+        const filterText = dailyMyLineOnly && preferredDailyLine ? `Line: ${preferredDailyLine}` : 'All lines';
+        doc.setTextColor(165, 180, 252);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text(filterText, pageW - margin, 32, { align: 'right' });
+
+        let y = 43;
+
+        // === EXECUTIVE SUMMARY LINE ===
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.2);
+        doc.roundedRect(margin, y, pageW - margin * 2, 8, 1.5, 1.5, 'FD');
+        const onTimeCycles = dailyFilteredEvents.filter(e => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length;
+        const onTimePct = dailyVisibleSummary.total_cycles > 0 ? Math.round((onTimeCycles / dailyVisibleSummary.total_cycles) * 100) : 0;
+        const avgLossPerCycle = dailyVisibleSummary.total_cycles > 0 ? (dailyVisibleSummary.total_lost_mins / dailyVisibleSummary.total_cycles).toFixed(1) : '0';
+        const worstLine = dailyVisibleLineLossRows[0]?.work_centre_name || '—';
+        doc.setTextColor(51, 65, 85);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`EXECUTIVE SUMMARY:`, margin + 3, y + 5.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(71, 85, 105);
+        doc.text(`${onTimePct}% On Time  ·  Avg Loss/Cycle: ${avgLossPerCycle}m  ·  Worst Line: ${worstLine}  ·  ${dailyVisibleLineMachineGroups.length} line(s) active`, margin + 42, y + 5.5);
+        y += 12;
+
+        // === SUMMARY KPI CARDS ===
+        const stats = [
+          { label: 'Total Cycles', value: String(dailyVisibleSummary.total_cycles), color: [30, 64, 175] as [number, number, number] },
+          { label: 'Started Late', value: `${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m`, color: [37, 99, 235] as [number, number, number] },
+          { label: 'Finished Late', value: `${formatMinutes(dailyVisibleSummary.total_extra_mins)}m`, color: [217, 119, 6] as [number, number, number] },
+          { label: 'Total Loss', value: `${formatMinutes(dailyVisibleSummary.total_lost_mins)}m`, color: [220, 38, 38] as [number, number, number] },
+          { label: 'On Time', value: `${onTimeCycles} (${onTimePct}%)`, color: [22, 163, 74] as [number, number, number] },
+          { label: 'Avg Loss/Cycle', value: `${avgLossPerCycle}m`, color: [124, 58, 237] as [number, number, number] },
+        ];
+        const kpiGap = 2.5;
+        const kpiW = (pageW - margin * 2 - kpiGap * (stats.length - 1)) / stats.length;
+        stats.forEach((stat, i) => {
+          const x = margin + i * (kpiW + kpiGap);
+          // Card background with shadow effect
+          doc.setFillColor(255, 255, 255);
+          doc.setDrawColor(203, 213, 225);
+          doc.setLineWidth(0.2);
+          doc.roundedRect(x, y, kpiW, 18, 2, 2, 'FD');
+          // Left color accent
+          doc.setFillColor(stat.color[0], stat.color[1], stat.color[2]);
+          doc.rect(x + 0.5, y + 3, 1.5, 12, 'F');
+          // Label
+          doc.setTextColor(100, 116, 139);
+          doc.setFontSize(5.5);
+          doc.setFont('helvetica', 'bold');
+          doc.text(stat.label.toUpperCase(), x + 5, y + 6.5);
+          // Value
+          doc.setTextColor(stat.color[0], stat.color[1], stat.color[2]);
+          doc.setFontSize(13);
+          doc.setFont('helvetica', 'bold');
+          doc.text(stat.value, x + 5, y + 14);
+          doc.setFont('helvetica', 'normal');
+        });
+        y += 24;
+
+        // === LINE LOSS RANKING TABLE ===
+        if (dailyVisibleLineLossRows.length > 0) {
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(51, 65, 85);
+          doc.text('LINE LOSS RANKING', margin, y + 3);
+          y += 5;
+
+          const rankHeaders = ['Line', 'Cycles', 'Started Late', 'Finished Late', 'Total Loss', 'Loss / Cycle'];
+          const rankRows = dailyVisibleLineLossRows.slice(0, 10).map((r) => [
+            r.work_centre_name,
+            String(r.cycles),
+            formatDashboardLoss(r.inactive),
+            formatDashboardLoss(r.extra),
+            formatDashboardLoss(r.lost),
+            formatDashboardLoss(r.perCycle),
+          ]);
+          autoTable(doc, {
+            startY: y,
+            head: [rankHeaders],
+            body: rankRows,
+            margin: { left: margin, right: margin },
+            styles: { fontSize: 6.5, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.1 },
+            headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            tableWidth: pageW * 0.55,
+          });
+          y = (doc as any).lastAutoTable.finalY + 6;
+        }
+
+        // === CYCLE DETAILS BY LINE → MACHINE ===
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(51, 65, 85);
+        doc.text('CYCLE DETAILS', margin, y + 3);
+        y += 7;
+
+        const headerLabels = ['Operator', 'Start', 'Finish', 'Target', 'Actual', 'Output', 'Started Late', 'Finished Late', 'Finished Early', 'On Time', 'Time Loss'];
+
+        dailyVisibleLineMachineGroups.forEach((line) => {
+          // Line header bar
+          if (y > pageH - 30) { doc.addPage(); y = margin; }
+          doc.setFillColor(indigo[0], indigo[1], indigo[2]);
+          doc.roundedRect(margin, y, pageW - margin * 2, 8, 1.5, 1.5, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.text(line.lineName, margin + 4, y + 5.5);
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'normal');
+          const lineTotalLoss = line.inactive + line.extra;
+          doc.text(`Cycles: ${line.cycles}  ·  Started Late: ${formatMinutes(line.inactive)}m  ·  Finished Late: ${formatMinutes(line.extra)}m  ·  Total Loss: ${formatMinutes(lineTotalLoss)}m`, pageW - margin - 4, y + 5.5, { align: 'right' });
+          y += 11;
+
+          line.machines.forEach((machine) => {
+            if (y > pageH - 20) { doc.addPage(); y = margin; }
+            // Machine subheader
+            const rootCause = machine.events[0]?.root_cause || '';
+            doc.setFillColor(238, 242, 255);
+            doc.setDrawColor(199, 210, 254);
+            doc.setLineWidth(0.2);
+            doc.roundedRect(margin, y, pageW - margin * 2, 7, 1, 1, 'FD');
+            doc.setTextColor(67, 56, 202); // indigo-700
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${machine.machineName}`, margin + 3, y + 4.8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            const machineInfo = rootCause
+              ? `Cycles: ${machine.cycles}  ·  Root Cause: ${rootCause}`
+              : `Cycles: ${machine.cycles}`;
+            doc.text(machineInfo, pageW - margin - 3, y + 4.8, { align: 'right' });
+            y += 9;
+
+            // Build rows
+            const tableRows = machine.events.map((row) => {
+              const actual = Number(row.actual_mins || 0);
+              const target = Number(row.target_mins || 0);
+              const inactive = Number(row.inactive_mins || 0);
+              const extra = Number(row.extra_mins || 0);
+              const finishedEarly = target > actual ? target - actual : 0;
+              const isOnTime = actual <= target && inactive === 0;
+              const timeLoss = inactive + extra;
+              return [
+                `${row.employee_name} (${row.employee_code})`,
+                row.start_time ? new Date(row.start_time).toLocaleTimeString() : '-',
+                row.finish_time ? new Date(row.finish_time).toLocaleTimeString() : '-',
+                formatMinutes(target),
+                formatMinutes(actual),
+                String(row.output_pairs ?? 0),
+                formatMinutes(inactive),
+                formatMinutes(extra),
+                finishedEarly > 0 ? formatMinutes(finishedEarly) : '—',
+                isOnTime ? '✓' : '—',
+                timeLoss > 0 ? formatMinutes(timeLoss) : '—',
+              ];
+            });
+
+            // Summary row
+            const totalActual = machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0);
+            const totalOutput = machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0);
+            const totalInactive = machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0);
+            const totalExtra = machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0);
+            const totalFinishedEarly = machine.events.reduce((s, e) => { const d = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (d > 0 ? d : 0); }, 0);
+            const totalOnTime = machine.events.filter((e) => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length;
+            const totalTimeLoss = totalInactive + totalExtra;
+            const summaryRow = [
+              `SUMMARY (${machine.events.length} cycles)`,
+              '', '',
+              '',
+              formatMinutes(totalActual),
+              String(totalOutput),
+              formatMinutes(totalInactive),
+              formatMinutes(totalExtra),
+              formatMinutes(totalFinishedEarly),
+              String(totalOnTime),
+              formatMinutes(totalTimeLoss),
+            ];
+
+            autoTable(doc, {
+              startY: y,
+              head: [headerLabels],
+              body: [summaryRow, ...tableRows],
+              margin: { left: margin, right: margin, top: margin, bottom: 14 },
+              styles: { fontSize: 6, cellPadding: 1.5, overflow: 'linebreak', valign: 'middle', lineColor: [226, 232, 240], lineWidth: 0.1 },
+              headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6, halign: 'left' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              didParseCell: (data) => {
+                if (data.section === 'body' && data.row.index === 0) {
+                  data.cell.styles.fillColor = [219, 234, 254];
+                  data.cell.styles.textColor = [30, 58, 138];
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              },
+              didDrawPage: () => {
+                // Footer
+                doc.setFontSize(6.5);
+                doc.setTextColor(148, 163, 184);
+                doc.text(`ProdPulse  ·  Time Loss Details Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
+              },
+            });
+            y = (doc as any).lastAutoTable.finalY + 5;
+          });
+          y += 3;
+        });
+
+        // === LOSS TREND SECTION ===
+        doc.addPage();
+        y = margin;
+
+        // Section title
+        doc.setFillColor(15, 23, 42);
+        doc.roundedRect(margin, y, pageW - margin * 2, 9, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LOSS TREND ANALYSIS', margin + 4, y + 6.5);
+        y += 14;
+
+        // Today's hourly loss trend
+        if (lineLossTrend.length > 0) {
+          doc.setTextColor(51, 65, 85);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Hourly Loss Trend (Today: 9 AM – 7 PM)', margin, y + 3);
+          y += 8;
+
+          const trendMax = Math.max(1, ...lineLossTrend.map((x) => x.total));
+          const barMaxWidth = pageW * 0.45;
+          const barHeight = 6;
+          const barGap = 2;
+
+          lineLossTrend.forEach((bucket) => {
+            if (y > pageH - 20) { doc.addPage(); y = margin; }
+            // Label
+            doc.setTextColor(71, 85, 105);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.text(bucket.label, margin, y + 4.5);
+            // Bar background
+            const barX = margin + 18;
+            doc.setFillColor(241, 245, 249);
+            doc.roundedRect(barX, y, barMaxWidth, barHeight, 1.5, 1.5, 'F');
+            // Bar fill
+            const barWidth = Math.max(2, (bucket.total / trendMax) * barMaxWidth);
+            doc.setFillColor(59, 130, 246);
+            doc.roundedRect(barX, y, barWidth, barHeight, 1.5, 1.5, 'F');
+            // Value
+            doc.setTextColor(30, 64, 175);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${Math.round(bucket.total)}m`, barX + barMaxWidth + 3, y + 4.5);
+            y += barHeight + barGap;
+          });
+          y += 6;
+        }
+
+        // Weekly trend (last 7 days)
+        if (weeklyTrend.length > 0) {
+          if (y > pageH - 60) { doc.addPage(); y = margin; }
+          doc.setTextColor(51, 65, 85);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Last 7 Days Trend', margin, y + 3);
+          y += 8;
+
+          const weekMax = Math.max(1, ...weeklyTrend.map((x) => x.lost_mins));
+          const wBarMaxWidth = pageW * 0.5;
+          const wBarHeight = 7;
+          const wBarGap = 3;
+
+          weeklyTrend.forEach((d) => {
+            if (y > pageH - 20) { doc.addPage(); y = margin; }
+            const label = new Date(d.day + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            // Label
+            doc.setTextColor(71, 85, 105);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.text(label, margin, y + 5);
+            // Bar background
+            const barX = margin + 35;
+            doc.setFillColor(241, 245, 249);
+            doc.roundedRect(barX, y, wBarMaxWidth, wBarHeight, 2, 2, 'F');
+            // Bar fill (red gradient for loss)
+            const barWidth = Math.max(2, (d.lost_mins / weekMax) * wBarMaxWidth);
+            doc.setFillColor(239, 68, 68); // red-500
+            doc.roundedRect(barX, y, barWidth, wBarHeight, 2, 2, 'F');
+            // Value
+            doc.setTextColor(185, 28, 28);
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${formatMinutes(d.lost_mins)}m`, barX + wBarMaxWidth + 4, y + 5);
+            // Extra info
+            doc.setTextColor(148, 163, 184);
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`${d.cycles} cycles`, barX + wBarMaxWidth + 22, y + 5);
+            y += wBarHeight + wBarGap;
+          });
+          y += 6;
+
+          // Weekly summary table
+          if (y > pageH - 30) { doc.addPage(); y = margin; }
+          const weekHeaders = ['Day', 'Cycles', 'Started Late', 'Finished Late', 'Total Loss'];
+          const weekRows = weeklyTrend.map((d) => [
+            new Date(d.day + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+            String(d.cycles),
+            `${formatMinutes(d.inactive_mins)}m`,
+            `${formatMinutes(d.extra_mins)}m`,
+            `${formatMinutes(d.lost_mins)}m`,
+          ]);
+          autoTable(doc, {
+            startY: y,
+            head: [weekHeaders],
+            body: weekRows,
+            margin: { left: margin, right: margin },
+            styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.1 },
+            headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+            alternateRowStyles: { fillColor: [254, 242, 242] },
+            tableWidth: pageW * 0.6,
+            didDrawPage: () => {
+              doc.setFontSize(6.5);
+              doc.setTextColor(148, 163, 184);
+              doc.text(`ProdPulse  ·  Time Loss Details Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
+            },
+          });
+        }
+
+        // === KEY INSIGHTS & RECOMMENDATIONS ===
+        y = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 10 : y + 10;
+        if (y > pageH - 50) { doc.addPage(); y = margin; }
+
+        doc.setFillColor(240, 253, 244); // green-50
+        doc.setDrawColor(34, 197, 94); // green-500
+        doc.setLineWidth(0.3);
+
+        doc.setTextColor(22, 101, 52); // green-800
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(21, 128, 61); // green-700
+        const insights: string[] = [];
+        if (onTimePct >= 80) insights.push(`✓ Good discipline — ${onTimePct}% of cycles completed on time.`);
+        else if (onTimePct > 0 && onTimePct >= 50) insights.push(`⚠ ${onTimePct}% on-time rate. Target: above 80%.`);
+        else if (onTimePct > 0) insights.push(`⚠ ${onTimePct}% on-time rate — needs improvement.`);
+        // Yesterday comparison (same time of day)
+        if (dailySummary.yesterday_same_time) {
+          const yst = dailySummary.yesterday_same_time;
+          const todayLossPdf2 = dailyVisibleSummary.total_lost_mins;
+          const yesterdayLossPdf = yst.total_lost_mins;
+          const diffPdf = yesterdayLossPdf - todayLossPdf2;
+          const pctChangePdf = yesterdayLossPdf > 0 ? Math.round(Math.abs(diffPdf) / yesterdayLossPdf * 100) : 0;
+          if (diffPdf > 0) {
+            insights.push(`✓ Improved vs yesterday (up to ${yst.compared_up_to}) — ${pctChangePdf}% less loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
+          } else if (diffPdf < 0) {
+            insights.push(`⚠ Worse than yesterday (up to ${yst.compared_up_to}) — ${pctChangePdf}% more loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
+          }
+          if (yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins > 5) {
+            insights.push(`  ↳ Late starts improved by ${formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m vs yesterday same time.`);
+          }
+          if (yst.total_extra_mins - dailyVisibleSummary.total_extra_mins > 5) {
+            insights.push(`  ↳ Late finishes improved by ${formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m vs yesterday same time.`);
+          }
+        }
+        if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
+          insights.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
+        } else {
+          insights.push(`→ Late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m) are the primary loss driver over late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m).`);
+        }
+        if (worstLine !== '—') insights.push(`→ Focus area: ${worstLine} has the highest total loss.`);
+        insights.push(`→ Average loss per cycle: ${avgLossPerCycle}m across ${dailyVisibleSummary.total_cycles} cycles.`);
+        // Peak loss hour
+        if (lineLossTrend.length > 0) {
+          const peakBucket = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+          if (peakBucket.total > 0) insights.push(`→ Peak loss hour: ${peakBucket.label} (${Math.round(peakBucket.total)}m).`);
+        }
+        // Best performing line (only when multiple lines)
+        if (dailyVisibleLineLossRows.length > 1) {
+          const best = dailyVisibleLineLossRows[dailyVisibleLineLossRows.length - 1];
+          insights.push(`→ Best line: ${best.work_centre_name} (${formatDashboardLoss(best.lost)} loss).`);
+        }
+        // Machines with zero net loss (time gain)
+        const totalMachinesPdf = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
+        const allMachinesPdf = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
+        const gainMachinesPdf = allMachinesPdf.filter(m => {
+          const totalGain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+          const netLoss = m.events.reduce((t, e) => t + eventLostMins(e), 0);
+          return totalGain > netLoss && m.cycles > 0;
+        });
+        if (gainMachinesPdf.length > 0) {
+          const gainDetails = gainMachinesPdf.map(m => {
+            const gain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+            return `${m.machineName} (+${formatMinutes(gain)}m)`;
+          }).join(', ');
+          insights.push(`✓ Time gain: ${gainDetails}`);
+          insights.push(`→ ${gainMachinesPdf.length} out of ${totalMachinesPdf} machines had net time gain.`);
+        } else {
+          insights.push(`→ No machines with zero loss today.`);
+        }
+
+        let insightY = y + 11;
+        // Draw box with dynamic height based on number of insights
+        const insightBoxHeight = 10 + insights.length * 5.5 + 4;
+        if (y + insightBoxHeight > pageH - 15) { doc.addPage(); y = margin; insightY = y + 11; }
+        doc.setFillColor(240, 253, 244);
+        doc.setDrawColor(34, 197, 94);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(margin, y, pageW - margin * 2, insightBoxHeight, 2, 2, 'FD');
+        doc.setTextColor(22, 101, 52);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('KEY INSIGHTS', margin + 4, y + 6);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(21, 128, 61);
+        insightY = y + 11;
+        insights.forEach((line) => {
+          doc.text(line, margin + 5, insightY);
+          insightY += 5.5;
+        });
+
+        // === HOW TO IMPROVE ===
+        y = insightY + 8;
+        if (y > pageH - 50) { doc.addPage(); y = margin; }
+
+        const tips: string[] = [];
+        // Peak hour tip
+        if (lineLossTrend.length > 0) {
+          const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+          if (peak.total > 20) tips.push(`Reduce shift-start delay — ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
+        }
+        // Late starts vs finishes
+        const inactPdf = dailyVisibleSummary.total_inactive_mins;
+        const extPdf = dailyVisibleSummary.total_extra_mins;
+        if (inactPdf > extPdf * 2 && inactPdf > 30) {
+          tips.push(`Focus on start discipline — Late starts (${formatMinutes(inactPdf)}m) are ${extPdf > 0 ? (inactPdf / extPdf).toFixed(1) : '∞'}x more than late finishes. Click START immediately.`);
+        } else if (extPdf > inactPdf * 2 && extPdf > 30) {
+          tips.push(`Speed up cycle completion — Late finishes (${formatMinutes(extPdf)}m) dominate. Review target times or operator technique.`);
+        }
+        // Worst machine
+        const worstMachinePdf = allMachinesPdf.sort((a, b) => b.events.reduce((t, e) => t + eventLostMins(e), 0) - a.events.reduce((t, e) => t + eventLostMins(e), 0))[0];
+        if (worstMachinePdf && worstMachinePdf.events.reduce((t, e) => t + eventLostMins(e), 0) > 20) {
+          const wLoss = formatMinutes(worstMachinePdf.events.reduce((t, e) => t + eventLostMins(e), 0));
+          tips.push(`Investigate ${worstMachinePdf.machineName} — Highest loss (${wLoss}m). Check target or operator support.`);
+        }
+        // Time gain replication
+        if (gainMachinesPdf.length > 0) {
+          tips.push(`Replicate ${gainMachinesPdf[0].machineName}'s approach — This machine gains time by finishing early. Study its workflow.`);
+        }
+        // Tomorrow target
+        const totalLossPdf = dailyVisibleSummary.total_lost_mins;
+        if (totalLossPdf > 10) {
+          const target20Pdf = Math.round(totalLossPdf * 0.8);
+          tips.push(`Tomorrow's target — Reduce loss by 20% (from ${formatMinutes(totalLossPdf)}m to ${formatMinutes(target20Pdf)}m).`);
+        }
+
+        if (tips.length > 0) {
+          const tipBoxHeight = 14 + tips.length * 5.5 + 2;
+          if (y + tipBoxHeight > pageH - 15) { doc.addPage(); y = margin; }
+          doc.setFillColor(239, 246, 255); // blue-50
+          doc.setDrawColor(59, 130, 246); // blue-500
+          doc.setLineWidth(0.3);
+          doc.roundedRect(margin, y, pageW - margin * 2, tipBoxHeight, 2, 2, 'FD');
+          doc.setTextColor(30, 64, 175); // blue-800
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.text('HOW TO IMPROVE', margin + 4, y + 6);
+          doc.setFontSize(6);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(59, 130, 246);
+          doc.text('Actionable steps to reduce time loss and boost productivity', margin + 42, y + 6);
+          doc.setFontSize(7);
+          doc.setTextColor(30, 58, 138); // blue-900
+          let tipY = y + 12;
+          tips.forEach((tip) => {
+            doc.text(`⚡ ${tip}`, margin + 5, tipY);
+            tipY += 5.5;
+          });
+          y = tipY + 4;
+        }
+
+        // === FOOTER NOTE ===
+        if (y > pageH - 15) { doc.addPage(); y = margin; }
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(margin, y, pageW - margin * 2, 8, 1.5, 1.5, 'F');
+        doc.setTextColor(148, 163, 184);
+        doc.setFontSize(6.5);
+        doc.text('This report was auto-generated by ProdPulse · Smart Production Tracking. Data reflects completed production cycles for the selected period.', margin + 3, y + 5.2);
+
+        // Open in new tab for preview
+        const pdfBlob = doc.output('blob');
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        window.open(blobUrl, '_blank');
+      });
+    });
+  };
+
   const exportDailySummaryCsv = () => {
     if (dailyVisibleLineLossRows.length === 0) return;
     const headers = ['line', 'cycles', 'inactive_mins', 'extra_mins', 'lost_mins', 'loss_per_cycle'];
@@ -2106,7 +2684,7 @@ export const MissedActionsPage: React.FC = () => {
               <p className="text-sm font-bold text-slate-900">{activeTabMeta.label}</p>
               <p className="text-xs text-slate-500">
                 {activeTab === 'live' && 'Real-time missed START and FINISH alerts across all lines.'}
-                {activeTab === 'daily' && 'Completed-cycle inactive and extra minutes for a date range.'}
+                {activeTab === 'daily' && 'Time loss breakdown by line, machine, and cycle for a date range.'}
                 {activeTab === 'discipline' && 'Late starts and slow finishes per cycle.'}
                 {activeTab === 'operator' && 'Operator-level loss summary and root causes.'}
                 {activeTab === 'machines' && 'Machine activity status: total, active, inactive machines and last entry times.'}
@@ -2787,8 +3365,9 @@ export const MissedActionsPage: React.FC = () => {
           </>
         ) : activeTab === 'daily' ? (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm ring-1 ring-black/[0.02]">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            {/* Filters Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm ring-1 ring-black/[0.02]">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   {isViewingTodayDaily ? (
                     <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-full bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200 hover:bg-white transition-colors">
@@ -2807,7 +3386,7 @@ export const MissedActionsPage: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3 items-end">
                 <div>
                   <label className={FILTER_LABEL}>From</label>
                   <input
@@ -2828,7 +3407,7 @@ export const MissedActionsPage: React.FC = () => {
                     className={FILTER_CONTROL}
                   />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className={FILTER_LABEL}>
                     <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
                   </label>
@@ -2848,44 +3427,53 @@ export const MissedActionsPage: React.FC = () => {
                   type="button"
                   onClick={() => { void fetchDailyReport(); }}
                   disabled={dailyLoading}
-                  className={BTN_PRIMARY}
+                  className={`${BTN_PRIMARY} w-full`}
                 >
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Refresh
                 </button>
                 <button
                   type="button"
-                  onClick={exportDailyCsv}
+                  onClick={exportDailyPdf}
                   disabled={dailyFilteredEvents.length === 0}
-                  className={BTN_DARK}
+                  className={`${BTN_DARK} w-full`}
                 >
                   <Download className="h-4 w-4" />
-                  Export detail
+                  <span className="hidden sm:inline">Export</span> PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={exportDailyCsv}
+                  disabled={dailyFilteredEvents.length === 0}
+                  className={`${BTN_SECONDARY} w-full`}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Export</span> CSV
                 </button>
                 <button
                   type="button"
                   onClick={exportDailySummaryCsv}
                   disabled={dailyVisibleLineLossRows.length === 0}
-                  className={BTN_SECONDARY}
+                  className={`${BTN_SECONDARY} w-full col-span-2 sm:col-span-1`}
                 >
                   <Download className="h-4 w-4" />
-                  Export summary
+                  <span className="hidden sm:inline">Export</span> Summary
                 </button>
               </div>
-              <div className="mt-4 border-t border-slate-100 pt-4 flex flex-wrap items-center gap-2">
+              <div className="mt-3 border-t border-slate-100 pt-3 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setDailyTopOffendersOnly((v) => !v)}
                   title="Show only the top 5 lines/operators with the highest time loss"
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyTopOffendersOnly ? 'bg-red-100 text-red-800 border-red-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[10px] sm:text-xs font-semibold border transition-colors ${dailyTopOffendersOnly ? 'bg-red-100 text-red-800 border-red-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
                 >
-                  Top offenders only
+                  Top offenders
                 </button>
                 <button
                   type="button"
                   onClick={() => setDailyBreachedOnly((v) => !v)}
                   title="Show only cycles that breached the 15-min start grace or exceeded target duration"
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyBreachedOnly ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[10px] sm:text-xs font-semibold border transition-colors ${dailyBreachedOnly ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
                 >
                   Breached only
                 </button>
@@ -2893,11 +3481,11 @@ export const MissedActionsPage: React.FC = () => {
                   type="button"
                   onClick={() => setDailyMyLineOnly((v) => !v)}
                   disabled={!preferredDailyLine}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${dailyMyLineOnly ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'} disabled:opacity-50`}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[10px] sm:text-xs font-semibold border transition-colors ${dailyMyLineOnly ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'} disabled:opacity-50`}
                 >
-                  My line only {preferredDailyLine ? `(${preferredDailyLine})` : '(set line first)'}
+                  My line{preferredDailyLine ? ` (${preferredDailyLine})` : ''}
                 </button>
-                <div className="ml-auto text-[11px] text-slate-500 flex flex-wrap items-center gap-2">
+                <div className="ml-auto hidden sm:flex items-center gap-2 text-[10px] text-slate-500">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">Inactive = blue</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Extra = amber</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Loss = red</span>
@@ -2905,63 +3493,67 @@ export const MissedActionsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              <div className="bg-red-50 rounded-xl border-2 border-red-300 p-5 shadow-sm">
-                <p className="text-[11px] text-red-700 font-semibold uppercase tracking-wide">Total Time Loss</p>
-                <p className="text-3xl sm:text-4xl font-black text-red-800 mt-1 tabular-nums">
-                  {formatDashboardLoss(dailyVisibleSummary.total_lost_mins)} <span className="text-lg sm:text-xl">loss</span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
+              <div className="col-span-2 sm:col-span-3 xl:col-span-2 bg-gradient-to-br from-red-50 to-red-100/50 rounded-xl border-2 border-red-200 p-4 sm:p-5 shadow-sm">
+                <p className="text-[10px] sm:text-[11px] text-red-700 font-semibold uppercase tracking-wide">Total Time Loss</p>
+                <p className="text-2xl sm:text-3xl xl:text-4xl font-black text-red-800 mt-1 tabular-nums">
+                  {formatDashboardLoss(dailyVisibleSummary.total_lost_mins)} <span className="text-base sm:text-lg xl:text-xl">loss</span>
                 </p>
-                {previousDayTrend && (
-                  <p className={`text-xs mt-1 font-semibold ${dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {dailyVisibleSummary.total_lost_mins <= previousDayTrend.lost_mins ? '↓' : '↑'} vs previous day ({formatDashboardLoss(previousDayTrend.lost_mins)})
+                {dailySummary.yesterday_same_time && (
+                  <p className={`text-[10px] sm:text-xs mt-1 font-semibold ${dailyVisibleSummary.total_lost_mins <= dailySummary.yesterday_same_time.total_lost_mins ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {dailyVisibleSummary.total_lost_mins <= dailySummary.yesterday_same_time.total_lost_mins ? '↓' : '↑'} vs yesterday up to {dailySummary.yesterday_same_time.compared_up_to} ({formatDashboardLoss(dailySummary.yesterday_same_time.total_lost_mins)})
                   </p>
                 )}
-                <p className="text-xs text-gray-500 mt-1">Same calculation as TV dashboard time loss</p>
               </div>
-              <div className="bg-blue-50 rounded-xl border-2 border-blue-300 p-5 shadow-sm">
-                <p className="text-[11px] text-blue-700 font-semibold uppercase tracking-wide">Inactive Minutes</p>
-                <p className="text-4xl font-black text-blue-800 mt-1">{formatMinutes(dailyVisibleSummary.total_inactive_mins)}</p>
-                <p className="text-xs text-gray-500 mt-1">Waiting / no-start loss</p>
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-200 p-3 sm:p-4 shadow-sm">
+                <p className="text-[10px] sm:text-[11px] text-blue-700 font-semibold uppercase tracking-wide">Started Late</p>
+                <p className="text-2xl sm:text-3xl font-black text-blue-800 mt-1 tabular-nums">{formatMinutes(dailyVisibleSummary.total_inactive_mins)}<span className="text-sm text-blue-500">m</span></p>
+                <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Waiting / no-start loss</p>
               </div>
-              <div className="bg-amber-50 rounded-xl border-2 border-amber-300 p-5 shadow-sm">
-                <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Extra Minutes</p>
-                <p className="text-4xl font-black text-amber-800 mt-1">{formatMinutes(dailyVisibleSummary.total_extra_mins)}</p>
-                <p className="text-xs text-gray-500 mt-1">Cycle over target duration</p>
+              <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl border border-amber-200 p-3 sm:p-4 shadow-sm">
+                <p className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Finished Late</p>
+                <p className="text-2xl sm:text-3xl font-black text-amber-800 mt-1 tabular-nums">{formatMinutes(dailyVisibleSummary.total_extra_mins)}<span className="text-sm text-amber-500">m</span></p>
+                <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Cycle over target duration</p>
               </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Total Cycles</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{dailyVisibleSummary.total_cycles}</p>
-                <p className="text-xs text-gray-500 mt-1">Completed cycles for selected date</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 shadow-sm">
+                <p className="text-[10px] sm:text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Total Cycles</p>
+                <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 tabular-nums">{dailyVisibleSummary.total_cycles}</p>
+                <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Completed cycles for selected date</p>
               </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Live Active Loss</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">
-                  {formatMinutes(liveLossRows.reduce((sum, row) => sum + row.activeLoss, 0))}
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 shadow-sm">
+                <p className="text-[10px] sm:text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Live Active Loss</p>
+                <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 tabular-nums">
+                  {formatDashboardLoss(liveLossRows.reduce((sum, row) => sum + row.activeLoss, 0))}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">From current live missed issues</p>
+                <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">From current live missed issues</p>
               </div>
-              <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
-                <p className="text-[11px] text-amber-700 font-semibold uppercase tracking-wide">
-                  Worst Line {dailyReportDate === dailyDateTo ? '(Today)' : `(${dailyReportDate} – ${dailyDateTo})`}
-                </p>
-                <p className="text-xl font-bold text-amber-700 mt-1">{dailyVisibleLineLossRows[0]?.work_centre_name || '-'}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {dailyVisibleLineLossRows[0] ? `${formatDashboardLoss(dailyVisibleLineLossRows[0].lost)} loss` : 'No data'}
-                </p>
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-xl border border-amber-200 p-3 sm:p-4 shadow-sm col-span-2 sm:col-span-3 xl:col-span-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">
+                      Worst Line {dailyReportDate === dailyDateTo ? '(Today)' : `(${dailyReportDate} – ${dailyDateTo})`}
+                    </p>
+                    <p className="text-lg sm:text-xl font-bold text-amber-700 mt-0.5">{dailyVisibleLineLossRows[0]?.work_centre_name || '-'}</p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {dailyVisibleLineLossRows[0] ? `${formatDashboardLoss(dailyVisibleLineLossRows[0].lost)} total loss` : 'No data'}
+                  </p>
+                </div>
               </div>
             </div>
             {dailyError ? (
               <div className="bg-white rounded-xl border border-red-200 p-6 text-center text-red-600 font-medium">{dailyError}</div>
             ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 sm:gap-4">
                 <div className="xl:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="p-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-gray-700">Line Loss Ranking</span>
-                    <button type="button" onClick={() => setShowAllLineRows((v) => !v)} className="text-xs font-semibold text-blue-700 hover:text-blue-800">
+                  <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-slate-700 to-slate-800 flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-white">Line Loss Ranking</span>
+                    <button type="button" onClick={() => setShowAllLineRows((v) => !v)} className="text-xs font-semibold text-blue-200 hover:text-white transition">
                       {showAllLineRows ? 'Show fewer' : 'View all'}
                     </button>
                   </div>
-                  <div className="overflow-x-auto">
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
                     {dailyVisibleLineLossRows.length === 0 ? (
                       <p className="px-4 py-6 text-sm text-gray-400 text-center">No loss data for the selected period.</p>
                     ) : (
@@ -2970,19 +3562,19 @@ export const MissedActionsPage: React.FC = () => {
                           <tr>
                             <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Line</th>
                             <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Cycles</th>
-                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Inactive</th>
-                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Extra</th>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Started Late</th>
+                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Late</th>
                             <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Total Loss</th>
                             <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Loss / Cycle</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {dailyVisibleLineLossRows.map((row) => (
-                            <tr key={row.work_centre_name}>
+                          {dailyVisibleLineLossRows.map((row, idx) => (
+                            <tr key={row.work_centre_name} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
                               <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{row.work_centre_name}</td>
                               <td className="px-3 py-2.5 text-sm text-gray-700">{row.cycles}</td>
-                              <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatMinutes(row.inactive)}</td>
-                              <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatMinutes(row.extra)}</td>
+                              <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatDashboardLoss(row.inactive)}</td>
+                              <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatDashboardLoss(row.extra)}</td>
                               <td className="px-3 py-2.5 text-sm text-red-700 font-bold tabular-nums">{formatDashboardLoss(row.lost)}</td>
                               <td className="px-3 py-2.5 text-sm text-gray-700 tabular-nums">{formatDashboardLoss(row.perCycle)}</td>
                             </tr>
@@ -2991,9 +3583,160 @@ export const MissedActionsPage: React.FC = () => {
                       </table>
                     )}
                   </div>
+                  {/* Mobile cards */}
+                  <div className="sm:hidden p-2 space-y-2">
+                    {dailyVisibleLineLossRows.length === 0 ? (
+                      <p className="px-2 py-6 text-sm text-gray-400 text-center">No loss data.</p>
+                    ) : (
+                      dailyVisibleLineLossRows.map((row, idx) => (
+                        <div key={row.work_centre_name} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold text-gray-900">{row.work_centre_name}</span>
+                            <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-full">{formatDashboardLoss(row.lost)}</span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Cycles</p>
+                              <p className="text-sm font-bold text-gray-800">{row.cycles}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-blue-500">Late Start</p>
+                              <p className="text-sm font-bold text-blue-700">{formatDashboardLoss(row.inactive)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-amber-500">Late Finish</p>
+                              <p className="text-sm font-bold text-amber-700">{formatDashboardLoss(row.extra)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {/* Key Insights */}
+                  {dailyVisibleLineLossRows.length > 0 && (
+                    <div className="p-3 border-t border-gray-100">
+                      <div className="rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 mb-2">Key Insights</p>
+                        <ul className="space-y-1.5 text-xs text-emerald-800">
+                          {(() => {
+                            const totalCycles = dailyVisibleSummary.total_cycles;
+                            const onTime = dailyFilteredEvents.filter(e => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length;
+                            const onTimePctVal = totalCycles > 0 ? Math.round((onTime / totalCycles) * 100) : 0;
+                            const avgLoss = totalCycles > 0 ? (dailyVisibleSummary.total_lost_mins / totalCycles).toFixed(1) : '0';
+                            const worst = dailyVisibleLineLossRows[0];
+                            const items: string[] = [];
+                            if (onTimePctVal > 0) {
+                              items.push(onTimePctVal >= 80 ? `✓ Good discipline — ${onTimePctVal}% of cycles completed on time.` : `⚠ ${onTimePctVal}% on-time rate. Target: above 80%.`);
+                            }
+                            // Yesterday comparison (same time of day)
+                            if (dailySummary.yesterday_same_time) {
+                              const yst = dailySummary.yesterday_same_time;
+                              const todayLoss = dailyVisibleSummary.total_lost_mins;
+                              const yesterdayLoss = yst.total_lost_mins;
+                              const diff = yesterdayLoss - todayLoss;
+                              const pctChange = yesterdayLoss > 0 ? Math.round(Math.abs(diff) / yesterdayLoss * 100) : 0;
+                              if (diff > 0) {
+                                items.push(`✓ Improved vs yesterday (up to ${yst.compared_up_to}) — ${pctChange}% less loss (${formatDashboardLoss(todayLoss)} vs ${formatDashboardLoss(yesterdayLoss)}). Keep it up!`);
+                              } else if (diff < 0) {
+                                items.push(`⚠ Worse than yesterday (up to ${yst.compared_up_to}) — ${pctChange}% more loss (${formatDashboardLoss(todayLoss)} vs ${formatDashboardLoss(yesterdayLoss)}).`);
+                              }
+                              if (yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins > 5) {
+                                items.push(`  ↳ Late starts improved by ${formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m vs yesterday same time.`);
+                              }
+                              if (yst.total_extra_mins - dailyVisibleSummary.total_extra_mins > 5) {
+                                items.push(`  ↳ Late finishes improved by ${formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m vs yesterday same time.`);
+                              }
+                            }
+                            if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
+                              items.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
+                            } else if (dailyVisibleSummary.total_extra_mins > 0) {
+                              items.push(`→ Late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m) are the primary loss driver over late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m).`);
+                            }
+                            if (worst) items.push(`→ Focus area: ${worst.work_centre_name} has the highest total loss.`);
+                            items.push(`→ Average loss per cycle: ${avgLoss}m across ${totalCycles} cycles.`);
+                            // Peak loss hour
+                            if (lineLossTrend.length > 0) {
+                              const peakBucket = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+                              if (peakBucket.total > 0) items.push(`→ Peak loss hour: ${peakBucket.label} (${Math.round(peakBucket.total)}m).`);
+                            }
+                            // Best performing line (only when multiple lines)
+                            if (dailyVisibleLineLossRows.length > 1) {
+                              const best = dailyVisibleLineLossRows[dailyVisibleLineLossRows.length - 1];
+                              items.push(`→ Best line: ${best.work_centre_name} (${formatDashboardLoss(best.lost)} loss).`);
+                            }
+                            // Machines with zero net loss (time gain = early finishes fully offset late starts)
+                            const totalMachines = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
+                            const allMachines = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
+                            const gainMachines = allMachines.filter(m => {
+                              const totalGain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+                              const netLoss = m.events.reduce((t, e) => t + eventLostMins(e), 0);
+                              return totalGain > netLoss && m.cycles > 0;
+                            });
+                            if (gainMachines.length > 0) {
+                              const gainDetails = gainMachines.map(m => {
+                                const gain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+                                return `${m.machineName} (+${formatMinutes(gain)}m)`;
+                              }).join(', ');
+                              items.push(`✓ Time gain: ${gainDetails}`);
+                              items.push(`→ ${gainMachines.length} out of ${totalMachines} machines had net time gain.`);
+                            } else {
+                              items.push(`→ No machines with zero loss today.`);
+                            }
+                            return items.map((item, i) => <li key={i}>{item}</li>);
+                          })()}
+                        </ul>
+                      </div>
+                      {/* How to Improve */}
+                      <div className="rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 mt-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">How to Improve</p>
+                        <p className="text-[9px] text-blue-500 mb-2">Actionable steps to reduce time loss and boost productivity</p>
+                        <ul className="space-y-1.5 text-xs text-blue-800">
+                          {(() => {
+                            const tips: string[] = [];
+                            // Peak hour tip
+                            if (lineLossTrend.length > 0) {
+                              const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+                              if (peak.total > 20) tips.push(`⚡ Reduce shift-start delay — ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
+                            }
+                            // Late starts vs finishes
+                            const inact = dailyVisibleSummary.total_inactive_mins;
+                            const ext = dailyVisibleSummary.total_extra_mins;
+                            if (inact > ext * 2 && inact > 30) {
+                              tips.push(`⚡ Focus on start discipline — Late starts (${formatMinutes(inact)}m) are ${ext > 0 ? (inact / ext).toFixed(1) : '∞'}x more than late finishes. Click START immediately.`);
+                            } else if (ext > inact * 2 && ext > 30) {
+                              tips.push(`⚡ Speed up cycle completion — Late finishes (${formatMinutes(ext)}m) dominate. Review target times or operator technique.`);
+                            }
+                            // Worst machine tip
+                            const worstMachine = dailyVisibleLineMachineGroups.flatMap(l => l.machines).sort((a, b) => b.events.reduce((t, e) => t + eventLostMins(e), 0) - a.events.reduce((t, e) => t + eventLostMins(e), 0))[0];
+                            if (worstMachine && worstMachine.events.reduce((t, e) => t + eventLostMins(e), 0) > 20) {
+                              const worstLoss = formatMinutes(worstMachine.events.reduce((t, e) => t + eventLostMins(e), 0));
+                              tips.push(`⚡ Investigate ${worstMachine.machineName} — Highest loss (${worstLoss}m). Check if target is realistic or operator needs support.`);
+                            }
+                            // Time gain replication
+                            const allM = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
+                            const gainM = allM.filter(m => {
+                              const g = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
+                              const l = m.events.reduce((t, e) => t + eventLostMins(e), 0);
+                              return g > l && m.cycles > 0;
+                            });
+                            if (gainM.length > 0) {
+                              tips.push(`⚡ Replicate ${gainM[0].machineName}'s approach — This machine gains time by finishing early. Study its workflow for other machines.`);
+                            }
+                            // Tomorrow target
+                            const totalLoss = dailyVisibleSummary.total_lost_mins;
+                            if (totalLoss > 10) {
+                              const target20 = Math.round(totalLoss * 0.8);
+                              tips.push(`⚡ Tomorrow's target — Reduce loss by 20% (from ${formatMinutes(totalLoss)}m to ${formatMinutes(target20)}m). Eliminate top machine's late starts first.`);
+                            }
+                            return tips.map((tip, i) => <li key={i}>{tip}</li>);
+                          })()}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="p-3 border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-700">Loss Trend</div>
+                  <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 text-sm font-bold text-white">Loss Trend</div>
                   <div className="p-3 space-y-3">
                     {dailyReportDate === dailyDateTo && (
                       <div>
@@ -3046,8 +3789,8 @@ export const MissedActionsPage: React.FC = () => {
             )}
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-gray-700">Cycle Details (Line → Machine)</span>
+              <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-indigo-600 to-blue-600 flex items-center justify-between gap-2">
+                <span className="text-sm font-bold text-white">Cycle Details (Line → Machine)</span>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -3060,14 +3803,14 @@ export const MissedActionsPage: React.FC = () => {
                       });
                       setExpandedMachineKeys(next);
                     }}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300 bg-white text-gray-700"
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white/20 text-white hover:bg-white/30 transition"
                   >
                     Expand All
                   </button>
                   <button
                     type="button"
                     onClick={() => setExpandedMachineKeys({})}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300 bg-white text-gray-700"
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white/20 text-white hover:bg-white/30 transition"
                   >
                     Collapse All
                   </button>
@@ -3075,17 +3818,19 @@ export const MissedActionsPage: React.FC = () => {
               </div>
 
               <div className="p-3 space-y-3">
-                {dailyVisibleLineMachineGroups.slice(dailyPage * dailyPageSize, (dailyPage + 1) * dailyPageSize).map((line) => (
-                  <div key={line.lineName} className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                      <p className="text-sm font-bold text-gray-700">{line.lineName}</p>
-                      <p className="text-xs text-gray-600">
-                        Cycles: {line.cycles} | Inactive: {formatMinutes(line.inactive)} | Extra: {formatMinutes(line.extra)}
-                      </p>
+                {dailyVisibleLineMachineGroups.slice(dailyPage * dailyPageSize, (dailyPage + 1) * dailyPageSize).map((line, lineIdx) => (
+                  <div key={line.lineName} className="border border-indigo-200/60 rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100 flex items-center justify-between">
+                      <p className="text-sm font-bold text-indigo-800">{line.lineName}</p>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="font-semibold text-indigo-600">Cycles: {line.cycles}</span>
+                        <span className="font-semibold text-blue-600">Inactive: {formatMinutes(line.inactive)}</span>
+                        <span className="font-semibold text-amber-600">Extra: {formatMinutes(line.extra)}</span>
+                      </div>
                     </div>
 
                     <div className="divide-y divide-gray-100">
-                      {line.machines.map((machine) => {
+                      {line.machines.map((machine, machineIdx) => {
                         const machineKey = `${line.lineName}__${machine.machineKey}`;
                         const isExpanded = !!expandedMachineKeys[machineKey];
                         return (
@@ -3093,16 +3838,44 @@ export const MissedActionsPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setExpandedMachineKeys((prev) => ({ ...prev, [machineKey]: !prev[machineKey] }))}
-                              className="w-full px-3 py-2.5 bg-white hover:bg-gray-50 flex items-center justify-between text-left"
+                              className={`w-full px-4 py-2.5 flex items-center justify-between text-left transition-colors ${
+                                isExpanded ? 'bg-blue-50/60' : machineIdx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/50 hover:bg-blue-50/40'
+                              }`}
                             >
                               <div className="flex items-center gap-2">
-                                {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
-                                <span className="text-sm font-semibold text-gray-800">{machine.machineName}</span>
+                                {isExpanded ? <ChevronDown className="h-4 w-4 text-blue-600" /> : <ChevronRight className="h-4 w-4 text-indigo-400" />}
+                                <span className={`text-sm font-semibold ${isExpanded ? 'text-blue-700' : 'text-gray-800'}`}>{machine.machineName}</span>
                               </div>
-                              <span className="text-xs text-gray-600">
-                                Cycles: {machine.cycles} | Inactive: {formatMinutes(machine.inactive)} | Extra: {formatMinutes(machine.extra)}
-                              </span>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="font-medium text-indigo-600">Cycles: {machine.cycles}</span>
+                                <span className="font-medium text-blue-600">Inactive: {formatMinutes(machine.inactive)}</span>
+                                <span className="font-medium text-amber-600">Extra: {formatMinutes(machine.extra)}</span>
+                              </div>
                             </button>
+
+                            {/* Machine-level root cause — visible only when expanded */}
+                            {isExpanded && (
+                              <div className="px-3 py-2 bg-gray-50/50 border-t border-gray-100 flex items-center gap-2">
+                                <span className="text-xs font-semibold text-gray-500">Root Cause:</span>
+                                <RootCauseSelect
+                                  value={machine.events[0]?.root_cause}
+                                  onChange={(val) => {
+                                    const ids = machine.events.map((ev) => ev.id);
+                                    setDailyEvents((prev) => prev.map((ev) => ids.includes(ev.id) ? { ...ev, root_cause: val } : ev));
+                                    ids.forEach((id) => {
+                                      const key = `daily__${id}`;
+                                      apiFetch(`${API_BASE}/api/missed-actions/root-cause`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ issue_key: key, root_cause: val }),
+                                      }).catch(() => {});
+                                    });
+                                    toast.success(val ? `Root cause set for all ${ids.length} cycles: ${val}` : 'Root cause cleared');
+                                  }}
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+                                />
+                              </div>
+                            )}
 
                             {isExpanded && (
                               <div className="overflow-x-auto border-t border-gray-100">
@@ -3120,7 +3893,6 @@ export const MissedActionsPage: React.FC = () => {
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Early</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">On Time</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Time Loss</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Root Cause</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
@@ -3136,7 +3908,6 @@ export const MissedActionsPage: React.FC = () => {
                                       <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-green-800">{machine.events.filter((e) => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs text-gray-500">—</td>
                                     </tr>
                                     {machine.events.map((row) => {
                                       const actual = Number(row.actual_mins || 0);
@@ -3159,23 +3930,6 @@ export const MissedActionsPage: React.FC = () => {
                                         <td className="px-3 py-2.5 text-sm font-semibold text-emerald-600">{finishedEarly > 0 ? formatMinutes(finishedEarly) : '—'}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold">{isOnTime ? <span className="text-green-600">✓</span> : <span className="text-gray-300">—</span>}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold text-red-600">{timeLoss > 0 ? formatMinutes(timeLoss) : '—'}</td>
-                                        <td className="px-3 py-2.5 text-sm">
-                                          <RootCauseSelect
-                                            value={row.root_cause}
-                                            onChange={(val) => {
-                                              const key = `daily__${row.id}`;
-                                              setDailyEvents((prev) => prev.map((ev) => ev.id === row.id ? { ...ev, root_cause: val } : ev));
-                                              apiFetch(`${API_BASE}/api/missed-actions/root-cause`, {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ issue_key: key, root_cause: val }),
-                                              })
-                                                .then(() => toast.success(val ? `Root cause saved: ${val}` : 'Root cause cleared'))
-                                                .catch(() => toast.error('Failed to save root cause'));
-                                            }}
-                                            className="px-1.5 py-1 text-xs border border-gray-300 rounded bg-white"
-                                          />
-                                        </td>
                                       </tr>
                                       );
                                     })}
