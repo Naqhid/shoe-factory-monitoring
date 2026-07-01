@@ -4126,7 +4126,19 @@ export const ManualProductionEntryForm: React.FC = () => {
                                         </span>
                                       )}
                                     </div>
-                                    <span className="text-xs font-bold tabular-nums text-blue-700">{Number(row.output_pairs || 0)} prs</span>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className="text-xs font-bold tabular-nums text-blue-700 mr-1">{Number(row.output_pairs || 0)} prs</span>
+                                      {canMutate && (
+                                        <button type="button" onClick={() => handleProdEdit(row)} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100" title="Edit">
+                                          <Edit className="h-3.5 w-3.5" aria-hidden />
+                                        </button>
+                                      )}
+                                      {canMutate && (
+                                        <button type="button" onClick={() => setProdDeleteCandidate(row)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 active:bg-red-100" title="Delete">
+                                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-500">
                                     <span>{formatShortTime(row.start_time)} → {isActive ? 'now' : formatShortTime(row.finish_time)}</span>
