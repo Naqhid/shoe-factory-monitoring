@@ -37,6 +37,7 @@ import {
   getFixFirstScore,
   type MissedActionLike,
 } from '../utils/missedActionsLiveUtils';
+import { downloadReportPdf } from '../utils/reportPdfExport';
 
 const LIVE_SORT_LABELS: Record<string, string> = {
   fix_first: 'Fix first',
@@ -1758,6 +1759,56 @@ export const MissedActionsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const exportDailyPdf = () => {
+    if (dailyFilteredEvents.length === 0) return;
+    const headerLabels = ['Line', 'Machine', 'Operator', 'Start', 'Finish', 'Target', 'Actual', 'Output', 'Started Late', 'Finished Late', 'Finished Early', 'On Time', 'Time Loss', 'Root Cause'];
+    const rows = dailyFilteredEvents.map((i) => {
+      const actual = Number(i.actual_mins || 0);
+      const target = Number(i.target_mins || 0);
+      const inactive = Number(i.inactive_mins || 0);
+      const extra = Number(i.extra_mins || 0);
+      const finishedEarly = target > actual ? target - actual : 0;
+      const isOnTime = actual <= target && inactive === 0;
+      const timeLoss = inactive + extra;
+      return [
+        i.work_centre_name || '',
+        i.machine_name || i.machine_id || '',
+        `${i.employee_name} (${i.employee_code})`,
+        i.start_time ? new Date(i.start_time).toLocaleTimeString() : '-',
+        i.finish_time ? new Date(i.finish_time).toLocaleTimeString() : '-',
+        formatMinutes(target),
+        formatMinutes(actual),
+        String(i.output_pairs ?? 0),
+        formatMinutes(inactive),
+        formatMinutes(extra),
+        finishedEarly > 0 ? formatMinutes(finishedEarly) : '—',
+        isOnTime ? '✓' : '—',
+        timeLoss > 0 ? formatMinutes(timeLoss) : '—',
+        i.root_cause || '',
+      ];
+    });
+    downloadReportPdf({
+      meta: {
+        title: 'Daily Inactive Report',
+        subtitle: 'Cycle discipline & time loss breakdown',
+        dateRange: dailyReportDate === dailyDateTo ? dailyReportDate : `${dailyReportDate} to ${dailyDateTo}`,
+        filters: dailyMyLineOnly && preferredDailyLine ? [`Line: ${preferredDailyLine}`] : ['All lines'],
+        rowCount: rows.length,
+        generatedAt: new Date().toLocaleString(),
+        themeColor: 'blue',
+        summaryStats: [
+          { label: 'Total Cycles', value: dailyVisibleSummary.total_cycles },
+          { label: 'Started Late', value: `${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m` },
+          { label: 'Finished Late', value: `${formatMinutes(dailyVisibleSummary.total_extra_mins)}m` },
+          { label: 'Total Loss', value: `${formatMinutes(dailyVisibleSummary.total_lost_mins)}m` },
+        ],
+      },
+      headerLabels,
+      rows,
+      filename: `daily_report_${dailyReportDate}.pdf`,
+    });
+  };
+
   const exportDailySummaryCsv = () => {
     if (dailyVisibleLineLossRows.length === 0) return;
     const headers = ['line', 'cycles', 'inactive_mins', 'extra_mins', 'lost_mins', 'loss_per_cycle'];
@@ -2855,12 +2906,21 @@ export const MissedActionsPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={exportDailyCsv}
+                  onClick={exportDailyPdf}
                   disabled={dailyFilteredEvents.length === 0}
                   className={BTN_DARK}
                 >
                   <Download className="h-4 w-4" />
-                  Export detail
+                  Export PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={exportDailyCsv}
+                  disabled={dailyFilteredEvents.length === 0}
+                  className={BTN_SECONDARY}
+                >
+                  <Download className="h-4 w-4" />
+                  Export CSV
                 </button>
                 <button
                   type="button"
@@ -2936,7 +2996,7 @@ export const MissedActionsPage: React.FC = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                 <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Live Active Loss</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">
-                  {formatMinutes(liveLossRows.reduce((sum, row) => sum + row.activeLoss, 0))}
+                  {formatDashboardLoss(liveLossRows.reduce((sum, row) => sum + row.activeLoss, 0))}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">From current live missed issues</p>
               </div>
@@ -2981,8 +3041,8 @@ export const MissedActionsPage: React.FC = () => {
                             <tr key={row.work_centre_name}>
                               <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{row.work_centre_name}</td>
                               <td className="px-3 py-2.5 text-sm text-gray-700">{row.cycles}</td>
-                              <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatMinutes(row.inactive)}</td>
-                              <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatMinutes(row.extra)}</td>
+                              <td className="px-3 py-2.5 text-sm text-blue-700 font-semibold">{formatDashboardLoss(row.inactive)}</td>
+                              <td className="px-3 py-2.5 text-sm text-amber-700 font-semibold">{formatDashboardLoss(row.extra)}</td>
                               <td className="px-3 py-2.5 text-sm text-red-700 font-bold tabular-nums">{formatDashboardLoss(row.lost)}</td>
                               <td className="px-3 py-2.5 text-sm text-gray-700 tabular-nums">{formatDashboardLoss(row.perCycle)}</td>
                             </tr>
