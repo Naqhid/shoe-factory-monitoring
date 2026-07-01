@@ -815,6 +815,79 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
     const totalCycles = byLine.reduce((sum, row) => sum + Number(row.cycles || 0), 0);
     const allEvents = [...filtered, ...syntheticEvents];
 
+    // --- Yesterday same-time comparison ---
+    let yesterdaySameTime = null;
+    const today = new Date().toISOString().slice(0, 10);
+    const isViewingToday = dateFrom === today && dateTo === today;
+    if (isViewingToday) {
+      try {
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const comparedUpTo = `${currentHour > 12 ? currentHour - 12 : currentHour}:${String(currentMinute).padStart(2, '0')} ${currentHour >= 12 ? 'PM' : 'AM'}`;
+
+        // Yesterday's date
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+        // Query yesterday's cycles that started before the same time of day
+        const cutoffTime = `${yesterdayStr} ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}:00`;
+
+        const [yRows] = await db.query(
+          `SELECT
+            mcp.start_time,
+            mcp.finish_time,
+            mcp.target_mins,
+            ROUND(TIMESTAMPDIFF(SECOND, mcp.start_time, mcp.finish_time) / 60.0, 1) AS actual_mins,
+            LAG(mcp.finish_time) OVER (
+              PARTITION BY mcp.machine_id, DATE(mcp.prod_date)
+              ORDER BY mcp.start_time
+            ) AS prev_finish_time
+          FROM machine_centre_production mcp
+          LEFT JOIN work_centres wc ON wc.id = mcp.work_centre_id
+          WHERE DATE(mcp.prod_date) = ?
+            AND mcp.button_status = 2
+            AND mcp.start_time IS NOT NULL
+            AND mcp.finish_time IS NOT NULL
+            AND mcp.start_time <= ?
+            AND wc.deleted_at IS NULL AND COALESCE(wc.is_active, 1) = 1
+          ORDER BY mcp.machine_id, mcp.start_time`,
+          [yesterdayStr, cutoffTime]
+        );
+
+        let yInactive = 0, yExtra = 0, yLost = 0, yCycles = yRows.length;
+        yRows.forEach((row) => {
+          const actualMins = toNumber(row.actual_mins, 0);
+          const targetMins = toNumber(row.target_mins, 0);
+          const extra = Math.max(0, actualMins - targetMins);
+          const startTs = new Date(row.start_time);
+          const shiftStart = new Date(startTs);
+          shiftStart.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+          const baselineTs = row.prev_finish_time ? new Date(row.prev_finish_time) : shiftStart;
+          const inactive = computeShiftInactiveMinutes({
+            baselineTs,
+            startTs,
+            startReminderSecs: TIME_LOSS_START_GRACE_SECS,
+          });
+          const lost = computeCycleNetLostMins(inactive, targetMins, actualMins);
+          yInactive += inactive;
+          yExtra += extra;
+          yLost += lost;
+        });
+
+        yesterdaySameTime = {
+          total_cycles: yCycles,
+          total_inactive_mins: Math.round(yInactive * 10) / 10,
+          total_extra_mins: Math.round(yExtra * 10) / 10,
+          total_lost_mins: Math.round(yLost * 10) / 10,
+          compared_up_to: comparedUpTo,
+        };
+      } catch (err) {
+        logger.warn('Failed to compute yesterday_same_time comparison:', err.message);
+      }
+    }
+
     return res.json({
       success: true,
       date: dateFrom,
@@ -830,6 +903,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         total_inactive_mins: totalInactive,
         total_extra_mins: totalExtra,
         total_lost_mins: totalLost,
+        yesterday_same_time: yesterdaySameTime,
       },
       by_line: byLine,
       events: allEvents,

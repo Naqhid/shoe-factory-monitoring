@@ -329,6 +329,7 @@ export const MissedActionsPage: React.FC = () => {
     total_inactive_mins: 0,
     total_extra_mins: 0,
     total_lost_mins: 0,
+    yesterday_same_time: null as null | { total_cycles: number; total_inactive_mins: number; total_extra_mins: number; total_lost_mins: number; compared_up_to: string },
   });
   const [dailyByLine, setDailyByLine] = React.useState<DailyReportLine[]>([]);
   const [dailyEvents, setDailyEvents] = React.useState<DailyReportEvent[]>([]);
@@ -2183,6 +2184,25 @@ export const MissedActionsPage: React.FC = () => {
         if (onTimePct >= 80) insights.push(`✓ Good discipline — ${onTimePct}% of cycles completed on time.`);
         else if (onTimePct > 0 && onTimePct >= 50) insights.push(`⚠ ${onTimePct}% on-time rate. Target: above 80%.`);
         else if (onTimePct > 0) insights.push(`⚠ ${onTimePct}% on-time rate — needs improvement.`);
+        // Yesterday comparison (same time of day)
+        if (dailySummary.yesterday_same_time) {
+          const yst = dailySummary.yesterday_same_time;
+          const todayLossPdf2 = dailyVisibleSummary.total_lost_mins;
+          const yesterdayLossPdf = yst.total_lost_mins;
+          const diffPdf = yesterdayLossPdf - todayLossPdf2;
+          const pctChangePdf = yesterdayLossPdf > 0 ? Math.round(Math.abs(diffPdf) / yesterdayLossPdf * 100) : 0;
+          if (diffPdf > 0) {
+            insights.push(`✓ Improved vs yesterday (up to ${yst.compared_up_to}) — ${pctChangePdf}% less loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
+          } else if (diffPdf < 0) {
+            insights.push(`⚠ Worse than yesterday (up to ${yst.compared_up_to}) — ${pctChangePdf}% more loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
+          }
+          if (yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins > 5) {
+            insights.push(`  ↳ Late starts improved by ${formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m vs yesterday same time.`);
+          }
+          if (yst.total_extra_mins - dailyVisibleSummary.total_extra_mins > 5) {
+            insights.push(`  ↳ Late finishes improved by ${formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m vs yesterday same time.`);
+          }
+        }
         if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
           insights.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
         } else {
@@ -3608,6 +3628,25 @@ export const MissedActionsPage: React.FC = () => {
                             const items: string[] = [];
                             if (onTimePctVal > 0) {
                               items.push(onTimePctVal >= 80 ? `✓ Good discipline — ${onTimePctVal}% of cycles completed on time.` : `⚠ ${onTimePctVal}% on-time rate. Target: above 80%.`);
+                            }
+                            // Yesterday comparison (same time of day)
+                            if (dailySummary.yesterday_same_time) {
+                              const yst = dailySummary.yesterday_same_time;
+                              const todayLoss = dailyVisibleSummary.total_lost_mins;
+                              const yesterdayLoss = yst.total_lost_mins;
+                              const diff = yesterdayLoss - todayLoss;
+                              const pctChange = yesterdayLoss > 0 ? Math.round(Math.abs(diff) / yesterdayLoss * 100) : 0;
+                              if (diff > 0) {
+                                items.push(`✓ Improved vs yesterday (up to ${yst.compared_up_to}) — ${pctChange}% less loss (${formatDashboardLoss(todayLoss)} vs ${formatDashboardLoss(yesterdayLoss)}). Keep it up!`);
+                              } else if (diff < 0) {
+                                items.push(`⚠ Worse than yesterday (up to ${yst.compared_up_to}) — ${pctChange}% more loss (${formatDashboardLoss(todayLoss)} vs ${formatDashboardLoss(yesterdayLoss)}).`);
+                              }
+                              if (yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins > 5) {
+                                items.push(`  ↳ Late starts improved by ${formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m vs yesterday same time.`);
+                              }
+                              if (yst.total_extra_mins - dailyVisibleSummary.total_extra_mins > 5) {
+                                items.push(`  ↳ Late finishes improved by ${formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m vs yesterday same time.`);
+                              }
                             }
                             if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
                               items.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
