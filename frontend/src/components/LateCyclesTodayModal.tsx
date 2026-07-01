@@ -6,7 +6,7 @@ import {
   computeCycleNetLostMins,
   LateCycleCategory,
 } from '../utils/cycleLostMins';
-import { CycleDurationInline, minutesToDurationParts, sumMinutes } from '../utils/formatCycleDuration';
+import { CycleDurationInline, minutesToDurationParts, formatDurationString, sumMinutes } from '../utils/formatCycleDuration';
 import { LateCycleTiming, LateCycleTimingCard } from './LateCycleTimingCard';
 
 const FILTER_OPTIONS: { value: LateCycleCategory; label: string }[] = [
@@ -167,7 +167,7 @@ export function LateCyclesTodayModal({
                             : 'text-red-900'
                       }`}
                     >
-                      {!hasNetDelta ? '0m' : `${netDeltaParts.wholeMinutes}m ${netDeltaParts.seconds}s`}
+                      {!hasNetDelta ? '0m' : formatDurationString(netDeltaMins)}
                     </p>
                   </div>
                 </div>

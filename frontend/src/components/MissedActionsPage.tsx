@@ -29,7 +29,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { computeCycleNetLostMins, computeCycleNetGainMins } from '../utils/cycleLostMins';
-import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
 import {
   formatOverdueLabel,
   formatRecoveryHint,
@@ -2376,8 +2376,7 @@ export const MissedActionsPage: React.FC = () => {
   };
 
   const formatDashboardLoss = (value: number) => {
-    const parts = minutesToDurationParts(Math.abs(Number(value) || 0));
-    return `${parts.wholeMinutes}m ${parts.seconds}s`;
+    return formatDurationString(Number(value) || 0);
   };
 
   const criticalItemsCount = React.useMemo(

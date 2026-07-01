@@ -35,7 +35,7 @@ import { HourlyOutputChart } from './HourlyOutputChart';
 import { Reports } from './Reports';
 import { formatInput, formatWip } from '../utils/wipUtils';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals, SHIFT_END_MINUTES, SHIFT_START_MINUTES } from '../utils/shiftPaceUtils';
-import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
 import { formatSinceTimeHHMM } from '../utils/dateTimeFormat';
 import { TimeLossReasonDialog } from './TimeLossReasonDialog';
 import { ProductionDayLockPanel } from './ProductionDayLockPanel';
@@ -71,22 +71,21 @@ const machineKeysMatch = (left: string, right: string) => {
 
 const formatSignedNetBalance = (netMins: number) => {
   if (Math.abs(netMins) * 60 < 1) return null;
-  const parts = minutesToDurationParts(Math.abs(netMins));
-  const dur = `${parts.wholeMinutes}m ${parts.seconds}s`;
+  const dur = formatDurationString(netMins);
   return netMins < 0 ? `${dur} loss` : `${dur} gain`;
 };
 
 /** Duration only for card badges (label already says Time loss / Net balance). */
 const formatNetBalanceDuration = (netMins: number) => {
   if (Math.abs(netMins) * 60 < 1) return null;
-  const parts = minutesToDurationParts(Math.abs(netMins));
-  return `${parts.wholeMinutes}m ${parts.seconds}s`;
+  return formatDurationString(netMins);
 };
 
 /** Shift time remaining — whole minutes and seconds, no decimals. */
 const formatShiftTimeLeft = (minutes: number) => {
   const parts = minutesToDurationParts(Math.max(0, minutes));
-  if (parts.wholeMinutes <= 0 && parts.seconds <= 0) return '0s left';
+  if (parts.wholeMinutes <= 0 && parts.hours <= 0 && parts.seconds <= 0) return '0s left';
+  if (parts.hours > 0) return `${parts.hours}h ${parts.wholeMinutes}m ${parts.seconds}s left`;
   if (parts.wholeMinutes <= 0) return `${parts.seconds}s left`;
   if (parts.seconds <= 0) return `${parts.wholeMinutes}m left`;
   return `${parts.wholeMinutes}m ${parts.seconds}s left`;

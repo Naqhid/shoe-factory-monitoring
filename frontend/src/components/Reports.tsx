@@ -6,7 +6,7 @@ import html2canvas from 'html2canvas';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import * as XLSX from 'xlsx';
-import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
 import {
   addDaysToDateKey,
   computeCompareDelta,
@@ -386,7 +386,7 @@ const CompareDeltaCell: React.FC<{
 const formatNetBalanceLabel = (netMins: number) => {
   const parts = minutesToDurationParts(Math.abs(netMins));
   const status = Math.abs(netMins) * 60 < 1 ? 'neutral' : netMins > 0 ? 'gain' : 'loss';
-  return { parts, status, text: `${parts.wholeMinutes}m ${parts.seconds}s ${status}` };
+  return { parts, status, text: `${formatDurationString(netMins)} ${status}` };
 };
 
 const netBalanceBadge = (netMins: number) => {

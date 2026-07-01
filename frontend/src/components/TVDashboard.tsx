@@ -9,7 +9,7 @@ import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
-import { minutesToDurationParts } from '../utils/formatCycleDuration';
+import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
 import { M4_BADGE_CLASS, M4_REASON_ROW_CLASS, M4_REASON_TEXT_CLASS } from '../utils/m4ReasonUtils';
 
 const formatPairsPerHour = (value: number | null) => {
@@ -580,7 +580,6 @@ export const TVDashboard: React.FC = () => {
     const totalReworkQty = Number(reworkTotals.total_rework || 0);
     const totalRejectionQty = Number(reworkTotals.total_rejection || 0);
     const netMachineDeltaMins = machineTimeLossRows.reduce((sum: number, row: any) => sum + Number(row.net_mins || 0), 0);
-    const netMachineDeltaParts = minutesToDurationParts(Math.abs(netMachineDeltaMins));
     const netMachineDeltaLabel =
       Math.abs(netMachineDeltaMins) * 60 < 1
         ? 'neutral'
@@ -1161,14 +1160,13 @@ export const TVDashboard: React.FC = () => {
                                                     </span>
                                                     {(() => {
                                                         const net = Number(row.net_mins || 0);
-                                                        const parts = minutesToDurationParts(Math.abs(net));
                                                         const tone =
                                                             net > 0
                                                                 ? 'text-emerald-800 bg-emerald-100 border border-emerald-300'
                                                                 : 'text-red-700 bg-red-50 border border-red-200';
                                                         return (
                                                             <span className={`text-[9px] sm:text-[10px] font-black tabular-nums shrink-0 px-1 py-px rounded leading-tight ${tone}`}>
-                                                                {parts.wholeMinutes}m {parts.seconds}s
+                                                                {formatDurationString(net)}
                                                             </span>
                                                         );
                                                     })()}
@@ -1185,7 +1183,7 @@ export const TVDashboard: React.FC = () => {
                                                               : 'text-gray-700'
                                                     }`}
                                                 >
-                                                    {netMachineDeltaParts.wholeMinutes}m {netMachineDeltaParts.seconds}s
+                                                    {formatDurationString(netMachineDeltaMins)}
                                                 </span>
                                             </div>
                                         </div>
