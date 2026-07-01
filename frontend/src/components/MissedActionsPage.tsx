@@ -28,7 +28,7 @@ import {
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
-import { computeCycleNetLostMins } from '../utils/cycleLostMins';
+import { computeCycleNetLostMins, computeCycleNetGainMins } from '../utils/cycleLostMins';
 import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import {
   formatOverdueLabel,
@@ -2183,8 +2183,8 @@ export const MissedActionsPage: React.FC = () => {
         doc.setTextColor(21, 128, 61); // green-700
         const insights: string[] = [];
         if (onTimePct >= 80) insights.push(`✓ Good discipline — ${onTimePct}% of cycles completed on time.`);
-        else if (onTimePct >= 50) insights.push(`⚠ ${onTimePct}% on-time rate. Target: above 80%.`);
-        else insights.push(`✗ Only ${onTimePct}% on-time rate — needs immediate attention.`);
+        else if (onTimePct > 0 && onTimePct >= 50) insights.push(`⚠ ${onTimePct}% on-time rate. Target: above 80%.`);
+        else if (onTimePct > 0) insights.push(`⚠ ${onTimePct}% on-time rate — needs improvement.`);
         if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
           insights.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
         } else {
@@ -2192,6 +2192,34 @@ export const MissedActionsPage: React.FC = () => {
         }
         if (worstLine !== '—') insights.push(`→ Focus area: ${worstLine} has the highest total loss.`);
         insights.push(`→ Average loss per cycle: ${avgLossPerCycle}m across ${dailyVisibleSummary.total_cycles} cycles.`);
+        // Peak loss hour
+        if (lineLossTrend.length > 0) {
+          const peakBucket = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+          if (peakBucket.total > 0) insights.push(`→ Peak loss hour: ${peakBucket.label} (${Math.round(peakBucket.total)}m).`);
+        }
+        // Best performing line (only when multiple lines)
+        if (dailyVisibleLineLossRows.length > 1) {
+          const best = dailyVisibleLineLossRows[dailyVisibleLineLossRows.length - 1];
+          insights.push(`→ Best line: ${best.work_centre_name} (${formatDashboardLoss(best.lost)} loss).`);
+        }
+        // Machines with zero net loss (time gain)
+        const totalMachinesPdf = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
+        const allMachinesPdf = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
+        const gainMachinesPdf = allMachinesPdf.filter(m => {
+          const netLoss = m.events.reduce((t, e) => t + eventLostMins(e), 0);
+          const hasEarlyFinish = m.events.some(e => Number(e.target_mins || 0) > Number(e.actual_mins || 0));
+          return netLoss === 0 && hasEarlyFinish && m.cycles > 0;
+        });
+        if (gainMachinesPdf.length > 0) {
+          const gainNames = gainMachinesPdf.map(m => m.machineName).join(', ');
+          insights.push(`✓ Time gain machines: ${gainNames} (finished early, offsetting late starts).`);
+        }
+        const zeroLossMachinesPdf = allMachinesPdf.filter(m => m.events.reduce((t, e) => t + eventLostMins(e), 0) === 0).length;
+        if (zeroLossMachinesPdf > 0) {
+          insights.push(`→ ${zeroLossMachinesPdf} out of ${totalMachinesPdf} machines had zero net loss.`);
+        } else if (gainMachinesPdf.length === 0) {
+          insights.push(`→ No machines with zero loss today.`);
+        }
 
         let insightY = y + 11;
         insights.forEach((line) => {
@@ -3408,6 +3436,13 @@ export const MissedActionsPage: React.FC = () => {
                 </p>
                 <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">From current live missed issues</p>
               </div>
+              <div className="bg-gradient-to-br from-emerald-50 to-green-100/50 rounded-xl border border-emerald-200 p-3 sm:p-4 shadow-sm">
+                <p className="text-[10px] sm:text-[11px] text-emerald-700 font-semibold uppercase tracking-wide">Time Gain</p>
+                <p className="text-2xl sm:text-3xl font-black text-emerald-800 mt-1 tabular-nums">
+                  {formatDashboardLoss(dailyFilteredEvents.reduce((s, e) => s + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0))}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Recovered by finishing early</p>
+              </div>
               <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-xl border border-amber-200 p-3 sm:p-4 shadow-sm col-span-2 sm:col-span-3 xl:col-span-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
@@ -3493,6 +3528,63 @@ export const MissedActionsPage: React.FC = () => {
                       ))
                     )}
                   </div>
+                  {/* Key Insights */}
+                  {dailyVisibleLineLossRows.length > 0 && (
+                    <div className="p-3 border-t border-gray-100">
+                      <div className="rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 mb-2">Key Insights</p>
+                        <ul className="space-y-1.5 text-xs text-emerald-800">
+                          {(() => {
+                            const totalCycles = dailyVisibleSummary.total_cycles;
+                            const onTime = dailyFilteredEvents.filter(e => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length;
+                            const onTimePctVal = totalCycles > 0 ? Math.round((onTime / totalCycles) * 100) : 0;
+                            const avgLoss = totalCycles > 0 ? (dailyVisibleSummary.total_lost_mins / totalCycles).toFixed(1) : '0';
+                            const worst = dailyVisibleLineLossRows[0];
+                            const items: string[] = [];
+                            if (onTimePctVal > 0) {
+                              items.push(onTimePctVal >= 80 ? `✓ Good discipline — ${onTimePctVal}% of cycles completed on time.` : `⚠ ${onTimePctVal}% on-time rate. Target: above 80%.`);
+                            }
+                            if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
+                              items.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
+                            } else if (dailyVisibleSummary.total_extra_mins > 0) {
+                              items.push(`→ Late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m) are the primary loss driver over late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m).`);
+                            }
+                            if (worst) items.push(`→ Focus area: ${worst.work_centre_name} has the highest total loss.`);
+                            items.push(`→ Average loss per cycle: ${avgLoss}m across ${totalCycles} cycles.`);
+                            // Peak loss hour
+                            if (lineLossTrend.length > 0) {
+                              const peakBucket = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
+                              if (peakBucket.total > 0) items.push(`→ Peak loss hour: ${peakBucket.label} (${Math.round(peakBucket.total)}m).`);
+                            }
+                            // Best performing line (only when multiple lines)
+                            if (dailyVisibleLineLossRows.length > 1) {
+                              const best = dailyVisibleLineLossRows[dailyVisibleLineLossRows.length - 1];
+                              items.push(`→ Best line: ${best.work_centre_name} (${formatDashboardLoss(best.lost)} loss).`);
+                            }
+                            // Machines with zero net loss (time gain = early finishes fully offset late starts)
+                            const totalMachines = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
+                            const allMachines = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
+                            const gainMachines = allMachines.filter(m => {
+                              const netLoss = m.events.reduce((t, e) => t + eventLostMins(e), 0);
+                              const hasEarlyFinish = m.events.some(e => Number(e.target_mins || 0) > Number(e.actual_mins || 0));
+                              return netLoss === 0 && hasEarlyFinish && m.cycles > 0;
+                            });
+                            if (gainMachines.length > 0) {
+                              const gainNames = gainMachines.map(m => m.machineName).join(', ');
+                              items.push(`✓ Time gain machines: ${gainNames} (finished early, offsetting late starts).`);
+                            }
+                            const zeroLossMachines = allMachines.filter(m => m.events.reduce((t, e) => t + eventLostMins(e), 0) === 0).length;
+                            if (zeroLossMachines > 0) {
+                              items.push(`→ ${zeroLossMachines} out of ${totalMachines} machines had zero net loss.`);
+                            } else if (gainMachines.length === 0) {
+                              items.push(`→ No machines with zero loss today.`);
+                            }
+                            return items.map((item, i) => <li key={i}>{item}</li>);
+                          })()}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 text-sm font-bold text-white">Loss Trend</div>
