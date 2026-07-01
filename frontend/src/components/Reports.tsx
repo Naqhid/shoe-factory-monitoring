@@ -270,7 +270,7 @@ const VISIBLE_REPORT_OPTIONS = REPORT_OPTIONS.filter((o) => !HIDDEN_REPORT_TYPES
 const DEFAULT_VISIBLE_REPORT_TYPE: ReportType = VISIBLE_REPORT_OPTIONS[0]?.value ?? 'hourly-production';
 
 const normalizeVisibleReportTab = (tab: ReportType): ReportType =>
-  HIDDEN_REPORT_TYPES.has(tab) ? DEFAULT_VISIBLE_REPORT_TYPE : tab;
+  HIDDEN_REPORT_TYPES.has(tab) || tab === 'time-loss-details' ? DEFAULT_VISIBLE_REPORT_TYPE : tab;
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; activeBg: string; activeText: string }> = {
   blue:   { bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-200',   activeBg: 'bg-blue-600',   activeText: 'text-white' },
