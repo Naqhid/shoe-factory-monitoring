@@ -338,7 +338,10 @@ export const MissedActionsPage: React.FC = () => {
   const [dailyPageSize, setDailyPageSize] = React.useState(10);
   const [dailyTopOffendersOnly, setDailyTopOffendersOnly] = React.useState(false);
   const [dailyBreachedOnly, setDailyBreachedOnly] = React.useState(false);
+  const [pdfDropdownOpen, setPdfDropdownOpen] = React.useState(false);
   const [dailyMyLineOnly, setDailyMyLineOnly] = React.useState(false);
+  const [dailyMachineFilter, setDailyMachineFilter] = React.useState<string>('all');
+  const [dailyDatePreset, setDailyDatePreset] = React.useState<string>('today');
   const [dailyAutoRefresh, setDailyAutoRefresh] = React.useState(true);
   const [dailyLastUpdated, setDailyLastUpdated] = React.useState<Date | null>(null);
   const [isDailySilentRefreshing, setIsDailySilentRefreshing] = React.useState(false);
@@ -1229,11 +1232,24 @@ export const MissedActionsPage: React.FC = () => {
     if (dailyMyLineOnly && preferredDailyLine) {
       rows = rows.filter((r) => String(r.work_centre_name) === preferredDailyLine);
     }
+    if (dailyMachineFilter !== 'all') {
+      rows = rows.filter((r) => (r.machine_id || r.machine_name) === dailyMachineFilter);
+    }
     if (dailyBreachedOnly) {
       rows = rows.filter((r) => Number(r.inactive_mins || 0) >= 15 || Number(r.extra_mins || 0) > 0);
     }
     return rows;
-  }, [dailyEvents, dailyMyLineOnly, preferredDailyLine, dailyBreachedOnly]);
+  }, [dailyEvents, dailyMyLineOnly, preferredDailyLine, dailyMachineFilter, dailyBreachedOnly]);
+
+  const dailyAvailableMachines = React.useMemo(() => {
+    const machineMap = new Map<string, string>();
+    dailyEvents.forEach((e) => {
+      const key = e.machine_id || e.machine_name || '';
+      const name = e.machine_name || e.machine_id || '';
+      if (key) machineMap.set(key, name);
+    });
+    return Array.from(machineMap.entries()).map(([key, name]) => ({ key, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [dailyEvents]);
 
   const dailyVisibleLineRows = React.useMemo(() => {
     let rows = lineLossRows;
@@ -1759,8 +1775,9 @@ export const MissedActionsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const exportDailyPdf = () => {
+  const exportDailyPdf = (mode: 'preview' | 'download') => {
     if (dailyFilteredEvents.length === 0) return;
+    setPdfDropdownOpen(false);
     // Dynamically import jsPDF for grouped PDF
     import('jspdf').then(({ jsPDF }) => {
       import('jspdf-autotable').then(({ default: autoTable }) => {
@@ -1794,7 +1811,7 @@ export const MissedActionsPage: React.FC = () => {
         doc.text('PP', margin + 3.2, 15.5);
 
         // Brand text
-        doc.setTextColor(148, 163, 184); // slate-400
+        doc.setTextColor(255, 255, 255);
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.text('ProdPulse · Smart Production Tracking', margin + 13, 9);
@@ -1813,7 +1830,7 @@ export const MissedActionsPage: React.FC = () => {
 
         // Confidential badge
         doc.setFontSize(6);
-        doc.setTextColor(100, 116, 139);
+        doc.setTextColor(165, 180, 252);
         doc.text('CONFIDENTIAL', margin + 13, 32);
 
         // Right side info panel
@@ -1832,7 +1849,7 @@ export const MissedActionsPage: React.FC = () => {
         // Stats line
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        doc.setTextColor(148, 163, 184);
+        doc.setTextColor(200, 220, 255);
         doc.text(`${dailyFilteredEvents.length} cycles recorded`, pageW - margin, 22, { align: 'right' });
         doc.text(`Generated: ${new Date().toLocaleString()}`, pageW - margin, 27, { align: 'right' });
         const filterText = dailyMyLineOnly && preferredDailyLine ? `Line: ${preferredDailyLine}` : 'All lines';
@@ -1848,26 +1865,32 @@ export const MissedActionsPage: React.FC = () => {
         doc.setDrawColor(226, 232, 240);
         doc.setLineWidth(0.2);
         doc.roundedRect(margin, y, pageW - margin * 2, 8, 1.5, 1.5, 'FD');
-        const onTimeCycles = dailyFilteredEvents.filter(e => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length;
+        const onTimeCycles = dailyFilteredEvents.filter(e => {
+          const act = Number(e.actual_mins || 0);
+          const tgt = Number(e.target_mins || 0);
+          const inact = Number(e.inactive_mins || 0);
+          const early = tgt > act ? tgt - act : 0;
+          return (act <= tgt && inact === 0) || early > 0;
+        }).length;
         const onTimePct = dailyVisibleSummary.total_cycles > 0 ? Math.round((onTimeCycles / dailyVisibleSummary.total_cycles) * 100) : 0;
         const avgLossPerCycle = dailyVisibleSummary.total_cycles > 0 ? (dailyVisibleSummary.total_lost_mins / dailyVisibleSummary.total_cycles).toFixed(1) : '0';
-        const worstLine = dailyVisibleLineLossRows[0]?.work_centre_name || '—';
-        doc.setTextColor(51, 65, 85);
+        const worstLine = dailyVisibleLineLossRows[0]?.work_centre_name || '-';
+        doc.setTextColor(15, 23, 42);
         doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
         doc.text(`EXECUTIVE SUMMARY:`, margin + 3, y + 5.5);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(71, 85, 105);
+        doc.setTextColor(15, 23, 42);
         doc.text(`${onTimePct}% On Time  ·  Avg Loss/Cycle: ${avgLossPerCycle}m  ·  Worst Line: ${worstLine}  ·  ${dailyVisibleLineMachineGroups.length} line(s) active`, margin + 42, y + 5.5);
         y += 12;
 
         // === SUMMARY KPI CARDS ===
         const stats = [
           { label: 'Total Cycles', value: String(dailyVisibleSummary.total_cycles), color: [30, 64, 175] as [number, number, number] },
-          { label: 'Started Late', value: `${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m`, color: [37, 99, 235] as [number, number, number] },
-          { label: 'Finished Late', value: `${formatMinutes(dailyVisibleSummary.total_extra_mins)}m`, color: [217, 119, 6] as [number, number, number] },
-          { label: 'Total Loss', value: `${formatMinutes(dailyVisibleSummary.total_lost_mins)}m`, color: [220, 38, 38] as [number, number, number] },
-          { label: 'On Time', value: `${onTimeCycles} (${onTimePct}%)`, color: [22, 163, 74] as [number, number, number] },
+          { label: 'Started Late', value: formatDashboardLoss(dailyVisibleSummary.total_inactive_mins), color: [37, 99, 235] as [number, number, number] },
+          { label: 'Finished Late', value: formatDashboardLoss(dailyVisibleSummary.total_extra_mins), color: [217, 119, 6] as [number, number, number] },
+          { label: 'Total Loss', value: formatDashboardLoss(dailyVisibleSummary.total_lost_mins), color: [220, 38, 38] as [number, number, number] },
+          { label: 'Early / On Time', value: `${formatDashboardLoss(dailyFilteredEvents.reduce((s, e) => { const d = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (d > 0 ? d : 0); }, 0))}  ${onTimePct}% (${onTimeCycles}/${dailyVisibleSummary.total_cycles})`, color: [22, 163, 74] as [number, number, number] },
           { label: 'Avg Loss/Cycle', value: `${avgLossPerCycle}m`, color: [124, 58, 237] as [number, number, number] },
         ];
         const kpiGap = 2.5;
@@ -1883,13 +1906,14 @@ export const MissedActionsPage: React.FC = () => {
           doc.setFillColor(stat.color[0], stat.color[1], stat.color[2]);
           doc.rect(x + 0.5, y + 3, 1.5, 12, 'F');
           // Label
-          doc.setTextColor(100, 116, 139);
+          doc.setTextColor(15, 23, 42);
           doc.setFontSize(5.5);
           doc.setFont('helvetica', 'bold');
           doc.text(stat.label.toUpperCase(), x + 5, y + 6.5);
           // Value
           doc.setTextColor(stat.color[0], stat.color[1], stat.color[2]);
-          doc.setFontSize(13);
+          const valFontSize = stat.value.length > 12 ? 8 : 13;
+          doc.setFontSize(valFontSize);
           doc.setFont('helvetica', 'bold');
           doc.text(stat.value, x + 5, y + 14);
           doc.setFont('helvetica', 'normal');
@@ -1900,7 +1924,7 @@ export const MissedActionsPage: React.FC = () => {
         if (dailyVisibleLineLossRows.length > 0) {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
-          doc.setTextColor(51, 65, 85);
+          doc.setTextColor(15, 23, 42);
           doc.text('LINE LOSS RANKING', margin, y + 3);
           y += 5;
 
@@ -1918,7 +1942,7 @@ export const MissedActionsPage: React.FC = () => {
             head: [rankHeaders],
             body: rankRows,
             margin: { left: margin, right: margin },
-            styles: { fontSize: 6.5, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.1 },
+            styles: { fontSize: 6.5, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.1, textColor: [15, 23, 42], fontStyle: 'bold' },
             headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5 },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             tableWidth: pageW * 0.55,
@@ -1929,7 +1953,7 @@ export const MissedActionsPage: React.FC = () => {
         // === CYCLE DETAILS BY LINE → MACHINE ===
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(51, 65, 85);
+        doc.setTextColor(15, 23, 42);
         doc.text('CYCLE DETAILS', margin, y + 3);
         y += 7;
 
@@ -1964,7 +1988,7 @@ export const MissedActionsPage: React.FC = () => {
             doc.text(`${machine.machineName}`, margin + 3, y + 4.8);
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(6.5);
-            doc.setTextColor(100, 116, 139);
+            doc.setTextColor(15, 23, 42);
             const machineInfo = rootCause
               ? `Cycles: ${machine.cycles}  ·  Root Cause: ${rootCause}`
               : `Cycles: ${machine.cycles}`;
@@ -1978,7 +2002,7 @@ export const MissedActionsPage: React.FC = () => {
               const inactive = Number(row.inactive_mins || 0);
               const extra = Number(row.extra_mins || 0);
               const finishedEarly = target > actual ? target - actual : 0;
-              const isOnTime = actual <= target && inactive === 0;
+              const isOnTime = (actual <= target && inactive === 0) || finishedEarly > 0;
               const timeLoss = inactive + extra;
               return [
                 `${row.employee_name} (${row.employee_code})`,
@@ -1989,8 +2013,8 @@ export const MissedActionsPage: React.FC = () => {
                 String(row.output_pairs ?? 0),
                 formatMinutes(inactive),
                 formatMinutes(extra),
-                finishedEarly > 0 ? formatMinutes(finishedEarly) : '—',
-                isOnTime ? '✓' : '—',
+                finishedEarly > 0 ? formatMinutes(finishedEarly) : '0',
+                isOnTime ? 'Yes' : 'No',
                 timeLoss > 0 ? formatMinutes(timeLoss) : '—',
               ];
             });
@@ -2001,7 +2025,13 @@ export const MissedActionsPage: React.FC = () => {
             const totalInactive = machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0);
             const totalExtra = machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0);
             const totalFinishedEarly = machine.events.reduce((s, e) => { const d = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (d > 0 ? d : 0); }, 0);
-            const totalOnTime = machine.events.filter((e) => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length;
+            const totalOnTime = machine.events.filter((e) => {
+              const act = Number(e.actual_mins || 0);
+              const tgt = Number(e.target_mins || 0);
+              const inact = Number(e.inactive_mins || 0);
+              const early = tgt > act ? tgt - act : 0;
+              return (act <= tgt && inact === 0) || early > 0;
+            }).length;
             const totalTimeLoss = totalInactive + totalExtra;
             const summaryRow = [
               `SUMMARY (${machine.events.length} cycles)`,
@@ -2021,8 +2051,8 @@ export const MissedActionsPage: React.FC = () => {
               head: [headerLabels],
               body: [summaryRow, ...tableRows],
               margin: { left: margin, right: margin, top: margin, bottom: 14 },
-              styles: { fontSize: 6, cellPadding: 1.5, overflow: 'linebreak', valign: 'middle', lineColor: [226, 232, 240], lineWidth: 0.1 },
-              headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6, halign: 'left' },
+              styles: { fontSize: 6.5, cellPadding: 1.5, overflow: 'linebreak', valign: 'middle', lineColor: [226, 232, 240], lineWidth: 0.1, textColor: [15, 23, 42], fontStyle: 'bold' },
+              headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'left' },
               alternateRowStyles: { fillColor: [248, 250, 252] },
               didParseCell: (data) => {
                 if (data.section === 'body' && data.row.index === 0) {
@@ -2030,11 +2060,22 @@ export const MissedActionsPage: React.FC = () => {
                   data.cell.styles.textColor = [30, 58, 138];
                   data.cell.styles.fontStyle = 'bold';
                 }
+                // On Time column (index 9): green for Yes, red for No
+                if (data.section === 'body' && data.column.index === 9) {
+                  const val = data.cell.raw as string;
+                  if (val === 'Yes') {
+                    data.cell.styles.textColor = [22, 163, 74];
+                    data.cell.styles.fontStyle = 'bold';
+                  } else if (val === 'No') {
+                    data.cell.styles.textColor = [220, 38, 38];
+                    data.cell.styles.fontStyle = 'bold';
+                  }
+                }
               },
               didDrawPage: () => {
                 // Footer
                 doc.setFontSize(6.5);
-                doc.setTextColor(148, 163, 184);
+                doc.setTextColor(15, 23, 42);
                 doc.text(`ProdPulse  ·  Time Loss Details Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
               },
             });
@@ -2058,10 +2099,10 @@ export const MissedActionsPage: React.FC = () => {
 
         // Today's hourly loss trend
         if (lineLossTrend.length > 0) {
-          doc.setTextColor(51, 65, 85);
+          doc.setTextColor(15, 23, 42);
           doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
-          doc.text('Hourly Loss Trend (Today: 9 AM – 7 PM)', margin, y + 3);
+          doc.text(`Hourly Loss Trend (${new Date(dailyReportDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}: 9 AM – 7 PM)`, margin, y + 3);
           y += 8;
 
           const trendMax = Math.max(1, ...lineLossTrend.map((x) => x.total));
@@ -2072,7 +2113,7 @@ export const MissedActionsPage: React.FC = () => {
           lineLossTrend.forEach((bucket) => {
             if (y > pageH - 20) { doc.addPage(); y = margin; }
             // Label
-            doc.setTextColor(71, 85, 105);
+            doc.setTextColor(15, 23, 42);
             doc.setFontSize(7);
             doc.setFont('helvetica', 'normal');
             doc.text(bucket.label, margin, y + 4.5);
@@ -2097,7 +2138,7 @@ export const MissedActionsPage: React.FC = () => {
         // Weekly trend (last 7 days)
         if (weeklyTrend.length > 0) {
           if (y > pageH - 60) { doc.addPage(); y = margin; }
-          doc.setTextColor(51, 65, 85);
+          doc.setTextColor(15, 23, 42);
           doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
           doc.text('Last 7 Days Trend', margin, y + 3);
@@ -2112,7 +2153,7 @@ export const MissedActionsPage: React.FC = () => {
             if (y > pageH - 20) { doc.addPage(); y = margin; }
             const label = new Date(d.day + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
             // Label
-            doc.setTextColor(71, 85, 105);
+            doc.setTextColor(15, 23, 42);
             doc.setFontSize(7);
             doc.setFont('helvetica', 'normal');
             doc.text(label, margin, y + 5);
@@ -2130,7 +2171,7 @@ export const MissedActionsPage: React.FC = () => {
             doc.setFont('helvetica', 'bold');
             doc.text(`${formatMinutes(d.lost_mins)}m`, barX + wBarMaxWidth + 4, y + 5);
             // Extra info
-            doc.setTextColor(148, 163, 184);
+            doc.setTextColor(15, 23, 42);
             doc.setFontSize(6);
             doc.setFont('helvetica', 'normal');
             doc.text(`${d.cycles} cycles`, barX + wBarMaxWidth + 22, y + 5);
@@ -2153,13 +2194,13 @@ export const MissedActionsPage: React.FC = () => {
             head: [weekHeaders],
             body: weekRows,
             margin: { left: margin, right: margin },
-            styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.1 },
+            styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.1, textColor: [15, 23, 42], fontStyle: 'bold' },
             headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
             alternateRowStyles: { fillColor: [254, 242, 242] },
             tableWidth: pageW * 0.6,
             didDrawPage: () => {
               doc.setFontSize(6.5);
-              doc.setTextColor(148, 163, 184);
+              doc.setTextColor(15, 23, 42);
               doc.text(`ProdPulse  ·  Time Loss Details Report  ·  ${dateRange}  ·  Page ${doc.getNumberOfPages()}`, pageW / 2, pageH - 5, { align: 'center' });
             },
           });
@@ -2181,9 +2222,9 @@ export const MissedActionsPage: React.FC = () => {
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(21, 128, 61); // green-700
         const insights: string[] = [];
-        if (onTimePct >= 80) insights.push(`✓ Good discipline — ${onTimePct}% of cycles completed on time.`);
-        else if (onTimePct > 0 && onTimePct >= 50) insights.push(`⚠ ${onTimePct}% on-time rate. Target: above 80%.`);
-        else if (onTimePct > 0) insights.push(`⚠ ${onTimePct}% on-time rate — needs improvement.`);
+        if (onTimePct >= 80) insights.push(`[OK] Good discipline -- ${onTimePct}% of cycles completed on time.`);
+        else if (onTimePct > 0 && onTimePct >= 50) insights.push(`[!] ${onTimePct}% on-time rate. Target: above 80%.`);
+        else if (onTimePct > 0) insights.push(`[!] ${onTimePct}% on-time rate -- needs improvement.`);
         // Yesterday comparison (same time of day)
         if (dailySummary.yesterday_same_time) {
           const yst = dailySummary.yesterday_same_time;
@@ -2192,33 +2233,33 @@ export const MissedActionsPage: React.FC = () => {
           const diffPdf = yesterdayLossPdf - todayLossPdf2;
           const pctChangePdf = yesterdayLossPdf > 0 ? Math.round(Math.abs(diffPdf) / yesterdayLossPdf * 100) : 0;
           if (diffPdf > 0) {
-            insights.push(`✓ Improved vs yesterday (up to ${yst.compared_up_to}) — ${pctChangePdf}% less loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
+            insights.push(`[OK] Improved vs yesterday (up to ${yst.compared_up_to}) -- ${pctChangePdf}% less loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
           } else if (diffPdf < 0) {
-            insights.push(`⚠ Worse than yesterday (up to ${yst.compared_up_to}) — ${pctChangePdf}% more loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
+            insights.push(`[!] Worse than yesterday (up to ${yst.compared_up_to}) -- ${pctChangePdf}% more loss (${formatDashboardLoss(todayLossPdf2)} vs ${formatDashboardLoss(yesterdayLossPdf)}).`);
           }
           if (yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins > 5) {
-            insights.push(`  ↳ Late starts improved by ${formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m vs yesterday same time.`);
+            insights.push(`    > Late starts improved by ${formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m vs yesterday same time.`);
           }
           if (yst.total_extra_mins - dailyVisibleSummary.total_extra_mins > 5) {
-            insights.push(`  ↳ Late finishes improved by ${formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m vs yesterday same time.`);
+            insights.push(`    > Late finishes improved by ${formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m vs yesterday same time.`);
           }
         }
         if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
-          insights.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
+          insights.push(`[-] Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
         } else {
-          insights.push(`→ Late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m) are the primary loss driver over late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m).`);
+          insights.push(`[-] Late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m) are the primary loss driver over late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m).`);
         }
-        if (worstLine !== '—') insights.push(`→ Focus area: ${worstLine} has the highest total loss.`);
-        insights.push(`→ Average loss per cycle: ${avgLossPerCycle}m across ${dailyVisibleSummary.total_cycles} cycles.`);
+        if (worstLine !== '-') insights.push(`[-] Focus area: ${worstLine} has the highest total loss.`);
+        insights.push(`[-] Average loss per cycle: ${avgLossPerCycle}m across ${dailyVisibleSummary.total_cycles} cycles.`);
         // Peak loss hour
         if (lineLossTrend.length > 0) {
           const peakBucket = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
-          if (peakBucket.total > 0) insights.push(`→ Peak loss hour: ${peakBucket.label} (${Math.round(peakBucket.total)}m).`);
+          if (peakBucket.total > 0) insights.push(`[-] Peak loss hour: ${peakBucket.label} (${Math.round(peakBucket.total)}m).`);
         }
         // Best performing line (only when multiple lines)
         if (dailyVisibleLineLossRows.length > 1) {
           const best = dailyVisibleLineLossRows[dailyVisibleLineLossRows.length - 1];
-          insights.push(`→ Best line: ${best.work_centre_name} (${formatDashboardLoss(best.lost)} loss).`);
+          insights.push(`[-] Best line: ${best.work_centre_name} (${formatDashboardLoss(best.lost)} loss).`);
         }
         // Machines with zero net loss (time gain)
         const totalMachinesPdf = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
@@ -2233,15 +2274,15 @@ export const MissedActionsPage: React.FC = () => {
             const gain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
             return `${m.machineName} (+${formatMinutes(gain)}m)`;
           }).join(', ');
-          insights.push(`✓ Time gain: ${gainDetails}`);
-          insights.push(`→ ${gainMachinesPdf.length} out of ${totalMachinesPdf} machines had net time gain.`);
+          insights.push(`[OK] Time gain: ${gainDetails}`);
+          insights.push(`[-] ${gainMachinesPdf.length} out of ${totalMachinesPdf} machines had net time gain.`);
         } else {
-          insights.push(`→ No machines with zero loss today.`);
+          insights.push(`[-] No machines with zero loss on ${new Date(dailyReportDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}.`);
         }
 
         let insightY = y + 11;
         // Draw box with dynamic height based on number of insights
-        const insightBoxHeight = 10 + insights.length * 5.5 + 4;
+        const insightBoxHeight = 10 + insights.length * 6 + 4;
         if (y + insightBoxHeight > pageH - 15) { doc.addPage(); y = margin; insightY = y + 11; }
         doc.setFillColor(240, 253, 244);
         doc.setDrawColor(34, 197, 94);
@@ -2252,12 +2293,37 @@ export const MissedActionsPage: React.FC = () => {
         doc.setFont('helvetica', 'bold');
         doc.text('KEY INSIGHTS', margin + 4, y + 6);
         doc.setFontSize(7);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(21, 128, 61);
-        insightY = y + 11;
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        insightY = y + 12;
         insights.forEach((line) => {
-          doc.text(line, margin + 5, insightY);
-          insightY += 5.5;
+          // Draw colored bullet circle based on prefix
+          let bulletColor: [number, number, number] = [34, 197, 94]; // green default
+          let textColor: [number, number, number] = [15, 23, 42]; // dark default
+          let textLine = line;
+          if (line.startsWith('[OK]')) {
+            bulletColor = [22, 163, 74]; // green
+            textLine = line.replace('[OK] ', '');
+          } else if (line.startsWith('[!]')) {
+            bulletColor = [220, 38, 38]; // red for negative
+            textColor = [153, 27, 27]; // red-800 text
+            textLine = line.replace('[!] ', '');
+          } else if (line.startsWith('[-]')) {
+            bulletColor = [37, 99, 235]; // blue
+            textLine = line.replace('[-] ', '');
+          } else if (line.startsWith('    >')) {
+            bulletColor = [20, 184, 166]; // teal
+            textLine = line.replace('    > ', '');
+          }
+          // Draw bullet dot
+          const bulletX = line.startsWith('    >') ? margin + 10 : margin + 6;
+          const textX = bulletX + 3;
+          doc.setFillColor(bulletColor[0], bulletColor[1], bulletColor[2]);
+          doc.circle(bulletX, insightY - 1.2, 1.2, 'F');
+          // Draw text
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.text(textLine, textX, insightY);
+          insightY += 6;
         });
 
         // === HOW TO IMPROVE ===
@@ -2268,35 +2334,35 @@ export const MissedActionsPage: React.FC = () => {
         // Peak hour tip
         if (lineLossTrend.length > 0) {
           const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
-          if (peak.total > 20) tips.push(`Reduce shift-start delay — ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
+          if (peak.total > 20) tips.push(`Reduce shift-start delay -- ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
         }
         // Late starts vs finishes
         const inactPdf = dailyVisibleSummary.total_inactive_mins;
         const extPdf = dailyVisibleSummary.total_extra_mins;
         if (inactPdf > extPdf * 2 && inactPdf > 30) {
-          tips.push(`Focus on start discipline — Late starts (${formatMinutes(inactPdf)}m) are ${extPdf > 0 ? (inactPdf / extPdf).toFixed(1) : '∞'}x more than late finishes. Click START immediately.`);
+          tips.push(`Focus on start discipline -- Late starts (${formatMinutes(inactPdf)}m) are ${extPdf > 0 ? (inactPdf / extPdf).toFixed(1) : 'many'}x more than late finishes. Click START immediately.`);
         } else if (extPdf > inactPdf * 2 && extPdf > 30) {
-          tips.push(`Speed up cycle completion — Late finishes (${formatMinutes(extPdf)}m) dominate. Review target times or operator technique.`);
+          tips.push(`Speed up cycle completion -- Late finishes (${formatMinutes(extPdf)}m) dominate. Review target times or operator technique.`);
         }
         // Worst machine
         const worstMachinePdf = allMachinesPdf.sort((a, b) => b.events.reduce((t, e) => t + eventLostMins(e), 0) - a.events.reduce((t, e) => t + eventLostMins(e), 0))[0];
         if (worstMachinePdf && worstMachinePdf.events.reduce((t, e) => t + eventLostMins(e), 0) > 20) {
           const wLoss = formatMinutes(worstMachinePdf.events.reduce((t, e) => t + eventLostMins(e), 0));
-          tips.push(`Investigate ${worstMachinePdf.machineName} — Highest loss (${wLoss}m). Check target or operator support.`);
+          tips.push(`Investigate ${worstMachinePdf.machineName} -- Highest loss (${wLoss}m). Check target or operator support.`);
         }
         // Time gain replication
         if (gainMachinesPdf.length > 0) {
-          tips.push(`Replicate ${gainMachinesPdf[0].machineName}'s approach — This machine gains time by finishing early. Study its workflow.`);
+          tips.push(`Replicate ${gainMachinesPdf[0].machineName}'s approach -- This machine gains time by finishing early. Study its workflow.`);
         }
         // Tomorrow target
         const totalLossPdf = dailyVisibleSummary.total_lost_mins;
         if (totalLossPdf > 10) {
           const target20Pdf = Math.round(totalLossPdf * 0.8);
-          tips.push(`Tomorrow's target — Reduce loss by 20% (from ${formatMinutes(totalLossPdf)}m to ${formatMinutes(target20Pdf)}m).`);
+          tips.push(`Tomorrow's target -- Reduce loss by 20% (from ${formatMinutes(totalLossPdf)}m to ${formatMinutes(target20Pdf)}m).`);
         }
 
         if (tips.length > 0) {
-          const tipBoxHeight = 14 + tips.length * 5.5 + 2;
+          const tipBoxHeight = 14 + tips.length * 6 + 2;
           if (y + tipBoxHeight > pageH - 15) { doc.addPage(); y = margin; }
           doc.setFillColor(239, 246, 255); // blue-50
           doc.setDrawColor(59, 130, 246); // blue-500
@@ -2311,11 +2377,15 @@ export const MissedActionsPage: React.FC = () => {
           doc.setTextColor(59, 130, 246);
           doc.text('Actionable steps to reduce time loss and boost productivity', margin + 42, y + 6);
           doc.setFontSize(7);
-          doc.setTextColor(30, 58, 138); // blue-900
-          let tipY = y + 12;
+          doc.setFont('helvetica', 'bold');
+          let tipY = y + 13;
           tips.forEach((tip) => {
-            doc.text(`⚡ ${tip}`, margin + 5, tipY);
-            tipY += 5.5;
+            // Draw orange bullet
+            doc.setFillColor(234, 88, 12); // orange-600
+            doc.circle(margin + 6, tipY - 1.2, 1.2, 'F');
+            doc.setTextColor(15, 23, 42);
+            doc.text(tip, margin + 9, tipY);
+            tipY += 6;
           });
           y = tipY + 4;
         }
@@ -2324,14 +2394,24 @@ export const MissedActionsPage: React.FC = () => {
         if (y > pageH - 15) { doc.addPage(); y = margin; }
         doc.setFillColor(248, 250, 252);
         doc.roundedRect(margin, y, pageW - margin * 2, 8, 1.5, 1.5, 'F');
-        doc.setTextColor(148, 163, 184);
+        doc.setTextColor(15, 23, 42);
         doc.setFontSize(6.5);
         doc.text('This report was auto-generated by ProdPulse · Smart Production Tracking. Data reflects completed production cycles for the selected period.', margin + 3, y + 5.2);
 
-        // Open in new tab for preview
+        // Output PDF based on mode
         const pdfBlob = doc.output('blob');
         const blobUrl = URL.createObjectURL(pdfBlob);
-        window.open(blobUrl, '_blank');
+        if (mode === 'download') {
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `time-loss-report-${dailyReportDate}-to-${dailyDateTo}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } else {
+          window.open(blobUrl, '_blank');
+        }
       });
     });
   };
@@ -2896,8 +2976,8 @@ export const MissedActionsPage: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="flex flex-wrap items-end gap-3">
-            <div className="w-full sm:min-w-[200px] sm:w-auto sm:flex-1 sm:max-w-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 items-end">
+            <div className="col-span-2 sm:col-span-1">
               <label className={FILTER_LABEL}>
                 <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
               </label>
@@ -2912,7 +2992,7 @@ export const MissedActionsPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div className="w-full sm:w-auto sm:min-w-[140px]">
+            <div>
               <label className={FILTER_LABEL}>Min overdue</label>
               <select
                 value={minOverdueMins}
@@ -2929,33 +3009,33 @@ export const MissedActionsPage: React.FC = () => {
                 <option value={60}>60+ mins</option>
               </select>
             </div>
-            <div className="w-full md:w-auto md:flex-1">
+            <div>
               <label className={FILTER_LABEL}>Issue type</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1">
                 <button
                   type="button"
                   onClick={() => setIssueFilter('all')}
-                  className={`px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors ${issueFilter === 'all' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                  className={`px-2 py-2 text-[10px] sm:text-xs font-semibold rounded-lg border transition-colors ${issueFilter === 'all' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                 >
                   All
                 </button>
                 <button
                   type="button"
                   onClick={() => setIssueFilter('START_PENDING')}
-                  className={`px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors ${issueFilter === 'START_PENDING' ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                  className={`px-2 py-2 text-[10px] sm:text-xs font-semibold rounded-lg border transition-colors ${issueFilter === 'START_PENDING' ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                 >
                   Start
                 </button>
                 <button
                   type="button"
                   onClick={() => setIssueFilter('FINISH_PENDING')}
-                  className={`px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors ${issueFilter === 'FINISH_PENDING' ? 'bg-red-600 text-white border-red-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                  className={`px-2 py-2 text-[10px] sm:text-xs font-semibold rounded-lg border transition-colors ${issueFilter === 'FINISH_PENDING' ? 'bg-red-600 text-white border-red-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                 >
                   Finish
                 </button>
               </div>
             </div>
-            <div className="w-full sm:w-auto sm:min-w-[180px]">
+            <div>
               <label className={FILTER_LABEL}>Sort by</label>
               <select
                 value={liveSort}
@@ -2968,11 +3048,11 @@ export const MissedActionsPage: React.FC = () => {
                 <option value="machine">Machine (A-Z)</option>
               </select>
             </div>
-            <div className="w-full lg:w-auto lg:ml-auto flex flex-wrap gap-2">
+            <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-2 flex flex-wrap gap-2">
               <button
                 onClick={() => setShowMuted((v) => !v)}
-                className={`inline-flex justify-center items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${
-                  showMuted ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : `${BTN_SECONDARY} text-xs py-2.5`
+                className={`inline-flex justify-center items-center gap-1.5 px-2.5 py-2 rounded-lg text-[10px] sm:text-xs font-semibold border transition-colors ${
+                  showMuted ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : `${BTN_SECONDARY} text-xs py-2`
                 }`}
               >
                 <BellOff className="h-3.5 w-3.5" />
@@ -2981,7 +3061,7 @@ export const MissedActionsPage: React.FC = () => {
               <button
                 onClick={acknowledgeFiltered}
                 disabled={sortedFilteredItems.length === 0 || isActionLoading === '__bulk__'}
-                className="inline-flex justify-center items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm disabled:opacity-60 transition-colors"
+                className="inline-flex justify-center items-center gap-1.5 px-2.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-xs font-semibold shadow-sm disabled:opacity-60 transition-colors"
               >
                 {isActionLoading === '__bulk__' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                 Ack filtered
@@ -2989,7 +3069,7 @@ export const MissedActionsPage: React.FC = () => {
               <button
                 onClick={exportFilteredCsv}
                 disabled={sortedFilteredItems.length === 0}
-                className={`${BTN_DARK} text-xs py-2.5`}
+                className={`${BTN_DARK} text-[10px] sm:text-xs py-2`}
               >
                 <Download className="h-3.5 w-3.5" />
                 Export
@@ -2997,7 +3077,7 @@ export const MissedActionsPage: React.FC = () => {
               <button
                 onClick={() => void fetchData()}
                 disabled={isLoading}
-                className={`${BTN_PRIMARY} text-xs py-2.5`}
+                className={`${BTN_PRIMARY} text-[10px] sm:text-xs py-2`}
               >
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
@@ -3366,8 +3446,41 @@ export const MissedActionsPage: React.FC = () => {
           <div className="space-y-4">
             {/* Filters Card */}
             <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm ring-1 ring-black/[0.02]">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              {/* Quick date presets */}
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-3">
+                {[
+                  { id: 'today', label: 'Today' },
+                  { id: 'yesterday', label: 'Yesterday' },
+                  { id: 'last7', label: 'Last 7 days' },
+                  { id: 'thisMonth', label: 'This month' },
+                  { id: 'custom', label: 'Custom' },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setDailyDatePreset(preset.id);
+                      const today = new Date();
+                      const fmt = (d: Date) => d.toISOString().slice(0, 10);
+                      if (preset.id === 'today') {
+                        setDailyReportDate(fmt(today)); setDailyDateTo(fmt(today));
+                      } else if (preset.id === 'yesterday') {
+                        const yd = new Date(today); yd.setDate(yd.getDate() - 1);
+                        setDailyReportDate(fmt(yd)); setDailyDateTo(fmt(yd));
+                      } else if (preset.id === 'last7') {
+                        const d7 = new Date(today); d7.setDate(d7.getDate() - 6);
+                        setDailyReportDate(fmt(d7)); setDailyDateTo(fmt(today));
+                      } else if (preset.id === 'thisMonth') {
+                        const m1 = new Date(today.getFullYear(), today.getMonth(), 1);
+                        setDailyReportDate(fmt(m1)); setDailyDateTo(fmt(today));
+                      }
+                    }}
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[10px] sm:text-xs font-semibold border transition-colors ${dailyDatePreset === preset.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50'}`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
                   {isViewingTodayDaily ? (
                     <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-full bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200 hover:bg-white transition-colors">
                       <input
@@ -3376,23 +3489,19 @@ export const MissedActionsPage: React.FC = () => {
                         onChange={(e) => setDailyAutoRefresh(e.target.checked)}
                         className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600"
                       />
-                      Auto-refresh every 15s
+                      <span className="hidden sm:inline">Auto-refresh 15s</span>
                     </label>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200 text-slate-400">
-                      Auto-refresh when viewing today only
-                    </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3 items-end">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 items-end">
                 <div>
                   <label className={FILTER_LABEL}>From</label>
                   <input
                     type="date"
                     value={dailyReportDate}
                     max={dailyDateTo}
-                    onChange={(e) => setDailyReportDate(e.target.value)}
+                    onChange={(e) => { setDailyReportDate(e.target.value); setDailyDatePreset('custom'); }}
                     className={FILTER_CONTROL}
                   />
                 </div>
@@ -3402,23 +3511,38 @@ export const MissedActionsPage: React.FC = () => {
                     type="date"
                     value={dailyDateTo}
                     min={dailyReportDate}
-                    onChange={(e) => setDailyDateTo(e.target.value)}
+                    onChange={(e) => { setDailyDateTo(e.target.value); setDailyDatePreset('custom'); }}
                     className={FILTER_CONTROL}
                   />
                 </div>
-                <div className="col-span-2 sm:col-span-1">
+                <div>
                   <label className={FILTER_LABEL}>
                     <span className="inline-flex items-center gap-1"><Filter className="h-3 w-3" aria-hidden /> Line</span>
                   </label>
                   <select
                     value={dailyLine}
-                    onChange={(e) => setDailyLine(e.target.value)}
+                    onChange={(e) => { setDailyLine(e.target.value); setDailyMachineFilter('all'); }}
                     disabled={dailyLoading}
                     className={FILTER_CONTROL}
                   >
                     <option value="all">{dailyLoading ? 'Loading…' : 'All lines'}</option>
                     {workCentres.map((wc) => (
                       <option key={wc.id} value={wc.name}>{lineLabel(wc)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={FILTER_LABEL}>
+                    <span className="inline-flex items-center gap-1"><Cpu className="h-3 w-3" aria-hidden /> Machine</span>
+                  </label>
+                  <select
+                    value={dailyMachineFilter}
+                    onChange={(e) => setDailyMachineFilter(e.target.value)}
+                    className={FILTER_CONTROL}
+                  >
+                    <option value="all">All machines</option>
+                    {dailyAvailableMachines.map((m) => (
+                      <option key={m.key} value={m.key}>{m.name}</option>
                     ))}
                   </select>
                 </div>
@@ -3429,17 +3553,40 @@ export const MissedActionsPage: React.FC = () => {
                   className={`${BTN_PRIMARY} w-full`}
                 >
                   {dailyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Refresh
+                  Search
                 </button>
-                <button
-                  type="button"
-                  onClick={exportDailyPdf}
-                  disabled={dailyFilteredEvents.length === 0}
-                  className={`${BTN_DARK} w-full`}
-                >
-                  <Download className="h-4 w-4" />
-                  <span className="hidden sm:inline">Export</span> PDF
-                </button>
+                <div className="relative w-full">
+                  <button
+                    type="button"
+                    onClick={() => setPdfDropdownOpen((v) => !v)}
+                    disabled={dailyFilteredEvents.length === 0}
+                    className={`${BTN_DARK} w-full`}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline">Export</span> PDF
+                    <ChevronDown className="h-3 w-3 ml-1" />
+                  </button>
+                  {pdfDropdownOpen && (
+                    <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => exportDailyPdf('preview')}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => exportDailyPdf('download')}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-t border-gray-100"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Download
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={exportDailyCsv}
@@ -3492,8 +3639,8 @@ export const MissedActionsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
-              <div className="col-span-2 sm:col-span-3 xl:col-span-2 bg-gradient-to-br from-red-50 to-red-100/50 rounded-xl border-2 border-red-200 p-4 sm:p-5 shadow-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+              <div className="col-span-2 sm:col-span-3 bg-gradient-to-br from-red-50 to-red-100/50 rounded-xl border-2 border-red-200 p-4 sm:p-5 shadow-sm">
                 <p className="text-[10px] sm:text-[11px] text-red-700 font-semibold uppercase tracking-wide">Total Time Loss</p>
                 <p className="text-2xl sm:text-3xl xl:text-4xl font-black text-red-800 mt-1 tabular-nums">
                   {formatDashboardLoss(dailyVisibleSummary.total_lost_mins)} <span className="text-base sm:text-lg xl:text-xl">loss</span>
@@ -3506,12 +3653,12 @@ export const MissedActionsPage: React.FC = () => {
               </div>
               <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-200 p-3 sm:p-4 shadow-sm">
                 <p className="text-[10px] sm:text-[11px] text-blue-700 font-semibold uppercase tracking-wide">Started Late</p>
-                <p className="text-2xl sm:text-3xl font-black text-blue-800 mt-1 tabular-nums">{formatMinutes(dailyVisibleSummary.total_inactive_mins)}<span className="text-sm text-blue-500">m</span></p>
+                <p className="text-lg sm:text-2xl font-black text-blue-800 mt-1 tabular-nums">{formatDashboardLoss(dailyVisibleSummary.total_inactive_mins)}</p>
                 <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Waiting / no-start loss</p>
               </div>
               <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl border border-amber-200 p-3 sm:p-4 shadow-sm">
                 <p className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Finished Late</p>
-                <p className="text-2xl sm:text-3xl font-black text-amber-800 mt-1 tabular-nums">{formatMinutes(dailyVisibleSummary.total_extra_mins)}<span className="text-sm text-amber-500">m</span></p>
+                <p className="text-lg sm:text-2xl font-black text-amber-800 mt-1 tabular-nums">{formatDashboardLoss(dailyVisibleSummary.total_extra_mins)}</p>
                 <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">Cycle over target duration</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 shadow-sm">
@@ -3521,24 +3668,303 @@ export const MissedActionsPage: React.FC = () => {
               </div>
               <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 shadow-sm">
                 <p className="text-[10px] sm:text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Live Active Loss</p>
-                <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 tabular-nums">
+                <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1 tabular-nums">
                   {formatDashboardLoss(liveLossRows.reduce((sum, row) => sum + row.activeLoss, 0))}
                 </p>
                 <p className="text-[10px] text-gray-500 mt-1 hidden sm:block">From current live missed issues</p>
               </div>
-              <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-xl border border-amber-200 p-3 sm:p-4 shadow-sm col-span-2 sm:col-span-3 xl:col-span-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <p className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">
-                      Worst Line {dailyReportDate === dailyDateTo ? '(Today)' : `(${dailyReportDate} – ${dailyDateTo})`}
-                    </p>
-                    <p className="text-lg sm:text-xl font-bold text-amber-700 mt-0.5">{dailyVisibleLineLossRows[0]?.work_centre_name || '-'}</p>
+              <div className="bg-gradient-to-br from-emerald-50 to-green-100/50 rounded-xl border border-emerald-200 p-3 sm:p-4 shadow-sm">
+                <p className="text-[10px] sm:text-[11px] text-emerald-700 font-semibold uppercase tracking-wide">Finished Early / On Time</p>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-lg sm:text-2xl font-black text-emerald-800 tabular-nums">{formatDashboardLoss(dailyFilteredEvents.reduce((s, e) => { const d = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (d > 0 ? d : 0); }, 0))}</p>
+                  {(() => {
+                    const onTimeCount = dailyFilteredEvents.filter(e => {
+                      const act = Number(e.actual_mins || 0);
+                      const tgt = Number(e.target_mins || 0);
+                      const inact = Number(e.inactive_mins || 0);
+                      const early = tgt > act ? tgt - act : 0;
+                      return (act <= tgt && inact === 0) || early > 0;
+                    }).length;
+                    const pct = dailyVisibleSummary.total_cycles > 0 ? Math.round((onTimeCount / dailyVisibleSummary.total_cycles) * 100) : 0;
+                    return (
+                      <div className="relative h-12 w-12 sm:h-14 sm:w-14 flex-shrink-0">
+                        <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                          <circle cx="18" cy="18" r="15.5" fill="none" stroke="#d1fae5" strokeWidth="3" />
+                          <circle cx="18" cy="18" r="15.5" fill="none" stroke="#059669" strokeWidth="3" strokeDasharray={`${pct} ${100 - pct}`} strokeLinecap="round" />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-[10px] sm:text-xs font-black text-emerald-800">{pct}%</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+                <p className="text-[10px] text-emerald-600 mt-1 font-medium hidden sm:block">
+                  {(() => {
+                    const onTimeCount = dailyFilteredEvents.filter(e => {
+                      const act = Number(e.actual_mins || 0);
+                      const tgt = Number(e.target_mins || 0);
+                      const inact = Number(e.inactive_mins || 0);
+                      const early = tgt > act ? tgt - act : 0;
+                      return (act <= tgt && inact === 0) || early > 0;
+                    }).length;
+                    return <><span className="inline-block bg-emerald-200 text-emerald-900 font-bold px-1.5 py-0.5 rounded">{onTimeCount}</span> of <span className="inline-block bg-emerald-200 text-emerald-900 font-bold px-1.5 py-0.5 rounded">{dailyVisibleSummary.total_cycles}</span> cycles on time</>;
+                  })()}
+                </p>
+              </div>
+              <div className="bg-gradient-to-br from-amber-50 via-orange-50/50 to-red-50/30 rounded-xl border-2 border-amber-300 p-3 sm:p-4 shadow-md col-span-2 sm:col-span-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm">
+                        <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] sm:text-[11px] text-amber-800 font-bold uppercase tracking-wide">
+                        Line with the most time loss today {dailyReportDate === dailyDateTo ? `(${new Date(dailyReportDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })})` : `(${dailyReportDate} – ${dailyDateTo})`}
+                          <span className="ml-2 normal-case font-medium text-amber-600/80">— Line with the highest cumulative time loss from late starts and slow finishes</span>
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-black text-amber-800 mt-2">{dailyVisibleLineLossRows[0]?.work_centre_name || '-'}</p>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    {dailyVisibleLineLossRows[0] ? `${formatDashboardLoss(dailyVisibleLineLossRows[0].lost)} total loss` : 'No data'}
-                  </p>
+                  <div className="text-right sm:mt-1">
+                    <p className="text-sm sm:text-base font-bold text-red-700">
+                      {dailyVisibleLineLossRows[0] ? formatDashboardLoss(dailyVisibleLineLossRows[0].lost) : '—'}
+                    </p>
+                    <p className="text-[10px] text-amber-600 font-medium">total time lost</p>
+                  </div>
                 </div>
               </div>
+            </div>
+            <div className="rounded-2xl border-2 border-indigo-300 shadow-md overflow-hidden bg-gradient-to-br from-indigo-50/50 via-white to-blue-50/50">
+              <div className="p-2 sm:p-3 border-b border-indigo-200 bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <span className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <BarChart2 className="h-4 w-4 text-indigo-200" />
+                  Cycle Details (Line → Machine)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next: Record<string, boolean> = {};
+                      dailyVisibleLineMachineGroups.forEach((line) => {
+                        line.machines.forEach((machine) => {
+                          next[`${line.lineName}__${machine.machineKey}`] = true;
+                        });
+                      });
+                      setExpandedMachineKeys(next);
+                    }}
+                    className="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-semibold rounded-lg bg-white/20 text-white hover:bg-white/30 transition"
+                  >
+                    Expand All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMachineKeys({})}
+                    className="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-semibold rounded-lg bg-white/20 text-white hover:bg-white/30 transition"
+                  >
+                    Collapse All
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 space-y-3">
+                {dailyVisibleLineMachineGroups.slice(dailyPage * dailyPageSize, (dailyPage + 1) * dailyPageSize).map((line, lineIdx) => (
+                  <div key={line.lineName} className="border-2 border-indigo-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                    <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-violet-100 via-indigo-100 to-blue-100 border-b border-indigo-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+                      <p className="text-xs sm:text-sm font-bold text-indigo-900">{line.lineName}</p>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs">
+                        <span className="font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">Cycles: {line.cycles}</span>
+                        <span className="font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Inactive: {formatMinutes(line.inactive)}</span>
+                        <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Extra: {formatMinutes(line.extra)}</span>
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-gray-100">
+                      {line.machines.map((machine, machineIdx) => {
+                        const machineKey = `${line.lineName}__${machine.machineKey}`;
+                        const isExpanded = !!expandedMachineKeys[machineKey];
+                        return (
+                          <div key={machineKey}>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedMachineKeys((prev) => ({ ...prev, [machineKey]: !prev[machineKey] }))}
+                              className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between text-left transition-colors gap-1 sm:gap-0 ${
+                                isExpanded ? 'bg-blue-50/60' : machineIdx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/50 hover:bg-blue-50/40'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                {isExpanded ? <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600" /> : <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-400" />}
+                                <span className={`text-xs sm:text-sm font-semibold ${isExpanded ? 'text-blue-700' : 'text-gray-800'}`}>{machine.machineName}</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs pl-5 sm:pl-0">
+                                <span className="font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">Cycles: {machine.cycles}</span>
+                                <span className="font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Inactive: {formatMinutes(machine.inactive)}</span>
+                                <span className="font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Extra: {formatMinutes(machine.extra)}</span>
+                              </div>
+                            </button>
+
+                            {/* Machine-level root cause — visible only when expanded */}
+                            {isExpanded && (
+                              <div className="px-3 py-2 bg-gray-50/50 border-t border-gray-100 flex items-center gap-2">
+                                <span className="text-xs font-semibold text-gray-500">Root Cause:</span>
+                                <RootCauseSelect
+                                  value={machine.events[0]?.root_cause}
+                                  onChange={(val) => {
+                                    const ids = machine.events.map((ev) => ev.id);
+                                    setDailyEvents((prev) => prev.map((ev) => ids.includes(ev.id) ? { ...ev, root_cause: val } : ev));
+                                    ids.forEach((id) => {
+                                      const key = `daily__${id}`;
+                                      apiFetch(`${API_BASE}/api/missed-actions/root-cause`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ issue_key: key, root_cause: val }),
+                                      }).catch(() => {});
+                                    });
+                                    toast.success(val ? `Root cause set for all ${ids.length} cycles: ${val}` : 'Root cause cleared');
+                                  }}
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+                                />
+                              </div>
+                            )}
+
+                            {isExpanded && (
+                              <div className="border-t border-gray-100">
+                                {/* Mobile card view */}
+                                <div className="sm:hidden p-2 space-y-2">
+                                  {/* Summary card */}
+                                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-2.5">
+                                    <p className="text-[10px] font-bold text-blue-800 uppercase mb-1.5">Summary — {machine.events.length} cycles</p>
+                                    <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[10px]">
+                                      <div><span className="text-gray-500">Actual:</span> <span className="font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</span></div>
+                                      <div><span className="text-gray-500">Output:</span> <span className="font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</span></div>
+                                      <div><span className="text-gray-500">Late Start:</span> <span className="font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</span></div>
+                                      <div><span className="text-gray-500">Late Finish:</span> <span className="font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</span></div>
+                                      <div><span className="text-gray-500">Early:</span> <span className="font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</span></div>
+                                      <div><span className="text-gray-500">Loss:</span> <span className="font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</span></div>
+                                    </div>
+                                  </div>
+                                  {/* Row cards */}
+                                  {machine.events.map((row) => {
+                                    const actual = Number(row.actual_mins || 0);
+                                    const target = Number(row.target_mins || 0);
+                                    const inactive = Number(row.inactive_mins || 0);
+                                    const extra = Number(row.extra_mins || 0);
+                                    const finishedEarly = target > actual ? target - actual : 0;
+                                    const isOnTime = (actual <= target && inactive === 0) || finishedEarly > 0;
+                                    const timeLoss = inactive + extra;
+                                    return (
+                                      <div key={row.id} className="rounded-lg border border-gray-200 p-2.5 bg-white">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                          <span className="text-[11px] font-semibold text-gray-800 truncate max-w-[60%]">{row.employee_name} ({row.employee_code})</span>
+                                          <span className="text-[10px] font-semibold">{isOnTime ? <span className="text-green-600">✓ On Time</span> : <span className="text-red-500">✗ Late</span>}</span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[10px]">
+                                          <div><span className="text-gray-500">Start:</span> <span className="text-gray-700">{row.start_time ? new Date(row.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span></div>
+                                          <div><span className="text-gray-500">Finish:</span> <span className="text-gray-700">{row.finish_time ? new Date(row.finish_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span></div>
+                                          <div><span className="text-gray-500">Output:</span> <span className="font-semibold text-emerald-700">{row.output_pairs ?? 0}</span></div>
+                                          <div><span className="text-gray-500">Target:</span> <span className="text-gray-700">{formatMinutes(row.target_mins)}</span></div>
+                                          <div><span className="text-gray-500">Actual:</span> <span className="text-gray-700">{formatMinutes(row.actual_mins)}</span></div>
+                                          <div><span className="text-gray-500">Late Start:</span> <span className="font-semibold text-blue-700">{formatMinutes(row.inactive_mins)}</span></div>
+                                          <div><span className="text-gray-500">Late Finish:</span> <span className="font-semibold text-amber-700">{formatMinutes(row.extra_mins)}</span></div>
+                                          <div><span className="text-gray-500">Early:</span> <span className="font-semibold text-emerald-600">{finishedEarly > 0 ? formatMinutes(finishedEarly) : '0'}</span></div>
+                                          <div><span className="text-gray-500">Loss:</span> <span className="font-semibold text-red-600">{timeLoss > 0 ? formatMinutes(timeLoss) : '—'}</span></div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* Desktop table view */}
+                                <div className="hidden sm:block overflow-x-auto">
+                                <table className="min-w-full">
+                                  <thead className="bg-white border-b border-gray-100">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Operator</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Start</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finish</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Target</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Actual</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Output</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Started Late</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Late</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Early</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">On Time</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Time Loss</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    <tr className="bg-blue-50">
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">Summary</td>
+                                      <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>
+                                        Cycles: {machine.events.length}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-green-800">{machine.events.filter((e) => { const act = Number(e.actual_mins || 0); const tgt = Number(e.target_mins || 0); const inact = Number(e.inactive_mins || 0); const early = tgt > act ? tgt - act : 0; return (act <= tgt && inact === 0) || early > 0; }).length}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
+                                    </tr>
+                                    {machine.events.map((row) => {
+                                      const actual = Number(row.actual_mins || 0);
+                                      const target = Number(row.target_mins || 0);
+                                      const inactive = Number(row.inactive_mins || 0);
+                                      const extra = Number(row.extra_mins || 0);
+                                      const finishedEarly = target > actual ? target - actual : 0;
+                                      const isOnTime = (actual <= target && inactive === 0) || finishedEarly > 0;
+                                      const timeLoss = inactive + extra;
+                                      return (
+                                      <tr key={row.id}>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.employee_name} ({row.employee_code})</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.start_time ? new Date(row.start_time).toLocaleTimeString() : '-'}</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.finish_time ? new Date(row.finish_time).toLocaleTimeString() : '-'}</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.target_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.actual_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-700">{row.output_pairs ?? 0}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-blue-700">{formatMinutes(row.inactive_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-amber-700">{formatMinutes(row.extra_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-600">{finishedEarly > 0 ? formatMinutes(finishedEarly) : '0'}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold">{isOnTime ? <span className="text-green-600">✓</span> : <span className="text-red-500">✗</span>}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-red-600">{timeLoss > 0 ? formatMinutes(timeLoss) : '—'}</td>
+                                      </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {dailyVisibleLineMachineGroups.length > 0 && (() => {
+                const totalDailyPages = dailyPageSize === 0 ? 1 : Math.ceil(dailyVisibleLineMachineGroups.length / dailyPageSize);
+                return (
+                  <div className="px-2 sm:px-3 pb-3 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-gray-600 border-t border-gray-100">
+                    <span className="text-[10px] sm:text-xs">Page {dailyPageSize === 0 ? 1 : dailyPage + 1} of {totalDailyPages} &mdash; {dailyVisibleLineMachineGroups.length} line(s) total</span>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={dailyPageSize}
+                        onChange={(e) => { setDailyPageSize(Number(e.target.value)); setDailyPage(0); }}
+                        className="px-2 py-1 text-[10px] sm:text-xs border border-gray-300 rounded bg-white font-semibold"
+                      >
+                        <option value={10}>10 / page</option>
+                        <option value={20}>20 / page</option>
+                        <option value={30}>30 / page</option>
+                        <option value={0}>All</option>
+                      </select>
+                      <button type="button" onClick={() => setDailyPage((p) => Math.max(0, p - 1))} disabled={dailyPage === 0 || dailyPageSize === 0} className="px-2 sm:px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold text-[10px] sm:text-xs">Prev</button>
+                      <button type="button" onClick={() => setDailyPage((p) => Math.min(totalDailyPages - 1, p + 1))} disabled={dailyPage >= totalDailyPages - 1 || dailyPageSize === 0} className="px-2 sm:px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold text-[10px] sm:text-xs">Next</button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             {dailyError ? (
               <div className="bg-white rounded-xl border border-red-200 p-6 text-center text-red-600 font-medium">{dailyError}</div>
@@ -3616,18 +4042,31 @@ export const MissedActionsPage: React.FC = () => {
                     <div className="p-3 border-t border-gray-100">
                       <div className="rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 p-3">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 mb-2">Key Insights</p>
-                        <ul className="space-y-1.5 text-xs text-emerald-800">
+                        <ul className="space-y-2 text-xs text-emerald-800">
                           {(() => {
                             const totalCycles = dailyVisibleSummary.total_cycles;
-                            const onTime = dailyFilteredEvents.filter(e => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length;
+                            const onTime = dailyFilteredEvents.filter(e => {
+                              const act = Number(e.actual_mins || 0);
+                              const tgt = Number(e.target_mins || 0);
+                              const inact = Number(e.inactive_mins || 0);
+                              const early = tgt > act ? tgt - act : 0;
+                              return (act <= tgt && inact === 0) || early > 0;
+                            }).length;
                             const onTimePctVal = totalCycles > 0 ? Math.round((onTime / totalCycles) * 100) : 0;
                             const avgLoss = totalCycles > 0 ? (dailyVisibleSummary.total_lost_mins / totalCycles).toFixed(1) : '0';
                             const worst = dailyVisibleLineLossRows[0];
-                            const items: string[] = [];
+                            const hlClass = 'inline-block bg-emerald-200/60 text-emerald-900 font-bold px-1 py-0.5 rounded mx-0.5 tabular-nums';
+                            const warnIcon = <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-amber-100 text-amber-700 text-[9px] font-bold flex-shrink-0">!</span>;
+                            const checkIcon = <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold flex-shrink-0">✓</span>;
+                            const arrowIcon = <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex-shrink-0">→</span>;
+                            const subIcon = <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-teal-100 text-teal-700 text-[9px] font-bold flex-shrink-0">↳</span>;
+                            const items: React.ReactNode[] = [];
                             if (onTimePctVal > 0) {
-                              items.push(onTimePctVal >= 80 ? `✓ Good discipline — ${onTimePctVal}% of cycles completed on time.` : `⚠ ${onTimePctVal}% on-time rate. Target: above 80%.`);
+                              items.push(onTimePctVal >= 80
+                                ? <li key="ontime" className="flex items-start gap-2">{checkIcon}<span>Good discipline — <span className={hlClass}>{onTimePctVal}%</span> of cycles completed on time.</span></li>
+                                : <li key="ontime" className="flex items-start gap-2">{warnIcon}<span><span className={hlClass}>{onTimePctVal}%</span> on-time rate. Target: above 80%.</span></li>
+                              );
                             }
-                            // Yesterday comparison (same time of day)
                             if (dailySummary.yesterday_same_time) {
                               const yst = dailySummary.yesterday_same_time;
                               const todayLoss = dailyVisibleSummary.total_lost_mins;
@@ -3635,35 +4074,32 @@ export const MissedActionsPage: React.FC = () => {
                               const diff = yesterdayLoss - todayLoss;
                               const pctChange = yesterdayLoss > 0 ? Math.round(Math.abs(diff) / yesterdayLoss * 100) : 0;
                               if (diff > 0) {
-                                items.push(`✓ Improved vs yesterday (up to ${yst.compared_up_to}) — ${pctChange}% less loss (${formatDashboardLoss(todayLoss)} vs ${formatDashboardLoss(yesterdayLoss)}). Keep it up!`);
+                                items.push(<li key="yst-better" className="flex items-start gap-2">{checkIcon}<span>Improved vs yesterday (up to {yst.compared_up_to}) — <span className={hlClass}>{pctChange}% less loss</span> (<span className={hlClass}>{formatDashboardLoss(todayLoss)}</span> vs <span className={hlClass}>{formatDashboardLoss(yesterdayLoss)}</span>). Keep it up!</span></li>);
                               } else if (diff < 0) {
-                                items.push(`⚠ Worse than yesterday (up to ${yst.compared_up_to}) — ${pctChange}% more loss (${formatDashboardLoss(todayLoss)} vs ${formatDashboardLoss(yesterdayLoss)}).`);
+                                items.push(<li key="yst-worse" className="flex items-start gap-2">{warnIcon}<span>Worse than yesterday (up to {yst.compared_up_to}) — <span className={hlClass}>{pctChange}% more loss</span> (<span className={hlClass}>{formatDashboardLoss(todayLoss)}</span> vs <span className={hlClass}>{formatDashboardLoss(yesterdayLoss)}</span>).</span></li>);
                               }
                               if (yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins > 5) {
-                                items.push(`  ↳ Late starts improved by ${formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m vs yesterday same time.`);
+                                items.push(<li key="yst-inact" className="flex items-start gap-2 pl-6">{subIcon}<span>Late starts improved by <span className={hlClass}>{formatMinutes(yst.total_inactive_mins - dailyVisibleSummary.total_inactive_mins)}m</span> vs yesterday same time.</span></li>);
                               }
                               if (yst.total_extra_mins - dailyVisibleSummary.total_extra_mins > 5) {
-                                items.push(`  ↳ Late finishes improved by ${formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m vs yesterday same time.`);
+                                items.push(<li key="yst-extra" className="flex items-start gap-2 pl-6">{subIcon}<span>Late finishes improved by <span className={hlClass}>{formatMinutes(yst.total_extra_mins - dailyVisibleSummary.total_extra_mins)}m</span> vs yesterday same time.</span></li>);
                               }
                             }
                             if (dailyVisibleSummary.total_inactive_mins > dailyVisibleSummary.total_extra_mins) {
-                              items.push(`→ Late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m) are the primary loss driver over late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m).`);
+                              items.push(<li key="driver" className="flex items-start gap-2">{arrowIcon}<span>Late starts (<span className={hlClass}>{formatMinutes(dailyVisibleSummary.total_inactive_mins)}m</span>) are the primary loss driver over late finishes (<span className={hlClass}>{formatMinutes(dailyVisibleSummary.total_extra_mins)}m</span>).</span></li>);
                             } else if (dailyVisibleSummary.total_extra_mins > 0) {
-                              items.push(`→ Late finishes (${formatMinutes(dailyVisibleSummary.total_extra_mins)}m) are the primary loss driver over late starts (${formatMinutes(dailyVisibleSummary.total_inactive_mins)}m).`);
+                              items.push(<li key="driver" className="flex items-start gap-2">{arrowIcon}<span>Late finishes (<span className={hlClass}>{formatMinutes(dailyVisibleSummary.total_extra_mins)}m</span>) are the primary loss driver over late starts (<span className={hlClass}>{formatMinutes(dailyVisibleSummary.total_inactive_mins)}m</span>).</span></li>);
                             }
-                            if (worst) items.push(`→ Focus area: ${worst.work_centre_name} has the highest total loss.`);
-                            items.push(`→ Average loss per cycle: ${avgLoss}m across ${totalCycles} cycles.`);
-                            // Peak loss hour
+                            if (worst) items.push(<li key="focus" className="flex items-start gap-2">{arrowIcon}<span>Focus area: <span className={hlClass}>{worst.work_centre_name}</span> has the highest total loss.</span></li>);
+                            items.push(<li key="avg" className="flex items-start gap-2">{arrowIcon}<span>Average loss per cycle: <span className={hlClass}>{avgLoss}m</span> across <span className={hlClass}>{totalCycles}</span> cycles.</span></li>);
                             if (lineLossTrend.length > 0) {
                               const peakBucket = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
-                              if (peakBucket.total > 0) items.push(`→ Peak loss hour: ${peakBucket.label} (${Math.round(peakBucket.total)}m).`);
+                              if (peakBucket.total > 0) items.push(<li key="peak" className="flex items-start gap-2">{arrowIcon}<span>Peak loss hour: <span className={hlClass}>{peakBucket.label}</span> (<span className={hlClass}>{Math.round(peakBucket.total)}m</span>).</span></li>);
                             }
-                            // Best performing line (only when multiple lines)
                             if (dailyVisibleLineLossRows.length > 1) {
                               const best = dailyVisibleLineLossRows[dailyVisibleLineLossRows.length - 1];
-                              items.push(`→ Best line: ${best.work_centre_name} (${formatDashboardLoss(best.lost)} loss).`);
+                              items.push(<li key="best" className="flex items-start gap-2">{checkIcon}<span>Best line: <span className={hlClass}>{best.work_centre_name}</span> (<span className={hlClass}>{formatDashboardLoss(best.lost)}</span> loss).</span></li>);
                             }
-                            // Machines with zero net loss (time gain = early finishes fully offset late starts)
                             const totalMachines = dailyVisibleLineMachineGroups.reduce((s, l) => s + l.machines.length, 0);
                             const allMachines = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
                             const gainMachines = allMachines.filter(m => {
@@ -3676,12 +4112,12 @@ export const MissedActionsPage: React.FC = () => {
                                 const gain = m.events.reduce((t, e) => t + computeCycleNetGainMins(Number(e.inactive_mins || 0), Number(e.target_mins || 0), Number(e.actual_mins || 0)), 0);
                                 return `${m.machineName} (+${formatMinutes(gain)}m)`;
                               }).join(', ');
-                              items.push(`✓ Time gain: ${gainDetails}`);
-                              items.push(`→ ${gainMachines.length} out of ${totalMachines} machines had net time gain.`);
+                              items.push(<li key="gain" className="flex items-start gap-2">{checkIcon}<span>Time gain: <span className={hlClass}>{gainDetails}</span></span></li>);
+                              items.push(<li key="gain-count" className="flex items-start gap-2">{arrowIcon}<span><span className={hlClass}>{gainMachines.length}</span> out of <span className={hlClass}>{totalMachines}</span> machines had net time gain.</span></li>);
                             } else {
-                              items.push(`→ No machines with zero loss today.`);
+                              items.push(<li key="no-gain" className="flex items-start gap-2">{arrowIcon}<span>No machines with zero loss on {new Date(dailyReportDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}.</span></li>);
                             }
-                            return items.map((item, i) => <li key={i}>{item}</li>);
+                            return items;
                           })()}
                         </ul>
                       </div>
@@ -3691,25 +4127,26 @@ export const MissedActionsPage: React.FC = () => {
                         <p className="text-[9px] text-blue-500 mb-2">Actionable steps to reduce time loss and boost productivity</p>
                         <ul className="space-y-1.5 text-xs text-blue-800">
                           {(() => {
-                            const tips: string[] = [];
+                            const hlClass = 'inline-block bg-blue-200/60 text-blue-900 font-bold px-1 py-0.5 rounded mx-0.5 tabular-nums';
+                            const tips: React.ReactNode[] = [];
                             // Peak hour tip
                             if (lineLossTrend.length > 0) {
                               const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
-                              if (peak.total > 20) tips.push(`⚡ Reduce shift-start delay — ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
+                              if (peak.total > 20) tips.push(<li key="peak">⚡ Reduce shift-start delay — <span className={hlClass}>{Math.round(peak.total)}m</span> lost in <span className={hlClass}>{peak.label}</span> hour. Prepare materials and operators before shift.</li>);
                             }
                             // Late starts vs finishes
                             const inact = dailyVisibleSummary.total_inactive_mins;
                             const ext = dailyVisibleSummary.total_extra_mins;
                             if (inact > ext * 2 && inact > 30) {
-                              tips.push(`⚡ Focus on start discipline — Late starts (${formatMinutes(inact)}m) are ${ext > 0 ? (inact / ext).toFixed(1) : '∞'}x more than late finishes. Click START immediately.`);
+                              tips.push(<li key="start-disc">⚡ Focus on start discipline — Late starts (<span className={hlClass}>{formatMinutes(inact)}m</span>) are <span className={hlClass}>{ext > 0 ? (inact / ext).toFixed(1) : '∞'}x</span> more than late finishes. Click START immediately.</li>);
                             } else if (ext > inact * 2 && ext > 30) {
-                              tips.push(`⚡ Speed up cycle completion — Late finishes (${formatMinutes(ext)}m) dominate. Review target times or operator technique.`);
+                              tips.push(<li key="fin-disc">⚡ Speed up cycle completion — Late finishes (<span className={hlClass}>{formatMinutes(ext)}m</span>) dominate. Review target times or operator technique.</li>);
                             }
                             // Worst machine tip
                             const worstMachine = dailyVisibleLineMachineGroups.flatMap(l => l.machines).sort((a, b) => b.events.reduce((t, e) => t + eventLostMins(e), 0) - a.events.reduce((t, e) => t + eventLostMins(e), 0))[0];
                             if (worstMachine && worstMachine.events.reduce((t, e) => t + eventLostMins(e), 0) > 20) {
                               const worstLoss = formatMinutes(worstMachine.events.reduce((t, e) => t + eventLostMins(e), 0));
-                              tips.push(`⚡ Investigate ${worstMachine.machineName} — Highest loss (${worstLoss}m). Check if target is realistic or operator needs support.`);
+                              tips.push(<li key="worst-machine">⚡ Investigate <span className={hlClass}>{worstMachine.machineName}</span> — Highest loss (<span className={hlClass}>{worstLoss}m</span>). Check if target is realistic or operator needs support.</li>);
                             }
                             // Time gain replication
                             const allM = dailyVisibleLineMachineGroups.flatMap(l => l.machines);
@@ -3719,15 +4156,15 @@ export const MissedActionsPage: React.FC = () => {
                               return g > l && m.cycles > 0;
                             });
                             if (gainM.length > 0) {
-                              tips.push(`⚡ Replicate ${gainM[0].machineName}'s approach — This machine gains time by finishing early. Study its workflow for other machines.`);
+                              tips.push(<li key="replicate">⚡ Replicate <span className={hlClass}>{gainM[0].machineName}</span>&apos;s approach — This machine gains time by finishing early. Study its workflow for other machines.</li>);
                             }
                             // Tomorrow target
                             const totalLoss = dailyVisibleSummary.total_lost_mins;
                             if (totalLoss > 10) {
                               const target20 = Math.round(totalLoss * 0.8);
-                              tips.push(`⚡ Tomorrow's target — Reduce loss by 20% (from ${formatMinutes(totalLoss)}m to ${formatMinutes(target20)}m). Eliminate top machine's late starts first.`);
+                              tips.push(<li key="target">⚡ Tomorrow&apos;s target — Reduce loss by 20% (from <span className={hlClass}>{formatMinutes(totalLoss)}m</span> to <span className={hlClass}>{formatMinutes(target20)}m</span>). Eliminate top machine&apos;s late starts first.</li>);
                             }
-                            return tips.map((tip, i) => <li key={i}>{tip}</li>);
+                            return tips;
                           })()}
                         </ul>
                       </div>
@@ -3739,7 +4176,7 @@ export const MissedActionsPage: React.FC = () => {
                   <div className="p-3 space-y-3">
                     {dailyReportDate === dailyDateTo && (
                       <div>
-                        <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Today (9 AM – 7 PM)</p>
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">Today — {new Date(dailyReportDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} (9 AM – 7 PM)</p>
                         <div className="space-y-2">
                           {lineLossTrend.map((bucket) => {
                             const max = Math.max(1, ...lineLossTrend.map((x) => x.total));
@@ -3748,7 +4185,7 @@ export const MissedActionsPage: React.FC = () => {
                               <div key={bucket.label}>
                                 <div className="flex items-center justify-between text-xs mb-1">
                                   <span className="text-gray-600">{bucket.label}</span>
-                                  <span className="font-semibold text-gray-800">{Math.round(bucket.total)}m</span>
+                                  <span className="font-semibold text-gray-800">{formatDurationString(bucket.total)}</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div className="h-full bg-blue-500 rounded-full" style={{ width }} />
@@ -3771,7 +4208,7 @@ export const MissedActionsPage: React.FC = () => {
                               <div key={d.day}>
                                 <div className="flex items-center justify-between text-xs mb-1">
                                   <span className="text-gray-600">{label}</span>
-                                  <span className="font-semibold text-gray-800">{formatMinutes(d.lost_mins)}m</span>
+                                  <span className="font-semibold text-gray-800">{formatDurationString(d.lost_mins)}</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div className="h-full bg-red-400 rounded-full" style={{ width }} />
@@ -3787,185 +4224,6 @@ export const MissedActionsPage: React.FC = () => {
               </div>
             )}
 
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-indigo-600 to-blue-600 flex items-center justify-between gap-2">
-                <span className="text-sm font-bold text-white">Cycle Details (Line → Machine)</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next: Record<string, boolean> = {};
-                      dailyVisibleLineMachineGroups.forEach((line) => {
-                        line.machines.forEach((machine) => {
-                          next[`${line.lineName}__${machine.machineKey}`] = true;
-                        });
-                      });
-                      setExpandedMachineKeys(next);
-                    }}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white/20 text-white hover:bg-white/30 transition"
-                  >
-                    Expand All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedMachineKeys({})}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white/20 text-white hover:bg-white/30 transition"
-                  >
-                    Collapse All
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3 space-y-3">
-                {dailyVisibleLineMachineGroups.slice(dailyPage * dailyPageSize, (dailyPage + 1) * dailyPageSize).map((line, lineIdx) => (
-                  <div key={line.lineName} className="border border-indigo-200/60 rounded-xl overflow-hidden shadow-sm">
-                    <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100 flex items-center justify-between">
-                      <p className="text-sm font-bold text-indigo-800">{line.lineName}</p>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className="font-semibold text-indigo-600">Cycles: {line.cycles}</span>
-                        <span className="font-semibold text-blue-600">Inactive: {formatMinutes(line.inactive)}</span>
-                        <span className="font-semibold text-amber-600">Extra: {formatMinutes(line.extra)}</span>
-                      </div>
-                    </div>
-
-                    <div className="divide-y divide-gray-100">
-                      {line.machines.map((machine, machineIdx) => {
-                        const machineKey = `${line.lineName}__${machine.machineKey}`;
-                        const isExpanded = !!expandedMachineKeys[machineKey];
-                        return (
-                          <div key={machineKey}>
-                            <button
-                              type="button"
-                              onClick={() => setExpandedMachineKeys((prev) => ({ ...prev, [machineKey]: !prev[machineKey] }))}
-                              className={`w-full px-4 py-2.5 flex items-center justify-between text-left transition-colors ${
-                                isExpanded ? 'bg-blue-50/60' : machineIdx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/50 hover:bg-blue-50/40'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                {isExpanded ? <ChevronDown className="h-4 w-4 text-blue-600" /> : <ChevronRight className="h-4 w-4 text-indigo-400" />}
-                                <span className={`text-sm font-semibold ${isExpanded ? 'text-blue-700' : 'text-gray-800'}`}>{machine.machineName}</span>
-                              </div>
-                              <div className="flex items-center gap-3 text-xs">
-                                <span className="font-medium text-indigo-600">Cycles: {machine.cycles}</span>
-                                <span className="font-medium text-blue-600">Inactive: {formatMinutes(machine.inactive)}</span>
-                                <span className="font-medium text-amber-600">Extra: {formatMinutes(machine.extra)}</span>
-                              </div>
-                            </button>
-
-                            {/* Machine-level root cause — visible only when expanded */}
-                            {isExpanded && (
-                              <div className="px-3 py-2 bg-gray-50/50 border-t border-gray-100 flex items-center gap-2">
-                                <span className="text-xs font-semibold text-gray-500">Root Cause:</span>
-                                <RootCauseSelect
-                                  value={machine.events[0]?.root_cause}
-                                  onChange={(val) => {
-                                    const ids = machine.events.map((ev) => ev.id);
-                                    setDailyEvents((prev) => prev.map((ev) => ids.includes(ev.id) ? { ...ev, root_cause: val } : ev));
-                                    ids.forEach((id) => {
-                                      const key = `daily__${id}`;
-                                      apiFetch(`${API_BASE}/api/missed-actions/root-cause`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ issue_key: key, root_cause: val }),
-                                      }).catch(() => {});
-                                    });
-                                    toast.success(val ? `Root cause set for all ${ids.length} cycles: ${val}` : 'Root cause cleared');
-                                  }}
-                                  className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
-                                />
-                              </div>
-                            )}
-
-                            {isExpanded && (
-                              <div className="overflow-x-auto border-t border-gray-100">
-                                <table className="min-w-full">
-                                  <thead className="bg-white border-b border-gray-100">
-                                    <tr>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Operator</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Start</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finish</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Target</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Actual</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Output</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Started Late</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Late</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finished Early</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">On Time</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Time Loss</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-100">
-                                    <tr className="bg-blue-50">
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">Summary</td>
-                                      <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>
-                                        Cycles: {machine.events.length}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-green-800">{machine.events.filter((e) => Number(e.actual_mins || 0) <= Number(e.target_mins || 0) && Number(e.inactive_mins || 0) === 0).length}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
-                                    </tr>
-                                    {machine.events.map((row) => {
-                                      const actual = Number(row.actual_mins || 0);
-                                      const target = Number(row.target_mins || 0);
-                                      const inactive = Number(row.inactive_mins || 0);
-                                      const extra = Number(row.extra_mins || 0);
-                                      const finishedEarly = target > actual ? target - actual : 0;
-                                      const isOnTime = actual <= target && inactive === 0;
-                                      const timeLoss = inactive + extra;
-                                      return (
-                                      <tr key={row.id}>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.employee_name} ({row.employee_code})</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.start_time ? new Date(row.start_time).toLocaleTimeString() : '-'}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.finish_time ? new Date(row.finish_time).toLocaleTimeString() : '-'}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.target_mins)}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.actual_mins)}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-700">{row.output_pairs ?? 0}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-blue-700">{formatMinutes(row.inactive_mins)}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-amber-700">{formatMinutes(row.extra_mins)}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-600">{finishedEarly > 0 ? formatMinutes(finishedEarly) : '—'}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold">{isOnTime ? <span className="text-green-600">✓</span> : <span className="text-gray-300">—</span>}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-red-600">{timeLoss > 0 ? formatMinutes(timeLoss) : '—'}</td>
-                                      </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {dailyVisibleLineMachineGroups.length > 0 && (() => {
-                const totalDailyPages = dailyPageSize === 0 ? 1 : Math.ceil(dailyVisibleLineMachineGroups.length / dailyPageSize);
-                return (
-                  <div className="px-3 pb-3 pt-3 flex items-center justify-between text-xs text-gray-600 border-t border-gray-100">
-                    <span>Page {dailyPageSize === 0 ? 1 : dailyPage + 1} of {totalDailyPages} &mdash; {dailyVisibleLineMachineGroups.length} line(s) total</span>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={dailyPageSize}
-                        onChange={(e) => { setDailyPageSize(Number(e.target.value)); setDailyPage(0); }}
-                        className="px-2 py-1 text-xs border border-gray-300 rounded bg-white font-semibold"
-                      >
-                        <option value={10}>10 / page</option>
-                        <option value={20}>20 / page</option>
-                        <option value={30}>30 / page</option>
-                        <option value={0}>All</option>
-                      </select>
-                      <button type="button" onClick={() => setDailyPage((p) => Math.max(0, p - 1))} disabled={dailyPage === 0 || dailyPageSize === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Prev</button>
-                      <button type="button" onClick={() => setDailyPage((p) => Math.min(totalDailyPages - 1, p + 1))} disabled={dailyPage >= totalDailyPages - 1 || dailyPageSize === 0} className="px-2.5 py-1 rounded border border-gray-300 bg-white disabled:opacity-40 font-semibold">Next</button>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
           </div>
         ) : null}
 
