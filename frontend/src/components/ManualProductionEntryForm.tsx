@@ -4140,10 +4140,11 @@ export const ManualProductionEntryForm: React.FC = () => {
                                       )}
                                     </div>
                                   </div>
-                                  <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-500">
-                                    <span>{formatShortTime(row.start_time)} → {isActive ? 'now' : formatShortTime(row.finish_time)}</span>
-                                    <span>{metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
-                                    {eff != null && <span>Eff: {effBadge(eff)}</span>}
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px]">
+                                    <span className="text-indigo-600 font-medium">{formatShortTime(row.start_time)} → {isActive ? 'now' : formatShortTime(row.finish_time)}</span>
+                                    <span className="font-semibold text-amber-700">A: {metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
+                                    <span className="font-semibold text-blue-700">T: {Number(row.target_mins || 0).toFixed(1)}m</span>
+                                    {eff != null && <span className="font-semibold text-emerald-700">Eff: {effBadge(eff)}</span>}
                                     {metrics.anomalies.length > 0 && (
                                       <span className="text-red-600 font-semibold">{metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}</span>
                                     )}

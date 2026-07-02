@@ -13,13 +13,13 @@ export function minutesToDurationParts(minutes: number) {
   };
 }
 
-/** Format duration parts into a string like "1h 32m 12s" or "45m 12s" (hours shown only when >= 60 min). */
+/** Format duration parts into a string like "1 h 32 m 12 s" or "45 m 12 s" (hours shown only when >= 60 min). */
 export function formatDurationString(minutes: number): string {
   const parts = minutesToDurationParts(Math.abs(minutes));
   if (parts.hours > 0) {
-    return `${parts.hours}h ${parts.wholeMinutes}m ${parts.seconds}s`;
+    return `${parts.hours} h ${parts.wholeMinutes} m ${parts.seconds} s`;
   }
-  return `${parts.wholeMinutes}m ${parts.seconds}s`;
+  return `${parts.wholeMinutes} m ${parts.seconds} s`;
 }
 
 type CycleDurationKind = 'late' | 'extra' | 'early' | 'lost';
