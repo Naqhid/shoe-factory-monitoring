@@ -3594,7 +3594,6 @@ export const ManualProductionEntryForm: React.FC = () => {
                 )}
                 {prodSecondsSinceRefresh !== null ? (
                   <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                    <RefreshCw className={`h-3.5 w-3.5 ${prodLoading ? 'animate-spin text-blue-600' : ''}`} aria-hidden />
                     Updated {prodSecondsSinceRefresh}s ago
                   </span>
                 ) : null}
