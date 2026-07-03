@@ -26,7 +26,7 @@ export const Layout: React.FC<LayoutProps> = ({
   hideLogout = false,
   hideAlertBell = false
 }) => {
-  const [sidebarOpen, setSidebarOpen] = React.useState(() => window.innerWidth >= 1024);
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const navigate = useNavigate();
 

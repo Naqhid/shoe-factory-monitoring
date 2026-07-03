@@ -45,7 +45,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
   useEffect(() => {
     const fetchWorkCentres = async () => {
       try {
-        const response = await apiFetch(`${API_BASE_URL}/api/masters/work_centres`);
+        const response = await apiFetch(`${API_BASE_URL}/api/tv-dashboard/work-centres`);
         const result = await response.json();
         if (result.success) setWorkCentres(result.data);
       } catch (error) {
@@ -71,6 +71,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
         const result = await response.json();
         if (result.success) {
           setMachineCentres(result.data);
+          setSelectedMachineCentre('');
         }
       } catch (error) {
         console.error('Error fetching machine centres:', error);
