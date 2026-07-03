@@ -2046,16 +2046,29 @@ export const MissedActionsPage: React.FC = () => {
               formatMinutes(totalTimeLoss),
             ];
 
+            const bottomSummaryRow = [
+              `SUMMARY — ${machine.machineName}`,
+              '', '',
+              '',
+              formatMinutes(totalActual),
+              String(totalOutput),
+              formatMinutes(totalInactive),
+              formatMinutes(totalExtra),
+              formatMinutes(totalFinishedEarly),
+              String(totalOnTime),
+              formatMinutes(totalTimeLoss),
+            ];
+
             autoTable(doc, {
               startY: y,
               head: [headerLabels],
-              body: [summaryRow, ...tableRows],
+              body: [summaryRow, ...tableRows, bottomSummaryRow],
               margin: { left: margin, right: margin, top: margin, bottom: 14 },
               styles: { fontSize: 6.5, cellPadding: 1.5, overflow: 'linebreak', valign: 'middle', lineColor: [226, 232, 240], lineWidth: 0.1, textColor: [15, 23, 42], fontStyle: 'bold' },
               headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'left' },
               alternateRowStyles: { fillColor: [248, 250, 252] },
               didParseCell: (data) => {
-                if (data.section === 'body' && data.row.index === 0) {
+                if (data.section === 'body' && (data.row.index === 0 || data.row.index === tableRows.length + 1)) {
                   data.cell.styles.fillColor = [219, 234, 254];
                   data.cell.styles.textColor = [30, 58, 138];
                   data.cell.styles.fontStyle = 'bold';
@@ -3931,6 +3944,17 @@ export const MissedActionsPage: React.FC = () => {
                                       </tr>
                                       );
                                     })}
+                                    <tr className="bg-blue-50 border-t-2 border-blue-200">
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">Summary</td>
+                                      <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>Cycles: {machine.events.length}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-green-800">{machine.events.filter((e) => { const act = Number(e.actual_mins || 0); const tgt = Number(e.target_mins || 0); const inact = Number(e.inactive_mins || 0); const early = tgt > act ? tgt - act : 0; return (act <= tgt && inact === 0) || early > 0; }).length}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
+                                    </tr>
                                   </tbody>
                                 </table>
                                 </div>
