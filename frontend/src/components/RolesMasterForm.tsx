@@ -198,89 +198,92 @@ export const RolesMasterForm: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-2">
-        <h2 className="text-2xl font-bold">Role Management</h2>
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative w-full sm:w-64">
-            <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search roles..."
-              className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+    <div className="p-3 sm:p-6">
+      {/* Header */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-3 sm:px-4 py-3 mb-4 sm:mb-6">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-900">Role Management</h2>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => fetchRoles()}
+              disabled={fetchLoading}
+              title="Refresh"
+              className="p-2 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDialog({ action: 'save-defaults' })}
+              disabled={saveDefaultsLoading}
+              title="Save as defaults"
+              className="p-2 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 disabled:opacity-50"
+            >
+              <Bookmark className={`h-4 w-4 ${saveDefaultsLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDialog({ action: 'restore-defaults' })}
+              disabled={resetLoading}
+              title="Restore defaults"
+              className="p-2 rounded-lg bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200 disabled:opacity-50"
+            >
+              <RotateCcw className={`h-4 w-4 ${resetLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add Role</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => fetchRoles()}
-            disabled={fetchLoading}
-            title="Reload from server"
-            className="flex items-center gap-2 bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDialog({ action: 'save-defaults' })}
-            disabled={saveDefaultsLoading}
-            className="flex items-center gap-2 bg-emerald-100 text-emerald-900 border border-emerald-200 px-4 py-2 rounded-lg hover:bg-emerald-200 disabled:opacity-50"
-          >
-            <Bookmark className={`h-4 w-4 ${saveDefaultsLoading ? 'animate-spin' : ''}`} />
-            Save as defaults
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDialog({ action: 'restore-defaults' })}
-            disabled={resetLoading}
-            className="flex items-center gap-2 bg-amber-100 text-amber-900 border border-amber-200 px-4 py-2 rounded-lg hover:bg-amber-200 disabled:opacity-50"
-          >
-            <RotateCcw className={`h-4 w-4 ${resetLoading ? 'animate-spin' : ''}`} />
-            Restore defaults
-          </button>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-            <Plus className="h-4 w-4" /> Add Role
-          </button>
         </div>
+        <div className="relative">
+          <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search roles..."
+            className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400"
+          />
+        </div>
+        <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+          Menus and API access controlled here. <strong>Save as defaults</strong> stores current setup; <strong>Restore defaults</strong> rolls back to that snapshot.
+        </p>
       </div>
-      <p className="text-sm text-gray-600 mb-6 max-w-3xl">
-        Menus and API access are controlled here. Use <strong>Save as defaults</strong> to store the current setup; <strong>Restore defaults</strong> rolls all roles back to that saved snapshot. Live edits apply after re-login or session refresh.
-      </p>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 w-full sm:max-w-2xl max-h-[95dvh] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">{editingRole ? 'Edit Role' : 'Add Role'}</h3>
-              <button onClick={resetForm}><X className="h-5 w-5" /></button>
+              <h3 className="text-lg sm:text-xl font-bold">{editingRole ? 'Edit Role' : 'Add Role'}</h3>
+              <button onClick={resetForm} className="p-2 rounded-lg hover:bg-gray-100"><X className="h-5 w-5" /></button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">Role Name</label>
-                <input type="text" value={formData.role_name} onChange={(e) => setFormData({ ...formData, role_name: e.target.value })} className="w-full border rounded-lg px-3 py-2" required />
+                <input type="text" value={formData.role_name} onChange={(e) => setFormData({ ...formData, role_name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400" required />
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">Default Route</label>
-                <input type="text" value={formData.default_route} onChange={(e) => setFormData({ ...formData, default_route: e.target.value })} className="w-full border rounded-lg px-3 py-2" required placeholder="/production_tracker" />
+                <input type="text" value={formData.default_route} onChange={(e) => setFormData({ ...formData, default_route: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400" required placeholder="/production_tracker" />
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">Allowed Menus</label>
-                <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-lg p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-3">
                   {ALL_MENU_DEFINITIONS.map(menu => (
-                    <label key={menu.key} className="flex items-center gap-2">
-                      <input type="checkbox" checked={formData.allowed_menus.includes(menu.key)} onChange={() => toggleMenu(menu.key)} />
+                    <label key={menu.key} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-50">
+                      <input type="checkbox" checked={formData.allowed_menus.includes(menu.key)} onChange={() => toggleMenu(menu.key)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                       <span className="text-sm">{menu.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
               <div className="flex gap-2">
-                <button type="submit" className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 font-semibold">
                   <Save className="h-4 w-4" /> Save
                 </button>
-                <button type="button" onClick={resetForm} className="bg-gray-300 px-4 py-2 rounded-lg hover:bg-gray-400">Cancel</button>
+                <button type="button" onClick={resetForm} className="flex-1 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-200 font-semibold">Cancel</button>
               </div>
             </form>
           </div>
@@ -345,41 +348,79 @@ export const RolesMasterForm: React.FC = () => {
             {debouncedSearch ? 'No matching roles found' : 'No roles found'}
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gradient-to-r from-violet-600 to-purple-600">
-                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Role Name</th>
-                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Default Route</th>
-                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Menus Count</th>
-                <th className="px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {roles.map((role, idx) => (
-                <tr key={role.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/40'}>
-                  <td className="px-6 py-3.5 text-sm font-semibold text-gray-900">{role.role_name}</td>
-                  <td className="px-6 py-3.5 text-sm text-gray-600">{role.default_route}</td>
-                  <td className="px-6 py-3.5">
-                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
-                      {role.allowed_menus.length}
+          <>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gradient-to-r from-violet-600 to-purple-600">
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Role Name</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Default Route</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Menus</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-left text-[11px] font-bold text-white uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {roles.map((role, idx) => (
+                    <tr key={role.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/40'}>
+                      <td className="px-4 sm:px-6 py-3.5 text-sm font-semibold text-gray-900">{role.role_name}</td>
+                      <td className="px-4 sm:px-6 py-3.5 text-sm text-gray-600 font-mono">{role.default_route}</td>
+                      <td className="px-4 sm:px-6 py-3.5">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                          {role.allowed_menus.length}
+                        </span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-3.5">
+                        <div className="flex gap-1">
+                          <button onClick={() => handleEdit(role)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-100 transition" title="Edit">
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setConfirmDialog({ action: 'delete', roleId: role.id, roleName: role.role_name })}
+                            className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card layout */}
+            <div className="sm:hidden divide-y divide-gray-200">
+              {roles.map((role) => (
+                <div key={role.id} className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-gray-900">{role.role_name}</p>
+                      <p className="text-xs text-gray-500 font-mono mt-0.5">{role.default_route}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => handleEdit(role)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition" title="Edit">
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setConfirmDialog({ action: 'delete', roleId: role.id, roleName: role.role_name })}
+                        className="p-2 rounded-lg text-red-500 hover:bg-red-50 transition"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                      {role.allowed_menus.length} menus
                     </span>
-                  </td>
-                  <td className="px-6 py-3.5 flex gap-1">
-                    <button onClick={() => handleEdit(role)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-100 transition" title="Edit">
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setConfirmDialog({ action: 'delete', roleId: role.id, roleName: role.role_name })}
-                      className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
     </div>

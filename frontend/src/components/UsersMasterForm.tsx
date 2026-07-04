@@ -277,35 +277,61 @@ export const UsersMasterForm: React.FC = () => {
         confirmText="Delete"
       />
       
-      <header className="bg-white border-b border-gray-200 px-4 py-3 mb-6 pl-12 rounded-lg shadow-sm">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Users Master</h1>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
-            <div className="relative w-full sm:w-64">
-              <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search users..."
-                className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <select
-              value={roleFilter}
-              onChange={(e) => { setRoleFilter(e.target.value); setStyleFilter(''); setCurrentPage(1); }}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <header className="bg-white border border-gray-200 px-3 sm:px-4 py-3 mb-4 sm:mb-6 rounded-xl shadow-sm">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Users Master</h1>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={fetchLoading}
+              title="Reload from server"
+              className="p-2 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 disabled:opacity-50"
             >
-              <option value="">All Roles</option>
-              {roles.map((r) => (
-                <option key={r.id ?? r.role_name} value={r.role_name}>{r.role_name}</option>
-              ))}
-            </select>
-            {roleFilter && roleFilter.toLowerCase().includes('machine') && (
-              <select
+              <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={handleExportToExcel}
+              className="p-2 rounded-lg bg-green-600 text-white hover:bg-green-700"
+              title="Export to Excel"
+            >
+              <Download className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add New</span>
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search users..."
+              className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400"
+            />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={(e) => { setRoleFilter(e.target.value); setStyleFilter(''); setCurrentPage(1); }}
+            className="w-full sm:w-auto border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400"
+          >
+            <option value="">All Roles</option>
+            {roles.map((r) => (
+              <option key={r.id ?? r.role_name} value={r.role_name}>{r.role_name}</option>
+            ))}
+          </select>
+          {roleFilter && roleFilter.toLowerCase().includes('machine') && (
+            <select
                 value={styleFilter}
                 onChange={(e) => { setStyleFilter(e.target.value); setCurrentPage(1); }}
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full sm:w-auto border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400"
               >
                 <option value="">All Articles</option>
                 {stylesList.map((s) => (
@@ -313,33 +339,6 @@ export const UsersMasterForm: React.FC = () => {
                 ))}
               </select>
             )}
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={fetchLoading}
-              title="Reload from server"
-              className="bg-slate-100 text-slate-700 border border-slate-200 px-3 sm:px-4 py-2 rounded-md hover:bg-slate-200 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <RefreshCw className={`h-4 w-4 ${fetchLoading ? 'animate-spin' : ''}`} />
-              <span className="sm:inline hidden">Refresh</span>
-            </button>
-            <button
-              onClick={handleExportToExcel}
-              className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-green-700 flex items-center justify-center gap-2 text-sm sm:text-base"
-            >
-              <Download className="h-4 w-4" />
-              <span className="sm:inline hidden">Export to Excel</span>
-              <span className="sm:hidden">Export</span>
-            </button>
-            <button
-              onClick={() => setShowForm(true)}
-              className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-blue-700 flex items-center justify-center gap-2 text-sm sm:text-base"
-            >
-              <Plus className="h-4 w-4" />
-              <span className="sm:inline hidden">Add New</span>
-              <span className="sm:hidden">Add</span>
-            </button>
-          </div>
         </div>
       </header>
 
@@ -487,7 +486,8 @@ export const UsersMasterForm: React.FC = () => {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
           <table className="min-w-full">
             <thead>
               <tr className="bg-gradient-to-r from-blue-600 to-indigo-600">
@@ -555,8 +555,55 @@ export const UsersMasterForm: React.FC = () => {
           </table>
         </div>
 
+            {/* Mobile card layout */}
+            <div className="md:hidden divide-y divide-gray-200">
+              {records.length > 0 ? records.map((record) => (
+                <div key={record.id} className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-gray-900">{record.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{record.code}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleEdit(record)}
+                        className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition"
+                        title="Edit"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(record.id)}
+                        className="p-2 rounded-lg text-red-500 hover:bg-red-50 transition"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 capitalize">
+                      {record.role}
+                    </span>
+                    {record.work_centre_name && (
+                      <span className="text-xs text-gray-500">
+                        {record.work_centre_code ? `${record.work_centre_code} - ${record.work_centre_name}` : record.work_centre_name}
+                      </span>
+                    )}
+                    {record.machine_id && (
+                      <span className="text-xs text-gray-500">• {record.machine_id}</span>
+                    )}
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center py-8 text-gray-500">
+                  {debouncedSearch ? 'No matching users found' : 'No users found'}
+                </div>
+              )}
+            </div>
+
         {records.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
+          <div className="hidden md:block text-center py-8 text-gray-500">
             {debouncedSearch ? 'No matching users found' : 'No users found'}
           </div>
         )}
