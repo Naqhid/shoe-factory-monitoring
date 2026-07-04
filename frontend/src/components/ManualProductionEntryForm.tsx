@@ -256,7 +256,17 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [tableTotal, setTableTotal] = React.useState(0);
   const [tableTotalPages, setTableTotalPages] = React.useState(1);
   const [tableFilteredOutputTotal, setTableFilteredOutputTotal] = React.useState(0);
-  const [activeTab, setActiveTab] = React.useState<'entries' | 'coverage' | 'audit' | 'production' | 'summary' | 'wip'>('entries');
+  const [activeTab, setActiveTab] = React.useState<'entries' | 'coverage' | 'audit' | 'production' | 'summary' | 'wip'>(() => {
+    const hash = window.location.hash.replace('#', '');
+    const valid = ['entries', 'coverage', 'audit', 'production', 'summary', 'wip'];
+    return valid.includes(hash) ? (hash as any) : 'entries';
+  });
+
+  // Sync active tab to URL hash for persistence across refreshes
+  React.useEffect(() => {
+    window.location.hash = activeTab;
+  }, [activeTab]);
+
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
@@ -4185,55 +4195,53 @@ export const ManualProductionEntryForm: React.FC = () => {
                                       )}
                                     </div>
 
-                                    {/* Metrics Grid */}
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                      <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                                    {/* Metrics Grid: Output + Efficiency + Edit */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="flex-1 bg-blue-50 rounded-lg p-2 border border-blue-100 text-center">
                                         <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Output</div>
-                                        <div className="text-lg font-bold text-blue-700 mt-0.5">{Number(row.output_pairs || 0)}</div>
-                                        <div className="text-[10px] text-blue-500">pairs</div>
+                                        <div className="mt-0.5">
+                                          <span className="text-lg font-bold text-blue-700">{Number(row.output_pairs || 0)}</span>
+                                          <span className="text-[10px] text-blue-500 ml-1">pairs</span>
+                                        </div>
                                       </div>
-                                      <div className="bg-yellow-50 rounded-lg p-2 border border-yellow-100">
+                                      <div className="flex-1 bg-yellow-50 rounded-lg p-2 border border-yellow-100 text-center">
                                         <div className="text-[10px] text-yellow-600 font-bold uppercase tracking-wider">Efficiency</div>
                                         <div className="mt-0.5">{isActive ? <span className="text-xs text-amber-600 font-semibold">Live</span> : effBadge(eff)}</div>
                                       </div>
+                                      {canMutate && (
+                                        <button type="button" onClick={() => handleProdEdit(row)} className="flex items-center justify-center w-9 h-9 rounded-lg text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 active:bg-blue-200 transition-colors shrink-0" title="Edit cycle">
+                                          <Edit className="h-4 w-4" aria-hidden />
+                                        </button>
+                                      )}
                                     </div>
 
-                                    {/* Duration and Target Row */}
-                                    <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
-                                      <div className="flex items-center gap-1 bg-purple-50 p-1.5 rounded border border-purple-100">
+                                    {/* Duration and Target Row + Delete */}
+                                    <div className="flex items-center gap-2 mb-2 text-xs">
+                                      <div className="flex-1 flex items-center justify-center gap-1 bg-purple-50 p-1.5 rounded border border-purple-100">
                                         <span className="font-semibold text-purple-600">Actual:</span>
                                         <span className="font-bold text-purple-700">{metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
                                         {isActive && <span className="text-purple-500">+</span>}
                                       </div>
-                                      <div className="flex items-center gap-1 bg-cyan-50 p-1.5 rounded border border-cyan-100">
+                                      <div className="flex-1 flex items-center justify-center gap-1 bg-cyan-50 p-1.5 rounded border border-cyan-100">
                                         <span className="font-semibold text-cyan-600">Target:</span>
                                         <span className="font-bold text-cyan-700">{Number(row.target_mins || 0).toFixed(1)}m</span>
                                       </div>
+                                      {canMutate && (
+                                        <button type="button" onClick={() => setProdDeleteCandidate(row)} className="flex items-center justify-center w-9 h-9 rounded-lg text-red-500 bg-red-50 border border-red-200 hover:bg-red-100 active:bg-red-200 transition-colors shrink-0" title="Delete cycle">
+                                          <Trash2 className="h-4 w-4" aria-hidden />
+                                        </button>
+                                      )}
                                     </div>
 
-                                    {/* Flags and Actions Row */}
-                                    <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-200/50">
-                                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                                        {metrics.anomalies.length > 0 && (
-                                          <span className="inline-flex items-center gap-1 text-red-600 text-[10px] font-bold bg-red-50 px-1.5 py-0.5 rounded">
-                                            <AlertTriangle className="h-3 w-3" aria-hidden />
-                                            {metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}
-                                          </span>
-                                        )}
+                                    {/* Flags Row */}
+                                    {metrics.anomalies.length > 0 && (
+                                      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-200/50">
+                                        <span className="inline-flex items-center gap-1 text-red-600 text-[10px] font-bold bg-red-50 px-1.5 py-0.5 rounded">
+                                          <AlertTriangle className="h-3 w-3" aria-hidden />
+                                          {metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center gap-1.5">
-                                        {canMutate && (
-                                          <button type="button" onClick={() => handleProdEdit(row)} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 active:bg-blue-200 transition-colors" title="Edit cycle">
-                                            <Edit className="h-4 w-4" aria-hidden />
-                                          </button>
-                                        )}
-                                        {canMutate && (
-                                          <button type="button" onClick={() => setProdDeleteCandidate(row)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 active:bg-red-200 transition-colors" title="Delete cycle">
-                                            <Trash2 className="h-4 w-4" aria-hidden />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
+                                    )}
                                   </div>
                                 );
                               })}
