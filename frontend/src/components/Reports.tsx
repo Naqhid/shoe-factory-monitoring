@@ -2469,7 +2469,7 @@ export const Reports: React.FC = () => {
           </div>
         </div>
 
-        {SHOW_DAILY_INACTIVE_REPORT_CALLOUT && (
+        {/* {SHOW_DAILY_INACTIVE_REPORT_CALLOUT && (
         <div className="rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200/80 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-lg bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
@@ -2488,7 +2488,7 @@ export const Reports: React.FC = () => {
             <ChevronRight className="h-3.5 w-3.5" />
           </a>
         </div>
-        )}
+        )} */}
 
         {/* Report type picker */}
         <div className="overflow-hidden rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -2731,7 +2731,7 @@ export const Reports: React.FC = () => {
                   {isShareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <WhatsAppIcon className="h-4 w-4 shrink-0" />}
                   WhatsApp
                 </button>
-                <button type="button" onClick={clearAllFilters} className={secondaryBtnClass}>
+                <button type="button" onClick={clearAllFilters} className={`${actionBtnBase} border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100`}>
                   <RotateCcw className="h-4 w-4" /> Reset
                 </button>
                 <button
@@ -2742,7 +2742,7 @@ export const Reports: React.FC = () => {
                       .then(() => toast.success('Report link copied'))
                       .catch(() => toast.error('Could not copy link'));
                   }}
-                  className={secondaryBtnClass}
+                  className={`${actionBtnBase} border border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100`}
                 >
                   <Copy className="h-4 w-4" /> Copy link
                 </button>
@@ -2891,8 +2891,7 @@ export const Reports: React.FC = () => {
               <>
                 {!forceShareCapture && (
                   <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2 text-xs text-slate-500">
-                    Card layout for mobile — use landscape or desktop for the full grid.
-                  </div>
+                         </div>
                 )}
                 {renderMobileCards()}
               </>

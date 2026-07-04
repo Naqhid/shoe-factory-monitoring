@@ -2347,7 +2347,18 @@ export const MissedActionsPage: React.FC = () => {
         // Peak hour tip
         if (lineLossTrend.length > 0) {
           const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
-          if (peak.total > 20) tips.push(`Reduce shift-start delay -- ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`);
+          if (peak.total > 20) {
+            const peakIdx = lineLossTrend.indexOf(peak);
+            let tipText: string;
+            if (peakIdx === 0) {
+              tipText = `Reduce shift-start delay -- ${Math.round(peak.total)}m lost in ${peak.label} hour. Prepare materials and operators before shift.`;
+            } else if (peakIdx === 4 || peakIdx === 5) {
+              tipText = `Reduce post-lunch delay -- ${Math.round(peak.total)}m lost in ${peak.label} hour. Ensure operators return on time and restart quickly.`;
+            } else {
+              tipText = `Reduce idle time in ${peak.label} hour -- ${Math.round(peak.total)}m lost. Investigate why machines stall during this period.`;
+            }
+            tips.push(tipText);
+          }
         }
         // Late starts vs finishes
         const inactPdf = dailyVisibleSummary.total_inactive_mins;
@@ -4156,7 +4167,16 @@ export const MissedActionsPage: React.FC = () => {
                             // Peak hour tip
                             if (lineLossTrend.length > 0) {
                               const peak = lineLossTrend.reduce((best, b) => b.total > best.total ? b : best, lineLossTrend[0]);
-                              if (peak.total > 20) tips.push(<li key="peak">⚡ Reduce shift-start delay — <span className={hlClass}>{Math.round(peak.total)}m</span> lost in <span className={hlClass}>{peak.label}</span> hour. Prepare materials and operators before shift.</li>);
+                              if (peak.total > 20) {
+                                const peakIdx = lineLossTrend.indexOf(peak);
+                                if (peakIdx === 0) {
+                                  tips.push(<li key="peak">⚡ Reduce shift-start delay — <span className={hlClass}>{Math.round(peak.total)}m</span> lost in <span className={hlClass}>{peak.label}</span> hour. Prepare materials and operators before shift.</li>);
+                                } else if (peakIdx === 4 || peakIdx === 5) {
+                                  tips.push(<li key="peak">⚡ Reduce post-lunch delay — <span className={hlClass}>{Math.round(peak.total)}m</span> lost in <span className={hlClass}>{peak.label}</span> hour. Ensure operators return on time and restart quickly.</li>);
+                                } else {
+                                  tips.push(<li key="peak">⚡ Reduce idle time in <span className={hlClass}>{peak.label}</span> hour — <span className={hlClass}>{Math.round(peak.total)}m</span> lost. Investigate why machines stall during this period.</li>);
+                                }
+                              }
                             }
                             // Late starts vs finishes
                             const inact = dailyVisibleSummary.total_inactive_mins;
