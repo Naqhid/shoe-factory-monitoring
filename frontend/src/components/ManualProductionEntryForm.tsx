@@ -4156,7 +4156,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                             </div>
 
                             {/* Individual Cycle Cards */}
-                            <div className="divide-y divide-gray-100">
+                            <div className="divide-y-2 divide-blue-300">
                               {machineRows.map((row: any) => {
                                 const rowStatus = Number(row.button_status || 0);
                                 const isActive = isProdCycleActive(rowStatus);
