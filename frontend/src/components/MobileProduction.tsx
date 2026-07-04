@@ -1489,9 +1489,10 @@ export const MobileProduction: React.FC = () => {
                         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('user_info') : null;
                         const user = raw ? JSON.parse(raw) : null;
                         const userCode = user?.code || user?.emp_code || '';
+                        const effectiveRoleForMachine = getEffectiveRole(user);
                         if (
                             user &&
-                            getEffectiveRole(user) === 'Machine Centre User' &&
+                            (effectiveRoleForMachine === 'Machine Centre User' || effectiveRoleForMachine === 'Final Output Machine') &&
                             userCode &&
                             (
                                 !user.machine_id ||

@@ -4100,57 +4100,144 @@ export const ManualProductionEntryForm: React.FC = () => {
                               </tbody>
                             </table>
                           </div>
-                          {/* Mobile cycle cards */}
-                          <div className="sm:hidden divide-y divide-gray-100">
-                            {machineRows.map((row: any) => {
-                              const rowStatus = Number(row.button_status || 0);
-                              const isActive = isProdCycleActive(rowStatus);
-                              const ctx = cycleContextMap.get(Number(row.id)) ?? {
-                                prevFinishTime: null,
-                                cycleNumber: 1,
-                                operatorChanged: false,
-                              };
-                              const metrics = analyzeProdCycle(row, ctx, prodLiveNow);
-                              const eff = isActive ? null : metrics.efficiencyPct;
-                              return (
-                                <div key={row.id} className={`px-3 py-2.5 ${isActive ? 'bg-amber-50/70' : metrics.isSuspicious ? 'bg-red-50/60' : ''}`}>
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className="text-[10px] font-bold text-gray-400 tabular-nums">#{metrics.cycleNumber}</span>
-                                      <span className="text-xs text-gray-700 truncate">{row.emp_id}{row.employee_name ? ` – ${row.employee_name}` : ''}</span>
+                          {/* Mobile production cards - Enhanced for better visibility */}
+                          <div className="sm:hidden divide-y divide-gray-200">
+                            {/* Machine Summary Card */}
+                            <div className="px-3 py-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/60 border-b-2 border-indigo-200">
+                              <div className="flex flex-col gap-2">
+                                {/* Machine Title + Live Indicator */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-col gap-1">
+                                      {mName && <p className="text-xs font-semibold text-indigo-700 bg-indigo-100 rounded px-2 py-1 inline-block truncate">{mName}</p>}
+                                      <h3 className="font-mono font-bold text-sm text-gray-900 truncate">({mid})</h3>
+                                    </div>
+                                  </div>
+                                  {machineHasLive && (
+                                    <div className="flex items-center gap-1.5 bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+                                      <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                                      </span>
+                                      Live
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Cycle count */}
+                                <div className="text-xs text-gray-600 font-medium">
+                                  {machineRows.length} cycle{machineRows.length !== 1 ? 's' : ''}
+                                </div>
+                                {/* Key Metrics Row */}
+                                <div className="grid grid-cols-3 gap-2 pt-1">
+                                  <div className="bg-white rounded-lg p-2.5 border border-blue-100 text-center">
+                                    <div className="text-gray-600 text-[10px] font-semibold uppercase tracking-wide">Output</div>
+                                    <div className="text-lg font-bold text-blue-700 mt-1">{sectionOutput}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-2.5 border border-green-100 text-center">
+                                    <div className="text-gray-600 text-[10px] font-semibold uppercase tracking-wide">Avg Eff.</div>
+                                    <div className="mt-1">{effBadge(sectionAvgEff)}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-2.5 border border-purple-100 text-center">
+                                    <div className="text-gray-600 text-[10px] font-semibold uppercase tracking-wide">Cycles</div>
+                                    <div className="text-lg font-bold text-purple-700 mt-1">{machineRows.length}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Individual Cycle Cards */}
+                            <div className="divide-y divide-gray-100">
+                              {machineRows.map((row: any) => {
+                                const rowStatus = Number(row.button_status || 0);
+                                const isActive = isProdCycleActive(rowStatus);
+                                const ctx = cycleContextMap.get(Number(row.id)) ?? {
+                                  prevFinishTime: null,
+                                  cycleNumber: 1,
+                                  operatorChanged: false,
+                                };
+                                const metrics = analyzeProdCycle(row, ctx, prodLiveNow);
+                                const eff = isActive ? null : metrics.efficiencyPct;
+                                const bgClass = isActive 
+                                  ? 'bg-amber-50/50' 
+                                  : metrics.isSuspicious 
+                                    ? 'bg-red-50/40' 
+                                    : 'bg-white hover:bg-gray-50/50';
+                                
+                                return (
+                                  <div key={row.id} className={`px-3 py-3 ${bgClass} transition-colors`}>
+                                    {/* Row Header: Cycle # and Employee with Time - All in One Line */}
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0 whitespace-nowrap overflow-x-auto">
+                                        <span className="text-[11px] font-bold text-gray-400 bg-gray-100 rounded px-1.5 py-0.5 tabular-nums shrink-0">#{metrics.cycleNumber}</span>
+                                        <span className="text-xs font-semibold text-gray-800 shrink-0">{row.emp_id}</span>
+                                        {row.employee_name && <span className="text-xs text-gray-600 shrink-0">{row.employee_name}</span>}
+                                        <span className="text-gray-300 shrink-0">•</span>
+                                        <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden />
+                                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded shrink-0">{formatShortTime(row.start_time)}</span>
+                                        <span className="text-gray-400 shrink-0">→</span>
+                                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded shrink-0">{isActive ? 'now' : formatShortTime(row.finish_time)}</span>
+                                      </div>
                                       {isActive && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                                           <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                          Live
+                                          Running
                                         </span>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <span className="text-xs font-bold tabular-nums text-blue-700 mr-1">{Number(row.output_pairs || 0)} prs</span>
-                                      {canMutate && (
-                                        <button type="button" onClick={() => handleProdEdit(row)} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100" title="Edit">
-                                          <Edit className="h-3.5 w-3.5" aria-hidden />
-                                        </button>
-                                      )}
-                                      {canMutate && (
-                                        <button type="button" onClick={() => setProdDeleteCandidate(row)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 active:bg-red-100" title="Delete">
-                                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                                        </button>
-                                      )}
+
+                                    {/* Metrics Grid */}
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                      <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                                        <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Output</div>
+                                        <div className="text-lg font-bold text-blue-700 mt-0.5">{Number(row.output_pairs || 0)}</div>
+                                        <div className="text-[10px] text-blue-500">pairs</div>
+                                      </div>
+                                      <div className="bg-yellow-50 rounded-lg p-2 border border-yellow-100">
+                                        <div className="text-[10px] text-yellow-600 font-bold uppercase tracking-wider">Efficiency</div>
+                                        <div className="mt-0.5">{isActive ? <span className="text-xs text-amber-600 font-semibold">Live</span> : effBadge(eff)}</div>
+                                      </div>
+                                    </div>
+
+                                    {/* Duration and Target Row */}
+                                    <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
+                                      <div className="flex items-center gap-1 bg-purple-50 p-1.5 rounded border border-purple-100">
+                                        <span className="font-semibold text-purple-600">Actual:</span>
+                                        <span className="font-bold text-purple-700">{metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
+                                        {isActive && <span className="text-purple-500">+</span>}
+                                      </div>
+                                      <div className="flex items-center gap-1 bg-cyan-50 p-1.5 rounded border border-cyan-100">
+                                        <span className="font-semibold text-cyan-600">Target:</span>
+                                        <span className="font-bold text-cyan-700">{Number(row.target_mins || 0).toFixed(1)}m</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Flags and Actions Row */}
+                                    <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-200/50">
+                                      <div className="flex items-center gap-1 flex-1 min-w-0">
+                                        {metrics.anomalies.length > 0 && (
+                                          <span className="inline-flex items-center gap-1 text-red-600 text-[10px] font-bold bg-red-50 px-1.5 py-0.5 rounded">
+                                            <AlertTriangle className="h-3 w-3" aria-hidden />
+                                            {metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        {canMutate && (
+                                          <button type="button" onClick={() => handleProdEdit(row)} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 active:bg-blue-200 transition-colors" title="Edit cycle">
+                                            <Edit className="h-4 w-4" aria-hidden />
+                                          </button>
+                                        )}
+                                        {canMutate && (
+                                          <button type="button" onClick={() => setProdDeleteCandidate(row)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 active:bg-red-200 transition-colors" title="Delete cycle">
+                                            <Trash2 className="h-4 w-4" aria-hidden />
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
-                                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px]">
-                                    <span className="text-indigo-600 font-medium">{formatShortTime(row.start_time)} → {isActive ? 'now' : formatShortTime(row.finish_time)}</span>
-                                    <span className="font-semibold text-amber-700">A: {metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
-                                    <span className="font-semibold text-blue-700">T: {Number(row.target_mins || 0).toFixed(1)}m</span>
-                                    {eff != null && <span className="font-semibold text-emerald-700">Eff: {effBadge(eff)}</span>}
-                                    {metrics.anomalies.length > 0 && (
-                                      <span className="text-red-600 font-semibold">{metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}</span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
                         </details>
                       );

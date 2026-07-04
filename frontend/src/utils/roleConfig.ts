@@ -210,7 +210,8 @@ export const getDefaultRoute = (
 
   const normalizedRole = getEffectiveRole(user);
   // Machine-only URL — MobileProduction resolves active session or valid employee on load
-  if (normalizedRole === 'Machine Centre User' && user?.machine_id) {
+  const isMachineRole = normalizedRole === 'Machine Centre User' || normalizedRole === 'Final Output Machine';
+  if (isMachineRole && user?.machine_id) {
     return `/mobile/${encodeURIComponent(user.machine_id)}`;
   }
 
