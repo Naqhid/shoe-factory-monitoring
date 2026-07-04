@@ -266,6 +266,7 @@ export const MobileProduction: React.FC = () => {
     const isInitializingRef = React.useRef(false);
     const isCreatingRecordRef = React.useRef(false); // Prevent duplicate record creation on double-click
     const [totalOutputToday, setTotalOutputToday] = useState(0);
+    const [totalIdleMinsToday, setTotalIdleMinsToday] = useState(0);
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
     const [dailyTargetPairs, setDailyTargetPairs] = useState<number | null>(null);
@@ -1141,6 +1142,7 @@ export const MobileProduction: React.FC = () => {
                     }
                     
                     setTotalOutputToday(totalOutput);
+                    setTotalIdleMinsToday(parseFloat(result.data.time_loss_mins || 0));
                     setAvgEfficiencyToday(parseFloat(result.data.avg_efficiency_percent || 0).toFixed(1));
                     const dtp = result.data.daily_target_pairs;
                     setDailyTargetPairs(
@@ -1151,6 +1153,7 @@ export const MobileProduction: React.FC = () => {
                     return;
                 } else {
                     setTotalOutputToday(0);
+                    setTotalIdleMinsToday(0);
                     setAvgEfficiencyToday('0');
                     setDailyTargetPairs(null);
                     return;
@@ -2118,13 +2121,13 @@ export const MobileProduction: React.FC = () => {
     const controlBtnCue =
         'ring-2 ring-amber-300 ring-offset-2 ring-offset-white shadow-[0_0_24px_rgba(251,191,36,0.4)]';
     const pacePillClass =
-        'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 shadow-sm sm:px-3 sm:py-3';
+        'flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 shadow-sm sm:flex-1 sm:px-3 sm:py-3';
     const pacePillLabelClass =
-        'text-[11px] font-bold uppercase tracking-[0.14em] leading-none sm:text-xs';
+        'text-[10px] font-bold uppercase tracking-[0.12em] leading-none sm:text-xs sm:tracking-[0.14em]';
     const pacePillValueClass =
-        'text-base font-black tabular-nums leading-none tracking-tight sm:text-lg';
+        'text-sm font-black tabular-nums leading-none tracking-tight sm:text-lg';
     const actionStripBelowButtons =
-        dailyPaceSnapshot || showIdlePill ? (
+        dailyPaceSnapshot || showIdlePill || totalIdleMinsToday > 0 ? (
             <div
                 className={`mt-4 overflow-hidden rounded-2xl border shadow-sm ${
                     showIdlePill
@@ -2133,7 +2136,7 @@ export const MobileProduction: React.FC = () => {
                 }`}
             >
               
-                <div className="flex w-full flex-nowrap items-stretch gap-2 p-2 sm:gap-2.5 sm:p-2.5">
+                <div className="grid grid-cols-2 sm:flex sm:flex-nowrap sm:items-stretch gap-2 p-2 sm:gap-2.5 sm:p-2.5">
                     {dailyPaceSnapshot && (
                         <>
                             <span className={`${pacePillClass} border-slate-200 bg-white`}>
@@ -2159,6 +2162,18 @@ export const MobileProduction: React.FC = () => {
                             <span className={`${pacePillLabelClass} text-red-50/95`}>Idle</span>
                             <span className={`${pacePillValueClass} text-white drop-shadow-sm`}>
                                 {idleMinutes} m
+                            </span>
+                        </span>
+                    )}
+                    {totalIdleMinsToday > 0 && (
+                        <span
+                            className={`${pacePillClass} border-rose-300/60 bg-gradient-to-b from-rose-500 to-rose-700 text-white shadow-md shadow-rose-500/20`}
+                        >
+                            <span className={`${pacePillLabelClass} text-rose-50/95`}>Time Loss</span>
+                            <span className={`${pacePillValueClass} text-white drop-shadow-sm`}>
+                                {totalIdleMinsToday >= 60
+                                    ? `${Math.floor(totalIdleMinsToday / 60)}h ${Math.round(totalIdleMinsToday % 60)}m`
+                                    : `${Math.round(totalIdleMinsToday)}m`}
                             </span>
                         </span>
                     )}
