@@ -256,7 +256,17 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [tableTotal, setTableTotal] = React.useState(0);
   const [tableTotalPages, setTableTotalPages] = React.useState(1);
   const [tableFilteredOutputTotal, setTableFilteredOutputTotal] = React.useState(0);
-  const [activeTab, setActiveTab] = React.useState<'entries' | 'coverage' | 'audit' | 'production' | 'summary' | 'wip'>('entries');
+  const [activeTab, setActiveTab] = React.useState<'entries' | 'coverage' | 'audit' | 'production' | 'summary' | 'wip'>(() => {
+    const hash = window.location.hash.replace('#', '');
+    const valid = ['entries', 'coverage', 'audit', 'production', 'summary', 'wip'];
+    return valid.includes(hash) ? (hash as any) : 'entries';
+  });
+
+  // Sync active tab to URL hash for persistence across refreshes
+  React.useEffect(() => {
+    window.location.hash = activeTab;
+  }, [activeTab]);
+
   const [auditLogs, setAuditLogs] = React.useState<ManualEntryAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditEntryId, setAuditEntryId] = React.useState<number | null>(null);
@@ -4103,7 +4113,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                           {/* Mobile production cards - Enhanced for better visibility */}
                           <div className="sm:hidden divide-y divide-gray-200">
                             {/* Machine Summary Card */}
-                            <div className="px-3 py-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/60 border-b-2 border-indigo-200">
+                            <div className="px-3 py-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/60">
                               <div className="flex flex-col gap-2">
                                 {/* Machine Title + Live Indicator */}
                                 <div className="flex items-center justify-between">
@@ -4146,7 +4156,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                             </div>
 
                             {/* Individual Cycle Cards */}
-                            <div className="divide-y divide-gray-100">
+                            <div className="divide-y-2 divide-blue-200">
                               {machineRows.map((row: any) => {
                                 const rowStatus = Number(row.button_status || 0);
                                 const isActive = isProdCycleActive(rowStatus);
@@ -4158,82 +4168,87 @@ export const ManualProductionEntryForm: React.FC = () => {
                                 const metrics = analyzeProdCycle(row, ctx, prodLiveNow);
                                 const eff = isActive ? null : metrics.efficiencyPct;
                                 const bgClass = isActive 
-                                  ? 'bg-amber-50/50' 
+                                  ? 'bg-gradient-to-br from-amber-50 to-orange-50/40' 
                                   : metrics.isSuspicious 
-                                    ? 'bg-red-50/40' 
-                                    : 'bg-white hover:bg-gray-50/50';
+                                    ? 'bg-gradient-to-br from-red-50/60 to-rose-50/40' 
+                                    : 'bg-white';
                                 
                                 return (
                                   <div key={row.id} className={`px-3 py-3 ${bgClass} transition-colors`}>
-                                    {/* Row Header: Cycle # and Employee with Time - All in One Line */}
-                                    <div className="flex items-center justify-between gap-2 mb-2">
-                                      <div className="flex items-center gap-2 flex-1 min-w-0 whitespace-nowrap overflow-x-auto">
-                                        <span className="text-[11px] font-bold text-gray-400 bg-gray-100 rounded px-1.5 py-0.5 tabular-nums shrink-0">#{metrics.cycleNumber}</span>
-                                        <span className="text-xs font-semibold text-gray-800 shrink-0">{row.emp_id}</span>
-                                        {row.employee_name && <span className="text-xs text-gray-600 shrink-0">{row.employee_name}</span>}
-                                        <span className="text-gray-300 shrink-0">•</span>
-                                        <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden />
-                                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded shrink-0">{formatShortTime(row.start_time)}</span>
-                                        <span className="text-gray-400 shrink-0">→</span>
-                                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded shrink-0">{isActive ? 'now' : formatShortTime(row.finish_time)}</span>
-                                      </div>
-                                      {isActive && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
-                                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                          Running
+                                    {/* Header: Cycle badge + Operator + Time */}
+                                    <div className="flex items-center gap-2 mb-2.5">
+                                      <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-600 text-white text-[11px] font-bold shrink-0 shadow-sm">
+                                        {metrics.cycleNumber}
+                                      </span>
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <span className="text-sm font-semibold text-gray-900 truncate">
+                                          {row.employee_name || row.emp_id}
                                         </span>
+                                        <span className="text-gray-300 shrink-0">•</span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
+                                          <Clock className="h-3 w-3" aria-hidden />
+                                          {formatShortTime(row.start_time)} → {isActive ? 'now' : formatShortTime(row.finish_time)}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Metrics: Output + Efficiency + Edit */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="flex-1 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 p-2.5 border border-blue-100/80 text-center shadow-sm">
+                                        <div className="text-[9px] text-blue-500 font-bold uppercase tracking-wider">Output</div>
+                                        <div className="mt-1">
+                                          <span className="text-xl font-black text-blue-700 tabular-nums">{Number(row.output_pairs || 0)}</span>
+                                          <span className="text-[10px] text-blue-400 ml-1">pairs</span>
+                                        </div>
+                                      </div>
+                                      <div className="flex-1 rounded-xl bg-gradient-to-br from-emerald-50 to-green-50 p-2.5 border border-emerald-100/80 text-center shadow-sm">
+                                        <div className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider">Efficiency</div>
+                                        <div className="mt-1">{isActive ? <span className="text-sm text-amber-600 font-bold">Live</span> : effBadge(eff)}</div>
+                                      </div>
+                                      {canMutate && (
+                                        <button type="button" onClick={() => handleProdEdit(row)} className="flex items-center justify-center w-9 h-9 rounded-xl text-blue-600 bg-white border border-blue-200 hover:bg-blue-50 active:bg-blue-100 transition-colors shrink-0 shadow-sm" title="Edit cycle">
+                                          <Edit className="h-4 w-4" aria-hidden />
+                                        </button>
                                       )}
                                     </div>
 
-                                    {/* Metrics Grid */}
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                      <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
-                                        <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Output</div>
-                                        <div className="text-lg font-bold text-blue-700 mt-0.5">{Number(row.output_pairs || 0)}</div>
-                                        <div className="text-[10px] text-blue-500">pairs</div>
+                                    {/* Actual + Target + Delete */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="flex-1 flex items-center justify-center gap-1.5 bg-purple-50/80 px-2 py-2 rounded-xl border border-purple-100/80">
+                                        <span className="text-[10px] font-semibold text-purple-500">Actual</span>
+                                        <span className="text-sm font-bold text-purple-700 tabular-nums">{metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
+                                        {isActive && <span className="text-purple-400 text-xs">+</span>}
                                       </div>
-                                      <div className="bg-yellow-50 rounded-lg p-2 border border-yellow-100">
-                                        <div className="text-[10px] text-yellow-600 font-bold uppercase tracking-wider">Efficiency</div>
-                                        <div className="mt-0.5">{isActive ? <span className="text-xs text-amber-600 font-semibold">Live</span> : effBadge(eff)}</div>
+                                      <div className="flex-1 flex items-center justify-center gap-1.5 bg-cyan-50/80 px-2 py-2 rounded-xl border border-cyan-100/80">
+                                        <span className="text-[10px] font-semibold text-cyan-500">Target</span>
+                                        <span className="text-sm font-bold text-cyan-700 tabular-nums">{Number(row.target_mins || 0).toFixed(1)}m</span>
                                       </div>
+                                      {canMutate && (
+                                        <button type="button" onClick={() => setProdDeleteCandidate(row)} className="flex items-center justify-center w-9 h-9 rounded-xl text-red-500 bg-white border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors shrink-0 shadow-sm" title="Delete cycle">
+                                          <Trash2 className="h-4 w-4" aria-hidden />
+                                        </button>
+                                      )}
                                     </div>
 
-                                    {/* Duration and Target Row */}
-                                    <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
-                                      <div className="flex items-center gap-1 bg-purple-50 p-1.5 rounded border border-purple-100">
-                                        <span className="font-semibold text-purple-600">Actual:</span>
-                                        <span className="font-bold text-purple-700">{metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
-                                        {isActive && <span className="text-purple-500">+</span>}
+                                    {/* Running indicator */}
+                                    {isActive && (
+                                      <div className="flex items-center justify-center">
+                                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-4 py-1.5 rounded-full shadow-sm ring-1 ring-amber-200/60">
+                                          <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                                          Running
+                                        </span>
                                       </div>
-                                      <div className="flex items-center gap-1 bg-cyan-50 p-1.5 rounded border border-cyan-100">
-                                        <span className="font-semibold text-cyan-600">Target:</span>
-                                        <span className="font-bold text-cyan-700">{Number(row.target_mins || 0).toFixed(1)}m</span>
-                                      </div>
-                                    </div>
+                                    )}
 
-                                    {/* Flags and Actions Row */}
-                                    <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-200/50">
-                                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                                        {metrics.anomalies.length > 0 && (
-                                          <span className="inline-flex items-center gap-1 text-red-600 text-[10px] font-bold bg-red-50 px-1.5 py-0.5 rounded">
-                                            <AlertTriangle className="h-3 w-3" aria-hidden />
-                                            {metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}
-                                          </span>
-                                        )}
+                                    {/* Flags */}
+                                    {metrics.anomalies.length > 0 && (
+                                      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-200/60">
+                                        <span className="inline-flex items-center gap-1 text-red-700 text-[10px] font-bold bg-red-50 px-2 py-0.5 rounded-full ring-1 ring-red-200/60">
+                                          <AlertTriangle className="h-3 w-3" aria-hidden />
+                                          {metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center gap-1.5">
-                                        {canMutate && (
-                                          <button type="button" onClick={() => handleProdEdit(row)} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 active:bg-blue-200 transition-colors" title="Edit cycle">
-                                            <Edit className="h-4 w-4" aria-hidden />
-                                          </button>
-                                        )}
-                                        {canMutate && (
-                                          <button type="button" onClick={() => setProdDeleteCandidate(row)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 active:bg-red-200 transition-colors" title="Delete cycle">
-                                            <Trash2 className="h-4 w-4" aria-hidden />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
+                                    )}
                                   </div>
                                 );
                               })}

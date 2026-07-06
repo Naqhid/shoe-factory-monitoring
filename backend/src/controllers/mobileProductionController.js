@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
 const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
 const wipStateService = require('../services/wipStateService');
+const { aggregateMachineCycleLosses } = require('../utils/cycleLossMins');
 
 const refreshLineWipForDate = async (workCentreId, prodDate) => {
   try {
@@ -2064,7 +2065,25 @@ exports.getSummaryByMachineAndDate = async (req, res, next) => {
       total_cycles: totalCycles,
       daily_target_pairs: dailyTargetPairs,
       plan_man_hours_minutes: planManHoursMinutes,
+      time_loss_mins: 0,
     };
+
+    // Calculate time loss (same as dashboard) if work centre is known
+    if (workCentreId != null) {
+      try {
+        const machineLosses = await aggregateMachineCycleLosses(db, workCentreId, date);
+        const thisRow = machineLosses.find(
+          (r) => inList.some((key) => String(r.machine_id) === String(key))
+        );
+        if (thisRow) {
+          // net_mins is negative when there is loss, positive when there is gain
+          const netMins = Number(thisRow.net_mins || 0);
+          result.time_loss_mins = netMins < 0 ? Math.abs(netMins) : 0;
+        }
+      } catch (err) {
+        logger.warn('Could not compute time loss for summary:', err.message);
+      }
+    }
 
     logger.info(`Fresh calc for ${machineId}: ${JSON.stringify(result)}`);
 

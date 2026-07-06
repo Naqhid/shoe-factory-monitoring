@@ -122,33 +122,33 @@ export const DashboardSettings: React.FC = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-sm mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md">
-            <Sliders className="h-5 w-5" />
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-6 shadow-sm mb-4 sm:mb-6">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shrink-0">
+            <Sliders className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard Settings</h1>
-            <p className="text-sm text-gray-500">Configure efficiency color thresholds for the TV dashboard</p>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Dashboard Settings</h1>
+            <p className="text-xs sm:text-sm text-gray-500">Configure efficiency color thresholds</p>
           </div>
         </div>
       </div>
 
       {/* Efficiency Color Thresholds */}
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
-          <h2 className="text-base font-bold text-gray-900">Efficiency Color Thresholds</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Define which color to show based on efficiency percentage. Applied to circle indicators, progress bars, and percentages across the dashboard.
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+          <h2 className="text-sm sm:text-base font-bold text-gray-900">Efficiency Color Thresholds</h2>
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+            Define which color to show based on efficiency percentage.
           </p>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-3 sm:p-5 space-y-4">
           {/* Preview */}
-          <div className="rounded-xl bg-gray-50 border border-gray-200 p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Preview</p>
-            <div className="flex flex-wrap gap-3">
+          <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 sm:mb-3">Preview</p>
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3">
               {[...thresholds].sort((a, b) => b.min - a.min).map((t, i) => {
                 const nextMin = i < thresholds.length - 1
                   ? [...thresholds].sort((a, b) => b.min - a.min)[i + 1]?.min
@@ -174,13 +174,13 @@ export const DashboardSettings: React.FC = () => {
           {/* Threshold rows */}
           <div className="space-y-3">
             {thresholds.map((threshold, index) => (
-              <div key={index} className="flex flex-wrap items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="h-6 w-6 rounded-full border-2 border-white shadow" style={{ backgroundColor: threshold.color }} />
+              <div key={index} className="rounded-xl border border-gray-200 bg-white p-3 space-y-2 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-full border-2 border-white shadow shrink-0" style={{ backgroundColor: threshold.color }} />
                   <select
                     value={threshold.color}
                     onChange={(e) => updateThreshold(index, 'color', e.target.value)}
-                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                    className="flex-1 sm:flex-none border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
                   >
                     {COLOR_PRESETS.map((c) => (
                       <option key={c.value} value={c.value}>{c.label}</option>
@@ -198,21 +198,21 @@ export const DashboardSettings: React.FC = () => {
                     className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center"
                   />
                   <label className="text-xs text-gray-500">%</label>
+                  <input
+                    type="text"
+                    value={threshold.label}
+                    onChange={(e) => updateThreshold(index, 'label', e.target.value)}
+                    placeholder="Label"
+                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeThreshold(index)}
+                    className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg text-xs font-medium shrink-0"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <input
-                  type="text"
-                  value={threshold.label}
-                  onChange={(e) => updateThreshold(index, 'label', e.target.value)}
-                  placeholder="Label"
-                  className="flex-1 min-w-[120px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeThreshold(index)}
-                  className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg text-xs font-medium"
-                >
-                  ✕
-                </button>
               </div>
             ))}
           </div>
@@ -227,11 +227,11 @@ export const DashboardSettings: React.FC = () => {
         </div>
 
         {/* Footer actions */}
-        <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-wrap gap-2 justify-end">
+        <div className="px-3 sm:px-5 py-3 sm:py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-2 sm:justify-end">
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium w-full sm:w-auto"
           >
             <RotateCcw className="h-4 w-4" />
             Reset to defaults
@@ -240,7 +240,7 @@ export const DashboardSettings: React.FC = () => {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50 w-full sm:w-auto"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save settings

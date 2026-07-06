@@ -739,57 +739,61 @@ const LogPage: React.FC = () => {
         )}
 
         {yesterdayPreviewOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
-            <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 flex flex-col">
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 sm:px-5 py-4">
-                <div className="flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-500">Bulk login</p>
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-1">Login same as selected date</h2>
-                  <p className="text-sm text-slate-600 mt-1">
-                    {yesterdayPreview
-                      ? `Last operator per machine from ${yesterdayPreview.source_date} → activate for ${yesterdayPreview.today_date}. Edit any row if a new operator joined.`
-                      : 'Loading assignments…'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div>
-                    <label htmlFor="sourceDate" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                      Copy from date
-                    </label>
-                    <input
-                      id="sourceDate"
-                      type="date"
-                      className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400"
-                      value={sourceDate}
-                      onChange={(e) => setSourceDate(e.target.value)}
-                      max={new Date().toLocaleDateString('en-CA')}
-                    />
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+            <div className="w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 flex flex-col overflow-hidden">
+              {/* Scrollable area - header + content scroll together */}
+              <div className="overflow-y-auto flex-1 min-h-0">
+                <div className="border-b border-slate-200 px-4 sm:px-5 py-3 sm:py-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-500">Bulk login</p>
+                      <h2 className="text-base sm:text-xl font-black text-slate-900 mt-0.5 sm:mt-1">Login same as selected date</h2>
+                      <p className="text-xs sm:text-sm text-slate-600 mt-0.5 sm:mt-1">
+                        {yesterdayPreview
+                          ? `Last operator per machine from ${yesterdayPreview.source_date} → activate for ${yesterdayPreview.today_date}. Edit any row if a new operator joined.`
+                          : 'Loading assignments…'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeYesterdayModal}
+                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 shrink-0"
+                      aria-label="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadYesterdayLoginPreview()}
-                    disabled={yesterdayPreviewLoading || yesterdayActivating}
-                    className="mt-5 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
-                  >
-                    {yesterdayPreviewLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    Load
-                  </button>
+                  <div className="flex items-end gap-2 mt-2 sm:mt-3">
+                    <div className="flex-1">
+                      <label htmlFor="sourceDate" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                        Copy from date
+                      </label>
+                      <input
+                        id="sourceDate"
+                        type="date"
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400"
+                        value={sourceDate}
+                        onChange={(e) => setSourceDate(e.target.value)}
+                        max={new Date().toLocaleDateString('en-CA')}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadYesterdayLoginPreview()}
+                      disabled={yesterdayPreviewLoading || yesterdayActivating}
+                      className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
+                    >
+                      {yesterdayPreviewLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      Load
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeYesterdayModal}
-                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                  aria-label="Close"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
 
-              <div className="overflow-y-auto flex-1 px-4 sm:px-5 py-4 space-y-4">
+                <div className="px-4 sm:px-5 py-4 space-y-4">
                 {yesterdayPreviewLoading && !yesterdayPreview ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-slate-500">
                     <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
@@ -801,7 +805,8 @@ const LogPage: React.FC = () => {
                   </p>
                 ) : yesterdayPreview ? (
                   <>
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    {/* Desktop table - hidden on mobile */}
+                    <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200">
                       <table className="min-w-full text-sm">
                         <thead className="bg-slate-50">
                           <tr>
@@ -899,6 +904,75 @@ const LogPage: React.FC = () => {
                       </table>
                     </div>
 
+                    {/* Mobile card layout - visible only on mobile */}
+                    <div className="sm:hidden space-y-3">
+                      {editableLoginRows.map((row) => {
+                        const result = yesterdayActivateResults?.find(
+                          (r) => String(r.machine_id) === String(row.machine_id)
+                        );
+                        const isChanged = String(row.login_emp_code) !== String(row.emp_code);
+                        return (
+                          <div key={`mobile-${row.machine_id}-${row.emp_code}`} className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="text-sm font-bold text-slate-900">{row.machine_name || row.machine_id}</p>
+                                <p className="text-xs text-slate-500">{row.work_centre_name || '—'}</p>
+                              </div>
+                              {!yesterdayActivateResults && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeLoginRow(String(row.machine_id))}
+                                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition"
+                                  title="Remove this row from login"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              )}
+                              {yesterdayActivateResults && result && (
+                                result.success ? (
+                                  <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2 py-1 rounded-lg">Logged in</span>
+                                ) : (
+                                  <span className="text-xs text-red-700 font-semibold bg-red-50 px-2 py-1 rounded-lg" title={result.error}>Failed</span>
+                                )
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-600">
+                              <span className="text-slate-400">Yesterday:</span>
+                              <span className="font-medium">{row.emp_name || row.emp_code}</span>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Login as</p>
+                              {!yesterdayActivateResults ? (
+                                <div className="space-y-1">
+                                  <SearchableSelect
+                                    compact
+                                    value={row.login_emp_code}
+                                    options={operatorSelectOptions(row)}
+                                    onChange={(code) => updateLoginOperator(row.machine_id, code)}
+                                    placeholder="Select operator"
+                                    searchPlaceholder="Search name or code…"
+                                    footerCountLabel="operators"
+                                    className="w-full"
+                                  />
+                                  {isChanged && (
+                                    <span className="inline-flex rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 ring-1 ring-indigo-200">
+                                      Changed from yesterday
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="font-medium text-slate-900 text-sm">{row.login_emp_name}</span>
+                                  <span className="text-xs text-slate-500 ml-1">{row.login_emp_code}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-xs">{todayStatusLabel(row)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
                     {!yesterdayActivateResults && (
                       <label className="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
                         <input
@@ -917,9 +991,10 @@ const LogPage: React.FC = () => {
                     )}
                   </>
                 ) : null}
+                </div>
               </div>
 
-              <div className="border-t border-slate-200 px-4 sm:px-5 py-4 flex flex-wrap items-center justify-end gap-2">
+              <div className="shrink-0 border-t border-slate-200 px-4 sm:px-5 py-3 sm:py-4 flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={closeYesterdayModal}
@@ -1013,27 +1088,27 @@ const LogPage: React.FC = () => {
         </div>
 
         {!loading && !error && logs.length > 0 && (
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-slate-600">
-                <Users className="h-4 w-4" aria-hidden />
-                <p className="text-[11px] font-bold uppercase tracking-wide">Sessions</p>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-3 sm:p-4 shadow-sm">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-slate-600">
+                <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide">Sessions</p>
               </div>
-              <p className="text-3xl font-black text-slate-900 mt-2 tabular-nums">{summary.total}</p>
+              <p className="text-2xl sm:text-3xl font-black text-slate-900 mt-1.5 sm:mt-2 tabular-nums">{summary.total}</p>
             </div>
-            <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 to-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-emerald-700">
-                <Activity className="h-4 w-4" aria-hidden />
-                <p className="text-[11px] font-bold uppercase tracking-wide">Active now</p>
+            <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 to-white p-3 sm:p-4 shadow-sm">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-emerald-700">
+                <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide">Active</p>
               </div>
-              <p className="text-3xl font-black text-emerald-900 mt-2 tabular-nums">{summary.active}</p>
+              <p className="text-2xl sm:text-3xl font-black text-emerald-900 mt-1.5 sm:mt-2 tabular-nums">{summary.active}</p>
             </div>
-            <div className="rounded-2xl border border-green-200/80 bg-gradient-to-br from-green-50/50 to-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-green-700">
-                <TrendingUp className="h-4 w-4" aria-hidden />
-                <p className="text-[11px] font-bold uppercase tracking-wide">Total output</p>
+            <div className="rounded-2xl border border-green-200/80 bg-gradient-to-br from-green-50/50 to-white p-3 sm:p-4 shadow-sm">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-green-700">
+                <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide">Output</p>
               </div>
-              <p className="text-3xl font-black text-green-900 mt-2 tabular-nums">{summary.totalOutput}</p>
+              <p className="text-2xl sm:text-3xl font-black text-green-900 mt-1.5 sm:mt-2 tabular-nums">{summary.totalOutput}</p>
               <p className="text-[10px] text-slate-500 mt-0.5">pairs</p>
             </div>
           </div>
@@ -1047,7 +1122,8 @@ const LogPage: React.FC = () => {
         )}
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-black/[0.02]">
-          <div className="overflow-x-auto">
+          {/* Desktop table - hidden on mobile */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50/90 border-b border-slate-200">
                 <tr>
@@ -1236,6 +1312,176 @@ const LogPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile card layout - visible only on mobile */}
+          <div className="md:hidden">
+            {loading ? (
+              <div className="px-4 py-16 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
+                <p className="text-sm text-slate-500 mt-3">Loading login logs…</p>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="px-4 py-16 text-center">
+                <FileText className="h-10 w-10 text-slate-300 mx-auto" aria-hidden />
+                <p className="text-sm font-semibold text-slate-700 mt-3">No login logs found</p>
+                <p className="text-xs text-slate-500 mt-1">Try another date or line, or clear filters.</p>
+                {hasFilters && (
+                  <button type="button" onClick={clearFilters} className="mt-3 text-sm font-semibold text-blue-600 hover:text-blue-800">
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {logs.map((log) => (
+                  <div key={`mobile-${log.session_id}`} className="p-3">
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => toggleExpand(log.session_id, log)}
+                    >
+                      {/* Card header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          {expandedRows.has(log.session_id) ? (
+                            <ChevronDown className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-bold text-slate-900 truncate">{log.machine_name || log.machine_id}</p>
+                              {statusBadge(log.status)}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">{log.work_centre_name || '—'}</p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-lg font-black text-green-700 tabular-nums leading-tight">{formatNumber(log.total_output) || '0'}</p>
+                          <p className="text-[10px] text-slate-500">output</p>
+                        </div>
+                      </div>
+
+                      {/* Card body */}
+                      <div className="mt-2 ml-6">
+                        <div className="flex items-center gap-2 text-sm text-slate-700">
+                          <span className="font-medium">{log.emp_name || log.emp_code}</span>
+                          {log.emp_name && <span className="text-xs text-slate-400">{log.emp_code}</span>}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 mt-2">
+                          <div>
+                            <p className="text-[10px] text-slate-400 uppercase">Cycles</p>
+                            <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatNumber(log.total_cycles) || '0'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-400 uppercase">Pace</p>
+                            {Number(log.pace_in_progress_expected) > 0 || getLogPaceEfficiency(log) > 0 ? (
+                              <p className={`text-sm font-bold tabular-nums ${paceEfficiencyClass(getLogPaceEfficiency(log))}`}>
+                                {getLogPaceEfficiency(log)}%
+                              </p>
+                            ) : (
+                              <p className="text-sm text-slate-400">—</p>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-400 uppercase">Time</p>
+                            <p className="text-sm font-semibold text-slate-700">{formatDuration(log.total_actual_mins) || '—'}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-blue-700 font-medium mt-1.5">
+                          {getCycleStatus(log.total_cycles, log.status, log.has_active_cycle)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="mt-2 ml-6 flex items-center gap-2">
+                      {log.status === 'active' || log.status === 'waiting' ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeactivateTarget(log);
+                          }}
+                          disabled={deactivatingSessions.has(log.session_id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100 disabled:opacity-50 transition-colors"
+                        >
+                          <UserX className={`h-3 w-3 ${deactivatingSessions.has(log.session_id) ? 'animate-pulse' : ''}`} />
+                          {deactivatingSessions.has(log.session_id) ? '…' : 'Deactivate'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReactivate(log);
+                          }}
+                          disabled={reactivatingSessions.has(log.session_id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                        >
+                          <RotateCcw className={`h-3 w-3 ${reactivatingSessions.has(log.session_id) ? 'animate-spin' : ''}`} />
+                          {reactivatingSessions.has(log.session_id) ? '…' : 'Reactivate'}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Expanded cycle details on mobile */}
+                    {expandedRows.has(log.session_id) && (
+                      <div className="mt-3 ml-6 border-l-2 border-blue-400 pl-3 rounded-r-xl bg-slate-50 p-3">
+                        <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-blue-600" aria-hidden />
+                          Cycles
+                          <span className="text-xs font-semibold text-slate-500">({log.total_cycles})</span>
+                        </h4>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3 pb-3 border-b border-slate-200">
+                          <div>
+                            <span className="text-slate-400">Login: </span>
+                            <span className="text-slate-700">{formatDateTime(log.activated_at)}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Last: </span>
+                            <span className="text-slate-700">{formatDateTime(log.last_finish_time)}</span>
+                          </div>
+                        </div>
+                        {loadingCycles.has(log.session_id) ? (
+                          <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            Loading…
+                          </div>
+                        ) : cycleDetails[log.session_id]?.length > 0 ? (
+                          <div className="space-y-2">
+                            {cycleDetails[log.session_id].map((cycle) => (
+                              <div key={cycle.id} className="rounded-lg bg-white p-2.5 ring-1 ring-slate-200/80">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-bold text-blue-700">#{cycle.cycle_number}</span>
+                                  <span className={`text-sm font-bold ${cycle.efficiency >= 90 ? 'text-green-600' : cycle.efficiency >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                                    {cycle.efficiency}%
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 mt-1.5 text-xs">
+                                  <div>
+                                    <p className="text-slate-400">Output</p>
+                                    <p className="font-medium text-slate-700">{cycle.output_pairs} prs</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-slate-400">Duration</p>
+                                    <p className="font-medium text-slate-700">{formatDuration(cycle.actual_mins)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-slate-400">Start</p>
+                                    <p className="font-medium text-slate-700">{new Date(cycle.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-500 italic">No cycle details available.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

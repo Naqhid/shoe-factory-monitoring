@@ -23,7 +23,7 @@ class ReworkRejectionController {
 
   async getAll(req, res) {
     try {
-      const { work_centre_id, date, machine_centre_name } = req.query;
+      const { work_centre_id, date, date_from, date_to, machine_centre_name } = req.query;
       let query = `SELECT rr.*, wc.name as work_centre_name 
                    FROM rework_rejection rr
                    LEFT JOIN work_centres wc ON rr.work_centre_id = wc.id
@@ -31,6 +31,8 @@ class ReworkRejectionController {
       const params = [];
       if (work_centre_id) { query += ` AND rr.work_centre_id = ?`; params.push(work_centre_id); }
       if (date) { query += ` AND DATE(rr.production_date) = ?`; params.push(date); }
+      if (!date && date_from) { query += ` AND DATE(rr.production_date) >= ?`; params.push(date_from); }
+      if (!date && date_to) { query += ` AND DATE(rr.production_date) <= ?`; params.push(date_to); }
       if (machine_centre_name) { query += ` AND rr.machine_centre_name = ?`; params.push(machine_centre_name); }
       query += ` ORDER BY rr.saved_at DESC`;
       const [rows] = await db.execute(query, params);

@@ -43,6 +43,9 @@ interface WorkCentre {
 
 interface Props {
   selectedDate: string;
+  dateFrom?: string;
+  dateTo?: string;
+  refreshKey?: number;
   selectedWorkCentre: string;
   selectedMachineCentre: string;
   machineCentres: MachineCentre[];
@@ -83,6 +86,9 @@ const defaultFormState = () => ({
 
 export const ReworkRejectionEntryTab: React.FC<Props> = ({
   selectedDate,
+  dateFrom,
+  dateTo,
+  refreshKey,
   selectedWorkCentre,
   selectedMachineCentre,
   machineCentres,
@@ -104,13 +110,18 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   const fieldCls = inputClass(REWORK_CFG.focusRing);
 
   const fetchSavedRecords = async () => {
-    if (!wcId || !selectedDate) return;
+    if (!selectedDate) return;
     setLoading(true);
     try {
-      const query = new URLSearchParams({
-        work_centre_id: String(wcId),
-        date: selectedDate,
-      });
+      const query = new URLSearchParams();
+      if (wcId) query.set('work_centre_id', String(wcId));
+      // Use date range if provided, otherwise fall back to single date
+      if (dateFrom && dateTo && dateFrom !== dateTo) {
+        query.set('date_from', dateFrom);
+        query.set('date_to', dateTo);
+      } else {
+        query.set('date', dateFrom || selectedDate);
+      }
       if (selectedMachineCentre) query.set('machine_centre_name', selectedMachineCentre);
       const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection?${query.toString()}`);
       const result = await response.json();
@@ -128,10 +139,10 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    if (wcId && selectedDate) {
+    if (selectedDate) {
       fetchSavedRecords();
     }
-  }, [wcId, selectedDate, selectedMachineCentre]);
+  }, [wcId, selectedDate, selectedMachineCentre, dateFrom, dateTo, refreshKey]);
 
   const loadMachineOutput = async (machineId: string) => {
     if (!wcId || !selectedDate || !machineId) return;
@@ -335,18 +346,18 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6 mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ring-1 ring-black/[0.02]">
         <div className="flex items-start gap-3">
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${REWORK_CFG.headerGradient} text-white shadow-md`}
+            className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-gradient-to-br ${REWORK_CFG.headerGradient} text-white shadow-md shrink-0`}
           >
             <ClipboardList className="h-5 w-5" aria-hidden />
           </div>
-          <div>
-            <h2 className={`text-lg font-semibold text-gray-900 ${REWORK_CFG.tabAccent}`}>
+          <div className="min-w-0">
+            <h2 className={`text-base sm:text-lg font-semibold text-gray-900 ${REWORK_CFG.tabAccent}`}>
               {REWORK_CFG.label}
             </h2>
-            <p className="text-sm text-gray-600 max-w-xl">
+            <p className="text-xs sm:text-sm text-gray-600 max-w-xl">
               Add rework and rejection quantities per machine for the selected work centre and date.
             </p>
           </div>
@@ -355,18 +366,22 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
           type="button"
           onClick={() => openModal()}
           disabled={!wcId}
-          className={`text-white px-5 py-2.5 rounded-lg font-medium shadow-md transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${REWORK_CFG.addBtnClass}`}
+          className={`w-full sm:w-auto text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium shadow-md transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${REWORK_CFG.addBtnClass}`}
         >
-          Add Rework / Rejection Entry
+          Add Entry
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-4 sm:mb-6 ring-1 ring-black/[0.02]">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Saved Entries</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Saved Entries</h3>
             <p className="text-sm text-gray-600">
-              Showing entries for {workCentreDisplayName || 'no work centre selected'} on {(() => { const [y, m, d] = selectedDate.split('-'); return `${m}/${d}/${y}`; })()}
+              Showing entries for {workCentreDisplayName || 'no work centre selected'}
+              {dateFrom && dateTo && dateFrom !== dateTo
+                ? ` from ${(() => { const [y, m, d] = dateFrom.split('-'); return `${m}/${d}/${y}`; })()} to ${(() => { const [y, m, d] = dateTo.split('-'); return `${m}/${d}/${y}`; })()}`
+                : ` on ${(() => { const [y, m, d] = (dateFrom || selectedDate).split('-'); return `${m}/${d}/${y}`; })()}`
+              }
             </p>
           </div>
           <button
@@ -547,13 +562,13 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
 
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="rework-modal-title"
         >
           <div
-            className={`bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden ring-1 ${REWORK_CFG.modalRing} flex flex-col max-h-[92vh]`}
+            className={`bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-3xl overflow-hidden ring-1 ${REWORK_CFG.modalRing} flex flex-col h-[95dvh] sm:h-auto sm:max-h-[92vh]`}
           >
             <div
               className={`bg-gradient-to-r ${REWORK_CFG.headerGradient} px-5 py-4 sm:px-6 text-white flex items-start justify-between gap-3`}
