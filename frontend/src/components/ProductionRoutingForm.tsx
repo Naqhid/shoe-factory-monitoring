@@ -631,7 +631,13 @@ export const ProductionRoutingForm: React.FC = () => {
           machine_name: '',
           process: String(processRaw || ''),
           observed_time: String(observedRaw),
+          base_observed_time: String(observedRaw),
           rating_factor: String(ratingRaw),
+          normal_time_secs_pr: '',
+          std_time_secs_pr: '',
+          mins_6_prs_box: '',
+          pairs_per_hr: '',
+          pairs_per_day: '',
           manpower: String(manpowerRaw),
         };
 
