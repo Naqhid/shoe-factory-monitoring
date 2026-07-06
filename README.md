@@ -1,269 +1,266 @@
-# Shoe Factory Monitoring System
+# ProdPulse — Smart Production Tracking System
 
-Short overview: this app helps supervisors and operators track shoe production in real time, monitor machine performance, and review daily productivity and cycle exceptions from one dashboard.
+A manufacturing execution system (MES) for shoe factories. Connects shop-floor operators, line supervisors, planners, and management through real-time production monitoring, mobile workflows, and automated reporting.
 
-## What this app includes
+## Features Summary
 
-- Real-time machine and line monitoring
-- Production cycle tracking (start, running, finish, idle)
-- Missed actions and inactive-time visibility
-- Login/session logs for operator activity
-- Production routing and planning management (with bulk Excel upload)
-- Reports for efficiency and daily operations
+### TV Dashboard (`/overview`)
+Full-screen display for wall-mounted TVs. Auto-rotating carousel across production lines showing:
+- Target vs actual output, input %, WIP
+- Pace efficiency (expected vs actual output by current time)
+- Time loss breakdown (inactive + extra cycle time)
+- Hourly output chart
+- Per-machine pace panel
+- Live bottleneck / breakdown cards
+- Rework & rejection summary
 
-## Tech stack
+### Production Tracker (`/production_tracker`)
+Supervisor command center for all lines:
+- Risk-sorted line list (Monitor / At Risk / Critical)
+- Pace %, projected end-of-day output, output gap
+- Auto-refresh (10s / 30s / manual)
+- Line detail: per-machine pace cards, vs last working day compare, time-loss reasons
+- Fix-first ranking — machines with highest net time loss
 
-- Backend: Node.js, Express, MySQL
-- Frontend: React, TypeScript, Tailwind CSS
-- Data flow: API-driven dashboard + automated production data ingestion
+### Line Monitor / Mobile Production (`/mobile`)
+Operator tablet workflow at machines:
+- QR scan or session-based login
+- Start / Finish cycle with progress bar
+- Actual vs expected output, pace efficiency
+- Boxes completed (6 pairs/box standard)
+- Idle reminders and late-cycle alerts
+- Pairs/box dropdown (1–12) for variable finishes
+- vs last working day compare at machine level
 
-## 🏗️ **Architecture**
+### Line Setup (`/line_setup_form`)
+Supervisor workflow to assign operators to machines:
+- Select line + machine (or scan QR)
+- Select or scan employee QR
+- One active session per machine enforcement
+- Shift start and current session visibility
 
-```
-Workstation Device → JSON Files → Backend Processing → Database → Frontend Dashboard
-```
+### Login Logs (`/logs`)
+Session audit and control:
+- Filter by line and date
+- Per-session: operator, machine, cycles, output, pace, idle time
+- Expand for cycle-level detail
+- Deactivate / reactivate sessions
+- **Same as yesterday** — bulk-login today's operators from prior day's assignments
 
-- **Backend**: Node.js + Express + MySQL (File processing & APIs)
-- **Frontend**: React + TypeScript + Tailwind CSS (Real-time dashboard)
-- **Database**: MySQL 8.0 (Railway hosted)
-- **File Processing**: Automated JSON ingestion with chokidar
+### Missed Actions (`/missed_actions`)
+Operational discipline tracking:
+- Live issues: START_PENDING / FINISH_PENDING with overdue time
+- Daily inactive report
+- Cycle discipline analysis
+- Idle reminder settings per machine
+- Acknowledge, snooze, root cause
 
-## 🚀 **Quick Start**
+### Alert Center (`/alert_center`)
+Real-time alert inbox:
+- Efficiency low, idle too long, target at risk
+- No scan heartbeat, machine offline
+- Headcount low
+- Acknowledge with notes
 
-### **Prerequisites**
-- Node.js 18+ LTS
-- MySQL 8.0 (or Railway account)
-- Git
+### Reports (`/reports`)
+- Hourly production (with machine filter)
+- Line & process efficiency with pace enrichment
+- Rework & rejection by line/machine
+- Time loss & stoppages
+- Shift summary
+- Export: Excel, PDF, WhatsApp image snapshot
 
-### **1. Clone Repository**
-```bash
-git clone https://github.com/Naqhid/shoe-factory-monitoring.git
-cd shoe-factory-monitoring
-```
+### Manual Production Entry (`/manual_production_entry`)
+Back-office tool for missing/incorrect floor data:
+- Create/edit manual production rows
+- Coverage hints (missing entries vs sessions and plan)
+- Audit log with restore
+- WIP daily state per line
+- Respects production day lock
 
-## 🔧 **Backend Setup**
+### Production Planning (`/production_planning`)
+Daily production targets:
+- Customer / group / leather / color / style selection
+- Trays, SMV, manpower, target pairs per day
+- Copy from prior days, Excel import/export
 
-### **1. Install Dependencies**
-```bash
-cd backend
-npm install
-```
+### Production Routing (`/production_routing`)
+Engineering routings — machine sequence and standard times:
+- Observed time, rating %, manpower per machine step
+- Computed standard time (mins_6_prs_box)
+- Drives cycle targets and shift targets
+- Excel template import/export
 
-### **2. Database Setup**
-```bash
-# Connect to MySQL and run:
-mysql -u root -p < database_setup.sql
-```
+### Line Schedule (`/line_schedule`)
+Article-on-line board:
+- Which style runs on which line per date
+- Changeover wizard with routing preview
 
-### **3. Environment Configuration**
-Create `.env` file in backend directory:
-```env
-DB_HOST=your_mysql_host
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=shoe_factory
-PORT=3001
-NODE_ENV=production
-INCOMING_DIR=E:/Florence-IOT/incoming
-SUCCESS_DIR=E:/Florence-IOT/success
-FAILURE_DIR=E:/Florence-IOT/failure
-LOGS_DIR=E:/Florence-IOT/logs
+### Rework / Rejection Tracker (`/rework_rejection_tracker`)
+Quality tracking:
+- Record rework and rejection by line, machine, cycle
+- Bottleneck and breakdown stoppage entry
+- Scoped by work centre for line supervisors
 
-# WIP daily auto-close (server local time) — sets closing_wip for next-day carry-forward
-WIP_AUTO_CLOSE_ENABLED=true
-WIP_AUTO_CLOSE_TIME=18:45
-```
+### Master Data
+CRUD with soft-delete, restore, usage check, Excel export:
+- Customers, Groups, Leather, Styles, Colors
+- Work Centres (production lines)
+- Machine Centres (individual machines)
+- Employees (operators)
 
-### **4. Start Backend**
-```bash
-# Development
-npm start
+### Users & Roles
+- User accounts with login, password, role, machine assignment
+- Role management: configurable menus and default landing page per role
+- Changes apply without redeployment
 
-# Production with PM2
-npm run pm2:start
-```
+### Monitoring (`/monitoring`)
+Server health: database ping, disk, memory, CPU, request latency (p95/p99), error rate.
 
-**Backend runs on:** `http://localhost:3001`
-
-## 🎨 **Frontend Setup**
-
-### **1. Install Dependencies**
-```bash
-cd frontend
-npm install
-```
-
-### **2. Start Development Server**
-```bash
-npm run dev
-```
-
-**Frontend runs on:** `http://localhost:3000`
-
-### **3. Build for Production**
-```bash
-npm run build
-```
-
-## 📊 **API Endpoints**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/machines/status` | GET | Latest status per machine |
-| `/api/reports/run-idle?date=YYYY-MM-DD` | GET | Run vs idle minutes |
-| `/api/reports/hourly?date=YYYY-MM-DD` | GET | Hourly event analysis |
-| `/api/reports/efficiency?date=YYYY-MM-DD` | GET | Machine efficiency ranking |
-| `/api/reports/overall-efficiency?date=YYYY-MM-DD` | GET | Factory-wide efficiency |
-| `/api/missed-actions/daily-report?date=YYYY-MM-DD&line=LINE` | GET | Daily inactive/lost-minutes report |
-| `/api/production-routing/bulk` | POST | Bulk create routing from parsed Excel rows |
-| `/api/production-planning/bulk` | POST | Bulk create planning records from parsed Excel rows |
-| `/health` | GET | System health check |
-
-## 📁 **File Processing**
-
-### **JSON Format**
-```json
-{
-  "data": [
-    { "machine_id": "US-01", "status": 1 },
-    { "machine_id": "US-02", "status": 0 }
-  ]
-}
-```
-
-### **Processing Flow**
-1. Drop JSON files in `incoming/` directory
-2. Backend validates and processes automatically
-3. Success → `success/` directory
-4. Failure → `failure/` directory
-5. Data inserted into MySQL with timestamps
-
-## 🎛️ **Dashboard Features**
-
-### **Real-time Monitoring**
-- ✅ Live machine status (5-second refresh)
-- ✅ Efficiency percentages per machine
-- ✅ Overall factory efficiency
-- ✅ Connection status indicator
-- ✅ Auto-refresh timestamps
-
-### **Interactive Elements**
-- 🖱️ Click machine cards for detailed view
-- 💡 Hover tooltips on status icons
-- 📊 Efficiency ranking charts
-- 📱 Responsive design (mobile/tablet/desktop)
-- 📁 Excel template preview/download and bulk import for routing/planning
-- 📉 Daily lost-minutes analysis by line and machine
-
-### **Visual Indicators**
-- 🟢 **Running** (Status 1): Machine producing
-- 🔴 **Idle** (Status 0): Machine stopped
-- 🏆 **90%+**: Excellent efficiency
-- ⚠️ **<70%**: Needs attention
-
-## 🛠️ **Tech Stack**
-
-### **Backend**
-- **Runtime**: Node.js 18+ LTS
-- **Framework**: Express.js
-- **Database**: MySQL 8.0 with mysql2/promise
-- **File Watching**: Chokidar
-- **Logging**: Winston
-- **Process Manager**: PM2
-- **Environment**: dotenv
-
-### **Frontend**
-- **Framework**: React 18 + TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS
-- **Data Fetching**: React Query + Axios
-- **Charts**: Recharts
-- **Icons**: Lucide React
-- **Notifications**: React Hot Toast
-
-## 📱 **Responsive Design**
-
-- **Desktop (1200px+)**: 4-column machine grid + sidebar charts
-- **Tablet (768-1199px)**: 2-column grid + stacked charts
-- **Mobile (320-767px)**: Single column + touch-optimized
-
-## 🔒 **Security & Best Practices**
-
-- ✅ Environment variables for secrets
-- ✅ CORS protection
-- ✅ Input validation
-- ✅ Transaction-safe database operations
-- ✅ Error handling and logging
-- ✅ Graceful shutdown support
-
-## 📈 **Production Deployment**
-
-### **Backend (PM2)**
-```bash
-cd backend
-npm run pm2:start
-pm2 save
-pm2 startup
-```
-
-### **Frontend (Static Hosting)**
-```bash
-cd frontend
-npm run build
-# Deploy dist/ folder to your hosting service
-```
-
-## 🧪 **Testing**
-
-### **Backend Testing**
-```bash
-# Test file processing
-cp sample_data.json incoming/
-
-# Check API endpoints
-curl http://localhost:3001/health
-curl http://localhost:3001/api/machines/status
-```
-
-### **Frontend Testing**
-```bash
-# Start development server
-npm run dev
-
-# Access dashboard
-open http://localhost:3000
-```
-
-## 📊 **Database Schema**
-
-```sql
-CREATE TABLE stitching_events (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    machine_id VARCHAR(20) NOT NULL,
-    status TINYINT(1) NOT NULL,
-    event_time DATETIME NOT NULL,
-    source_file VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-## 🤝 **Contributing**
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📄 **License**
-
-This project is licensed under the MIT License.
-
-## 👨‍💻 **Author**
-
-**Naqhid** - [GitHub](https://github.com/Naqhid)
+### Settings (`/settings`)
+Dashboard configuration and system preferences.
 
 ---
 
-**Built with ❤️ for modern manufacturing efficiency**
+## User Roles
+
+| Role | Default Landing | Primary Use |
+|------|----------------|-------------|
+| Admin | TV Dashboard | Full system access |
+| Line Supervisor | Line Setup | Floor setup, tracker, rework |
+| Machine Centre User | Line Monitor | Operator at assigned machine |
+| Final Output Machine | Line Monitor | End-of-line output machine |
+| IED | Production Tracker | Routing and line performance |
+| Planner | Production Planning | Plans, schedules, masters |
+| Unit Head | TV Dashboard | Executive overview |
+| Production Manager | Production Tracker | Tracker, missed actions, alerts |
+| Quality | Production Tracker | Rework/rejection tracking |
+| Project Monitor | Production Tracker | Cross-line monitoring + masters |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, React Query |
+| Backend | Node.js, Express.js, MySQL 8.0 |
+| Charts | Recharts |
+| Icons | Lucide React |
+| PWA | vite-plugin-pwa (offline-capable) |
+| Process Manager | PM2 |
+| File Processing | Chokidar (JSON ingestion from workstations) |
+
+---
+
+## Architecture
+
+```
+Workstation Devices → JSON Files → Backend File Watcher → MySQL Database
+                                                              ↓
+Operators (Tablets) ←→ Express API ←→ React Frontend (SPA)
+                                         ↓
+                              TV Displays / Mobile Browsers
+```
+
+**Single-server production mode:** Backend serves both the API and the built frontend (`frontend/dist`) on one port.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js 18+ LTS
+- MySQL 8.0
+- Git
+
+### Setup
+
+```bash
+git clone https://github.com/Naqhid/shoe-factory-monitoring.git
+cd shoe-factory-monitoring
+
+# Backend
+cd backend
+npm install
+# Configure backend/.env (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, PORT)
+PORT=3101 npm start
+
+# Frontend (development with hot reload)
+cd ../frontend
+npm install
+npm run dev -- --port 3002 --host 0.0.0.0
+
+# Frontend (production — served by backend)
+npm run build
+# Then just run the backend — it serves frontend/dist automatically
+```
+
+### Production (single process)
+
+```bash
+cd frontend && npm run build
+cd ../backend && PORT=3101 npm start
+# Access at http://your-ip:3101
+```
+
+---
+
+## Automated Background Jobs
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| Session auto-close | ~18:35 daily | Deactivate stale mobile sessions |
+| Production auto-finish | ~18:30 daily | Close open cycles |
+| WIP auto-close | ~18:45 daily | Carry closing WIP to next day |
+| Missed-action cleanup | Periodic | Remove old acknowledged items |
+| Alert checks | Hourly | Generate efficiency/idle/target alerts |
+| File watcher | On startup | Ingest workstation JSON into database |
+| DB backup | Scheduled (configurable) | SQL dumps to `backend/data/backups` |
+
+---
+
+## Key Business Logic
+
+- **Shift window:** ~09:05–17:35 with lunch exclusion
+- **Pace efficiency:** `actual_output ÷ expected_output_at_now × 100`
+- **Routing standard:** `mins_6_prs_box = ((observed × rating% / 100) × 1.15) × 6 / 60`
+- **WIP:** `Opening WIP + Today Input − Output`
+- **Last working day compare:** Finds most recent day with production, compares at same clock time
+
+---
+
+## Environment Variables (Backend)
+
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=florence
+PORT=3101
+NODE_ENV=production
+INCOMING_DIR=./data/incoming
+SUCCESS_DIR=./data/processed
+FAILURE_DIR=./data/error
+JWT_SECRET=your_secret_key
+BACKUP_TIMES=13:45,17:45
+```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/my-feature`)
+3. Commit changes (`git commit -m 'Add feature'`)
+4. Push to branch (`git push origin feature/my-feature`)
+5. Open Pull Request
+
+## License
+
+MIT License
+
+## Author
+
+**Naqhid** — [GitHub](https://github.com/Naqhid)
