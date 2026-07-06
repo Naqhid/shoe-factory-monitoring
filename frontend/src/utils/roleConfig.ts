@@ -3,6 +3,7 @@ export type UserRole =
   | 'Admin'
   | 'Line Supervisor'
   | 'Machine Centre User'
+  | 'Final Output Machine'
   | 'IED'
   | 'Planner'
   | 'Unit Head'
@@ -41,6 +42,10 @@ export const roleConfigs: Record<UserRole, RoleConfig> = {
   'Machine Centre User': {
     defaultRoute: '/mobile',
     allowedMenus: ['mobile', 'line1', 'line2']
+  },
+  'Final Output Machine': {
+    defaultRoute: '/mobile',
+    allowedMenus: ['mobile']
   },
   'IED': {
     defaultRoute: '/production_tracker',
@@ -105,6 +110,7 @@ const ROLE_ALIASES: Record<string, UserRole> = {
   admin: 'Admin',
   'line supervisor': 'Line Supervisor',
   'machine centre user': 'Machine Centre User',
+  'final output machine': 'Final Output Machine',
   ied: 'IED',
   planner: 'Planner',
   'unit head': 'Unit Head',
@@ -152,7 +158,7 @@ export const getEffectiveRole = (user: UserSession | null | undefined): UserRole
   if (normalized !== 'Unit Head') {
     if (normalized) return normalized;
     const customRole = String(user.role || '').trim();
-    return customRole || null;
+    return (customRole || null) as UserRole | null;
   }
   const hints = [user.code, user.name].filter(Boolean).map((v) => String(v));
   if (hints.some(matchesProductionManager)) return 'Production Manager';

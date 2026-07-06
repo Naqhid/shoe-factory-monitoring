@@ -412,7 +412,7 @@ export function countMissingEligibleSlots(
   dateKey: string,
   now = new Date()
 ): number {
-  const eligible = new Set(getEligibleSlotsForNow(dateKey, now).map((s) => s.value));
+  const eligible = new Set(getEligibleSlotsForNow(dateKey, now).map((s) => s.value as string));
   let count = 0;
   heatmap.forEach((row) => {
     if (!row.logged_in) return;
