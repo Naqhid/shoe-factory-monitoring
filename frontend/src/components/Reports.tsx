@@ -1964,7 +1964,9 @@ export const Reports: React.FC = () => {
 
   const renderShiftSummary = () => {
     const eolOutputTotal = sumShiftSummaryEolOutput(data!);
-    const eolBoxesTotal = eolOutputTotal > 0 ? Math.round(eolOutputTotal / 6) : 0;
+    // Use pairs_per_tray from plan (returned by backend) for box calculation; fallback to 6 if not available
+    const defaultPairsPerTray = data!.length > 0 ? (Number(data![0].pairs_per_tray) || 6) : 6;
+    const eolBoxesTotal = eolOutputTotal > 0 ? Math.round(eolOutputTotal / defaultPairsPerTray) : 0;
     return (
     <TableWrap>
       <table className="min-w-full">
@@ -1988,13 +1990,13 @@ export const Reports: React.FC = () => {
                 {row.employee_name ? <span className="block">{row.employee_name}</span> : null}
               </Td>
               <Td>{row.work_centre_name ? <LineBadge name={row.work_centre_name} /> : '—'}</Td>
-              <Td center title={row.routing_mins_per_box ? `Routing: ${row.routing_mins_per_box} min / 6 prs` : 'No routing'}>
+              <Td center title={row.routing_mins_per_box ? `Routing: ${row.routing_mins_per_box} min / ${row.pairs_per_tray || 6} prs` : 'No routing'}>
                 {row.shift_target_output != null && Number(row.shift_target_output) > 0 ? r(row.shift_target_output) : '—'}
               </Td>
               <Td center>{row.cycles ?? '—'}</Td>
               <Td center>
                 <span className="font-semibold">
-                  {row.boxes != null ? row.boxes : (Number(row.total_output || 0) > 0 ? Math.round(Number(row.total_output) / 6) : 0)}
+                  {row.boxes != null ? row.boxes : (Number(row.total_output || 0) > 0 ? Math.round(Number(row.total_output) / (Number(row.pairs_per_tray) || 6)) : 0)}
                 </span>
               </Td>
               <Td><span className="font-bold">{row.total_output}</span></Td>
