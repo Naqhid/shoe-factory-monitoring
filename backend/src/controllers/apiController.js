@@ -677,6 +677,7 @@ class ApiController {
           COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.output_pairs END), 0) AS total_output,
           COALESCE(SUM(CASE WHEN mcp.button_status = 2 THEN mcp.target_mins END), 0) AS total_target_mins,
           COALESCE(MAX(pp.total_target_per_day), 0) AS target,
+          COALESCE(MAX(pp.target_pairs_per_tray), 6) AS target_pairs_per_tray,
           COALESCE(MAX(line_input.total_input), 0) AS total_input,
           ROUND((COALESCE(MAX(line_input.total_input), 0) / NULLIF(MAX(pp.total_target_per_day), 0)) * 100, 1) AS input_percent,
           COALESCE(MAX(line_eol.line_eol_output), 0) AS line_eol_output,
@@ -746,7 +747,8 @@ class ApiController {
         const actualMins = Math.max(0, Number(r.shift_actual_mins));
         const utilisation = Math.round((actualMins / SHIFT_WORKING_MINS) * 100);
         const output = Number(r.total_output) || 0;
-        const boxes = output > 0 ? Math.round(output / 6) : 0;
+        const planPairsPerTray = Number(r.target_pairs_per_tray) || 6;
+        const boxes = output > 0 ? Math.round(output / planPairsPerTray) : 0;
         const routingMinsPerBox = routingMap.get(routingKey(r.work_centre_id, r.date, r.machine_id)) || 0;
         const shiftTargetOutput = routingMinsPerBox > 0
           ? Math.round((SHIFT_WORKING_MINS / routingMinsPerBox) * pairsPerBin)
@@ -757,6 +759,7 @@ class ApiController {
         return {
           ...r,
           boxes,
+          pairs_per_tray: planPairsPerTray,
           routing_mins_per_box: routingMinsPerBox,
           shift_target_output: shiftTargetOutput,
           shift_working_mins: SHIFT_WORKING_MINS,

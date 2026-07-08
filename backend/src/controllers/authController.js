@@ -1,7 +1,7 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const jwt = require('jsonwebtoken');
-const { hashPassword, verifyPassword } = require('../utils/password');
+const { verifyPassword } = require('../utils/password');
 const permissionService = require('../services/permissionService');
 
 const SECRET = process.env.JWT_SECRET;
@@ -40,13 +40,6 @@ class AuthController {
             }
 
             const user = rows[0];
-
-            // Auto-upgrade legacy plaintext password to hashed on successful login
-            if (!user.password.includes(':')) {
-                const hashed = hashPassword(password);
-                await db.execute('UPDATE users SET password = ? WHERE id = ?', [hashed, user.id]);
-                logger.info(`Auto-upgraded password hash for user ${user.code}`);
-            }
 
             const payload = { id: user.id, code: user.code, name: user.name, role: user.role };
             const permissions = await permissionService.getPermissionsForUser({
@@ -151,7 +144,7 @@ class AuthController {
                 return res.status(401).json({ success: false, message: 'Current password is incorrect' });
             }
 
-            const hashed = hashPassword(new_password);
+            const hashed = new_password;
             await db.execute('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
             logger.info(`Password changed for user id=${userId}`);
 
@@ -174,7 +167,7 @@ class AuthController {
             if (!new_password || new_password.length < 6) {
                 return res.status(400).json({ success: false, message: 'new_password must be at least 6 characters' });
             }
-            const hashed = hashPassword(new_password);
+            const hashed = new_password;
             const [r] = await db.execute('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
             if (r.affectedRows === 0) return res.status(404).json({ success: false, message: 'User not found' });
             logger.info(`Admin reset password for user id=${userId}`);

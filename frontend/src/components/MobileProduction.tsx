@@ -270,6 +270,8 @@ export const MobileProduction: React.FC = () => {
     const [avgEfficiencyToday, setAvgEfficiencyToday] = useState('0');
     const [loadingSummary, setLoadingSummary] = useState(true);
     const [dailyTargetPairs, setDailyTargetPairs] = useState<number | null>(null);
+    /** Pairs per tray from production planning — used for boxes display and as dropdown default. */
+    const [planningPairsPerTray, setPlanningPairsPerTray] = useState<number>(MOBILE_PAIRS_PER_BIN);
     /** Routing mins/pairs per bin (6-pr baseline) used for shift day target — not scaled by operator dropdown. */
     const [routingMinsPerBin, setRoutingMinsPerBin] = React.useState(0);
     const [routingPairsPerBin, setRoutingPairsPerBin] = React.useState(MOBILE_PAIRS_PER_BIN);
@@ -439,7 +441,7 @@ export const MobileProduction: React.FC = () => {
     const initializeTargetPairBaseline = React.useCallback(
         (
             refreshedBaseMins: number,
-            _planningTrayPairs: number,
+            planningTrayPairs: number,
             opts?: {
                 resumeRecordTargetMins?: number | null;
                 resumeRecordTargetPairs?: number | null;
@@ -458,7 +460,15 @@ export const MobileProduction: React.FC = () => {
                 setRoutingPairsPerBin(routingBin);
             }
 
-            let next = MOBILE_PAIRS_PER_BIN;
+            // Use planning pairs per tray as the default instead of hardcoded 6
+            const planDefault = planningTrayPairs > 0 && planningTrayPairs <= 12
+                ? clampMobileTargetPairs(planningTrayPairs)
+                : MOBILE_PAIRS_PER_BIN;
+
+            // Store planning value for boxes calculation
+            setPlanningPairsPerTray(planDefault);
+
+            let next = planDefault;
             const resumePairsRaw = opts?.resumeRecordTargetPairs;
             const resumePairs =
                 resumePairsRaw != null && Number.isFinite(Number(resumePairsRaw)) && Number(resumePairsRaw) > 0
@@ -468,14 +478,14 @@ export const MobileProduction: React.FC = () => {
             if (resumePairs != null) {
                 let pairs = resumePairs;
                 // target_pairs = 12 in the DB is the planning/routing baseline, NOT an operator choice.
-                // Always treat it as the default (6) unless sessionStorage has a confirmed operator selection.
+                // Always treat it as the default (planDefault) unless sessionStorage has a confirmed operator selection.
                 if (pairs === 12) {
                     const sessionStored = targetPairsSessionKey && typeof sessionStorage !== 'undefined'
                         ? sessionStorage.getItem(targetPairsSessionKey)
                         : null;
                     pairs = sessionStored != null && sessionStored !== ''
                         ? clampMobileTargetPairs(Number(sessionStored))
-                        : MOBILE_PAIRS_PER_BIN;
+                        : planDefault;
                 }
                 next = pairs;
             } else if (targetPairsSessionKey && typeof sessionStorage !== 'undefined') {
@@ -553,9 +563,9 @@ export const MobileProduction: React.FC = () => {
     ]);
 
     const outputExpectedNow = dailyPaceSnapshot?.expected ?? 0;
-    // Physical box count is always 6 pairs/box; cycle dropdown (1–12) is for target time / finish qty only.
-    const binsCompletedToday = Math.floor(totalOutputToday / MOBILE_PAIRS_PER_BIN);
-    const boxesExpectedNow = Math.floor(outputExpectedNow / MOBILE_PAIRS_PER_BIN);
+    // Box count uses the planning pairs/tray value; dropdown (1–12) is for target time / finish qty only.
+    const binsCompletedToday = Math.floor(totalOutputToday / planningPairsPerTray);
+    const boxesExpectedNow = Math.floor(outputExpectedNow / planningPairsPerTray);
     const formatBoxesDisplay = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
     const outputPaceEfficiencyPct =
         outputExpectedNow > 0 ? Math.round((totalOutputToday / outputExpectedNow) * 100) : 0;
@@ -1315,8 +1325,9 @@ export const MobileProduction: React.FC = () => {
                         const machine = macRes.data?.find((m: any) => (m.machine_id === effectiveMachineId || m.code === urlMachineId));
                         const workCentre = wcRes.data?.find((wc: any) => wc.id === activeRecord.work_centre_id);
 
-                        // Prefer pairs saved on the open cycle; do not substitute planning tray (often 12) as mobile default.
+                        // Prefer pairs saved on the open cycle; use planning tray value as default.
                         const targetPairsFromDb = Number(activeRecord.target_pairs || 0);
+                        const planTrayPairs = Number(initRes?.data?.targetPairs || 0);
 
                         // Always refresh target_mins from latest routing for this machine/work-centre.
                         // This prevents stale unfinished records (e.g. old 16.6) from overriding current routing.
@@ -1326,7 +1337,7 @@ export const MobileProduction: React.FC = () => {
                                 : Number(activeRecord.target_mins || 0);
                         const { scaledTargetMins, targetPairs: binPairs } = initializeTargetPairBaseline(
                             refreshedTargetMins,
-                            MOBILE_PAIRS_PER_BIN,
+                            planTrayPairs,
                             {
                                 resumeRecordTargetMins: Number(activeRecord.target_mins ?? 0) || null,
                                 resumeRecordTargetPairs: targetPairsFromDb > 0 ? targetPairsFromDb : null,
@@ -1395,11 +1406,11 @@ export const MobileProduction: React.FC = () => {
                             return;
                         }
 
-                        const { employee, machine, workCentre, targetMins, existingRecord, pairsPerBin, idleReminder } = result.data;
+                        const { employee, machine, workCentre, targetMins, targetPairs: planTrayPairsFromInit, existingRecord, pairsPerBin, idleReminder } = result.data;
                         if (idleReminder) applyIdleReminderConfig(idleReminder);
                         const { scaledTargetMins, targetPairs: binPairs } = initializeTargetPairBaseline(
                             Number(targetMins || 0),
-                            MOBILE_PAIRS_PER_BIN,
+                            Number(planTrayPairsFromInit || 0),
                             existingRecord
                                 ? {
                                       resumeRecordTargetMins: Number(existingRecord.target_mins ?? 0) || null,
@@ -2428,12 +2439,12 @@ export const MobileProduction: React.FC = () => {
                                         <p className="font-semibold truncate">
                                             {loadingSummary
                                                 ? '...'
-                                                : Number.isInteger(totalOutputToday / MOBILE_PAIRS_PER_BIN)
-                                                    ? totalOutputToday / MOBILE_PAIRS_PER_BIN
-                                                    : (totalOutputToday / MOBILE_PAIRS_PER_BIN).toFixed(2)}
+                                                : Number.isInteger(totalOutputToday / planningPairsPerTray)
+                                                    ? totalOutputToday / planningPairsPerTray
+                                                    : (totalOutputToday / planningPairsPerTray).toFixed(2)}
                                         </p>
                                         <p className="text-[11px] opacity-80">
-                                            ~bins at {MOBILE_PAIRS_PER_BIN} pr/box (standard)
+                                            ~bins at {planningPairsPerTray} pr/box (from planning)
                                         </p>
                                     </div>
                                 </div>

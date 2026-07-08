@@ -985,7 +985,7 @@ export const ProductionPlanningForm: React.FC = () => {
                 <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Style</th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Work centre</th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Target/day</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Pairs/tray</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Pairs/Box</th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Status</th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wide">Actions</th>
               </tr>
@@ -1109,7 +1109,7 @@ export const ProductionPlanningForm: React.FC = () => {
                   <p className="text-lg font-black text-blue-800 tabular-nums leading-none mt-0.5">{Number(p.total_target_per_day || 0).toLocaleString()}</p>
                 </div>
                 <div className="px-4 text-center border-l border-gray-100">
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Pairs/tray</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Pairs/Box</p>
                   <p className="text-sm font-bold tabular-nums text-gray-700 mt-0.5">{p.target_pairs_per_tray}</p>
                 </div>
                 <div className="px-4 text-center border-l border-gray-100">
@@ -1246,8 +1246,8 @@ export const ProductionPlanningForm: React.FC = () => {
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Group</th>
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Work centre</th>
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Target</th>
-                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Pairs/tray</th>
-                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Trays</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Pairs/Box</th>
+                          <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Boxes</th>
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Man hrs</th>
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">SMV</th>
                         </tr>
@@ -1428,7 +1428,7 @@ export const ProductionPlanningForm: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Pairs/tray *</label>
+                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Pairs/Box *</label>
                             <input
                               type="number"
                               min="1"

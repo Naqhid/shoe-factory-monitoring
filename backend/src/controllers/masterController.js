@@ -1,7 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
-const { hashPassword } = require('../utils/password');
 const { clearLineMachineCache } = require('../services/lineMachineResolver');
 
 class MasterController {
@@ -311,7 +310,7 @@ class MasterController {
         }
         const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
         [rows] = await db.query(
-          `SELECT u.id, u.code, u.name, u.role, u.work_centre_id, u.machine_id, wc.code as work_centre_code, wc.name as work_centre_name 
+          `SELECT u.id, u.code, u.name, u.role, u.password, u.work_centre_id, u.machine_id, wc.code as work_centre_code, wc.name as work_centre_name 
            FROM users u 
            LEFT JOIN work_centres wc ON u.work_centre_id = wc.id
            ${styleJoin}
@@ -557,10 +556,9 @@ class MasterController {
             const [wc] = await conn.execute('SELECT id FROM work_centres WHERE id = ?', [work_centre_id]);
             if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
           }
-          const hashedPassword = hashPassword(password);
           const [r] = await conn.execute(
             `INSERT INTO users (code, name, password, role, work_centre_id, machine_id) VALUES (?, ?, ?, ?, ?, ?)`,
-            [code, name, hashedPassword, role || 'user', work_centre_id || null, machine_id || null]
+            [code, name, password, role || 'user', work_centre_id || null, machine_id || null]
           );
           return { id: r.insertId };
         }
@@ -653,7 +651,7 @@ class MasterController {
           let params = [code, name, role || 'user', work_centre_id || null, machine_id || null];
           if (password) {
             query += `, password = ?`;
-            params.push(hashPassword(password));
+            params.push(password);
           }
           query += ` WHERE id = ?`;
           params.push(id);
