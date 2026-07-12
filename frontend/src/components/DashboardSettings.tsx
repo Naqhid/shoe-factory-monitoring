@@ -122,7 +122,7 @@ export const DashboardSettings: React.FC = () => {
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6">
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-6 shadow-sm mb-4 sm:mb-6">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shrink-0">

@@ -18,7 +18,7 @@ interface MachineHourlyData {
 }
 
 interface Props {
-  workCentreId: number;
+  workCentreId: number | string;
   workCentreName?: string;
   showProgress?: boolean;
   progress?: number;

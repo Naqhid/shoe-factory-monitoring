@@ -1,6 +1,7 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
 const wipStateService = require('../services/wipStateService');
+const { ACTIVE_WORK_CENTRE_WHERE } = require('../utils/workCentreSql');
 
 /** Standard working hours for prorating daily pair targets (matches production_routing_header.target_per_hour = target_per_day / 8). */
 const SHIFT_HOURS = 8;
@@ -30,6 +31,86 @@ function formatHour(hour) {
   return `${hour - 12} PM`;
 }
 
+/** Aggregate hourly output across all active work centres (EOL machine per line). */
+async function getHourlyOutputAllLines(res, requestedDate) {
+  try {
+    // Get all active work centres
+    const [wcRows] = await db.query(
+      `SELECT id FROM work_centres WHERE ${ACTIVE_WORK_CENTRE_WHERE}`
+    );
+
+    if (wcRows.length === 0) {
+      return res.json({
+        success: true,
+        data: { hourlyData: [], average: 0, target: 0, dailyTarget: 0, shiftHours: SHIFT_HOURS },
+      });
+    }
+
+    // For each line, resolve EOL machine and sum hourly output
+    const dataMap = {};
+    for (const wc of wcRows) {
+      const eolMachineId = await wipStateService.resolveEolMachineId(Number(wc.id));
+      let [hourlyData] = await db.query(`
+        SELECT HOUR(start_time) as hour, SUM(output_pairs) as production
+        FROM machine_centre_production
+        WHERE work_centre_id = ? AND DATE(prod_date) = ? AND start_time IS NOT NULL AND button_status = 2
+          AND machine_id = ?
+        GROUP BY HOUR(start_time)
+        ORDER BY hour
+      `, [wc.id, requestedDate, eolMachineId]);
+
+      if (hourlyData.length === 0) {
+        [hourlyData] = await db.query(`
+          SELECT HOUR(finish_time) as hour, SUM(output_pairs) as production
+          FROM machine_centre_production
+          WHERE work_centre_id = ? AND DATE(prod_date) = ? AND finish_time IS NOT NULL AND button_status = 2
+            AND machine_id = ?
+          GROUP BY HOUR(finish_time)
+          ORDER BY hour
+        `, [wc.id, requestedDate, eolMachineId]);
+      }
+
+      hourlyData.forEach(row => {
+        const h = row.hour;
+        dataMap[h] = (dataMap[h] || 0) + (parseInt(row.production) || 0);
+      });
+    }
+
+    const availableHours = Object.keys(dataMap).map(h => parseInt(h)).sort((a, b) => a - b);
+    const formattedData = availableHours.map(hour => ({
+      hour: `${formatHour(hour)} - ${formatHour(hour + 1)}`,
+      production: dataMap[hour] || 0
+    }));
+
+    const totalProduction = Object.values(dataMap).reduce((sum, v) => sum + v, 0);
+    const average = availableHours.length > 0 ? parseFloat((totalProduction / availableHours.length).toFixed(1)) : 0;
+
+    // Sum daily targets across all lines
+    const [targetRows] = await db.query(
+      `SELECT COALESCE(SUM(total_target_per_day), 0) AS daily_target
+       FROM production_plan
+       WHERE DATE(plan_date) = DATE(?) AND deleted_at IS NULL`,
+      [requestedDate]
+    );
+    const dailyTarget = Number(targetRows[0]?.daily_target) || 0;
+    const hourlyPace = dailyTarget > 0 ? Math.round(dailyTarget / SHIFT_HOURS) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        hourlyData: formattedData,
+        average,
+        target: hourlyPace,
+        dailyTarget,
+        shiftHours: SHIFT_HOURS,
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching all-lines hourly output:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
 class HourlyOutputController {
   async getHourlyOutput(req, res) {
     try {
@@ -39,6 +120,11 @@ class HourlyOutputController {
         return res.status(400).json({ success: false, error: parsedDate.error });
       }
       const { requestedDate } = parsedDate;
+
+      // ── Aggregate all lines when workCentreId === 'all' ──
+      if (workCentreId === 'all') {
+        return getHourlyOutputAllLines(res, requestedDate);
+      }
 
       logger.info(`Fetching hourly output for work centre: ${workCentreId}, date: ${requestedDate}`);
 

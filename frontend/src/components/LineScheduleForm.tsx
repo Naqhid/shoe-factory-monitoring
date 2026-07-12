@@ -370,7 +370,7 @@ export const LineScheduleForm: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6">
       {/* Header */}
       <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-violet-50/40 p-4 sm:p-5 shadow-sm mb-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">

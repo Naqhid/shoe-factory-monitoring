@@ -365,7 +365,7 @@ export const RealtimeAlertCenter: React.FC = () => {
   const unacknowledgedVisibleCount = alerts.filter((a) => Number(a.is_acknowledged || 0) === 0).length;
 
   return (
-    <div className="p-2 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-3 sm:space-y-4">
+    <div className="p-2 sm:p-4 md:p-6 space-y-3 sm:space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base sm:text-xl font-bold text-gray-900">Alert Center</h2>

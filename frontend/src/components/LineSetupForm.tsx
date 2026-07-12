@@ -135,7 +135,7 @@ export const LineSetupForm: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Line Setup</h1>
       </header>

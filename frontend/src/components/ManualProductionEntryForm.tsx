@@ -227,7 +227,7 @@ export const ManualProductionEntryForm: React.FC = () => {
   const [todayCoverageManual, setTodayCoverageManual] = React.useState<ManualEntryRow[]>([]);
   const [todayCoverageCycles, setTodayCoverageCycles] = React.useState<any[]>([]);
   const [mesSlotOutput, setMesSlotOutput] = React.useState<number | null>(null);
-  const [continueNextHour, setContinueNextHour] = React.useState(true);
+  const [continueNextHour, setContinueNextHour] = React.useState(false);
   const [coveragePlanTargets, setCoveragePlanTargets] = React.useState<Record<number, number>>({});
   const heatmapRef = React.useRef<HTMLDivElement>(null);
   const entriesTableRef = React.useRef<HTMLDivElement>(null);
@@ -451,6 +451,19 @@ export const ManualProductionEntryForm: React.FC = () => {
     !!stoppageReason.trim() &&
     !loading &&
     !slotConflictWarning;
+
+  const submitDisabledReason = React.useMemo(() => {
+    if (canSubmit) return '';
+    const missing: string[] = [];
+    if (!workCentreId) missing.push('Work Centre');
+    if (!machineId) missing.push('Machine');
+    if (!empId) missing.push('Employee');
+    if (!hasSlotSelection) missing.push('Time Slot');
+    if (!stoppageReason.trim()) missing.push('Reason');
+    if (slotConflictWarning) missing.push('Slot conflict exists');
+    if (loading) missing.push('Saving in progress');
+    return missing.length ? `Missing: ${missing.join(', ')}` : '';
+  }, [canSubmit, workCentreId, machineId, empId, hasSlotSelection, stoppageReason, slotConflictWarning, loading]);
 
   const selectedSlotMinutes = React.useMemo(() => {
     const match = SLOT_TYPES.find((slot) => slot.value === slotType);
@@ -2352,6 +2365,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                   <button
                     type="submit"
                     disabled={!canSubmit}
+                    title={submitDisabledReason || undefined}
                     className="w-full sm:w-auto px-5 py-2.5 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg transition-all disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
                   >
                     {loading ? (

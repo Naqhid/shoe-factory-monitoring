@@ -660,7 +660,7 @@ const LogPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-gradient-to-b from-slate-100 via-slate-50 to-white">
-      <div className="max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-5">
+      <div className="px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-5">
         <ConfirmDialog
           isOpen={deactivateTarget !== null}
           title="Deactivate session?"

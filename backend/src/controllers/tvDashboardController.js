@@ -398,6 +398,14 @@ exports.getDashboard = async (req, res) => {
         );
 
         // ── 10. Build response ────────────────────────────────────────────────
+        // Aggregate all-lines totals for the Overall Performance top section
+        const allLinesTarget = linePerformance.reduce((sum, l) => sum + Number(l.target || 0), 0);
+        const allLinesInput = linePerformance.reduce((sum, l) => sum + Number(l.input || 0), 0);
+        const allLinesOutput = linePerformance.reduce((sum, l) => sum + Number(l.output || 0), 0);
+        const allLinesOutputPercent = allLinesTarget > 0 ? (allLinesOutput / allLinesTarget) * 100 : 0;
+        const allLinesWip = linePerformance.reduce((sum, l) => sum + Number(l.wip || 0), 0);
+        const allLinesOpeningWip = linePerformance.reduce((sum, l) => sum + Number(l.opening_wip || 0), 0);
+
         res.json({
             success: true,
             data: {
@@ -405,17 +413,17 @@ exports.getDashboard = async (req, res) => {
                     workCentreName: 'Overall Performance',
                     styleCode: currentArticle?.style_code || null,
                     styleName: currentArticle?.style_name || null,
-                    target: Math.round(target),
-                    input: overallInput,
-                    output: Math.round(output),
-                    outputPercent: Math.round(outputPercent),
+                    target: Math.round(allLinesTarget),
+                    input: allLinesInput,
+                    output: Math.round(allLinesOutput),
+                    outputPercent: Math.round(allLinesOutputPercent),
                     efficiencyPercent: Math.round(efficiencyPercent),
                     lossOfMinutes: cycleLoss.lossOfMinutes,
                     lossInactiveMins: cycleLoss.inactiveMins,
                     lossExtraMins: cycleLoss.extraMins,
                     // MES WIP fields for overall section
-                    openingWip: wipData.openingWip,
-                    currentWip: wipData.currentWip,
+                    openingWip: allLinesOpeningWip,
+                    currentWip: allLinesWip,
                     closingWip: wipData.closingWip,
                     wipBreakdown,
                     showHappyEmoji: emojiType === 'happy',
@@ -439,7 +447,16 @@ exports.getDashboard = async (req, res) => {
                     reworkEntries: reworkRows,
                     reworkTotals,
                     linePerformance,
-                    workCentreName: wcData[0]?.name || 'N/A'
+                    workCentreName: wcData[0]?.name || 'N/A',
+                    perLineTimeLosses: await (async () => {
+                        const result = {};
+                        for (const line of linePerformance) {
+                            const lineWcId = Number(line.work_centre_id);
+                            const lineLosses = await aggregateMachineCycleLosses(pool, lineWcId, today);
+                            result[lineWcId] = { lineName: line.line_name, losses: lineLosses };
+                        }
+                        return result;
+                    })()
                 }
             }
         });

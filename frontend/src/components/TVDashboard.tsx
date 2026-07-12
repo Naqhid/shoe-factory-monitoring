@@ -255,16 +255,28 @@ export const TVDashboard: React.FC = () => {
     const [insightCarouselIndex, setInsightCarouselIndex] = useState(0);
     const [insightCarouselProgress, setInsightCarouselProgress] = useState(0);
     const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
+    const [allLinesMachinePace, setAllLinesMachinePace] = useState<Record<number, { name: string; rows: any[] }>>({});
 
-    const DETAIL_CAROUSEL_SLIDES = 3;
-    const DETAIL_CAROUSEL_LABELS = ['Line table', 'Hourly chart', 'Machines'];
+    const DETAIL_CAROUSEL_FIXED_SLIDES = 2; // Line table + Hourly chart
+    const DETAIL_CAROUSEL_LABELS = useMemo(() => {
+        const labels = ['Line table', 'Hourly chart'];
+        workCentres.forEach((wc: any) => labels.push(wc.name));
+        return labels;
+    }, [workCentres]);
+    const DETAIL_CAROUSEL_SLIDES = DETAIL_CAROUSEL_LABELS.length;
     const DETAIL_CAROUSEL_MS = 60000;
     const INSIGHT_CAROUSEL_MS = 15000;
 
-    type InsightSlideKind = 'time_loss' | 'rework' | 'breakdown';
+    type InsightSlideKind = string; // 'time_loss_<wcId>' | 'rework' | 'breakdown'
 
-    const insightSlides = useMemo((): InsightSlideKind[] => {
-        const slides: InsightSlideKind[] = ['time_loss'];
+    const perLineTimeLosses: Record<number, { lineName: string; losses: any[] }> = dashboardData?.lowerSection?.perLineTimeLosses || {};
+
+    const insightSlides = useMemo((): string[] => {
+        const slides: string[] = [];
+        // Add one time_loss slide per active line
+        for (const wc of workCentres) {
+            slides.push(`time_loss_${wc.id}`);
+        }
         const rework = Array.isArray(dashboardData?.lowerSection?.reworkEntries)
             ? dashboardData.lowerSection.reworkEntries
             : [];
@@ -274,7 +286,7 @@ export const TVDashboard: React.FC = () => {
         if (rework.length > 0) slides.push('rework');
         if (breakdowns.length > 0) slides.push('breakdown');
         return slides;
-    }, [dashboardData]);
+    }, [dashboardData, workCentres]);
 
     const insightSlideCount = insightSlides.length;
     const breakdownList = dashboardData?.lowerSection?.breakdowns ?? [];
@@ -415,7 +427,30 @@ export const TVDashboard: React.FC = () => {
             }
         };
 
+        const loadAllLinesMachinePace = async () => {
+            const paceMap: Record<number, { name: string; rows: any[] }> = {};
+            await Promise.all(
+                workCentres.map(async (wc: any) => {
+                    try {
+                        const res = await apiFetch(
+                            `${API_BASE_URL}/api/tv-dashboard/machine-centres/${wc.id}?date=${currentDate}`
+                        );
+                        const result = await res.json();
+                        if (result.success) {
+                            paceMap[wc.id] = { name: wc.name, rows: result.data || [] };
+                        } else {
+                            paceMap[wc.id] = { name: wc.name, rows: [] };
+                        }
+                    } catch {
+                        paceMap[wc.id] = { name: wc.name, rows: [] };
+                    }
+                })
+            );
+            setAllLinesMachinePace(paceMap);
+        };
+
         loadMachinePace();
+        loadAllLinesMachinePace();
     }, [workCentres, currentIndex, currentDate, dashboardUpdatedAt]);
 
     useEffect(() => {
@@ -602,23 +637,35 @@ export const TVDashboard: React.FC = () => {
     const targetGap = Math.max(0, Number(topSection.target || 0) - Number(topSection.output || 0));
     const timeLossMins = Math.max(0, Math.round(Number(topSection.lossOfMinutes || 0)));
     const reworkRejectionCount = Math.max(0, totalReworkQty + totalRejectionQty);
-    const insightSlideLabels: Record<InsightSlideKind, string> = {
-        time_loss: 'Time loss',
+    const insightSlideLabels: Record<string, string> = {
         rework: 'Rework',
         breakdown: 'Breakdown',
     };
-    const insightTabStyles: Record<InsightSlideKind, { base: string; active: string }> = {
-        time_loss: { base: 'bg-orange-100 text-orange-900 ring-orange-300', active: 'ring-orange-500' },
+    // Add per-line time loss labels dynamically
+    for (const wc of workCentres) {
+        insightSlideLabels[`time_loss_${wc.id}`] = wc.name;
+    }
+    const insightTabStyles: Record<string, { base: string; active: string }> = {
         rework: { base: 'bg-amber-100 text-amber-900 ring-amber-300', active: 'ring-amber-500' },
         breakdown: { base: 'bg-rose-100 text-rose-900 ring-rose-300', active: 'ring-rose-500' },
     };
-    const insightTabCount = (kind: InsightSlideKind) => {
+    // Default style for time_loss slides
+    const getInsightTabStyle = (kind: string) => {
+        if (insightTabStyles[kind]) return insightTabStyles[kind];
+        return { base: 'bg-orange-100 text-orange-900 ring-orange-300', active: 'ring-orange-500' };
+    };
+    const insightTabCount = (kind: string) => {
         if (kind === 'rework') return reworkRejectionCount;
         if (kind === 'breakdown') return breakdownList.length;
         return null;
     };
-    const insightGridCols =
-        insightSlides.length === 1 ? 'grid-cols-1' : insightSlides.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
+    const insightGridCols = (() => {
+        const len = insightSlides.length;
+        if (len <= 1) return 'grid-cols-1';
+        if (len === 2) return 'grid-cols-2';
+        if (len === 3) return 'grid-cols-3';
+        return 'grid-cols-4';
+    })();
     const recoveryLabel =
         targetGap > 0
             ? `Gap: ${targetGap}`
@@ -894,12 +941,11 @@ export const TVDashboard: React.FC = () => {
                 <div className="flex-shrink-0 border-b border-gray-100 px-3 sm:px-4 pt-3 pb-2">
                     <div className="flex items-center justify-between gap-2 min-w-0 overflow-hidden">
                     <div className="flex items-center min-w-0 flex-1 overflow-hidden gap-2">
-                    {detailCarouselIndex === 2 ? (
+                    {detailCarouselIndex >= 2 ? (
                         <div className="flex items-center min-w-0 flex-1 gap-2 sm:gap-4 text-sm sm:text-base font-bold leading-tight overflow-hidden">
-                            <span className="text-blue-600 truncate min-w-0" title={currentLineName}>
-                                {currentLineName}
+                            <span className="text-blue-600 truncate min-w-0" title={DETAIL_CAROUSEL_LABELS[detailCarouselIndex] || currentLineName}>
+                                {DETAIL_CAROUSEL_LABELS[detailCarouselIndex] || currentLineName}
                             </span>
-                            {articlePill}
                             <span className="h-4 w-px shrink-0 bg-slate-300" aria-hidden />
                             <TvMachinePaceLegend />
                         </div>
@@ -911,9 +957,10 @@ export const TVDashboard: React.FC = () => {
                             >
                                 {detailCarouselIndex === 0
                                     ? 'LINE PERFORMANCE'
-                                    : `${lowerSection.workCentreName || 'Line'} - Hourly Output`}
+                                    : detailCarouselIndex === 1
+                                    ? 'All Lines - Hourly Output'
+                                    : `${DETAIL_CAROUSEL_LABELS[detailCarouselIndex]} - Machines`}
                             </h3>
-                            {detailCarouselIndex !== 0 && articlePill}
                         </div>
                     )}
                     </div>
@@ -998,8 +1045,8 @@ export const TVDashboard: React.FC = () => {
                         </div>
                         <div className="min-w-full h-full flex flex-col min-h-0" style={{ background: 'rgba(239,246,255,0.95)', borderRadius: '12px', overflow: 'hidden' }}>
                             <HourlyOutputChart
-                                workCentreId={currentWorkCentreId}
-                                workCentreName={lowerSection.workCentreName}
+                                workCentreId={'all'}
+                                workCentreName={'All Lines'}
                                 showProgress={false}
                                 progress={progress}
                                 date={currentDate}
@@ -1020,18 +1067,36 @@ export const TVDashboard: React.FC = () => {
                                 </div>
                             )}
                         </div> */}
-                        <div className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
-                            <TvMachinePacePanel
-                                machines={machinePaceSnapshots}
-                                linePlan={{
-                                    lineName: currentLineName,
-                                    dailyTarget: linePaceTarget,
-                                    lineOutput: linePaceOutput,
-                                    expectedNow: currentLinePlanPace?.expected,
-                                    projectedEod: currentLinePlanPace?.projectedEod,
-                                }}
-                            />
-                        </div>
+                        {workCentres.map((wc: any) => {
+                            const wcPace = allLinesMachinePace[wc.id];
+                            const wcRows = wcPace?.rows || [];
+                            const wcSnapshots = wcRows.map((row: any) =>
+                                buildMachinePaceSnapshot(
+                                    String(row.machine_id),
+                                    row.machine_name || row.machine_centre_name || String(row.machine_id),
+                                    Number(row.total_output_pairs || 0),
+                                    Number(row.target_mins_per_box || 0),
+                                    currentTime
+                                )
+                            );
+                            const wcLinePerf = linePerformanceRows.find((l: any) => Number(l.work_centre_id) === Number(wc.id));
+                            const wcTarget = Number(wcLinePerf?.target ?? 0);
+                            const wcOutput = Number(wcLinePerf?.output ?? 0);
+                            return (
+                                <div key={wc.id} className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
+                                    <TvMachinePacePanel
+                                        machines={wcSnapshots}
+                                        linePlan={{
+                                            lineName: wc.name,
+                                            dailyTarget: wcTarget,
+                                            lineOutput: wcOutput,
+                                            expectedNow: undefined,
+                                            projectedEod: undefined,
+                                        }}
+                                    />
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
                 <div className="px-3 mt-2 sm:px-4 pb-3 flex-shrink-0">
@@ -1042,7 +1107,7 @@ export const TVDashboard: React.FC = () => {
                         />
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                        {detailCarouselIndex === 2 && lineRecoveryStats && lineRecoveryStats.gapToTarget > 0 && lineRecoveryStats.pairsPerHrNeeded != null ? (
+                        {detailCarouselIndex >= 2 && lineRecoveryStats && lineRecoveryStats.gapToTarget > 0 && lineRecoveryStats.pairsPerHrNeeded != null ? (
                             <div className="inline-flex flex-wrap items-center gap-2 sm:gap-2.5 rounded-lg bg-gradient-to-r from-amber-100 via-amber-50 to-orange-50 px-2.5 sm:px-3 py-1.5 ring-2 ring-amber-400/80 shadow-md min-w-0">
                                 <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wide text-amber-950 whitespace-nowrap">
                                     Speed to hit today’s plan (pairs/hr)
@@ -1063,7 +1128,7 @@ export const TVDashboard: React.FC = () => {
                                     </span>
                                 </div>
                             </div>
-                        ) : detailCarouselIndex === 2 && linePaceTarget > 0 ? (
+                        ) : detailCarouselIndex >= 2 && linePaceTarget > 0 ? (
                             <span className="inline-flex items-center rounded-lg bg-emerald-100 px-2.5 py-1 text-[9px] sm:text-[10px] font-bold text-emerald-800 ring-2 ring-emerald-300 shadow-sm">
                                 On track for today’s target
                             </span>
@@ -1103,30 +1168,39 @@ export const TVDashboard: React.FC = () => {
             <div className="sm:col-span-1 min-h-0 h-full flex flex-col motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:[animation-delay:140ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:animate-none motion-reduce:opacity-100">
                 <div className="h-full min-h-0 flex flex-col rounded-xl shadow-lg p-2 sm:p-3 border border-gray-200 bg-gradient-to-b from-white to-slate-50 ring-1 ring-slate-200/60 overflow-hidden">
                     <div className="flex-shrink-0 mb-1 min-w-0">
-                        <div className={`grid ${insightGridCols} gap-1 min-w-0`} role="tablist" aria-label="Time loss, rework, and breakdown">
-                            {insightSlides.map((kind, index) => {
-                                const tabStyle = insightTabStyles[kind];
-                                const count = insightTabCount(kind);
-                                const label = insightSlideLabels[kind];
-                                return (
-                                    <button
-                                        key={kind}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={insightCarouselIndex === index}
-                                        aria-label={label}
-                                        onClick={() => {
-                                            setInsightCarouselIndex(index);
-                                            setInsightCarouselProgress(0);
-                                        }}
-                                        className={`inline-flex items-center justify-center rounded-md px-1 py-1 text-[9px] sm:text-[10px] font-extrabold ring-1 tabular-nums shadow-sm whitespace-nowrap min-w-0 transition-all ${
-                                            tabStyle.base
-                                        } ${insightCarouselIndex === index ? `ring-2 ${tabStyle.active} ring-offset-1` : 'opacity-75 hover:opacity-100'}`}
-                                    >
-                                        {count === null ? label : `${label} ${count}`}
-                                    </button>
-                                );
-                            })}
+                        <div className="flex items-center justify-between gap-1.5 min-w-0">
+                            <p className="text-[10px] sm:text-[11px] font-extrabold tracking-wide text-orange-900 truncate">
+                                {insightSlideLabels[insightSlides[insightCarouselIndex]] || 'Time loss'}
+                            </p>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[8px] sm:text-[9px] font-semibold text-orange-600 tabular-nums">
+                                    {Math.max(0, Math.ceil((INSIGHT_CAROUSEL_MS / 1000) * (1 - insightCarouselProgress / 100)))}s
+                                </span>
+                                <div className="w-12 rounded-full h-1 bg-gray-200 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-orange-400 transition-[width] duration-100 motion-reduce:transition-none"
+                                        style={{ width: `${insightCarouselProgress}%` }}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-1" role="tablist" aria-label="Insight slides">
+                                    {insightSlides.map((kind, index) => (
+                                        <button
+                                            key={kind}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={insightCarouselIndex === index}
+                                            aria-label={insightSlideLabels[kind] || kind}
+                                            onClick={() => {
+                                                setInsightCarouselIndex(index);
+                                                setInsightCarouselProgress(0);
+                                            }}
+                                            className={`h-2 rounded-full transition-all duration-300 ${
+                                                insightCarouselIndex === index ? 'w-5 bg-orange-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
+                                            }`}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -1137,10 +1211,16 @@ export const TVDashboard: React.FC = () => {
                             >
                                 {insightSlides.map((kind) => (
                                 <div key={kind} className="flex-[0_0_100%] w-full h-full min-h-0 flex flex-col text-center px-1 py-0.5">
-                                {kind === 'time_loss' && (<>
-                                    {machineTimeLossRows.length > 0 ? (
+                                {kind.startsWith('time_loss_') && (() => {
+                                    const wcId = Number(kind.replace('time_loss_', ''));
+                                    const lineData = perLineTimeLosses[wcId];
+                                    const rows = lineData?.losses || [];
+                                    const lineName = lineData?.lineName || '';
+                                    const netMins = rows.reduce((sum: number, row: any) => sum + Number(row.net_mins || 0), 0);
+                                    return (<>
+                                    {rows.length > 0 ? (
                                         <div className="grid grid-cols-1 gap-0.5 overflow-auto pr-0.5 min-h-0 flex-1">
-                                            {machineTimeLossRows.slice(0, 8).map((row: any) => (
+                                            {rows.slice(0, 8).map((row: any) => (
                                                 <div
                                                     key={`${row.machine_id}-${row.machine_name}`}
                                                     className={`rounded px-1.5 py-0.5 flex items-center justify-between ${
@@ -1176,23 +1256,20 @@ export const TVDashboard: React.FC = () => {
                                                 <span className="text-[9px] sm:text-[10px] font-extrabold text-red-900 uppercase tracking-wide leading-tight">Total</span>
                                                 <span
                                                     className={`text-[9px] sm:text-[10px] font-black tabular-nums bg-white/80 px-1 py-px rounded leading-tight ${
-                                                        netMachineDeltaLabel === 'gain'
-                                                            ? 'text-emerald-800'
-                                                            : netMachineDeltaLabel === 'loss'
-                                                              ? 'text-red-800'
-                                                              : 'text-gray-700'
+                                                        netMins > 0 ? 'text-emerald-800' : netMins < 0 ? 'text-red-800' : 'text-gray-700'
                                                     }`}
                                                 >
-                                                    {formatDurationString(netMachineDeltaMins)}
+                                                    {formatDurationString(netMins)}
                                                 </span>
                                             </div>
                                         </div>
                                     ) : (
                                         <div className="flex-1 flex flex-col items-center justify-center">
-                                            <p className="text-[9px] sm:text-[10px] text-gray-400">No time loss data today</p>
+                                            <p className="text-[9px] sm:text-[10px] text-gray-400">No time loss data for {lineName}</p>
                                         </div>
                                     )}
-                                </>)}
+                                </>);
+                                })()}
 
                                 {kind === 'rework' && (
                                     <div className="h-full min-h-0 flex flex-col overflow-hidden">
@@ -1236,49 +1313,6 @@ export const TVDashboard: React.FC = () => {
                                 </div>
                                 ))}
                             </div>
-                        </div>
-                        <div className="flex-shrink-0 pt-0.5 border-t border-gray-100 mt-0.5">
-                            {insightSlideCount > 1 && (
-                                <>
-                                    <div className="flex items-center justify-center gap-1 mb-0.5" role="tablist" aria-label="Insight carousel">
-                                        {insightSlides.map((kind, i) => (
-                                            <button
-                                                key={kind}
-                                                type="button"
-                                                role="tab"
-                                                aria-selected={insightCarouselIndex === i}
-                                                aria-label={insightSlideLabels[kind]}
-                                                onClick={() => {
-                                                    setInsightCarouselIndex(i);
-                                                    setInsightCarouselProgress(0);
-                                                }}
-                                                className={`h-1 rounded-full transition-all duration-300 ${
-                                                    insightCarouselIndex === i ? 'w-4 bg-blue-500' : 'w-1 bg-slate-300 hover:bg-slate-400'
-                                                }`}
-                                            />
-                                        ))}
-                                    </div>
-                                    <div className="w-full rounded-full h-0.5 bg-gray-200 overflow-hidden mb-0.5">
-                                        <div
-                                            className="h-full rounded-full bg-blue-500 transition-[width] duration-100 motion-reduce:transition-none"
-                                            style={{ width: `${insightCarouselProgress}%` }}
-                                        />
-                                    </div>
-                                </>
-                            )}
-                            <p className="text-[8px] sm:text-[9px] text-slate-500 font-semibold text-center tabular-nums leading-tight truncate px-0.5">
-                                <span className="text-blue-700 font-bold">{currentLineName}</span>
-                                {insightSlideCount > 1 && (
-                                    <>
-                                        {' · '}
-                                        {insightSlideLabels[insightSlides[insightCarouselIndex]]}
-                                        {' · '}
-                                        {insightCarouselIndex + 1}/{insightSlideCount}
-                                        {' · '}
-                                        {Math.max(0, Math.ceil((INSIGHT_CAROUSEL_MS / 1000) * (1 - insightCarouselProgress / 100)))}s
-                                    </>
-                                )}
-                            </p>
                         </div>
                     </div>
                 </div>

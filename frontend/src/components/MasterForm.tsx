@@ -345,7 +345,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6">
       <ConfirmDialog
         isOpen={deleteId !== null}
         title={isArchiveTable ? `Archive ${archiveLabel}` : 'Delete Record'}
