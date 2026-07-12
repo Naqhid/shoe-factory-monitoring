@@ -583,11 +583,11 @@ exports.createManualEntry = async (req, res, next) => {
     }
 
     const [empRows] = await db.query(
-      'SELECT code, work_centre_id FROM employees WHERE code = ? AND work_centre_id = ? LIMIT 1',
-      [emp_id, work_centre_id]
+      'SELECT code, work_centre_id FROM employees WHERE code = ? LIMIT 1',
+      [emp_id]
     );
     if (empRows.length === 0) {
-      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found for selected line` });
+      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found` });
     }
 
     const normalizedStartTime = toMySqlDateTimeOrNull(start_time);
@@ -1022,11 +1022,11 @@ exports.updateManualEntry = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `Machine ${machine_id} not found for selected line` });
     }
     const [empRows] = await db.query(
-      'SELECT code FROM employees WHERE code = ? AND work_centre_id = ? LIMIT 1',
-      [emp_id, work_centre_id]
+      'SELECT code FROM employees WHERE code = ? LIMIT 1',
+      [emp_id]
     );
     if (empRows.length === 0) {
-      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found for selected line` });
+      return res.status(400).json({ success: false, message: `Employee ${emp_id} not found` });
     }
 
     let summaryData = null;
@@ -1355,11 +1355,11 @@ exports.restoreManualEntryFromAuditLog = async (req, res, next) => {
     }
 
     const [empRows] = await db.query(
-      'SELECT code FROM employees WHERE code = ? AND work_centre_id = ? LIMIT 1',
-      [empId, workCentreId]
+      'SELECT code FROM employees WHERE code = ? LIMIT 1',
+      [empId]
     );
     if (empRows.length === 0) {
-      return res.status(400).json({ success: false, message: `Employee ${empId} not found for selected line` });
+      return res.status(400).json({ success: false, message: `Employee ${empId} not found` });
     }
 
     const [unfinishedRows] = await db.query(
