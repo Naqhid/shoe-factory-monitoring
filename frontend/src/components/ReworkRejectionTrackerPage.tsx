@@ -140,7 +140,7 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-gradient-to-b from-slate-100 via-slate-50 to-white">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
+      <div className="px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
         {/* Page header */}
         <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm p-4 sm:p-5 ring-1 ring-black/[0.02]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
