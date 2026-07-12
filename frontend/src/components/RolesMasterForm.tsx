@@ -43,6 +43,11 @@ const CONFIRM_COPY: Record<ConfirmAction, { title: string; message: string; conf
 };
 
 export const RolesMasterForm: React.FC = () => {
+  const currentUser = (() => {
+    try { return JSON.parse(localStorage.getItem('user_info') || 'null'); } catch { return null; }
+  })();
+  const isAdmin = currentUser?.role === 'Admin';
+
   const [roles, setRoles] = useState<Role[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -362,7 +367,7 @@ export const RolesMasterForm: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {roles.map((role, idx) => (
-                    <tr key={role.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/40'}>
+                    <tr key={role.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/40'} ${!isAdmin && role.role_name === 'Admin' ? 'opacity-60' : ''}`}>
                       <td className="px-4 sm:px-6 py-3.5 text-sm font-semibold text-gray-900">{role.role_name}</td>
                       <td className="px-4 sm:px-6 py-3.5 text-sm text-gray-600 font-mono">{role.default_route}</td>
                       <td className="px-4 sm:px-6 py-3.5">
@@ -372,13 +377,19 @@ export const RolesMasterForm: React.FC = () => {
                       </td>
                       <td className="px-4 sm:px-6 py-3.5">
                         <div className="flex gap-1">
-                          <button onClick={() => handleEdit(role)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-100 transition" title="Edit">
+                          <button
+                            onClick={() => handleEdit(role)}
+                            disabled={!isAdmin && role.role_name === 'Admin'}
+                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-100 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            title={!isAdmin && role.role_name === 'Admin' ? 'Only Admin can edit this role' : 'Edit'}
+                          >
                             <Edit2 className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => setConfirmDialog({ action: 'delete', roleId: role.id, roleName: role.role_name })}
-                            className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition"
-                            title="Delete"
+                            disabled={!isAdmin && role.role_name === 'Admin'}
+                            className="p-2 rounded-lg text-red-500 hover:bg-red-100 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            title={!isAdmin && role.role_name === 'Admin' ? 'Only Admin can delete this role' : 'Delete'}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -393,19 +404,25 @@ export const RolesMasterForm: React.FC = () => {
             {/* Mobile card layout */}
             <div className="sm:hidden divide-y divide-gray-200">
               {roles.map((role) => (
-                <div key={role.id} className="p-3 space-y-2">
+                <div key={role.id} className={`p-3 space-y-2 ${!isAdmin && role.role_name === 'Admin' ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-gray-900">{role.role_name}</p>
                       <p className="text-xs text-gray-500 font-mono mt-0.5">{role.default_route}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => handleEdit(role)} className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition" title="Edit">
+                      <button
+                        onClick={() => handleEdit(role)}
+                        disabled={!isAdmin && role.role_name === 'Admin'}
+                        className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Edit"
+                      >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => setConfirmDialog({ action: 'delete', roleId: role.id, roleName: role.role_name })}
-                        className="p-2 rounded-lg text-red-500 hover:bg-red-50 transition"
+                        disabled={!isAdmin && role.role_name === 'Admin'}
+                        className="p-2 rounded-lg text-red-500 hover:bg-red-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
                         title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />

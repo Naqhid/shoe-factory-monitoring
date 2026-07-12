@@ -24,6 +24,11 @@ interface RoleOption {
 }
 
 export const UsersMasterForm: React.FC = () => {
+  const currentUser = React.useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('user_info') || 'null'); } catch { return null; }
+  }, []);
+  const isAdmin = currentUser?.role === 'Admin';
+
   const [records, setRecords] = React.useState<UserRecord[]>([]);
   const [roles, setRoles] = React.useState<RoleOption[]>([]);
   const [showForm, setShowForm] = React.useState(false);
@@ -422,7 +427,11 @@ export const UsersMasterForm: React.FC = () => {
                     <option value={formData.role}>{formData.role || 'Loading roles…'}</option>
                   ) : (
                     roles.map((role) => (
-                      <option key={role.id ?? role.role_name} value={role.role_name}>
+                      <option
+                        key={role.id ?? role.role_name}
+                        value={role.role_name}
+                        disabled={!isAdmin && role.role_name === 'Admin'}
+                      >
                         {role.role_name}
                       </option>
                     ))
