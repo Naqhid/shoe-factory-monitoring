@@ -211,7 +211,11 @@ export const StoppageEntryTab: React.FC<Props> = ({
 
   const resetForm = () => {
     setEditId(null);
-    setForm(defaultFormState());
+    // Auto-select the EOL (Final Output) machine
+    const eolMachine = machineCentres.find((mc) =>
+      /final\s*output|final\s*inspection/i.test(mc.name)
+    );
+    setForm({ ...defaultFormState(), machineId: eolMachine?.machine_id || '' });
     setAuditReason('');
   };
 
@@ -585,6 +589,7 @@ export const StoppageEntryTab: React.FC<Props> = ({
                     <select
                       value={form.machineId}
                       onChange={(e) => setForm((prev) => ({ ...prev, machineId: e.target.value }))}
+                      disabled
                       className={fieldCls}
                     >
                       <option value="">Select Machine</option>

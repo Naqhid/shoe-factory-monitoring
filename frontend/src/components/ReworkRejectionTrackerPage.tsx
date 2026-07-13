@@ -108,7 +108,11 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
         const result = await response.json();
         if (result.success) {
           setMachineCentres(result.data);
-          setSelectedMachineCentre('');
+          // Auto-select the EOL (Final Output) machine
+          const eolMachine = result.data.find((mc: MachineCentre) =>
+            /final\s*output|final\s*inspection/i.test(mc.name)
+          );
+          setSelectedMachineCentre(eolMachine ? eolMachine.name : '');
         }
       } catch (error) {
         console.error('Error fetching machine centres:', error);
@@ -283,8 +287,8 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
               <select
                 value={selectedMachineCentre}
                 onChange={(e) => setSelectedMachineCentre(e.target.value)}
-                disabled={!selectedWorkCentre}
-                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400 disabled:opacity-60 transition-shadow"
+                disabled
+                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 shadow-sm focus:outline-none cursor-not-allowed opacity-80 transition-shadow"
               >
                 <option value="">All Machines</option>
                 {machineCentres.map((mc) => (

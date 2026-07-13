@@ -3800,8 +3800,8 @@ export const MissedActionsPage: React.FC = () => {
                       <p className="text-xs sm:text-sm font-bold text-indigo-900">{line.lineName}</p>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs">
                         <span className="font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">Cycles: {line.cycles}</span>
-                        <span className="font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Inactive: {formatMinutes(line.inactive)}</span>
-                        <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Extra: {formatMinutes(line.extra)}</span>
+                        <span className="font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Inactive: {formatDurationString(line.inactive)}</span>
+                        <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Extra: {formatDurationString(line.extra)}</span>
                       </div>
                     </div>
 
@@ -3824,8 +3824,8 @@ export const MissedActionsPage: React.FC = () => {
                               </div>
                               <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs pl-5 sm:pl-0">
                                 <span className="font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">Cycles: {machine.cycles}</span>
-                                <span className="font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Inactive: {formatMinutes(machine.inactive)}</span>
-                                <span className="font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Extra: {formatMinutes(machine.extra)}</span>
+                                <span className="font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Inactive: {formatDurationString(machine.inactive)}</span>
+                                <span className="font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Extra: {formatDurationString(machine.extra)}</span>
                               </div>
                             </button>
 
@@ -3861,12 +3861,12 @@ export const MissedActionsPage: React.FC = () => {
                                   <div className="rounded-lg bg-blue-50 border border-blue-200 p-2.5">
                                     <p className="text-[10px] font-bold text-blue-800 uppercase mb-1.5">Summary — {machine.events.length} cycles</p>
                                     <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[10px]">
-                                      <div><span className="text-gray-500">Actual:</span> <span className="font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</span></div>
+                                      <div><span className="text-gray-500">Actual:</span> <span className="font-bold text-blue-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</span></div>
                                       <div><span className="text-gray-500">Output:</span> <span className="font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</span></div>
-                                      <div><span className="text-gray-500">Late Start:</span> <span className="font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</span></div>
-                                      <div><span className="text-gray-500">Late Finish:</span> <span className="font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</span></div>
-                                      <div><span className="text-gray-500">Early:</span> <span className="font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</span></div>
-                                      <div><span className="text-gray-500">Loss:</span> <span className="font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</span></div>
+                                      <div><span className="text-gray-500">Late Start:</span> <span className="font-bold text-blue-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</span></div>
+                                      <div><span className="text-gray-500">Late Finish:</span> <span className="font-bold text-amber-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</span></div>
+                                      <div><span className="text-gray-500">Early:</span> <span className="font-bold text-emerald-800">{formatDurationString(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</span></div>
+                                      <div><span className="text-gray-500">Loss:</span> <span className="font-bold text-red-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</span></div>
                                     </div>
                                   </div>
                                   {/* Row cards */}
@@ -3923,13 +3923,13 @@ export const MissedActionsPage: React.FC = () => {
                                       <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>
                                         Cycles: {machine.events.length}
                                       </td>
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatDurationString(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-green-800">{machine.events.filter((e) => { const act = Number(e.actual_mins || 0); const tgt = Number(e.target_mins || 0); const inact = Number(e.inactive_mins || 0); const early = tgt > act ? tgt - act : 0; return (act <= tgt && inact === 0) || early > 0; }).length}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
                                     </tr>
                                     {machine.events.map((row) => {
                                       const actual = Number(row.actual_mins || 0);
@@ -3944,27 +3944,27 @@ export const MissedActionsPage: React.FC = () => {
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.employee_name} ({row.employee_code})</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.start_time ? new Date(row.start_time).toLocaleTimeString() : '-'}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.finish_time ? new Date(row.finish_time).toLocaleTimeString() : '-'}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.target_mins)}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatMinutes(row.actual_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatDurationString(row.target_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{formatDurationString(row.actual_mins)}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold text-emerald-700">{row.output_pairs ?? 0}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-blue-700">{formatMinutes(row.inactive_mins)}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-amber-700">{formatMinutes(row.extra_mins)}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-600">{finishedEarly > 0 ? formatMinutes(finishedEarly) : '0'}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-blue-700">{formatDurationString(row.inactive_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-amber-700">{formatDurationString(row.extra_mins)}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-emerald-600">{finishedEarly > 0 ? formatDurationString(finishedEarly) : '0'}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold">{isOnTime ? <span className="text-green-600">✓</span> : <span className="text-red-500">✗</span>}</td>
-                                        <td className="px-3 py-2.5 text-sm font-semibold text-red-600">{timeLoss > 0 ? formatMinutes(timeLoss) : '—'}</td>
+                                        <td className="px-3 py-2.5 text-sm font-semibold text-red-600">{timeLoss > 0 ? formatDurationString(timeLoss) : '—'}</td>
                                       </tr>
                                       );
                                     })}
                                     <tr className="bg-blue-50 border-t-2 border-blue-200">
                                       <td className="px-3 py-2 text-xs font-bold text-blue-800">Summary</td>
                                       <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>Cycles: {machine.events.length}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatMinutes(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-amber-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-emerald-800">{formatDurationString(machine.events.reduce((s, e) => { const diff = Number(e.target_mins || 0) - Number(e.actual_mins || 0); return s + (diff > 0 ? diff : 0); }, 0))}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-green-800">{machine.events.filter((e) => { const act = Number(e.actual_mins || 0); const tgt = Number(e.target_mins || 0); const inact = Number(e.inactive_mins || 0); const early = tgt > act ? tgt - act : 0; return (act <= tgt && inact === 0) || early > 0; }).length}</td>
-                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatMinutes(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-red-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.inactive_mins || 0) + Number(e.extra_mins || 0), 0))}</td>
                                     </tr>
                                   </tbody>
                                 </table>
