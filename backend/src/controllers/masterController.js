@@ -9,7 +9,7 @@ class MasterController {
   }
 
   getUsageCheckTables() {
-    return ['groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees'];
+    return ['groups_master', 'leather', 'styles', 'colors', 'machine_centres', 'employees'];
   }
 
   logMasterAudit(action, req, details = {}) {
@@ -93,19 +93,11 @@ class MasterController {
     if (table === 'groups_master') return this.getGroupUsageSummary(conn, id);
 
     if (table === 'work_centres') {
-      const [[machineUsage]] = await conn.execute('SELECT COUNT(*) as total FROM machine_centres WHERE work_centre_id = ?', [id]);
-      const [[employeeUsage]] = await conn.execute('SELECT COUNT(*) as total FROM employees WHERE work_centre_id = ?', [id]);
-      const [[userUsage]] = await conn.execute('SELECT COUNT(*) as total FROM users WHERE work_centre_id = ?', [id]);
-      const [[planUsage]] = await conn.execute('SELECT COUNT(*) as total FROM production_plan WHERE work_centre_id = ?', [id]);
       const [[activeSessionUsage]] = await conn.execute(
         "SELECT COUNT(*) as total FROM mobile_sessions WHERE work_centre_id = ? AND status = 'active'",
         [id]
       );
       const details = [
-        { table: 'machine_centres', label: 'Machine Centres', count: Number(machineUsage?.total || 0) },
-        { table: 'employees', label: 'Employees', count: Number(employeeUsage?.total || 0) },
-        { table: 'users', label: 'Users', count: Number(userUsage?.total || 0) },
-        { table: 'production_plan', label: 'Production Plans', count: Number(planUsage?.total || 0) },
         { table: 'mobile_sessions', label: 'Active Mobile Sessions', count: Number(activeSessionUsage?.total || 0) },
       ];
       return { total: details.reduce((sum, row) => sum + row.count, 0), details };
