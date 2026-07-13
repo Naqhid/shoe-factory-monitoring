@@ -2435,7 +2435,7 @@ export const MobileProduction: React.FC = () => {
                                 </div>
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
                                     <div className="min-w-0">
-                                        <p className="text-xs opacity-80">Bins Completed (Today)</p>
+                                        <p className="text-xs opacity-80">Boxes Completed (Today)</p>
                                         <p className="font-semibold truncate">
                                             {loadingSummary
                                                 ? '...'

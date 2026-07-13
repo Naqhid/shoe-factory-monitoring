@@ -577,6 +577,29 @@ const runAutoProductionFinishCheck = async () => {
   }
 };
 
+// Also run auto-finish at shift start to catch stale cycles from previous days
+const SHIFT_START_HOUR = parseInt(process.env.SHIFT_START_HOUR || '9', 10);
+const SHIFT_START_MINUTE = parseInt(process.env.SHIFT_START_MINUTE || '5', 10);
+let lastShiftStartAutoFinishDate = null;
+const runShiftStartAutoFinishCheck = async () => {
+  try {
+    if (!AUTO_FINISH_ENABLED) return;
+
+    const now = new Date();
+    const shiftStartCutoff = new Date(now);
+    shiftStartCutoff.setHours(SHIFT_START_HOUR, SHIFT_START_MINUTE, 0, 0);
+
+    const todayKey = getLocalDateKey(now);
+    if (now >= shiftStartCutoff && lastShiftStartAutoFinishDate !== todayKey) {
+      const closedCycles = await mobileSessionController.autoFinishUnfinishedProductions();
+      lastShiftStartAutoFinishDate = todayKey;
+      logger.info(`Shift-start auto-finish completed for ${todayKey}. Closed stale cycles: ${closedCycles}`);
+    }
+  } catch (error) {
+    logger.error(`Shift-start auto-finish scheduler error: ${error.message}`);
+  }
+};
+
 const runExpiredSessionCleanup = async () => {
   try {
     if (!SESSION_CLEANUP_ENABLED) return;
@@ -599,9 +622,11 @@ if (AUTO_CLOSE_ENABLED) {
 }
 
 if (AUTO_FINISH_ENABLED) {
-  logger.info(`Mobile production auto-finish is enabled. Daily cutoff: ${AUTO_FINISH_TIME} (server local time).`);
+  logger.info(`Mobile production auto-finish is enabled. Daily cutoff: ${AUTO_FINISH_TIME} (server local time). Also runs at shift start (${String(SHIFT_START_HOUR).padStart(2,'0')}:${String(SHIFT_START_MINUTE).padStart(2,'0')}).`);
   setInterval(runAutoProductionFinishCheck, 60 * 1000); // check every minute
+  setInterval(runShiftStartAutoFinishCheck, 60 * 1000); // check every minute for shift-start cleanup
   setTimeout(runAutoProductionFinishCheck, 15 * 1000); // run once shortly after startup
+  setTimeout(runShiftStartAutoFinishCheck, 5 * 1000); // run stale cleanup shortly after startup
 } else {
   logger.info('Mobile production auto-finish is disabled via MOBILE_PRODUCTION_AUTO_FINISH_ENABLED=false.');
 }

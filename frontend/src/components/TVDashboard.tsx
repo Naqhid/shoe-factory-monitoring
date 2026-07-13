@@ -1082,6 +1082,17 @@ export const TVDashboard: React.FC = () => {
                             const wcLinePerf = linePerformanceRows.find((l: any) => Number(l.work_centre_id) === Number(wc.id));
                             const wcTarget = Number(wcLinePerf?.target ?? 0);
                             const wcOutput = Number(wcLinePerf?.output ?? 0);
+                            // Compute expectedNow and projectedEod for work-centre full-line card
+                            let wcExpectedNow: number | undefined;
+                            let wcProjectedEod: number | undefined;
+                            if (wcTarget > 0) {
+                                const { totalProductiveMins, elapsedProductiveMins } = getProductiveShiftTotals(currentTime);
+                                const elapsedMins = Math.max(0, elapsedProductiveMins);
+                                if (elapsedMins > 0 && totalProductiveMins > 0) {
+                                    wcExpectedNow = Math.round((wcTarget * elapsedMins) / totalProductiveMins);
+                                    wcProjectedEod = Math.round((wcOutput / elapsedMins) * totalProductiveMins);
+                                }
+                            }
                             return (
                                 <div key={wc.id} className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
                                     <TvMachinePacePanel
@@ -1090,8 +1101,8 @@ export const TVDashboard: React.FC = () => {
                                             lineName: wc.name,
                                             dailyTarget: wcTarget,
                                             lineOutput: wcOutput,
-                                            expectedNow: undefined,
-                                            projectedEod: undefined,
+                                            expectedNow: wcExpectedNow,
+                                            projectedEod: wcProjectedEod,
                                         }}
                                     />
                                 </div>

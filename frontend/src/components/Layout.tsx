@@ -149,7 +149,7 @@ export const Layout: React.FC<LayoutProps> = ({
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex items-center justify-center gap-1 p-2 sm:px-3 sm:py-2 text-sm text-white bg-red-500 hover:bg-red-600 active:bg-red-700 rounded-lg transition-colors shadow-sm touch-manipulation"
+                      className="hidden sm:flex items-center justify-center gap-1 p-2 sm:px-3 sm:py-2 text-sm text-white bg-red-500 hover:bg-red-600 active:bg-red-700 rounded-lg transition-colors shadow-sm touch-manipulation"
                       title="Logout"
                       aria-label="Logout"
                     >

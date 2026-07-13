@@ -1178,7 +1178,36 @@ const mobileSessionController = {
 
     // Internal utility: auto-finish any unfinished production cycles (used by scheduler)
     autoFinishUnfinishedProductions: async () => {
-        const [result] = await pool.execute(
+        const shiftEndHour = parseInt(process.env.SHIFT_END_HOUR || '17', 10);
+        const shiftEndMinute = parseInt(process.env.SHIFT_END_MINUTE || '35', 10);
+
+        // For cycles started on previous days, set finish_time to their day's shift-end
+        // so they don't accumulate absurd actual_time values across days.
+        const [staleResult] = await pool.execute(
+            `UPDATE machine_centre_production
+             SET
+               finish_time = CONCAT(DATE(start_time), ' ', LPAD(?, 2, '0'), ':', LPAD(?, 2, '0'), ':00'),
+               idle_stop_time = CASE
+                 WHEN button_status = 3 AND idle_start_time IS NOT NULL AND idle_stop_time IS NULL
+                   THEN CONCAT(DATE(start_time), ' ', LPAD(?, 2, '0'), ':', LPAD(?, 2, '0'), ':00')
+                 ELSE idle_stop_time
+               END,
+               output_pairs = CASE
+                 WHEN COALESCE(output_pairs, 0) <= 0 THEN 0
+                 ELSE output_pairs
+               END,
+               button_status = 2
+             WHERE button_status IN (1, 3)
+               AND DATE(start_time) < CURDATE()`,
+            [shiftEndHour, shiftEndMinute, shiftEndHour, shiftEndMinute]
+        );
+
+        if (staleResult.affectedRows > 0) {
+            logger.warn(`Auto-finish: closed ${staleResult.affectedRows} STALE production cycle(s) from previous days (finish set to shift-end of their start date).`);
+        }
+
+        // For today's open cycles, set finish_time to NOW()
+        const [todayResult] = await pool.execute(
             `UPDATE machine_centre_production
              SET
                finish_time = NOW(),
@@ -1191,16 +1220,20 @@ const mobileSessionController = {
                  ELSE output_pairs
                END,
                button_status = 2
-             WHERE button_status IN (1, 3)`
+             WHERE button_status IN (1, 3)
+               AND DATE(start_time) = CURDATE()`
         );
 
-        if (result.affectedRows > 0) {
-            logger.warn(`Auto-finish: closed ${result.affectedRows} unfinished production cycle(s).`);
-        } else {
+        if (todayResult.affectedRows > 0) {
+            logger.warn(`Auto-finish: closed ${todayResult.affectedRows} unfinished production cycle(s) from today.`);
+        }
+
+        const total = (staleResult.affectedRows || 0) + (todayResult.affectedRows || 0);
+        if (total === 0) {
             logger.info('Auto-finish: no unfinished production cycles found.');
         }
 
-        return result.affectedRows || 0;
+        return total;
     },
 
     // Internal utility: purge old expired sessions to keep table size manageable

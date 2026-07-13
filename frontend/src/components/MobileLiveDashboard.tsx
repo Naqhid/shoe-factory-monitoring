@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Square, Zap, TrendingUp, ArrowLeft, RefreshCw, LogOut } from 'lucide-react';
+import { Play, Square, Zap, TrendingUp, ArrowLeft, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { useMachineStatus, useDailyDashboardData } from '../hooks/useApi';
@@ -57,20 +57,6 @@ export const MobileLiveDashboard: React.FC = () => {
               title="Refresh"
             >
               <RefreshCw className={`h-6 w-6 text-gray-700 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              onClick={() => {
-                if (typeof localStorage !== 'undefined') {
-                  localStorage.removeItem('app_authenticated');
-                  localStorage.removeItem('mobile_authenticated');
-                }
-                navigate('/');
-                toast.success('Logged out');
-              }}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-              title="Logout"
-            >
-              <LogOut className="h-6 w-6 text-gray-700" />
             </button>
           </div>
         </div>
