@@ -72,6 +72,50 @@ const segmentColorBetween = (prevVal: number, currVal: number) => {
 
 type HourlySegmentLine = { dataKey: string; color: string };
 
+/** Extract the starting hour (0–23) from a formatted label like "9 AM - 10 AM" or "12 PM - 1 PM". */
+const extractStartHour = (label: string): number | null => {
+  const m = label.match(/^(\d{1,2})\s*(AM|PM)/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const ampm = m[2].toUpperCase();
+  if (ampm === 'AM' && h === 12) h = 0;
+  else if (ampm === 'PM' && h !== 12) h += 12;
+  return h;
+};
+
+/** Format an hour number (0–23) into the label format used by the backend, e.g. "12 PM - 1 PM". */
+const formatHourLabel = (hour: number): string => {
+  const fmt = (h: number) => {
+    if (h === 0) return '12 AM';
+    if (h < 12) return `${h} AM`;
+    if (h === 12) return '12 PM';
+    return `${h - 12} PM`;
+  };
+  return `${fmt(hour)} - ${fmt(hour + 1)}`;
+};
+
+/**
+ * Fill missing hourly slots between the first and last data point with 0 production.
+ * This ensures the chart always shows continuous hours (including lunch hours 12-1, 1-2).
+ */
+const fillMissingHours = (data: HourlyData[]): HourlyData[] => {
+  if (data.length <= 1) return data;
+  const hours = data.map(d => extractStartHour(d.hour)).filter((h): h is number => h !== null);
+  if (hours.length <= 1) return data;
+  const minHour = Math.min(...hours);
+  const maxHour = Math.max(...hours);
+  const dataMap = new Map<number, number>();
+  data.forEach(d => {
+    const h = extractStartHour(d.hour);
+    if (h !== null) dataMap.set(h, d.production);
+  });
+  const filled: HourlyData[] = [];
+  for (let h = minHour; h <= maxHour; h++) {
+    filled.push({ hour: formatHourLabel(h), production: dataMap.get(h) || 0 });
+  }
+  return filled;
+};
+
 /** One Recharts series per edge (only two non-null points) so segments never cross-connect. */
 const buildHourlySegmentLines = (data: HourlyData[]): {
   rows: HourlyChartRow[];
@@ -347,7 +391,15 @@ export const HourlyOutputChart: React.FC<Props> = ({
       };
       return getStartHour(a) - getStartHour(b);
     });
-    return hours.map(hour => {
+    // Fill missing hours between first and last
+    const hourNums = hours.map(h => extractStartHour(h)).filter((h): h is number => h !== null);
+    const minH = Math.min(...hourNums);
+    const maxH = Math.max(...hourNums);
+    const allHours: string[] = [];
+    for (let h = minH; h <= maxH; h++) {
+      allHours.push(formatHourLabel(h));
+    }
+    return allHours.map(hour => {
       const row: any = { hour };
       machineData.forEach(m => {
         const found = m.hourlyData.find(h => h.hour === hour);
@@ -374,11 +426,11 @@ export const HourlyOutputChart: React.FC<Props> = ({
     : null;
 
   const { rows: chartDataLine, segments: lineSegments } = buildHourlySegmentLines(
-    lineData?.hourlyData || []
+    fillMissingHours(lineData?.hourlyData || [])
   );
   const chartDataMachineAll = buildCombinedData();
   const { rows: chartDataMachineSingle, segments: machineSegments } = buildHourlySegmentLines(
-    activeMachine?.hourlyData || []
+    fillMissingHours(activeMachine?.hourlyData || [])
   );
 
   const noData = viewMode === 'line'

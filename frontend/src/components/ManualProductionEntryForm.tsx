@@ -4124,149 +4124,88 @@ export const ManualProductionEntryForm: React.FC = () => {
                               </tbody>
                             </table>
                           </div>
-                          {/* Mobile production cards - Enhanced for better visibility */}
-                          <div className="sm:hidden divide-y divide-gray-200">
-                            {/* Machine Summary Card */}
-                            <div className="px-3 py-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/60">
-                              <div className="flex flex-col gap-2">
-                                {/* Machine Title + Live Indicator */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex flex-col gap-1">
-                                      {mName && <p className="text-xs font-semibold text-indigo-700 bg-indigo-100 rounded px-2 py-1 inline-block truncate">{mName}</p>}
-                                      <h3 className="font-mono font-bold text-sm text-gray-900 truncate">({mid})</h3>
-                                    </div>
-                                  </div>
-                                  {machineHasLive && (
-                                    <div className="flex items-center gap-1.5 bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                                      <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                                      </span>
-                                      Live
-                                    </div>
-                                  )}
-                                </div>
-                                {/* Cycle count */}
-                                <div className="text-xs text-gray-600 font-medium">
-                                  {machineRows.length} cycle{machineRows.length !== 1 ? 's' : ''}
-                                </div>
-                                {/* Key Metrics Row */}
-                                <div className="grid grid-cols-3 gap-2 pt-1">
-                                  <div className="bg-white rounded-lg p-2.5 border border-blue-100 text-center">
-                                    <div className="text-gray-600 text-[10px] font-semibold uppercase tracking-wide">Output</div>
-                                    <div className="text-lg font-bold text-blue-700 mt-1">{sectionOutput}</div>
-                                  </div>
-                                  <div className="bg-white rounded-lg p-2.5 border border-green-100 text-center">
-                                    <div className="text-gray-600 text-[10px] font-semibold uppercase tracking-wide">Avg Eff.</div>
-                                    <div className="mt-1">{effBadge(sectionAvgEff)}</div>
-                                  </div>
-                                  <div className="bg-white rounded-lg p-2.5 border border-purple-100 text-center">
-                                    <div className="text-gray-600 text-[10px] font-semibold uppercase tracking-wide">Cycles</div>
-                                    <div className="text-lg font-bold text-purple-700 mt-1">{machineRows.length}</div>
-                                  </div>
-                                </div>
-                              </div>
+                          {/* Mobile production table - compact colorful layout */}
+                          <div className="sm:hidden overflow-x-auto">
+                            {/* Machine summary header */}
+                            <div className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center">
+                              <p className="font-bold text-sm">{mid}{mName ? ` - ${mName}` : ''} ({machineRows.length} cycles)</p>
+                              <p className="text-xs opacity-90">Out: <span className="font-bold">{sectionOutput}</span> &nbsp; Eff: <span className="font-bold">{sectionAvgEff != null ? `${sectionAvgEff}%` : '—'}</span></p>
                             </div>
-
-                            {/* Individual Cycle Cards */}
-                            <div className="divide-y-2 divide-blue-200">
-                              {machineRows.map((row: any) => {
-                                const rowStatus = Number(row.button_status || 0);
-                                const isActive = isProdCycleActive(rowStatus);
-                                const ctx = cycleContextMap.get(Number(row.id)) ?? {
-                                  prevFinishTime: null,
-                                  cycleNumber: 1,
-                                  operatorChanged: false,
-                                };
-                                const metrics = analyzeProdCycle(row, ctx, prodLiveNow);
-                                const eff = isActive ? null : metrics.efficiencyPct;
-                                const bgClass = isActive 
-                                  ? 'bg-gradient-to-br from-amber-50 to-orange-50/40' 
-                                  : metrics.isSuspicious 
-                                    ? 'bg-gradient-to-br from-red-50/60 to-rose-50/40' 
-                                    : 'bg-white';
-                                
-                                return (
-                                  <div key={row.id} className={`px-3 py-3 ${bgClass} transition-colors`}>
-                                    {/* Header: Cycle badge + Operator + Time */}
-                                    <div className="flex items-center gap-2 mb-2.5">
-                                      <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-600 text-white text-[11px] font-bold shrink-0 shadow-sm">
-                                        {metrics.cycleNumber}
-                                      </span>
-                                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                                        <span className="text-sm font-semibold text-gray-900 truncate">
-                                          {row.employee_name || row.emp_id}
-                                        </span>
-                                        <span className="text-gray-300 shrink-0">•</span>
-                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
-                                          <Clock className="h-3 w-3" aria-hidden />
-                                          {formatShortTime(row.start_time)} → {isActive ? 'now' : formatShortTime(row.finish_time)}
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    {/* Metrics: Output + Efficiency + Edit */}
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <div className="flex-1 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 p-2.5 border border-blue-100/80 text-center shadow-sm">
-                                        <div className="text-[9px] text-blue-500 font-bold uppercase tracking-wider">Output</div>
-                                        <div className="mt-1">
-                                          <span className="text-xl font-black text-blue-700 tabular-nums">{Number(row.output_pairs || 0)}</span>
-                                          <span className="text-[10px] text-blue-400 ml-1">pairs</span>
+                            <table className="w-full text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-gray-100 border-b-2 border-blue-300">
+                                  <th className="px-1.5 py-2 text-center font-bold text-gray-700">#</th>
+                                  <th className="px-1.5 py-2 text-center font-bold text-gray-700">Start</th>
+                                  <th className="px-1.5 py-2 text-center font-bold text-gray-700">Finish</th>
+                                  <th className="px-1.5 py-2 text-center font-bold text-gray-700">Actual</th>
+                                  <th className="px-1.5 py-2 text-center font-bold text-gray-700">Target</th>
+                                  <th className="px-1.5 py-2 text-center font-bold text-blue-700">Output</th>
+                                  <th className="px-1.5 py-2 text-center font-bold text-gray-700">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {machineRows.map((row: any) => {
+                                  const rowStatus = Number(row.button_status || 0);
+                                  const isActive = isProdCycleActive(rowStatus);
+                                  const ctx = cycleContextMap.get(Number(row.id)) ?? {
+                                    prevFinishTime: null,
+                                    cycleNumber: 1,
+                                    operatorChanged: false,
+                                  };
+                                  const metrics = analyzeProdCycle(row, ctx, prodLiveNow);
+                                  const dur = metrics.durationMins;
+                                  const rowBg = isActive
+                                    ? 'bg-amber-50'
+                                    : metrics.isSuspicious
+                                      ? 'bg-red-50'
+                                      : metrics.cycleNumber % 2 === 0
+                                        ? 'bg-blue-50/40'
+                                        : 'bg-white';
+                                  return (
+                                    <tr key={row.id} className={`${rowBg} border-b border-gray-200`}>
+                                      <td className="px-1.5 py-2 text-center font-bold text-gray-600 tabular-nums">{metrics.cycleNumber}</td>
+                                      <td className="px-1.5 py-2 text-center text-gray-800 tabular-nums font-medium">{formatShortTime(row.start_time)}</td>
+                                      <td className="px-1.5 py-2 text-center tabular-nums font-medium">
+                                        {isActive
+                                          ? <span className="text-amber-600 font-bold text-[10px]">Running</span>
+                                          : <span className="text-gray-800">{formatShortTime(row.finish_time)}</span>}
+                                      </td>
+                                      <td className="px-1.5 py-2 text-center tabular-nums font-medium text-purple-700">
+                                        {dur != null ? `${Math.round(dur)}m` : '—'}
+                                      </td>
+                                      <td className="px-1.5 py-2 text-center tabular-nums font-medium text-cyan-700">
+                                        {Math.round(Number(row.target_mins || 0))}m
+                                      </td>
+                                      <td className="px-1.5 py-2 text-center">
+                                        <span className="font-black text-base text-blue-700 tabular-nums">{Number(row.output_pairs || 0)}</span>
+                                      </td>
+                                      <td className="px-1.5 py-2 text-center">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleProdEdit(row)}
+                                            className="p-1 rounded text-blue-600 hover:bg-blue-100 border border-blue-200"
+                                            title="Edit"
+                                          >
+                                            <Edit className="h-3.5 w-3.5" aria-hidden />
+                                          </button>
+                                          {canMutate && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setProdDeleteCandidate(row)}
+                                              className="p-1 rounded text-red-500 hover:bg-red-100 border border-red-200"
+                                              title="Delete"
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                                            </button>
+                                          )}
                                         </div>
-                                      </div>
-                                      <div className="flex-1 rounded-xl bg-gradient-to-br from-emerald-50 to-green-50 p-2.5 border border-emerald-100/80 text-center shadow-sm">
-                                        <div className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider">Efficiency</div>
-                                        <div className="mt-1">{isActive ? <span className="text-sm text-amber-600 font-bold">Live</span> : effBadge(eff)}</div>
-                                      </div>
-                                      {canMutate && (
-                                        <button type="button" onClick={() => handleProdEdit(row)} className="flex items-center justify-center w-9 h-9 rounded-xl text-blue-600 bg-white border border-blue-200 hover:bg-blue-50 active:bg-blue-100 transition-colors shrink-0 shadow-sm" title="Edit cycle">
-                                          <Edit className="h-4 w-4" aria-hidden />
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    {/* Actual + Target + Delete */}
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <div className="flex-1 flex items-center justify-center gap-1.5 bg-purple-50/80 px-2 py-2 rounded-xl border border-purple-100/80">
-                                        <span className="text-[10px] font-semibold text-purple-500">Actual</span>
-                                        <span className="text-sm font-bold text-purple-700 tabular-nums">{metrics.durationMins != null ? `${metrics.durationMins.toFixed(1)}m` : '—'}</span>
-                                        {isActive && <span className="text-purple-400 text-xs">+</span>}
-                                      </div>
-                                      <div className="flex-1 flex items-center justify-center gap-1.5 bg-cyan-50/80 px-2 py-2 rounded-xl border border-cyan-100/80">
-                                        <span className="text-[10px] font-semibold text-cyan-500">Target</span>
-                                        <span className="text-sm font-bold text-cyan-700 tabular-nums">{Number(row.target_mins || 0).toFixed(1)}m</span>
-                                      </div>
-                                      {canMutate && (
-                                        <button type="button" onClick={() => setProdDeleteCandidate(row)} className="flex items-center justify-center w-9 h-9 rounded-xl text-red-500 bg-white border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors shrink-0 shadow-sm" title="Delete cycle">
-                                          <Trash2 className="h-4 w-4" aria-hidden />
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    {/* Running indicator */}
-                                    {isActive && (
-                                      <div className="flex items-center justify-center">
-                                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-4 py-1.5 rounded-full shadow-sm ring-1 ring-amber-200/60">
-                                          <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                                          Running
-                                        </span>
-                                      </div>
-                                    )}
-
-                                    {/* Flags */}
-                                    {metrics.anomalies.length > 0 && (
-                                      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-200/60">
-                                        <span className="inline-flex items-center gap-1 text-red-700 text-[10px] font-bold bg-red-50 px-2 py-0.5 rounded-full ring-1 ring-red-200/60">
-                                          <AlertTriangle className="h-3 w-3" aria-hidden />
-                                          {metrics.anomalies.length} flag{metrics.anomalies.length > 1 ? 's' : ''}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         </details>
                       );

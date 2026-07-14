@@ -2444,7 +2444,7 @@ export const MobileProduction: React.FC = () => {
                                                     : (totalOutputToday / planningPairsPerTray).toFixed(2)}
                                         </p>
                                         <p className="text-[11px] opacity-80">
-                                            ~bins at {planningPairsPerTray} pr/box (from planning)
+                                            ~boxes at {planningPairsPerTray} pr/box (from planning)
                                         </p>
                                     </div>
                                 </div>
