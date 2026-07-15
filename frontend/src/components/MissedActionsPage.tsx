@@ -30,6 +30,7 @@ import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { computeCycleNetLostMins, computeCycleNetGainMins } from '../utils/cycleLostMins';
 import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
+import { formatTime12NoAmPm, formatTime12NoAmPmSec } from '../utils/dateTimeFormat';
 import {
   formatOverdueLabel,
   formatRecoveryHint,
@@ -2006,8 +2007,8 @@ export const MissedActionsPage: React.FC = () => {
               const timeLoss = inactive + extra;
               return [
                 `${row.employee_name} (${row.employee_code})`,
-                row.start_time ? new Date(row.start_time).toLocaleTimeString() : '-',
-                row.finish_time ? new Date(row.finish_time).toLocaleTimeString() : '-',
+                row.start_time ? formatTime12NoAmPmSec(new Date(row.start_time)) : '-',
+                row.finish_time ? formatTime12NoAmPmSec(new Date(row.finish_time)) : '-',
                 formatMinutes(target),
                 formatMinutes(actual),
                 String(row.output_pairs ?? 0),
@@ -2642,7 +2643,7 @@ export const MissedActionsPage: React.FC = () => {
                         {contextCycles.map((c) => (
                           <div key={c.id} className="rounded-lg border border-gray-200 px-3 py-2 text-xs">
                             <div className="flex justify-between gap-2 font-semibold text-gray-800">
-                              <span>{c.start_time ? new Date(c.start_time).toLocaleTimeString() : '—'}</span>
+                              <span>{c.start_time ? (() => { const d = new Date(c.start_time); let h = d.getHours(); if (h > 12) h -= 12; if (h === 0) h = 12; return `${h}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`; })() : '—'}</span>
                               <span>{Number(c.output_pairs || 0)} pairs</span>
                             </div>
                             <p className="text-gray-500 mt-0.5">
@@ -3417,7 +3418,7 @@ export const MissedActionsPage: React.FC = () => {
                                     </span>
                                     {meta.lastActionAt && (
                                       <p className="text-[9px] text-gray-400 mt-0.5 tabular-nums">
-                                        {new Date(meta.lastActionAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {formatTime12NoAmPm(new Date(meta.lastActionAt))}
                                       </p>
                                     )}
                                   </div>
@@ -3885,8 +3886,8 @@ export const MissedActionsPage: React.FC = () => {
                                           <span className="text-[10px] font-semibold">{isOnTime ? <span className="text-green-600">✓ On Time</span> : <span className="text-red-500">✗ Late</span>}</span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[10px]">
-                                          <div><span className="text-gray-500">Start:</span> <span className="text-gray-700">{row.start_time ? new Date(row.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span></div>
-                                          <div><span className="text-gray-500">Finish:</span> <span className="text-gray-700">{row.finish_time ? new Date(row.finish_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span></div>
+                                          <div><span className="text-gray-500">Start:</span> <span className="text-gray-700">{row.start_time ? formatTime12NoAmPm(new Date(row.start_time)) : '-'}</span></div>
+                                          <div><span className="text-gray-500">Finish:</span> <span className="text-gray-700">{row.finish_time ? formatTime12NoAmPm(new Date(row.finish_time)) : '-'}</span></div>
                                           <div><span className="text-gray-500">Output:</span> <span className="font-semibold text-emerald-700">{row.output_pairs ?? 0}</span></div>
                                           <div><span className="text-gray-500">Target:</span> <span className="text-gray-700">{formatMinutes(row.target_mins)}</span></div>
                                           <div><span className="text-gray-500">Actual:</span> <span className="text-gray-700">{formatMinutes(row.actual_mins)}</span></div>
@@ -3942,8 +3943,8 @@ export const MissedActionsPage: React.FC = () => {
                                       return (
                                       <tr key={row.id}>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.employee_name} ({row.employee_code})</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.start_time ? new Date(row.start_time).toLocaleTimeString() : '-'}</td>
-                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.finish_time ? new Date(row.finish_time).toLocaleTimeString() : '-'}</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.start_time ? formatTime12NoAmPmSec(new Date(row.start_time)) : '-'}</td>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700">{row.finish_time ? formatTime12NoAmPmSec(new Date(row.finish_time)) : '-'}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{formatDurationString(row.target_mins)}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{formatDurationString(row.actual_mins)}</td>
                                         <td className="px-3 py-2.5 text-sm font-semibold text-emerald-700">{row.output_pairs ?? 0}</td>
@@ -4531,7 +4532,7 @@ export const MissedActionsPage: React.FC = () => {
                                               ? 'just now'
                                               : minsSinceEntry !== null && minsSinceEntry < 60
                                               ? `${minsSinceEntry}m ago`
-                                              : new Date(machine.last_entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                              : formatTime12NoAmPm(new Date(machine.last_entry_time))
                                             : '—'}
                                         </td>
                                       </tr>
@@ -4600,13 +4601,13 @@ export const MissedActionsPage: React.FC = () => {
                     <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
                       <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">First Entry</p>
                       <p className="text-sm font-semibold text-slate-900 mt-1">
-                        {m.first_entry_time ? new Date(m.first_entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                        {m.first_entry_time ? formatTime12NoAmPm(new Date(m.first_entry_time)) : '—'}
                       </p>
                     </div>
                     <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
                       <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Last Entry</p>
                       <p className="text-sm font-semibold text-slate-900 mt-1">
-                        {m.last_entry_time ? new Date(m.last_entry_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                        {m.last_entry_time ? formatTime12NoAmPm(new Date(m.last_entry_time)) : '—'}
                       </p>
                       {minsSince !== null && (
                         <p className={`text-xs mt-0.5 font-medium ${isGreen ? 'text-emerald-600' : 'text-amber-600'}`}>
@@ -5086,8 +5087,8 @@ export const MissedActionsPage: React.FC = () => {
                           `"${e.machine_name || e.machine_id}"`,
                           `"${e.work_centre_name}"`,
                           `"${e.start_time ? new Date(e.start_time).toLocaleDateString() : ''}"`,
-                          `"${e.start_time ? new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}"`,
-                          `"${e.finish_time ? new Date(e.finish_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}"`,
+                          `"${e.start_time ? formatTime12NoAmPm(new Date(e.start_time)) : ''}"`,
+                          `"${e.finish_time ? formatTime12NoAmPm(new Date(e.finish_time)) : ''}"`,
                           Math.round(e.inactive_mins || 0),
                           Math.round(e.extra_mins || 0),
                           `"${Math.round(e.inactive_mins || 0) > 0 && Math.round(e.extra_mins || 0) > 0 ? 'Late start + slow finish' : Math.round(e.inactive_mins || 0) > 0 ? 'Late start' : 'Slow finish'}"`,
@@ -5160,8 +5161,8 @@ export const MissedActionsPage: React.FC = () => {
                                           {e.employee_name} <span className="text-xs font-normal text-gray-400">({e.employee_code})</span>
                                         </td>
                                         {dailyLine === 'all' && <td className="px-3 py-3 text-sm text-gray-600">{e.work_centre_name}</td>}
-                                        <td className="px-3 py-3 text-sm text-gray-600">{e.start_time ? new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                                        <td className="px-3 py-3 text-sm text-gray-600">{e.finish_time ? new Date(e.finish_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                                        <td className="px-3 py-3 text-sm text-gray-600">{e.start_time ? formatTime12NoAmPm(new Date(e.start_time)) : '-'}</td>
+                                        <td className="px-3 py-3 text-sm text-gray-600">{e.finish_time ? formatTime12NoAmPm(new Date(e.finish_time)) : '-'}</td>
                                         <td className="px-3 py-3 text-sm">
                                           {late > 0 ? <span className="px-2 py-0.5 rounded-full text-sm font-semibold bg-blue-100 text-blue-700">{late}m late</span> : <span className="text-gray-300">—</span>}
                                         </td>

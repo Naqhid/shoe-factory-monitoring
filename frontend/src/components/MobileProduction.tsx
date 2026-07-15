@@ -7,6 +7,7 @@ import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { getEffectiveRole } from '../utils/roleConfig';
 import { classifyLateCycleCategory, computeCycleNetLostMins } from '../utils/cycleLostMins';
 import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours } from '../utils/shiftPaceUtils';
+import { formatTime12NoAmPm } from '../utils/dateTimeFormat';
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
 
@@ -2451,7 +2452,7 @@ export const MobileProduction: React.FC = () => {
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Date & Time</p>
-                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                        <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric' })} {formatTime12NoAmPm(currentTime)}</p>
                                     </div>
                                 </div>
                                 {loadingSummary && !dailyPaceSnapshot ? (

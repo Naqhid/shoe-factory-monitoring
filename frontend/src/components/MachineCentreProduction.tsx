@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { Clock, User, Factory, Cpu, Calendar } from 'lucide-react';
 
 import { API_BASE_URL } from '../services/api';
+import { formatTime12NoAmPm } from '../utils/dateTimeFormat';
 
 const API_BASE = `${API_BASE_URL}/api`;
 
@@ -312,7 +313,7 @@ export const MachineCentreProduction: React.FC = () => {
               <Clock className="h-4 w-4 flex-shrink-0" />
               <div className="min-w-0">
                 <p className="text-xs opacity-80">Date & Time</p>
-                <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                <p className="font-semibold text-xs">{currentTime.toLocaleString('en-US', { month: 'short', day: 'numeric' })} {formatTime12NoAmPm(currentTime)}</p>
               </div>
             </div>
           </div>

@@ -36,7 +36,7 @@ import { Reports } from './Reports';
 import { formatInput, formatWip } from '../utils/wipUtils';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals, SHIFT_END_MINUTES, SHIFT_START_MINUTES } from '../utils/shiftPaceUtils';
 import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
-import { formatSinceTimeHHMM } from '../utils/dateTimeFormat';
+import { formatSinceTimeHHMM, formatTime12NoAmPm } from '../utils/dateTimeFormat';
 import { TimeLossReasonDialog } from './TimeLossReasonDialog';
 import { ProductionDayLockPanel } from './ProductionDayLockPanel';
 import { LastWorkingDayCompareCard } from './LastWorkingDayCompareCard';
@@ -1470,7 +1470,7 @@ export const ProductionTracker: React.FC = () => {
                   />
                 </div>
                 <p className="mt-1.5 text-center text-[10px] text-slate-500">
-                  Now {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  Now {formatTime12NoAmPm(currentTime)}
                 </p>
               </div>
 
@@ -1893,7 +1893,7 @@ export const ProductionTracker: React.FC = () => {
                 <span>Live</span>
                 {dashboardLastUpdated && (
                   <span className="text-blue-200/90 tabular-nums">
-                    · {dashboardLastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    · {formatTime12NoAmPm(dashboardLastUpdated)}
                   </span>
                 )}
               </p>
@@ -2018,7 +2018,7 @@ export const ProductionTracker: React.FC = () => {
                   </div>
                   <div className="inline-flex w-fit items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 tabular-nums">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {formatTime12NoAmPm(currentTime)}
                   </div>
                 </div>
 

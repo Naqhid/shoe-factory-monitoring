@@ -493,14 +493,15 @@ export const ManualProductionEntryForm: React.FC = () => {
     if (!value) return '-';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    // 12hr format without AM/PM
+    if (hours > 12) hours -= 12;
+    if (hours === 0) hours = 12;
+    return `${day}/${month}/${year}, ${hours}:${minutes}`;
   };
 
   const formatDisplayDate = (value?: string | null) => formatProdDateKey(parseProdDateKey(value));
@@ -509,7 +510,12 @@ export const ManualProductionEntryForm: React.FC = () => {
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    // 12hr format without AM/PM: after 12:00, show 1:00, 2:00, etc.
+    if (hours > 12) hours -= 12;
+    if (hours === 0) hours = 12;
+    return `${hours}:${String(minutes).padStart(2, '0')}`;
   };
 
   const appendReasonChip = (chip: string) => {
@@ -4126,11 +4132,6 @@ export const ManualProductionEntryForm: React.FC = () => {
                           </div>
                           {/* Mobile production table - compact colorful layout */}
                           <div className="sm:hidden overflow-x-auto">
-                            {/* Machine summary header */}
-                            <div className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center">
-                              <p className="font-bold text-sm">{mid}{mName ? ` - ${mName}` : ''} ({machineRows.length} cycles)</p>
-                              <p className="text-xs opacity-90">Out: <span className="font-bold">{sectionOutput}</span> &nbsp; Eff: <span className="font-bold">{sectionAvgEff != null ? `${sectionAvgEff}%` : '—'}</span></p>
-                            </div>
                             <table className="w-full text-xs border-collapse">
                               <thead>
                                 <tr className="bg-gray-100 border-b-2 border-blue-300">

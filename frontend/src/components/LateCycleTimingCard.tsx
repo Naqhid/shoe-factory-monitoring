@@ -58,11 +58,14 @@ const TIPS = {
 } as const;
 
 function formatClock(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  const d = new Date(iso);
+  let hours = d.getHours();
+  const minutes = d.getMinutes();
+  const seconds = d.getSeconds();
+  // 12hr format without AM/PM
+  if (hours > 12) hours -= 12;
+  if (hours === 0) hours = 12;
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 function BreakdownRow({

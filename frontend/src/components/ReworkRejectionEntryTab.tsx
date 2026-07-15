@@ -4,7 +4,6 @@ import {
   Cpu,
   Edit,
   Loader2,
-  Package,
   Trash2,
   X,
 } from 'lucide-react';
@@ -240,12 +239,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
     const reworkQty = Number(form.reworkQty || 0);
     const rejectionQty = Number(form.rejectionQty || 0);
     const totalOutput = Number(form.totalOutput || 0);
-    if (reworkQty + rejectionQty > totalOutput) {
-      toast.error(`Rework + rejection cannot exceed total output (${totalOutput})`);
-      return;
-    }
-    if ((reworkQty > 0 || rejectionQty > 0) && (!form.reasonCategory || !form.reason.trim())) {
-      toast.error('Please select reason category and reason when entering rework or rejection');
+    if ((reworkQty > 0 || rejectionQty > 0) && !form.reasonCategory) {
+      toast.error('Please select a reason category when entering rework or rejection');
       return;
     }
     const reasonText = form.notes.trim()
@@ -604,59 +599,36 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
             <div className="overflow-y-auto flex-1 px-5 py-5 sm:px-6 space-y-5">
               <section className={`rounded-xl border p-4 ${REWORK_CFG.sectionClass}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
-                  Machine &amp; production
+                  Machine
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-                      <Cpu className="h-4 w-4 text-gray-400" aria-hidden />
-                      Machine Centre <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={form.machineId}
-                      onChange={(e) => setForm((prev) => ({ ...prev, machineId: e.target.value }))}
-                      disabled
-                      className={fieldCls}
-                    >
-                      <option value="">Select Machine</option>
-                      {machineCentres.map((mc) => (
-                        <option key={mc.id} value={mc.machine_id}>
-                          {mc.machine_id} - {mc.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-                      <Package className="h-4 w-4 text-gray-400" aria-hidden />
-                      Total output (pairs)
-                      {loadingOutput && (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500 ml-1" />
-                      )}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.totalOutput}
-                      disabled
-                      className={`${fieldCls} bg-gray-100 cursor-not-allowed`}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Bins completed: {binsCompleted(form.totalOutput, form.targetPairs)}
-                    </p>
-                  </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
+                    <Cpu className="h-4 w-4 text-gray-400" aria-hidden />
+                    Machine Centre <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={form.machineId}
+                    onChange={(e) => setForm((prev) => ({ ...prev, machineId: e.target.value }))}
+                    className={fieldCls}
+                  >
+                    <option value="">Select Machine</option>
+                    {machineCentres.map((mc) => (
+                      <option key={mc.id} value={mc.machine_id}>
+                        {mc.machine_id} - {mc.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </section>
 
               <section className={`rounded-xl border p-4 ${REWORK_CFG.sectionClass}`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Quantities</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Quantity</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Rework qty</label>
                     <input
                       type="number"
                       min="0"
-                      max={form.totalOutput}
                       value={form.reworkQty === 0 ? '' : form.reworkQty}
                       onChange={(e) =>
                         setForm((prev) => ({
@@ -673,7 +645,6 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                     <input
                       type="number"
                       min="0"
-                      max={form.totalOutput}
                       value={form.rejectionQty === 0 ? '' : form.rejectionQty}
                       onChange={(e) =>
                         setForm((prev) => ({
@@ -689,10 +660,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
               </section>
 
               <section className={`rounded-xl border p-4 ${REWORK_CFG.sectionClass}`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">M4 reason</h3>
-                <p className="text-xs text-gray-500 mb-3">
-                  Required when rework or rejection is greater than zero.
-                </p>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Reason</h3>
 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Reason Category <span className="text-red-500">*</span>
@@ -713,7 +681,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                 </div>
 
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Reason <span className="text-red-500">*</span>
+                  Typing <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -747,17 +715,6 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                     ))}
                   </div>
                 )}
-
-                <label className="block text-sm font-medium text-gray-700 mt-4 mb-1.5">
-                  Notes <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={form.notes}
-                  onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  className={`${fieldCls} resize-y min-h-[60px]`}
-                  placeholder="Optional detail (action taken, defect type, etc.)"
-                />
               </section>
             </div>
 
