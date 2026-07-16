@@ -25,6 +25,27 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('Unhandled UI error:', error, errorInfo);
+    // Auto-reload on stale chunk / dynamic import failures (PWA cache mismatch)
+    const msg = error?.message || '';
+    const isChunkError =
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Loading chunk') ||
+      msg.includes('Loading CSS chunk') ||
+      msg.includes('Importing a module script failed');
+    if (isChunkError) {
+      // Clear service worker caches and reload
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => caches.delete(name));
+        });
+      }
+      // Prevent reload loops: only auto-reload once per session
+      const reloadKey = 'pwa_chunk_reload';
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, '1');
+        window.location.reload();
+      }
+    }
   }
 
   private handleReload = () => {

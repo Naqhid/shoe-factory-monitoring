@@ -4172,10 +4172,10 @@ export const ManualProductionEntryForm: React.FC = () => {
                                           : <span className="text-gray-800">{formatShortTime(row.finish_time)}</span>}
                                       </td>
                                       <td className="px-1.5 py-2 text-center tabular-nums font-medium text-purple-700">
-                                        {dur != null ? `${Math.round(dur)}m` : '—'}
+                                        {dur != null ? (() => { const m = Math.floor(dur); const s = Math.round((dur - m) * 60); return s > 0 ? `${m}m ${s}s` : `${m}m`; })() : '—'}
                                       </td>
                                       <td className="px-1.5 py-2 text-center tabular-nums font-medium text-cyan-700">
-                                        {Math.round(Number(row.target_mins || 0))}m
+                                        {(() => { const t = Number(row.target_mins || 0); const m = Math.floor(t); const s = Math.round((t - m) * 60); return s > 0 ? `${m}m ${s}s` : `${m}m`; })()}
                                       </td>
                                       <td className="px-1.5 py-2 text-center">
                                         <span className="font-black text-base text-blue-700 tabular-nums">{Number(row.output_pairs || 0)}</span>
