@@ -21,6 +21,9 @@ export const MobileLineSelector: React.FC = () => {
   const [selectedLine, setSelectedLine] = useState<string>(() => {
     return sessionStorage.getItem('mobile_selected_line') || '';
   });
+  const [articleFilter, setArticleFilter] = useState<'active' | 'all'>('active');
+  const [activeLinesSet, setActiveLinesSet] = useState<Set<string>>(new Set());
+  const [loadingArticles, setLoadingArticles] = useState(true);
 
   // Persist selected line to sessionStorage
   useEffect(() => {
@@ -30,6 +33,32 @@ export const MobileLineSelector: React.FC = () => {
       sessionStorage.removeItem('mobile_selected_line');
     }
   }, [selectedLine]);
+
+  // Fetch active article assignments (which lines have an article today)
+  useEffect(() => {
+    setLoadingArticles(true);
+    apiFetch(`${API_BASE_URL}/api/line-schedule/board`)
+      .then(r => r.json())
+      .then(result => {
+        if (result.success && result.data?.lines) {
+          const activeNames = new Set<string>(
+            result.data.lines
+              .filter((line: any) => line.style_id)
+              .map((line: any) => line.work_centre_name as string)
+              .filter(Boolean)
+          );
+          setActiveLinesSet(activeNames);
+        } else {
+          // If API doesn't return expected data, fall back to showing all
+          setArticleFilter('all');
+        }
+      })
+      .catch(() => {
+        // If user doesn't have permission or request fails, default to all
+        setArticleFilter('all');
+      })
+      .finally(() => setLoadingArticles(false));
+  }, []);
 
   useEffect(() => {
     const userInfo = localStorage.getItem('user_info');
@@ -80,9 +109,15 @@ export const MobileLineSelector: React.FC = () => {
     );
   }
 
-  const filteredMachines = selectedLine
-    ? machines.filter(m => m.work_centre_name === selectedLine)
-    : machines;
+  const filteredMachines = (() => {
+    let result = selectedLine
+      ? machines.filter(m => m.work_centre_name === selectedLine)
+      : machines;
+    if (articleFilter === 'active') {
+      result = result.filter(m => m.work_centre_name && activeLinesSet.has(m.work_centre_name));
+    }
+    return result;
+  })();
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -108,7 +143,18 @@ export const MobileLineSelector: React.FC = () => {
           </div>
         )}
 
-        {loading ? (
+        <div className="mb-4">
+          <select
+            value={articleFilter}
+            onChange={e => setArticleFilter(e.target.value as 'active' | 'all')}
+            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="active">Active Article Only</option>
+            <option value="all">All Machines</option>
+          </select>
+        </div>
+
+        {loading || loadingArticles ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Building,
   ClipboardList,
   Cpu,
   Edit,
@@ -91,6 +92,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   selectedWorkCentre,
   selectedMachineCentre,
   machineCentres,
+  workCentres,
   isSupervisor,
   supervisorWorkCentreId,
   workCentreDisplayName,
@@ -104,6 +106,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(defaultFormState);
   const [loadingOutput, setLoadingOutput] = useState(false);
+  const [formWorkCentre, setFormWorkCentre] = useState('');
+  const [formMachineCentres, setFormMachineCentres] = useState<MachineCentre[]>([]);
 
   const wcId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
   const fieldCls = inputClass(REWORK_CFG.focusRing);
@@ -144,15 +148,15 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   }, [wcId, selectedDate, selectedMachineCentre, dateFrom, dateTo, refreshKey]);
 
   const loadMachineOutput = async (machineId: string) => {
-    if (!wcId || !selectedDate || !machineId) return;
+    if (!formWorkCentre || !selectedDate || !machineId) return;
     setLoadingOutput(true);
     try {
       const response = await apiFetch(
-        `${API_BASE_URL}/api/tv-dashboard/machine-centres/${wcId}?date=${selectedDate}`
+        `${API_BASE_URL}/api/tv-dashboard/machine-centres/${formWorkCentre}?date=${selectedDate}`
       );
       const result = await response.json();
       if (result.success && Array.isArray(result.data)) {
-        const machine = machineCentres.find((mc) => mc.machine_id === machineId);
+        const machine = formMachineCentres.find((mc) => mc.machine_id === machineId);
         const row = result.data.find(
           (r: { machine_centre_name?: string; machine_id?: string }) =>
             r.machine_centre_name === machine?.name ||
@@ -182,12 +186,45 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
     if (form.machineId && modalOpen) {
       void loadMachineOutput(form.machineId);
     }
-  }, [form.machineId, modalOpen, wcId, selectedDate]);
+  }, [form.machineId, modalOpen, formWorkCentre, selectedDate]);
+
+  // Fetch machine centres for the form's selected work centre
+  useEffect(() => {
+    const fetchFormMachineCentres = async () => {
+      if (!formWorkCentre) {
+        setFormMachineCentres([]);
+        return;
+      }
+      try {
+        const params = new URLSearchParams();
+        params.set('work_centre_id', formWorkCentre);
+        params.set('limit', '500');
+        const response = await apiFetch(`${API_BASE_URL}/api/masters/machine_centres?${params.toString()}`);
+        const result = await response.json();
+        if (result.success) {
+          setFormMachineCentres(result.data);
+          // Auto-select EOL (Final Output) machine if no machine is already selected
+          if (!form.machineId) {
+            const eolMachine = result.data.find((mc: MachineCentre) =>
+              /final\s*output|final\s*inspection/i.test(mc.name)
+            );
+            if (eolMachine) {
+              setForm((prev) => ({ ...prev, machineId: eolMachine.machine_id }));
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching machine centres for form:', error);
+      }
+    };
+    if (modalOpen) fetchFormMachineCentres();
+  }, [formWorkCentre, modalOpen]);
 
   const resetForm = () => {
     setEditId(null);
-    // Auto-select the EOL (Final Output) machine
-    const eolMachine = machineCentres.find((mc) =>
+    setFormWorkCentre(isSupervisor ? supervisorWorkCentreId : (selectedWorkCentre || ''));
+    // Auto-select the EOL (Final Output) machine from form's machine list
+    const eolMachine = formMachineCentres.find((mc) =>
       /final\s*output|final\s*inspection/i.test(mc.name)
     );
     setForm({ ...defaultFormState(), machineId: eolMachine?.machine_id || '' });
@@ -195,8 +232,11 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
 
   const openModal = (rec?: SavedRecord) => {
     if (rec) {
-      const machine = machineCentres.find((mc) => mc.name === rec.machine_centre_name);
+      // Try parent's machineCentres first; formMachineCentres will be loaded by useEffect
+      const machine = machineCentres.find((mc) => mc.name === rec.machine_centre_name)
+        || formMachineCentres.find((mc) => mc.name === rec.machine_centre_name);
       setEditId(rec.id);
+      setFormWorkCentre(isSupervisor ? supervisorWorkCentreId : (selectedWorkCentre || ''));
       setForm({
         machineId: machine?.machine_id || '',
         totalOutput: Number(rec.total_output_pairs || 0),
@@ -208,6 +248,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
         notes: '',
       });
     } else {
+      setFormWorkCentre(isSupervisor ? supervisorWorkCentreId : (selectedWorkCentre || ''));
       resetForm();
     }
     setModalOpen(true);
@@ -227,11 +268,11 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   });
 
   const saveEntry = async () => {
-    if (!wcId || !selectedDate) {
-      toast.error('Please select date and work centre');
+    if (!formWorkCentre || !selectedDate) {
+      toast.error('Please select date and work centre (line)');
       return;
     }
-    const machine = machineCentres.find((mc) => mc.machine_id === form.machineId);
+    const machine = formMachineCentres.find((mc) => mc.machine_id === form.machineId);
     if (!machine) {
       toast.error('Please select a machine');
       return;
@@ -288,7 +329,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            work_centre_id: Number(wcId),
+            work_centre_id: Number(formWorkCentre),
             production_date: selectedDate,
             rows: mergedRows,
           }),
@@ -364,8 +405,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => openModal()}
-          disabled={!wcId}
-          className={`w-full sm:w-auto text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium shadow-md transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${REWORK_CFG.addBtnClass}`}
+          className={`w-full sm:w-auto text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium shadow-md transition-all hover:shadow-lg ${REWORK_CFG.addBtnClass}`}
         >
           Add Entry
         </button>
@@ -599,25 +639,56 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
             <div className="overflow-y-auto flex-1 px-5 py-5 sm:px-6 space-y-5">
               <section className={`rounded-xl border p-4 ${REWORK_CFG.sectionClass}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
-                  Machine
+                  Line & Machine
                 </h3>
-                <div>
-                  <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-                    <Cpu className="h-4 w-4 text-gray-400" aria-hidden />
-                    Machine Centre <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={form.machineId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, machineId: e.target.value }))}
-                    className={fieldCls}
-                  >
-                    <option value="">Select Machine</option>
-                    {machineCentres.map((mc) => (
-                      <option key={mc.id} value={mc.machine_id}>
-                        {mc.machine_id} - {mc.name}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
+                      <Building className="h-4 w-4 text-gray-400" aria-hidden />
+                      Line <span className="text-red-500">*</span>
+                    </label>
+                    {isSupervisor ? (
+                      <input
+                        type="text"
+                        readOnly
+                        value={workCentreDisplayName || supervisorWorkCentreId}
+                        className={`${fieldCls} bg-gray-50 cursor-not-allowed`}
+                      />
+                    ) : (
+                      <select
+                        value={formWorkCentre}
+                        onChange={(e) => {
+                          setFormWorkCentre(e.target.value);
+                          setForm((prev) => ({ ...prev, machineId: '' }));
+                        }}
+                        className={fieldCls}
+                      >
+                        <option value="">Select Line</option>
+                        {workCentres.map((wc) => (
+                          <option key={wc.id} value={wc.id}>{wc.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
+                      <Cpu className="h-4 w-4 text-gray-400" aria-hidden />
+                      Machine Centre <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={form.machineId}
+                      onChange={(e) => setForm((prev) => ({ ...prev, machineId: e.target.value }))}
+                      disabled={!formWorkCentre}
+                      className={fieldCls}
+                    >
+                      <option value="">{formWorkCentre ? 'Select Machine' : 'Select a line first'}</option>
+                      {formMachineCentres.map((mc) => (
+                        <option key={mc.id} value={mc.machine_id}>
+                          {mc.machine_id} - {mc.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </section>
 

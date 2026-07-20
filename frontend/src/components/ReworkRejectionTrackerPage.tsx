@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Building, Cpu, Filter, X, RefreshCw } from 'lucide-react';
+import { Filter, X, RefreshCw } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import { getEffectiveRole } from '../utils/roleConfig';
 import { StoppageEntryTab } from './StoppageEntryTab';
@@ -253,50 +253,6 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Line and Machine filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                <span className="inline-flex items-center gap-1"><Building className="h-3 w-3" aria-hidden /> Line</span>
-              </label>
-              {isSupervisor ? (
-                <input
-                  type="text"
-                  readOnly
-                  value={userInfo?.work_centre_name || supervisorWorkCentreId}
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-700 cursor-not-allowed"
-                />
-              ) : (
-                <select
-                  value={selectedWorkCentre}
-                  onChange={(e) => setSelectedWorkCentre(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-400 transition-shadow"
-                >
-                  <option value="">All lines</option>
-                  {workCentres.map((wc) => (
-                    <option key={wc.id} value={wc.id}>{wc.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                <span className="inline-flex items-center gap-1"><Cpu className="h-3 w-3" aria-hidden /> Machine</span>
-              </label>
-              <select
-                value={selectedMachineCentre}
-                onChange={(e) => setSelectedMachineCentre(e.target.value)}
-                disabled
-                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 shadow-sm focus:outline-none cursor-not-allowed opacity-80 transition-shadow"
-              >
-                <option value="">All Machines</option>
-                {machineCentres.map((mc) => (
-                  <option key={mc.id} value={mc.name}>{mc.machine_id} - {mc.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
 
           {/* Load button */}
           <div className="mt-3 flex justify-end">
