@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="application-name" content="ProdPulse" />
+    <meta name="apple-mobile-web-app-title" content="ProdPulse" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="msapplication-TileColor" content="#2563eb" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>ProdPulse</title>
+    <style>
+      /* Hide Google Translate toolbar and top banner */
+      .goog-te-banner-frame, .skiptranslate { display: none !important; }
+      body { top: 0 !important; }
+      .goog-te-gadget { display: none !important; }
+      /* Hide the injected Google Translate spinner/logo */
+      .goog-te-spinner-pos { display: none !important; }
+      .goog-te-spinner { display: none !important; }
+      #goog-gt-tt, .goog-tooltip, .goog-tooltip:hover { display: none !important; }
+      .VIpgJd-ZVi9od-aZ2wEe-wOHMyf { display: none !important; }
+      .VIpgJd-ZVi9od-aZ2wEe { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <!-- Google Translate hidden widget container -->
+    <div id="google_translate_element" style="display:none"></div>
+    <div id="root">
+      <!-- Inline splash shown immediately while JS loads — prevents white screen on Android PWA -->
+      <div id="pwa-splash" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;background:#f9fafb;flex-direction:column;gap:12px;">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="animation:spin 1s linear infinite"><circle cx="24" cy="24" r="20" stroke="#2563eb" stroke-width="4" stroke-dasharray="80" stroke-dashoffset="60" stroke-linecap="round"/></svg>
+        <p style="font-family:system-ui,sans-serif;font-size:14px;color:#4b5563;font-weight:500;">Loading Production...</p>
+        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Fix Android PWA white screen: force repaint when app regains visibility
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+          // Force layout recalculation to fix frozen rendering
+          document.body.style.display = 'none';
+          document.body.offsetHeight; // trigger reflow
+          document.body.style.display = '';
+        }
+      });
+      // Also handle Android resume via focus
+      window.addEventListener('focus', function() {
+        if (document.getElementById('pwa-splash')) return; // Still loading, no issue
+        document.body.style.display = 'none';
+        document.body.offsetHeight;
+        document.body.style.display = '';
+      });
+    </script>
+  </body>
+</html>

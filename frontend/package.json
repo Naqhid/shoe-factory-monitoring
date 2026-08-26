@@ -1,0 +1,51 @@
+{
+  "name": "shoe-factory-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "homepage": "https://naqhid.github.io/shoe-factory-monitoring",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "build:lan": "tsc && vite build --mode lan",
+    "preview": "vite preview",
+    "generate-cert": "node generate-cert.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@zxing/library": "^0.20.0",
+    "axios": "^1.6.2",
+    "date-fns": "^2.30.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "lucide-react": "^0.294.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.4.1",
+    "react-qr-scanner": "1.0.0-alpha.11",
+    "react-query": "^3.39.3",
+    "react-router-dom": "^7.12.0",
+    "recharts": "^2.8.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.6.0",
+    "@types/node": "^26.1.0",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "jsdom": "^22.1.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8",
+    "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^1.6.0",
+    "workbox-window": "^7.4.0"
+  }
+}
