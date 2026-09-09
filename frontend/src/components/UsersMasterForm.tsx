@@ -12,6 +12,7 @@ interface UserRecord {
   code: string;
   name: string;
   role: string;
+  password?: string | null;
   work_centre_id?: number;
   work_centre_code?: string;
   work_centre_name?: string;
@@ -159,6 +160,7 @@ export const UsersMasterForm: React.FC = () => {
   };
 
   const filteredMachines = machineCentres;
+  const visibleRecords = records.filter((record) => record.role !== 'Admin');
 
   const resetForm = () => {
     setFormData({ code: '', name: '', password: '', role: defaultRole, work_centre_id: '', machine_id: '' });
@@ -209,7 +211,7 @@ export const UsersMasterForm: React.FC = () => {
     setFormData({
       code: record.code,
       name: record.name,
-      password: (record as any).password || '',
+      password: record.password || '',
       role: record.role,
       work_centre_id: record.work_centre_id?.toString() || '',
       machine_id: record.machine_id || ''
@@ -396,20 +398,23 @@ export const UsersMasterForm: React.FC = () => {
                 </label>
                 <div className="relative">
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={formData.role === 'Admin' ? 'password' : showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required={!editingRecord}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                  {formData.role !== 'Admin' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -534,7 +539,7 @@ export const UsersMasterForm: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {records.map((record, idx) => (
+              {visibleRecords.map((record, idx) => (
                 <tr key={record.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-blue-50/40'}>
                   <td className="px-3 sm:px-6 py-3.5 whitespace-nowrap text-sm font-semibold text-gray-900">
                     {record.code}
@@ -579,7 +584,7 @@ export const UsersMasterForm: React.FC = () => {
 
             {/* Mobile card layout */}
             <div className="md:hidden divide-y divide-gray-200">
-              {records.length > 0 ? records.map((record) => (
+              {visibleRecords.length > 0 ? visibleRecords.map((record) => (
                 <div key={record.id} className="p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -624,7 +629,7 @@ export const UsersMasterForm: React.FC = () => {
               )}
             </div>
 
-        {records.length === 0 && (
+        {visibleRecords.length === 0 && (
           <div className="hidden md:block text-center py-8 text-gray-500">
             {debouncedSearch ? 'No matching users found' : 'No users found'}
           </div>
