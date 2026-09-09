@@ -190,6 +190,7 @@ type ApiReportType =
   | 'breakdown';
 
 type ReportSubView = string;
+const ALL_MACHINES_VALUE = '__all__';
 
 const REPORT_SUB_VIEWS: Partial<Record<ReportType, { value: ReportSubView; label: string }[]>> = {
   attendance: [
@@ -2617,6 +2618,7 @@ export const Reports: React.FC = () => {
                 <label className={filterLabelClass}>Machine</label>
                 <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className={filterInputClass}>
                   <option value="">End-of-line (default)</option>
+                  <option value={ALL_MACHINES_VALUE}>All machines</option>
                   {filteredMachines.map((machine: any) => (
                     <option key={machine.id || machine.machine_id} value={machine.machine_id}>
                       {machine.machine_id}{' '}

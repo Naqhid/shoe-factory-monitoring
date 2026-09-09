@@ -108,7 +108,9 @@ export const MachineCentreProduction: React.FC = () => {
         return;
       }
 
-      const targetPairs = 12;
+      const targetPairs = Number(
+        planData.target_pairs_per_tray || planData.targetPairs || planData.target_pairs || 12
+      );
       const targetMins = planData.smv ? Math.round(planData.smv * targetPairs) : 60;
 
       const res = await axios.post(`${API_BASE}/machine-centre/start`, {

@@ -770,7 +770,7 @@ export const TVDashboard: React.FC = () => {
                             <h1 className="text-sm sm:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg tracking-tight truncate">{topSection.workCentreName}</h1>
                             {topSection.styleName && topSection.workCentreName !== 'Overall Performance' && (
                                 <span className="text-xs sm:text-sm font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full truncate">
-                                    {topSection.styleCode} — {topSection.styleName}
+                                    {topSection.styleName}
                                 </span>
                             )}
                             <button

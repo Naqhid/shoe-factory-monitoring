@@ -420,6 +420,18 @@ export const ManualProductionEntryForm: React.FC = () => {
     return byLine.filter((e) => !blockedEmpCodes.has(String(e.code)));
   }, [employees, workCentreId, activeSessions, machineId]);
 
+  const handleMachineChange = React.useCallback((nextMachineId: string) => {
+    setMachineId(nextMachineId);
+    const machine = machines.find((item) => String(item.machine_id) === String(nextMachineId));
+    if (machine?.work_centre_id != null) {
+      setWorkCentreId(String(machine.work_centre_id));
+      const selectedEmployee = employees.find((employee) => String(employee.code) === String(empId));
+      if (selectedEmployee && String(selectedEmployee.work_centre_id) !== String(machine.work_centre_id)) {
+        setEmpId('');
+      }
+    }
+  }, [machines, employees, empId]);
+
   const employeeSelectOptions = React.useMemo(
     () =>
       filteredEmployees.map((emp) => ({
@@ -2102,10 +2114,10 @@ export const ManualProductionEntryForm: React.FC = () => {
                     </label>
                     <select
                       value={machineId}
-                      onChange={(e) => setMachineId(e.target.value)}
+                      onChange={(e) => handleMachineChange(e.target.value)}
                       className={MANUAL_ENTRY_FIELD_CLS}
                       required
-                      disabled={loading || !workCentreId}
+                      disabled={loading}
                     >
                       <option value="">Select machine</option>
                       {filteredMachines.map((m) => (
