@@ -10,6 +10,7 @@
     "build:lan": "tsc && vite build --mode lan",
     "preview": "vite preview",
     "generate-cert": "node generate-cert.js",
+    "generate-icons": "node scripts/generate-pwa-icons.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -41,6 +42,7 @@
     "autoprefixer": "^10.4.16",
     "jsdom": "^22.1.0",
     "postcss": "^8.4.32",
+    "sharp": "^0.35.4",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
     "vite": "^5.0.8",
