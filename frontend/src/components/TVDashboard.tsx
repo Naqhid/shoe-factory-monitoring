@@ -475,20 +475,18 @@ export const TVDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        setDetailCarouselIndex(0);
-        setDetailCarouselProgress(0);
         setInsightCarouselIndex(0);
         setInsightCarouselProgress(0);
     }, [currentIndex]);
 
     useEffect(() => {
         setDetailCarouselProgress(0);
-        const rotateInterval = setInterval(() => {
+        const rotateTimeout = setTimeout(() => {
             setDetailCarouselIndex((prev) => (prev + 1) % DETAIL_CAROUSEL_SLIDES);
             setDetailCarouselProgress(0);
-        }, DETAIL_CAROUSEL_MS);
-        return () => clearInterval(rotateInterval);
-    }, [currentIndex]);
+        }, DETAIL_CAROUSEL_MS + 100);
+        return () => clearTimeout(rotateTimeout);
+    }, [detailCarouselIndex, DETAIL_CAROUSEL_SLIDES]);
 
     useEffect(() => {
         const tickMs = 100;
@@ -497,7 +495,7 @@ export const TVDashboard: React.FC = () => {
             setDetailCarouselProgress((prev) => Math.min(prev + increment, 100));
         }, tickMs);
         return () => clearInterval(interval);
-    }, [detailCarouselIndex, currentIndex]);
+    }, [detailCarouselIndex]);
 
     useEffect(() => {
         setInsightCarouselIndex((prev) => Math.min(prev, Math.max(0, insightSlideCount - 1)));
