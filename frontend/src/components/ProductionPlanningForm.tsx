@@ -111,6 +111,7 @@ export const ProductionPlanningForm: React.FC = () => {
   const [restoreId, setRestoreId] = React.useState<number | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [planDate, setPlanDate] = React.useState(() => todayDateKey());
+  const [planToDate, setPlanToDate] = React.useState(() => todayDateKey());
   const [lines, setLines] = React.useState<LineItem[]>([emptyLine()]);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(10);
@@ -303,9 +304,12 @@ export const ProductionPlanningForm: React.FC = () => {
   const handleAdd = () => {
     setEditingId(null);
     setPlanDate(filterDate || todayDateKey());
+    setPlanToDate(filterDate || todayDateKey());
     setLines([emptyLine()]);
     setShowModal(true);
   };
+
+  const addPlanLine = () => setLines((prev) => [...prev, emptyLine()]);
 
   const handleCopyPlansFrom = async (sourceDate: string) => {
     const workCentreId = lines[0]?.work_centre_id;
@@ -361,6 +365,7 @@ export const ProductionPlanningForm: React.FC = () => {
         const plan = result.data;
         setEditingId(id);
         setPlanDate(parseDateKey(plan.plan_date) || todayDateKey());
+        setPlanToDate(parseDateKey(plan.plan_date) || todayDateKey());
         setLines([{
           style_id: String(plan.style_id),
           customer_id: String(plan.customer_id),
@@ -480,9 +485,19 @@ export const ProductionPlanningForm: React.FC = () => {
       setLoading(false);
     } else {
       // Create new plans atomically
+      const dateKeys: string[] = [];
+      for (let cursor = parseDateKey(planDate); cursor && cursor <= planToDate; cursor = dayAfterDateKey(cursor)) {
+        dateKeys.push(cursor);
+        if (dateKeys.length > 366) break;
+      }
+      if (dateKeys.length === 0 || dateKeys.length > 366) {
+        toast.error('Choose a valid date range (maximum 366 days)');
+        setLoading(false);
+        return;
+      }
       const payload = {
-        lines: toSave.map((l) => ({
-          plan_date: planDate,
+        lines: dateKeys.flatMap((dateKey) => toSave.map((l) => ({
+          plan_date: dateKey,
           style_id: parseInt(l.style_id),
           customer_id: parseInt(l.customer_id),
           group_id: l.group_id ? parseInt(l.group_id) : null,
@@ -494,7 +509,7 @@ export const ProductionPlanningForm: React.FC = () => {
           tray_count: parseInt(l.tray_count || '0'),
           man_hours_minutes: parseInt(l.man_hours_minutes),
           smv_per_pair: parseFloat(l.smv_per_pair),
-        }))
+        })))
       };
       let ok = 0;
       try {
@@ -1227,6 +1242,16 @@ export const ProductionPlanningForm: React.FC = () => {
                           </button>
                         </>
                       )}
+                      {!editingId && (
+                        <button
+                          type="button"
+                          onClick={addPlanLine}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-semibold"
+                        >
+                          <Plus className="h-3.5 w-3.5" aria-hidden />
+                          Add line
+                        </button>
+                      )}
                       <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200">
                         Routing fields auto-fill when you pick a style
                       </span>
@@ -1260,10 +1285,26 @@ export const ProductionPlanningForm: React.FC = () => {
                                 <input
                                   type="date"
                                   value={planDate}
-                                  onChange={(e) => setPlanDate(e.target.value)}
+                                  onChange={(e) => {
+                                    setPlanDate(e.target.value);
+                                    if (planToDate < e.target.value) setPlanToDate(e.target.value);
+                                  }}
                                   className={cellInput}
                                   required
                                 />
+                                {!editingId && (
+                                  <>
+                                    <label className="block text-[10px] font-bold uppercase text-gray-500 mt-2 mb-1">To date</label>
+                                    <input
+                                      type="date"
+                                      value={planToDate}
+                                      min={planDate}
+                                      onChange={(e) => setPlanToDate(e.target.value)}
+                                      className={cellInput}
+                                      required
+                                    />
+                                  </>
+                                )}
                                 {!editingId && (
                                   <p className="text-[10px] text-gray-500 mt-1 leading-tight">
                                     Copy from today ({todaySourceLabel}) or yesterday ({yesterdaySourceLabel})
@@ -1366,10 +1407,26 @@ export const ProductionPlanningForm: React.FC = () => {
                       <input
                         type="date"
                         value={planDate}
-                        onChange={(e) => setPlanDate(e.target.value)}
+                        onChange={(e) => {
+                          setPlanDate(e.target.value);
+                          if (planToDate < e.target.value) setPlanToDate(e.target.value);
+                        }}
                         className={cellInput}
                         required
                       />
+                      {!editingId && (
+                        <>
+                          <label className="block text-[10px] font-bold uppercase text-gray-500 mt-2 mb-1">To date</label>
+                          <input
+                            type="date"
+                            value={planToDate}
+                            min={planDate}
+                            onChange={(e) => setPlanToDate(e.target.value)}
+                            className={cellInput}
+                            required
+                          />
+                        </>
+                      )}
                     </div>
                     {modalLines.map((line, idx) => (
                       <div key={`plan-line-mobile-${idx}-${line.work_centre_id || 'new'}`} className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">

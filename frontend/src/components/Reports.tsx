@@ -674,7 +674,7 @@ export const Reports: React.FC = () => {
           toDate: range.to,
           datePreset: urlPreset || 'today' as DatePreset,
           selectedLine: urlLine || '',
-          selectedMachine: urlMachine || '',
+          selectedMachine: urlMachine || ALL_MACHINES_VALUE,
           search: urlSearch || '',
           limit: urlLimit && !Number.isNaN(Number(urlLimit)) ? Number(urlLimit) : 10,
         };
@@ -694,7 +694,7 @@ export const Reports: React.FC = () => {
           toDate: saved.toDate || getPresetRange('today').to,
           datePreset: saved.datePreset || 'today' as DatePreset,
           selectedLine: saved.selectedLine || '',
-          selectedMachine: saved.selectedMachine || '',
+          selectedMachine: saved.selectedMachine || ALL_MACHINES_VALUE,
           search: saved.search || '',
           limit: saved.limit || 10,
         };
@@ -708,7 +708,7 @@ export const Reports: React.FC = () => {
       toDate: range.to,
       datePreset: 'today' as DatePreset,
       selectedLine: '',
-      selectedMachine: '',
+      selectedMachine: ALL_MACHINES_VALUE,
       search: '',
       limit: 10,
     };
@@ -944,9 +944,9 @@ export const Reports: React.FC = () => {
   }, [machines, selectedLine]);
 
   React.useEffect(() => {
-    if (!selectedMachine) return;
+    if (!selectedMachine || selectedMachine === ALL_MACHINES_VALUE) return;
     const stillExists = filteredMachines.some((m: any) => String(m.machine_id) === String(selectedMachine));
-    if (!stillExists) setSelectedMachine('');
+    if (!stillExists) setSelectedMachine(ALL_MACHINES_VALUE);
   }, [filteredMachines, selectedMachine]);
 
   const validateDateRange = React.useCallback(() => {
@@ -983,7 +983,7 @@ export const Reports: React.FC = () => {
     setFromDate(todayRange.from);
     setToDate(todayRange.to);
     setSelectedLine('');
-    setSelectedMachine('');
+    setSelectedMachine(ALL_MACHINES_VALUE);
     setSearch('');
     setPage(1);
     setError(null);
@@ -1277,7 +1277,7 @@ export const Reports: React.FC = () => {
         );
       }
       if (reportType === 'hourly-production') {
-        filterLines.push(selectedMachine ? `Machine: ${selectedMachine}` : 'Machine: End-of-line (07)');
+        filterLines.push(selectedMachine === ALL_MACHINES_VALUE ? 'Machine: All machines' : `Machine: ${selectedMachine}`);
       }
       if (search.trim()) filterLines.push(`Search: ${search.trim()}`);
 
@@ -1600,7 +1600,7 @@ export const Reports: React.FC = () => {
       chips.push(`Line: ${workCentres.find((w) => String(w.id) === String(selectedLine))?.name || selectedLine}`);
     }
     if (reportType === 'hourly-production') {
-      chips.push(selectedMachine ? `Machine: ${selectedMachine}` : 'Machine: End-of-line (07)');
+      chips.push(selectedMachine === ALL_MACHINES_VALUE ? 'Machine: All machines' : `Machine: ${selectedMachine}`);
     }
     if (search.trim()) chips.push(`Search: ${search.trim()}`);
     if (supportsPeriodCompare && compareMode !== 'none') {
@@ -2617,7 +2617,6 @@ export const Reports: React.FC = () => {
               <div>
                 <label className={filterLabelClass}>Machine</label>
                 <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className={filterInputClass}>
-                  <option value="">End-of-line (default)</option>
                   <option value={ALL_MACHINES_VALUE}>All machines</option>
                   {filteredMachines.map((machine: any) => (
                     <option key={machine.id || machine.machine_id} value={machine.machine_id}>
@@ -2867,7 +2866,7 @@ export const Reports: React.FC = () => {
                   <span className="text-xs font-medium text-slate-600">
                     {fmtDate(fromDate)} — {fmtDate(toDate)}
                     {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
-                    {reportType === 'hourly-production' && selectedMachine && ` · M${selectedMachine}`}
+                    {reportType === 'hourly-production' && selectedMachine && selectedMachine !== ALL_MACHINES_VALUE && ` · M${selectedMachine}`}
                   </span>
                 </div>
               </div>

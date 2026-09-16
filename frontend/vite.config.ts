@@ -10,6 +10,11 @@ const certFile = path.join(certPath, 'cert.pem')
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  /** Enable HTTPS automatically when cert files exist (needed for PWA install over LAN IP). */
+  const httpsConfig =
+    fs.existsSync(keyFile) && fs.existsSync(certFile)
+      ? { key: fs.readFileSync(keyFile), cert: fs.readFileSync(certFile) }
+      : undefined
   /** Factory LAN without internet: set VITE_DISABLE_PWA=true so Chrome is not blocked by a service worker. */
   const disablePwa = env.VITE_DISABLE_PWA === 'true'
   /** Split-dev proxy — set VITE_DEV_API_PROXY in frontend/.env.local (develop: 3001, feature: 3101). */
@@ -125,9 +130,9 @@ export default defineConfig(({ mode }) => {
     },
   },
   server: {
-    port: 3000,
+    port: 3002,
     host: '0.0.0.0',
-    https: false,
+    https: httpsConfig,
     ...(devApiProxy ? { proxy: devApiProxy } : {}),
   },
   optimizeDeps: {

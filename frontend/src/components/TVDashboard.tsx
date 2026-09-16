@@ -1009,10 +1009,10 @@ export const TVDashboard: React.FC = () => {
                                         style={{ animationDelay: `${Math.min(index, 12) * 55 + 40}ms` }}
                                     >
                                         <td className="px-2 py-2 font-semibold text-gray-800">{line.line_name}</td>
-                                        <td className="px-2 py-2 truncate max-w-[100px]" title={line.style_name || ''}>
-                                            {line.style_code ? (
+                                        <td className="px-2 py-2 truncate max-w-[100px]" title={line.style_name || line.style_code || ''}>
+                                            {line.style_name || line.style_code ? (
                                                 <span className="inline-flex px-2.5 py-1 rounded-lg text-xs font-black bg-indigo-600 text-white shadow-sm">
-                                                    {line.style_code}
+                                                    {line.style_name || line.style_code}
                                                 </span>
                                             ) : '—'}
                                         </td>

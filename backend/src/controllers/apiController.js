@@ -209,6 +209,7 @@ class ApiController {
 
   async getHourlyProductionStatus(req, res) {
     try {
+      res.set('Cache-Control', 'no-store');
       const { fromDate, toDate, workCentreId, machineId, search, page, limit } = req.query;
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
@@ -259,11 +260,11 @@ class ApiController {
         LEFT JOIN groups_master g ON pp.group_id = g.id
         ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${where}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, mcp.machine_id, wc.name, pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [rawRows] = await db.query(`
-        SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, wc.name as line, c.name as customer, s.name as article_no,
+        SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, mcp.machine_id, wc.name as line, c.name as customer, s.name as article_no,
           col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
           COALESCE(line_input.total_input, 0) as total_input,

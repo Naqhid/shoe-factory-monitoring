@@ -1477,6 +1477,8 @@ export const ManualProductionEntryForm: React.FC = () => {
     try {
       const row = prodRecords.find(r => r.id === editingProdId);
       if (!row) return;
+      const outputPairs = Math.max(0, Number(prodOutputPairs) || 0);
+      const targetMins = Math.round((Number(prodTargetMins) || 0) * (outputPairs / 6) * 10) / 10;
       const machineKeyToReopen = String(row.machine_id);
       const toLocal = (v: string) => {
         if (!v) return null;
@@ -1492,8 +1494,8 @@ export const ManualProductionEntryForm: React.FC = () => {
           work_centre_id: row.work_centre_id,
           machine_id: row.machine_id,
           emp_id: row.emp_id,
-          output_pairs: Number(prodOutputPairs),
-          target_mins: Number(prodTargetMins),
+          output_pairs: outputPairs,
+          target_mins: targetMins,
           start_time: toLocal(prodStartTime),
           finish_time: toLocal(prodFinishTime),
         }),
@@ -2099,9 +2101,9 @@ export const ManualProductionEntryForm: React.FC = () => {
                       onChange={(e) => setWorkCentreId(e.target.value)}
                       className={MANUAL_ENTRY_FIELD_CLS}
                       required
-                      disabled={loading}
+                      disabled={loading || !machineId}
                     >
-                      <option value="">Select line</option>
+                      <option value="">{machineId ? 'Line auto-selected' : 'Select machine first'}</option>
                       {workCentres.map((wc) => (
                         <option key={wc.id} value={wc.id}>{wc.name}</option>
                       ))}
@@ -2151,7 +2153,7 @@ export const ManualProductionEntryForm: React.FC = () => {
                       placeholder="Select employee"
                       searchPlaceholder="Search by code or name..."
                       required
-                      disabled={loading || !workCentreId}
+                      disabled={loading || !machineId || !workCentreId}
                     />
                   </div>
                 </div>
@@ -3717,8 +3719,20 @@ export const ManualProductionEntryForm: React.FC = () => {
                         <input type="number" min="0" value={prodOutputPairs} onChange={e => setProdOutputPairs(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Target Mins</label>
-                        <input type="number" min="0" step="0.1" value={prodTargetMins} onChange={e => setProdTargetMins(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Target Mins (auto)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={(Math.round((Number(prodTargetMins) || 0) * ((Math.max(0, Number(prodOutputPairs) || 0)) / 6) * 10) / 10).toFixed(1)}
+                          onChange={(e) => {
+                            const output = Math.max(1, Number(prodOutputPairs) || 0);
+                            const target = Math.max(0, Number(e.target.value) || 0);
+                            setProdTargetMins(String(Math.round((target * 6 / output) * 10) / 10));
+                          }}
+                          className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Auto-scales with output pairs; editable when needed</p>
                       </div>
                     </div>
                     <div className="flex gap-3 mt-5">
