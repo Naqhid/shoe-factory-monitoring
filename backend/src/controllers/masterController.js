@@ -302,7 +302,9 @@ class MasterController {
         }
         const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
         [rows] = await db.query(
-          `SELECT u.id, u.code, u.name, u.role, u.password, u.work_centre_id, u.machine_id, wc.code as work_centre_code, wc.name as work_centre_name 
+           `SELECT u.id, u.code, u.name, u.role,
+             CASE WHEN LOWER(COALESCE(u.role, '')) <> 'admin' AND INSTR(u.password, ':') = 0 THEN u.password ELSE NULL END AS password,
+             u.work_centre_id, u.machine_id, wc.code as work_centre_code, wc.name as work_centre_name 
            FROM users u 
            LEFT JOIN work_centres wc ON u.work_centre_id = wc.id
            ${styleJoin}
