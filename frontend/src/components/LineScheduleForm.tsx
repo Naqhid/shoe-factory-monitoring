@@ -131,7 +131,7 @@ export const LineScheduleForm: React.FC = () => {
 
   const loadMasters = React.useCallback(async () => {
     try {
-      const res = await apiFetch(`${API_BASE}/api/masters/styles`);
+      const res = await apiFetch(`${API_BASE}/api/masters/styles?limit=500`);
       const json = await res.json();
       if (json.success) setStyles(json.data || []);
     } catch {
