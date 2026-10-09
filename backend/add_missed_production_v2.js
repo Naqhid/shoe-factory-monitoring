@@ -3,7 +3,7 @@ const db = require('./config/database');
 
 async function addMissedProduction() {
   try {
-    const today = '2026-04-20';
+    const today = '2026-04-20'; 
     console.log(`Adding missed production data for date: ${today}`);
 
     // Machine 01 - S. Mythi (165) - Bin 1: 09:00 to 09:45
