@@ -23,6 +23,7 @@ import {
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
+import { SearchableSelect } from './SearchableSelect';
 import * as XLSX from 'xlsx';
 import { todayDateKey, dayBeforeDateKey, dayAfterDateKey, parseDateKey } from '../utils/compareDateUtils';
 
@@ -130,6 +131,14 @@ export const ProductionPlanningForm: React.FC = () => {
     tomorrow: PlanGapDay | null;
     loading: boolean;
   }>({ today: null, tomorrow: null, loading: true });
+  const styleOptions = React.useMemo(
+    () => styles.map((style) => ({
+      value: String(style.id),
+      label: style.name,
+      subLabel: style.code,
+    })),
+    [styles]
+  );
 
   const fetchPlanGaps = React.useCallback(async () => {
     const todayKey = todayDateKey();
@@ -232,14 +241,35 @@ export const ProductionPlanningForm: React.FC = () => {
   const fetchMasters = async () => {
     try {
       const [stylesRes, wcRes] = await Promise.all([
-        apiFetch(`${API_BASE}/api/masters/styles`),
+        apiFetch(`${API_BASE}/api/masters/styles?limit=500`),
         apiFetch(`${API_BASE}/api/masters/work_centres`)
       ]);
       const [stylesData, wcData] = await Promise.all([stylesRes.json(), wcRes.json()]);
-      if (stylesData.success) setStyles(stylesData.data);
+      if (!stylesRes.ok || !stylesData.success) {
+        throw new Error(stylesData.error || 'Failed to load styles');
+      }
+      if (!wcRes.ok || !wcData.success) {
+        throw new Error(wcData.error || 'Failed to load work centres');
+      }
+
+      const totalPages = Math.max(1, Number(stylesData.pagination?.totalPages) || 1);
+      const remainingStylePages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, index) =>
+          apiFetch(`${API_BASE}/api/masters/styles?page=${index + 2}&limit=500`)
+        )
+      );
+      const remainingStyles = await Promise.all(remainingStylePages.map(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to load all styles');
+        }
+        return data.data as MasterOption[];
+      }));
+      setStyles([...stylesData.data, ...remainingStyles.flat()]);
       if (wcData.success) setWorkCentres(wcData.data);
     } catch (error) {
-      toast.error('Error loading master data');
+      console.error('Error loading production planning masters:', error);
+      toast.error(error instanceof Error ? error.message : 'Error loading master data');
     }
   };
 
@@ -938,19 +968,17 @@ export const ProductionPlanningForm: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Style</label>
-              <select
+              <SearchableSelect
                 value={filterStyle}
-                onChange={(e) => {
-                  setFilterStyle(e.target.value);
+                options={styleOptions}
+                onChange={(value) => {
+                  setFilterStyle(value);
                   setCurrentPage(1);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-              >
-                <option value="">All styles</option>
-                {styles.map((s) => (
-                  <option key={s.id} value={String(s.id)}>{s.name}</option>
-                ))}
-              </select>
+                placeholder="All styles"
+                searchPlaceholder="Search styles..."
+                footerCountLabel="styles"
+              />
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1316,17 +1344,18 @@ export const ProductionPlanningForm: React.FC = () => {
                               <input readOnly value={line.customer_name} className={cellReadOnly} placeholder="From routing" />
                             </td>
                             <td className="py-2 px-2 align-top min-w-[130px]">
-                              <select
+                              <SearchableSelect
                                 value={line.style_id}
-                                onChange={(e) => handleStyleChange(idx, e.target.value)}
-                                className={`${cellInput} ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50 focus:ring-red-300' : ''}`}
+                                onChange={(value) => handleStyleChange(idx, value)}
+                                options={styleOptions}
+                                className="w-full"
+                                invalid={Boolean(line.style_id && !line.smv_per_pair)}
+                                compact
                                 required
-                              >
-                                <option value="">Style</option>
-                                {styles.map((s) => (
-                                  <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                              </select>
+                                placeholder="Style"
+                                searchPlaceholder="Search styles..."
+                                footerCountLabel="styles"
+                              />
                               {line.style_id && !line.smv_per_pair && (
                                 <p className="text-[10px] text-red-600 mt-0.5 leading-tight">No routing</p>
                               )}
@@ -1436,17 +1465,18 @@ export const ProductionPlanningForm: React.FC = () => {
                         <div className="grid grid-cols-2 gap-2">
                           <div className="col-span-2">
                             <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Style *</label>
-                            <select
+                            <SearchableSelect
                               value={line.style_id}
-                              onChange={(e) => handleStyleChange(idx, e.target.value)}
-                              className={`${cellInput} ${line.style_id && !line.smv_per_pair ? 'border-red-400 bg-red-50 focus:ring-red-300' : ''}`}
+                              onChange={(value) => handleStyleChange(idx, value)}
+                              options={styleOptions}
+                              className="w-full"
+                              invalid={Boolean(line.style_id && !line.smv_per_pair)}
+                              compact
                               required
-                            >
-                              <option value="">Select style</option>
-                              {styles.map((s) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                              ))}
-                            </select>
+                              placeholder="Select style"
+                              searchPlaceholder="Search styles..."
+                              footerCountLabel="styles"
+                            />
                             {line.style_id && !line.smv_per_pair && (
                               <p className="text-[10px] text-red-600 mt-0.5">No routing found</p>
                             )}
@@ -1642,7 +1672,5 @@ export const ProductionPlanningForm: React.FC = () => {
     </div>
   );
 };
-
-
 
 

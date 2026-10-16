@@ -19,6 +19,7 @@ interface SearchableSelectProps {
   footerCountLabel?: string;
   disabled?: boolean;
   required?: boolean;
+  invalid?: boolean;
   compact?: boolean;
   id?: string;
   className?: string;
@@ -56,6 +57,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   footerCountLabel = 'options',
   disabled = false,
   required = false,
+  invalid = false,
   compact = false,
   id,
   className = '',
@@ -374,7 +376,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         onKeyDown={onTriggerKeyDown}
         className={`w-full flex items-center gap-2 rounded-lg border bg-white text-left shadow-sm transition-all
           ${triggerPadding}
-          ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200' : 'hover:border-indigo-300 border-gray-300 cursor-pointer'}
+          ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200' : invalid ? 'border-red-400 bg-red-50 hover:border-red-500 cursor-pointer' : 'hover:border-indigo-300 border-gray-300 cursor-pointer'}
           ${open ? 'ring-2 ring-indigo-400 border-indigo-400' : ''}
           ${selected ? 'bg-indigo-50/30' : ''}`}
       >
