@@ -22,9 +22,14 @@ export function rowDateKey(date: unknown): string {
   return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
-export function hourlyCompareKey(row: { date?: unknown; work_centre_id?: unknown; line?: unknown }) {
+export function hourlyCompareKey(row: {
+  date?: unknown;
+  work_centre_id?: unknown;
+  line?: unknown;
+  machine_id?: unknown;
+}) {
   const wc = row.work_centre_id != null && row.work_centre_id !== '' ? String(row.work_centre_id) : String(row.line ?? '');
-  return `${rowDateKey(row.date)}|${wc}`;
+  return `${rowDateKey(row.date)}|${wc}|${row.machine_id ?? ''}`;
 }
 
 export function lineEffCompareKey(row: {

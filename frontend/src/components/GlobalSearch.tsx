@@ -229,7 +229,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearchChange }) =>
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Search everything..."
-          className="w-48 pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+          className="w-48 pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900 placeholder-gray-600 placeholder-opacity-100"
         />
         {query && (
           <button

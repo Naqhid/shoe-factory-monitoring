@@ -1195,7 +1195,7 @@ export const ProductionPlanningForm: React.FC = () => {
             role="presentation"
           >
             <div
-              className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-[min(100vw,1400px)] max-h-[100dvh] sm:h-auto sm:max-h-[95vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-[96vw] sm:max-w-[min(100vw,1760px)] max-h-[100dvh] sm:h-auto sm:max-h-[98vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-black/5"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"

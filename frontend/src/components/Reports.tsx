@@ -6,7 +6,7 @@ import html2canvas from 'html2canvas';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import * as XLSX from 'xlsx';
-import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
+import { minutesToDurationParts } from '../utils/formatCycleDuration';
 import {
   addDaysToDateKey,
   computeCompareDelta,
@@ -387,7 +387,9 @@ const CompareDeltaCell: React.FC<{
 const formatNetBalanceLabel = (netMins: number) => {
   const parts = minutesToDurationParts(Math.abs(netMins));
   const status = Math.abs(netMins) * 60 < 1 ? 'neutral' : netMins > 0 ? 'gain' : 'loss';
-  return { parts, status, text: `${formatDurationString(netMins)} ${status}` };
+  // Net balance is always shown in minutes (not hours) per reporting requirement.
+  const mins = Math.round(Math.abs(netMins));
+  return { parts, status, text: `${mins} m ${status}` };
 };
 
 const netBalanceBadge = (netMins: number) => {
@@ -409,6 +411,8 @@ const HEADER_MAP: Record<string, string> = {
   date: 'Date', line: 'Line', customer: 'Customer', article_no: 'Article No',
   color: 'Color', leather: 'Leather', group: 'Group', total_planned_qty: 'Total Planned',
   total_output: 'Total Output', avg_hourly_output: 'Avg Hourly Output',
+  input_vs_output: 'Input vs Output', input_vs_output_percent: 'Input vs Output %',
+  planned_vs_output_percent: 'Planned vs Output %',
   '9_10': '9-10', '10_11': '10-11', '11_12': '11-12', '12_1': '12-1',
   '2_3': '2-3', '3_4': '3-4', '4_5': '4-5', '5_6': '5-6', '6_7': '6-7',
   process: 'Process/Machine',
@@ -429,7 +433,8 @@ const HEADER_MAP: Record<string, string> = {
   target: 'EOD target',
   line_plan_target: 'Line plan target',
   line_plan_planned_qty: 'Line plan target',
-  wip: 'Day WIP',
+  wip: 'Closing WIP',
+  opening_wip: 'Opening WIP',
   performance_grade: 'Grade', boxes: 'Box', cycles: 'Cycles',
   routing_mins_per_box: 'Routing Mins/6 prs', shift_target_output: 'Shift Target (pairs)', shift_efficiency_pct: 'Shift Efficiency %',
   line_output_percent: 'Line Output %',
@@ -490,10 +495,14 @@ const HOURLY_PRODUCT_HEADERS = ['Customer', 'Article No', 'Color', 'Leather', 'G
 const PRODUCT_FIELD_KEYS = ['customer', 'article_no', 'color', 'leather', 'group'] as const;
 const supportsProductColumnToggle = (tab: ReportType) =>
   tab === 'hourly-production' || tab === 'line-efficiency';
+const supportsMachineFilter = (tab: ReportType) =>
+  tab === 'hourly-production' || tab === 'line-efficiency';
 
 const EXPORT_OMIT_BY_REPORT: Partial<Record<ApiReportType, readonly string[]>> = {
   'shift-summary': ['shift_idle_mins'],
   attendance: ['target', 'output_percent'],
+  'line-efficiency': ['targeted_output_smv', 'efficiency_percent'],
+  'rework-rejection': ['target', 'output_percent', 'bins_completed'],
 };
 
 const INTERNAL_EXPORT_OMIT = [
@@ -508,6 +517,11 @@ const INTERNAL_EXPORT_OMIT = [
 
 /** Column labels for table, mobile cards, and export — hourly keeps "Planned"/"Total Planned". */
 const reportColumnLabel = (fieldKey: string, apiReport: ApiReportType): string => {
+  if (fieldKey === 'machine_name' && apiReport === 'hourly-production') return 'Machine';
+  if (apiReport === 'line-efficiency') {
+    if (fieldKey === 'total_planned_qty') return 'Target as per SMV mins';
+    if (fieldKey === 'output_percent') return 'Efficiency %';
+  }
   if (fieldKey === 'total_planned_qty') {
     return apiReport === 'hourly-production' ? 'Total Planned' : 'EOD target';
   }
@@ -575,17 +589,29 @@ const computeReportSummaryStats = (rows: any[], apiReport: ApiReportType) => {
   const sum = (key: string) => rows.reduce((s, row) => s + (Number(row[key]) || 0), 0);
   const avg = (key: string) => Math.round(rows.reduce((s, row) => s + (parseFloat(row[key]) || 0), 0) / rows.length);
   switch (apiReport) {
-    case 'hourly-production':
+    case 'hourly-production': {
+      const planned = sum('total_planned_qty');
+      const input = sum('total_input');
+      const output = sum('total_output');
       return [
-        { label: 'Total output', value: sum('total_output') },
-        { label: 'Total planned', value: sum('total_planned_qty') },
+        { label: 'Total planned', value: planned },
+        { label: 'Total input', value: input },
+        { label: 'Total output', value: output },
+        { label: 'Input %', value: `${planned > 0 ? Math.round((input / planned) * 100) : 0}%` },
+        { label: 'Output %', value: `${planned > 0 ? Math.round((output / planned) * 100) : 0}%` },
+        { label: 'Input vs Output %', value: `${input > 0 ? Math.round((output / input) * 100) : 0}%` },
       ];
-    case 'line-efficiency':
+    }
+    case 'line-efficiency': {
+      const planned = sum('total_planned_qty');
+      const output = sum('total_output');
       return [
         { label: 'Rows', value: rows.length },
+        { label: 'Total output', value: output },
+        { label: 'Output %', value: `${planned > 0 ? Math.round((output / planned) * 100) : 0}%` },
         { label: 'Avg efficiency', value: `${avg('efficiency_percent')}%` },
-        { label: 'Total output', value: sum('total_output') },
       ];
+    }
     case 'attendance': {
       const present = rows.filter((r) => r.status === 'Present').length;
       return [
@@ -755,6 +781,8 @@ export const Reports: React.FC = () => {
   const [showExportMenu, setShowExportMenu] = React.useState(false);
   /** Hourly report: hide Customer/Article/etc. by default to reduce horizontal scroll. */
   const [showProductDetails, setShowProductDetails] = React.useState(false);
+  /** Hourly report: 'machine' (default, one row per machine) or 'line' (all machines of a line combined). */
+  const [hourlyGroupBy, setHourlyGroupBy] = React.useState<'machine' | 'line'>('machine');
   const [compareMode, setCompareMode] = React.useState<ReportCompareMode>('none');
   const [compareMaps, setCompareMaps] = React.useState<{
     yesterday?: Map<string, any>;
@@ -841,10 +869,11 @@ export const Reports: React.FC = () => {
     reportSubView,
     selectedLine,
     selectedMachine,
+    hourlyGroupBy,
     search: search.trim(),
     limit,
     datePreset,
-  }), [fromDate, toDate, reportType, reportSubView, selectedLine, selectedMachine, search, limit, datePreset]);
+  }), [fromDate, toDate, reportType, reportSubView, selectedLine, selectedMachine, hourlyGroupBy, search, limit, datePreset]);
   const hasUnsavedReportFilterChanges = React.useMemo(() => {
     if (!data || data.length === 0) return false;
     if (!generatedFilterSnapshotRef.current) return false;
@@ -906,7 +935,7 @@ export const Reports: React.FC = () => {
     params.set('fromDate', fromDate);
     params.set('toDate', toDate);
     if (selectedLine) params.set('workCentreId', selectedLine);
-    if (selectedMachine && reportType === 'hourly-production') params.set('machineId', selectedMachine);
+    if (selectedMachine && supportsMachineFilter(reportType)) params.set('machineId', selectedMachine);
     if (search.trim()) params.set('search', search.trim());
     params.set('limit', String(limit));
     params.set('datePreset', datePreset);
@@ -984,6 +1013,7 @@ export const Reports: React.FC = () => {
     setToDate(todayRange.to);
     setSelectedLine('');
     setSelectedMachine(ALL_MACHINES_VALUE);
+    setHourlyGroupBy('machine');
     setSearch('');
     setPage(1);
     setError(null);
@@ -1004,11 +1034,12 @@ export const Reports: React.FC = () => {
       limit: String(opts?.limit ?? limit),
     });
     if (selectedLine) params.set('workCentreId', selectedLine);
-    if (reportType === 'hourly-production' && selectedMachine) params.set('machineId', selectedMachine);
+    if (supportsMachineFilter(reportType) && selectedMachine) params.set('machineId', selectedMachine);
+    if (reportType === 'hourly-production' && hourlyGroupBy === 'line') params.set('groupBy', 'line');
     const s = opts?.search !== undefined ? opts.search : search;
     if (s.trim()) params.set('search', s.trim());
     return params;
-  }, [fromDate, toDate, page, limit, selectedLine, reportType, selectedMachine, search]);
+  }, [fromDate, toDate, page, limit, selectedLine, reportType, selectedMachine, hourlyGroupBy, search]);
 
   const fetchAllRowsForDateRange = React.useCallback(
     async (rangeFrom: string, rangeTo: string, searchVal: string) => {
@@ -1276,7 +1307,7 @@ export const Reports: React.FC = () => {
           `Line: ${workCentres.find((w) => String(w.id) === String(selectedLine))?.name || selectedLine}`
         );
       }
-      if (reportType === 'hourly-production') {
+      if (supportsMachineFilter(reportType)) {
         filterLines.push(selectedMachine === ALL_MACHINES_VALUE ? 'Machine: All machines' : `Machine: ${selectedMachine}`);
       }
       if (search.trim()) filterLines.push(`Search: ${search.trim()}`);
@@ -1289,7 +1320,7 @@ export const Reports: React.FC = () => {
           filters: filterLines,
           rowCount: exportRows.length,
           generatedAt: new Date().toLocaleString('en-GB'),
-          themeColor: activeOption.color,
+          themeColor: 'blue',
           summaryStats: computeReportSummaryStats(exportRows, apiReportType),
         },
         headerLabels,
@@ -1373,15 +1404,16 @@ export const Reports: React.FC = () => {
   };
 
   const activeOption = VISIBLE_REPORT_OPTIONS.find((o) => o.value === reportType) ?? VISIBLE_REPORT_OPTIONS[0];
-  const activeColor = COLOR_MAP[activeOption?.color ?? 'blue'];
-  const lineBadgeClass = LINE_BADGE[activeOption?.color ?? 'blue'] || LINE_BADGE.slate;
+  // Standardized report theme — all reports use the blue scheme (same as Hourly Production).
+  const activeColor = COLOR_MAP.blue;
+  const lineBadgeClass = LINE_BADGE.blue;
 
   const activeSubViewLabel = REPORT_SUB_VIEWS[reportType]?.find((s) => s.value === reportSubView)?.label;
 
   const filterLabelClass =
     'mb-1 block text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500';
   const filterInputClass =
-    'w-full rounded-lg sm:rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 py-2 sm:py-2.5 text-sm shadow-sm transition-shadow focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25';
+    'w-full rounded-lg sm:rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 py-2 sm:py-2.5 text-sm text-slate-900 placeholder:text-slate-600 placeholder:opacity-100 shadow-sm transition-shadow focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25';
   const presetBtnClass = (active: boolean) =>
     `rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all ${
       active
@@ -1599,7 +1631,7 @@ export const Reports: React.FC = () => {
     if (selectedLine) {
       chips.push(`Line: ${workCentres.find((w) => String(w.id) === String(selectedLine))?.name || selectedLine}`);
     }
-    if (reportType === 'hourly-production') {
+    if (supportsMachineFilter(reportType)) {
       chips.push(selectedMachine === ALL_MACHINES_VALUE ? 'Machine: All machines' : `Machine: ${selectedMachine}`);
     }
     if (search.trim()) chips.push(`Search: ${search.trim()}`);
@@ -1621,12 +1653,19 @@ export const Reports: React.FC = () => {
       'hourly-production': [
         'date',
         'line',
+        'machine_name',
         ...(showProductDetails ? PRODUCT_FIELD_KEYS : []),
         'total_planned_qty',
+        'opening_wip',
         'total_input',
         'input_percent',
         'total_output',
+        'input_vs_output',
+        'input_vs_output_percent',
+        'planned_vs_output_percent',
         'output_percent',
+        'wip',
+        'avg_hourly_output',
         ...HOURLY_HOUR_KEYS,
       ],
       'line-efficiency': [
@@ -1637,10 +1676,11 @@ export const Reports: React.FC = () => {
         'total_planned_qty',
         'total_output',
         'output_percent',
-        'efficiency_percent',
+        'total_standard_mins_value',
+        'total_produced_mins_value',
       ],
       'attendance': ['date', 'line', 'emp_code', 'emp_name', 'status', 'login_time'],
-      'rework-rejection': ['date', 'line', 'machine', 'target', 'output', 'output_percent', 'rework_qty', 'rejection_qty'],
+      'rework-rejection': ['date', 'line', 'machine', 'output', 'rework_qty', 'rejection_qty'],
       'employee-output': ['date', 'line', 'emp_code', 'target', 'total_output', 'output_percent'],
       'employee-performance': ['date', 'line', 'emp_code', 'target', 'output', 'output_percent', 'efficiency_percent'],
       bottleneck: ['date', 'line', 'machine_id', 'emp_id', 'status', 'duration_mins', 'm4_category', 'm4_reason'],
@@ -1725,7 +1765,7 @@ export const Reports: React.FC = () => {
                 if (HOURLY_HOUR_KEYS.includes(key as (typeof HOURLY_HOUR_KEYS)[number])) {
                   value = r(value) || '0';
                 }
-                if (key === 'input_percent' || key === 'output_percent' || key === 'shift_efficiency_pct') {
+                if (key === 'input_percent' || key === 'output_percent' || key === 'shift_efficiency_pct' || key === 'input_vs_output_percent' || key === 'planned_vs_output_percent') {
                   value =
                     key === 'shift_efficiency_pct'
                       ? effBadge(r(value), shareCard)
@@ -1894,7 +1934,7 @@ export const Reports: React.FC = () => {
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-orange-600 text-white">
+            <tr className="bg-blue-600 text-white">
               <td colSpan={4} className="px-3 py-2.5 text-sm font-bold">{data!.length} machine-days</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center tabular-nums">{netTotalLabel}</td>
               <td className="px-3 py-2.5" />
@@ -1921,7 +1961,7 @@ export const Reports: React.FC = () => {
             {data!.map((row: any, i: number) => {
               const isZero = Number(row.total_output) === 0;
               return (
-                <tr key={i} className={`transition-colors even:bg-slate-50/40 ${isZero ? 'bg-red-50/80 hover:bg-red-50' : 'hover:bg-cyan-50/30'}`}>
+                <tr key={i} className={`transition-colors even:bg-slate-50/40 ${isZero ? 'bg-red-50/80 hover:bg-red-50' : 'hover:bg-blue-50/30'}`}>
                   <Td><span className="font-medium text-slate-600">{row.date ? fmtDate(row.date) : '—'}</span></Td>
                   <Td>
                     <span className="font-mono text-xs">{row.emp_code}</span>
@@ -1950,7 +1990,7 @@ export const Reports: React.FC = () => {
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-cyan-600 text-white">
+            <tr className="bg-blue-600 text-white">
               <td colSpan={10} className="px-3 py-2.5 text-sm font-bold">
                 {data!.length} sessions{zeroCount > 0 ? ` · ${zeroCount} zero output` : ''}
               </td>
@@ -2008,7 +2048,7 @@ export const Reports: React.FC = () => {
           ))}
         </tbody>
         <tfoot>
-          <tr className="bg-slate-700 text-white">
+          <tr className="bg-blue-600 text-white">
             <td colSpan={5} className="px-3 py-2.5 text-xs sm:text-sm font-bold">
               Totals · Shift 09:05–17:35 (480 min excl. lunch)
             </td>
@@ -2076,20 +2116,22 @@ export const Reports: React.FC = () => {
     const totalOutput = data!.reduce((s, row) => s + r(row.total_output), 0);
     const totalPlanned = data!.reduce((s, row) => s + r(row.total_planned_qty), 0);
     const totalInput = data!.reduce((s, row) => s + r(row.total_input), 0);
-    const metricHeaders: string[] = ['Planned', 'Input', 'Input %', 'Output'];
+    const totalOpeningWip = data!.reduce((s, row) => s + r(row.opening_wip), 0);
+    const metricHeaders: string[] = ['Planned', 'Opening WIP', 'Input', 'Input %', 'Output'];
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => metricHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
     }
+    metricHeaders.push('Input vs Output', 'Input vs Output %', 'Planned vs Output %');
     metricHeaders.push('Output %');
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => metricHeaders.push(`Out % vs ${comparePeriodHeaderLabel(p)}`));
     }
-    metricHeaders.push('Day WIP', 'Avg/Hr');
+    metricHeaders.push('Closing WIP', 'Avg/Hr');
     const hourHeaders = HOURLY_HOUR_KEYS.map((k) => HOURLY_HOUR_LABELS[k]);
     const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
-    const allHeaders = ['Date', 'Line', ...productHeaders, ...metricHeaders, ...hourHeaders];
-    const leftAlign = new Set(['Date', 'Line', ...HOURLY_PRODUCT_HEADERS]);
-    const labelColSpan = 2 + productHeaders.length;
+    const allHeaders = ['Date', 'Line', 'Machine', ...productHeaders, ...metricHeaders, ...hourHeaders];
+    const leftAlign = new Set(['Date', 'Line', 'Machine', ...HOURLY_PRODUCT_HEADERS]);
+    const labelColSpan = 3 + productHeaders.length;
     const stickyLineLeft = 96;
 
     return (
@@ -2121,6 +2163,7 @@ export const Reports: React.FC = () => {
                   <Td stickyLeft={stickyLineLeft} rowShade={shaded}>
                     <LineBadge name={row.line} />
                   </Td>
+                  <Td>{row.machine_name || row.machine_id}</Td>
                   {showProductDetails && (
                     <>
                       <Td>{row.customer}</Td>
@@ -2134,6 +2177,9 @@ export const Reports: React.FC = () => {
                     <span className="font-semibold text-gray-700">{r(row.total_planned_qty)}</span>
                   </Td>
                   <Td center>
+                    <span className="font-semibold text-gray-700">{r(row.opening_wip)}</span>
+                  </Td>
+                  <Td center>
                     <span className="font-semibold text-blue-700">{r(row.total_input)}</span>
                   </Td>
                   <Td center>{effBadge(r(row.input_percent))}</Td>
@@ -2141,6 +2187,11 @@ export const Reports: React.FC = () => {
                     <span className="font-bold text-green-600">{r(row.total_output)}</span>
                   </Td>
                   {showPeriodCompare && renderCompareMetricCells(row, 'total_output', shaded)}
+                  <Td center>
+                    <span className="font-semibold text-gray-700">{r(row.input_vs_output)}</span>
+                  </Td>
+                  <Td center>{effBadge(r(row.input_vs_output_percent))}</Td>
+                  <Td center>{effBadge(r(row.planned_vs_output_percent))}</Td>
                   <Td center>{effBadge(r(row.output_percent))}</Td>
                   {showPeriodCompare && renderCompareMetricCells(row, 'output_percent', shaded)}
                   <Td center>
@@ -2162,6 +2213,7 @@ export const Reports: React.FC = () => {
                 TOTAL — {data!.length} rows
               </td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalPlanned}</td>
+              <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOpeningWip}</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalInput}</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">
                 {totalPlanned > 0 ? effBadge(Math.round((totalInput / totalPlanned) * 100)) : '—'}
@@ -2170,6 +2222,13 @@ export const Reports: React.FC = () => {
               {showPeriodCompare && comparePeriods.map((p) => (
                 <td key={p} className="px-3 py-2.5 text-sm text-center text-blue-100/80">—</td>
               ))}
+              <td className="px-3 py-2.5 text-sm font-bold text-center">{totalInput - totalOutput}</td>
+              <td className="px-3 py-2.5 text-sm font-bold text-center">
+                {totalInput > 0 ? effBadge(Math.round((totalOutput / totalInput) * 100)) : '—'}
+              </td>
+              <td className="px-3 py-2.5 text-sm font-bold text-center">
+                {totalPlanned > 0 ? effBadge(Math.round((totalOutput / totalPlanned) * 100)) : '—'}
+              </td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">
                 {totalPlanned > 0 ? effBadge(Math.round((totalOutput / totalPlanned) * 100)) : '—'}
               </td>
@@ -2188,21 +2247,17 @@ export const Reports: React.FC = () => {
   const renderLineEfficiency = () => {
     const avgEff = data!.length ? Math.round(data!.reduce((s, row) => s + (parseFloat(row.efficiency_percent) || 0), 0) / data!.length) : 0;
     const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
-    const baseHeaders = ['Date', 'Line', 'Machine', ...productHeaders, 'EOD target', 'Output'];
+    const baseHeaders = ['Date', 'Line', 'Machine', ...productHeaders, 'Target as per SMV mins', 'Output'];
     const lineHeaders: string[] = [...baseHeaders];
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => lineHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
     }
-    lineHeaders.push('Output %');
-    if (showPeriodCompare) {
-      comparePeriods.forEach((p) => lineHeaders.push(`Out % vs ${comparePeriodHeaderLabel(p)}`));
-    }
-    lineHeaders.push('Std Mins', 'Actual Mins', 'Target@SMV', 'Efficiency % (in progress)');
+    lineHeaders.push('Efficiency %');
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => lineHeaders.push(`Eff % vs ${comparePeriodHeaderLabel(p)}`));
     }
+    lineHeaders.push('Std Mins', 'Actual Mins');
     const leftCols = new Set(['Date', 'Line', 'Machine', ...HOURLY_PRODUCT_HEADERS]);
-    const trailingCompareCols = showPeriodCompare ? comparePeriods.length : 0;
     return (
       <TableWrap>
         <table className="min-w-full">
@@ -2213,7 +2268,7 @@ export const Reports: React.FC = () => {
             {data!.map((row, i) => {
               const rowShade = i % 2 === 1;
               return (
-              <tr key={i} className="hover:bg-green-50/30 even:bg-slate-50/30 transition-colors">
+              <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
                 <Td><span className="font-medium">{row.process}</span></Td>
@@ -2233,19 +2288,14 @@ export const Reports: React.FC = () => {
                 {showPeriodCompare && renderCompareMetricCells(row, 'output_percent', rowShade)}
                 <Td center>{r(row.total_standard_mins_value)}</Td>
                 <Td center>{r(row.total_produced_mins_value)}</Td>
-                <Td center>{r(row.targeted_output_smv)}</Td>
-                <Td center>{effBadge(r(row.efficiency_percent))}</Td>
-                {showPeriodCompare && renderCompareMetricCells(row, 'efficiency_percent', rowShade)}
               </tr>
             );})}
           </tbody>
           <tfoot>
-            <tr className="bg-green-600 text-white">
-              <td colSpan={lineHeaders.length - 1 - trailingCompareCols} className="px-3 py-2.5 text-sm font-bold">AVG EFFICIENCY — {data!.length} rows</td>
-              <td className="px-3 py-2.5 text-sm font-bold text-center">{avgEff}%</td>
-              {showPeriodCompare && comparePeriods.map((p) => (
-                <td key={p} className="px-3 py-2.5 text-sm text-center text-green-100/80">—</td>
-              ))}
+            <tr className="bg-blue-600 text-white">
+              <td colSpan={lineHeaders.length} className="px-3 py-2.5 text-sm font-bold">
+                AVG EFFICIENCY — {data!.length} rows &nbsp;·&nbsp; {avgEff}%
+              </td>
             </tr>
           </tfoot>
         </table>
@@ -2264,7 +2314,7 @@ export const Reports: React.FC = () => {
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
-              <tr key={i} className={`hover:bg-purple-50/30 even:bg-slate-50/30 transition-colors ${row.status === 'Absent' ? 'bg-red-50/40' : ''}`}>
+              <tr key={i} className={`hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors ${row.status === 'Absent' ? 'bg-red-50/40' : ''}`}>
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
                 <Td><span className="font-mono text-gray-600">{row.emp_code}</span></Td>
@@ -2280,7 +2330,7 @@ export const Reports: React.FC = () => {
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-purple-600 text-white">
+            <tr className="bg-blue-600 text-white">
               <td colSpan={4} className="px-3 py-2.5 text-sm font-bold">{data!.length} records</td>
               <td className="px-3 py-2.5 text-sm text-center font-bold">
                 ✓ {present} Present &nbsp;|&nbsp; ✗ {absent} Absent
@@ -2300,18 +2350,15 @@ export const Reports: React.FC = () => {
       <TableWrap>
         <table className="min-w-full">
           <thead><tr>
-            {['Date','Line','Machine','EOD target','Output','Output %','Bins','Rework','Rejection','Rework %','Rejection %','Category','Reason'].map(h => <Th key={h} center={!['Date','Line','Machine','Category','Reason'].includes(h)}>{h}</Th>)}
+            {['Date','Line','Machine','Output','Rework','Rejection','Rework %','Rejection %','Category','Reason'].map(h => <Th key={h} center={!['Date','Line','Machine','Category','Reason'].includes(h)}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
-              <tr key={i} className="hover:bg-yellow-50/30 even:bg-slate-50/30 transition-colors">
+              <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
                 <Td>{row.machine}</Td>
-                <Td center>{r(row.target)}</Td>
                 <Td center><span className="font-semibold">{r(row.output)}</span></Td>
-                <Td center>{effBadge(r(row.output_percent))}</Td>
-                <Td center>{r(row.bins_completed)}</Td>
                 <Td center><span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs font-bold">{r(row.rework_qty)}</span></Td>
                 <Td center><span className="inline-flex items-center px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-bold">{r(row.rejection_qty)}</span></Td>
                 <Td center>{row.rework_percent ?? 0}%</Td>
@@ -2322,8 +2369,8 @@ export const Reports: React.FC = () => {
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-yellow-500 text-white">
-              <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+            <tr className="bg-blue-600 text-white">
+              <td colSpan={4} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRework} rework</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRejection} rejection</td>
               <td colSpan={4}></td>
@@ -2344,7 +2391,7 @@ export const Reports: React.FC = () => {
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
-              <tr key={i} className="hover:bg-teal-50/30 even:bg-slate-50/30 transition-colors">
+              <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
                 <Td><span className="font-mono text-gray-600">{row.emp_code}</span></Td>
@@ -2360,7 +2407,7 @@ export const Reports: React.FC = () => {
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-teal-600 text-white">
+            <tr className="bg-blue-600 text-white">
               <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput} total pairs</td>
               <td></td>
@@ -2388,7 +2435,7 @@ export const Reports: React.FC = () => {
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
-              <tr key={i} className="hover:bg-rose-50/30 even:bg-slate-50/30 transition-colors">
+              <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
                 <Td><span className="font-mono text-gray-600">{row.emp_code}</span></Td>
@@ -2411,7 +2458,7 @@ export const Reports: React.FC = () => {
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-rose-600 text-white">
+            <tr className="bg-blue-600 text-white">
               <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput}</td>
               <td></td>
@@ -2505,7 +2552,7 @@ export const Reports: React.FC = () => {
                   value={reportTypeQuery}
                   onChange={(e) => setReportTypeQuery(e.target.value)}
                   placeholder="Filter reports…"
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm text-slate-900 placeholder:text-slate-600 placeholder:opacity-100 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
                 />
                 {reportTypeQuery && (
                   <button
@@ -2613,10 +2660,15 @@ export const Reports: React.FC = () => {
                 ))}
               </select>
             </div>
-            {reportType === 'hourly-production' && (
+            {supportsMachineFilter(reportType) && (
               <div>
                 <label className={filterLabelClass}>Machine</label>
-                <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className={filterInputClass}>
+                <select
+                  value={selectedMachine}
+                  onChange={(e) => setSelectedMachine(e.target.value)}
+                  disabled={reportType === 'hourly-production' && hourlyGroupBy === 'line'}
+                  className={`${filterInputClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
                   <option value={ALL_MACHINES_VALUE}>All machines</option>
                   {filteredMachines.map((machine: any) => (
                     <option key={machine.id || machine.machine_id} value={machine.machine_id}>
@@ -2624,6 +2676,19 @@ export const Reports: React.FC = () => {
                       {machine.machine_name || machine.name ? `- ${machine.machine_name || machine.name}` : ''}
                     </option>
                   ))}
+                </select>
+              </div>
+            )}
+            {reportType === 'hourly-production' && (
+              <div>
+                <label className={filterLabelClass}>View</label>
+                <select
+                  value={hourlyGroupBy}
+                  onChange={(e) => setHourlyGroupBy(e.target.value as 'machine' | 'line')}
+                  className={filterInputClass}
+                >
+                  <option value="machine">Machine-wise</option>
+                  <option value="line">Line-wise (all machines)</option>
                 </select>
               </div>
             )}
@@ -2692,7 +2757,7 @@ export const Reports: React.FC = () => {
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && fetchReport(1, search)}
                   placeholder="Name, line, machine…"
-                  className={`${filterInputClass} pl-9 pr-9`}
+                  className={`${filterInputClass} !pl-9 !pr-9`}
                 />
                 {search && (
                   <button
@@ -2866,7 +2931,7 @@ export const Reports: React.FC = () => {
                   <span className="text-xs font-medium text-slate-600">
                     {fmtDate(fromDate)} — {fmtDate(toDate)}
                     {selectedLine && workCentres.length > 0 && ` · ${workCentres.find((w) => w.id == selectedLine)?.name}`}
-                    {reportType === 'hourly-production' && selectedMachine && selectedMachine !== ALL_MACHINES_VALUE && ` · M${selectedMachine}`}
+                    {supportsMachineFilter(reportType) && selectedMachine && selectedMachine !== ALL_MACHINES_VALUE && ` · M${selectedMachine}`}
                   </span>
                 </div>
               </div>
@@ -2922,6 +2987,24 @@ export const Reports: React.FC = () => {
                   )}
                 </div>
                 {renderTable()}
+                {(reportType === 'hourly-production' || reportType === 'line-efficiency') && reportSummaryStats.length > 0 && (
+                  <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3">
+                    <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Summary</p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                      {reportSummaryStats.map((stat) => (
+                        <div
+                          key={stat.label}
+                          className={`rounded-lg border border-slate-200/80 bg-white px-3 py-2 shadow-sm ${activeColor.border}`}
+                        >
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{stat.label}</p>
+                          <p className={`mt-0.5 text-lg font-black tabular-nums leading-none ${activeColor.text}`}>
+                            {stat.value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

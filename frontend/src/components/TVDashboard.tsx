@@ -252,6 +252,8 @@ export const TVDashboard: React.FC = () => {
     const [showStatusBar, setShowStatusBar] = useState(false);
     const [detailCarouselIndex, setDetailCarouselIndex] = useState(0);
     const [detailCarouselProgress, setDetailCarouselProgress] = useState(0);
+    const [detailCarouselStartedAt, setDetailCarouselStartedAt] = useState(() => Date.now());
+    const [detailCarouselResetToken, setDetailCarouselResetToken] = useState(0);
     const [insightCarouselIndex, setInsightCarouselIndex] = useState(0);
     const [insightCarouselProgress, setInsightCarouselProgress] = useState(0);
     const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
@@ -480,22 +482,23 @@ export const TVDashboard: React.FC = () => {
     }, [currentIndex]);
 
     useEffect(() => {
+        const startedAt = Date.now();
+        setDetailCarouselStartedAt(startedAt);
         setDetailCarouselProgress(0);
         const rotateTimeout = setTimeout(() => {
             setDetailCarouselIndex((prev) => (prev + 1) % DETAIL_CAROUSEL_SLIDES);
-            setDetailCarouselProgress(0);
-        }, DETAIL_CAROUSEL_MS + 100);
+        }, DETAIL_CAROUSEL_MS);
         return () => clearTimeout(rotateTimeout);
-    }, [detailCarouselIndex, DETAIL_CAROUSEL_SLIDES]);
+    }, [detailCarouselIndex, DETAIL_CAROUSEL_SLIDES, detailCarouselResetToken]);
 
     useEffect(() => {
         const tickMs = 100;
-        const increment = (tickMs / DETAIL_CAROUSEL_MS) * 100;
         const interval = setInterval(() => {
-            setDetailCarouselProgress((prev) => Math.min(prev + increment, 100));
+            const elapsedMs = Date.now() - detailCarouselStartedAt;
+            setDetailCarouselProgress(Math.min((elapsedMs / DETAIL_CAROUSEL_MS) * 100, 100));
         }, tickMs);
         return () => clearInterval(interval);
-    }, [detailCarouselIndex]);
+    }, [detailCarouselStartedAt]);
 
     useEffect(() => {
         setInsightCarouselIndex((prev) => Math.min(prev, Math.max(0, insightSlideCount - 1)));
@@ -1157,7 +1160,7 @@ export const TVDashboard: React.FC = () => {
                                         aria-label={label}
                                         onClick={() => {
                                             setDetailCarouselIndex(i);
-                                            setDetailCarouselProgress(0);
+                                            setDetailCarouselResetToken((prev) => prev + 1);
                                         }}
                                         className={`h-2 rounded-full transition-all duration-300 ${
                                             detailCarouselIndex === i ? 'w-6 bg-blue-500' : 'w-2 bg-slate-300 hover:bg-slate-400'
@@ -1166,7 +1169,7 @@ export const TVDashboard: React.FC = () => {
                                 ))}
                             </div>
                             <p className="text-[9px] sm:text-[10px] text-blue-500 font-semibold tabular-nums whitespace-nowrap">
-                                Auto-switch in {Math.max(0, Math.ceil((DETAIL_CAROUSEL_MS / 1000) * (1 - detailCarouselProgress / 100)))}s
+                                Auto-switch in {Math.max(0, Math.ceil((detailCarouselStartedAt + DETAIL_CAROUSEL_MS - Date.now()) / 1000))}s
                             </p>
                         </div>
                     </div>

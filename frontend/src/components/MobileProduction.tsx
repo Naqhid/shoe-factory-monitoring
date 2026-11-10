@@ -2449,6 +2449,15 @@ export const MobileProduction: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
+                                <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(236,72,153,0.4)]">
+                                    <div className="min-w-0">
+                                        <p className="text-xs opacity-80">SMV %</p>
+                                        <p className="font-semibold truncate">
+                                            {loadingSummary ? '...' : `${avgEfficiencyToday}%`}
+                                        </p>
+                                        <p className="text-[11px] opacity-80">avg SMV efficiency (today)</p>
+                                    </div>
+                                </div>
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.35)]">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">Date & Time</p>
@@ -2514,6 +2523,13 @@ export const MobileProduction: React.FC = () => {
                                             <p className="text-[10px] sm:text-[11px] opacity-75 mt-1 md:mt-0.5">
                                                 pairs @ routing ({dailyPaceSnapshot.totalProductiveMins}m shift)
                                             </p>
+                                            <div className="mt-1.5 flex items-center justify-center gap-1.5 border-t border-white/20 pt-1.5">
+                                                <span className="text-[10px] sm:text-[11px] uppercase tracking-wide opacity-80">Asking rate</span>
+                                                <span className="text-sm sm:text-base font-bold tabular-nums text-amber-200">
+                                                    {dailyPaceSnapshot.pairsPerHrNeeded > 0 ? dailyPaceSnapshot.pairsPerHrNeeded : dailyPaceSnapshot.currentPairsPerHr}
+                                                </span>
+                                                <span className="text-[10px] sm:text-[11px] opacity-75">prs/hr</span>
+                                            </div>
                                         </div>
                                     </div>
                                 ) : (
