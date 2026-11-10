@@ -211,11 +211,17 @@ export const ManualEntrySlotHeatmap: React.FC<{
                                     : `Overlap — mobile ${cell.mesOutput} / manual ${cell.manualOutput}`
                           }
                           onClick={() => clickable && onCellClick?.(row, slot.value)}
-                          className={`w-full min-w-[1.6rem] sm:min-w-[2rem] h-6 sm:h-7 rounded-md font-bold ring-1 transition-transform text-[8px] sm:text-[10px] ${
+                          className={`w-full min-w-[1.6rem] sm:min-w-[2rem] h-6 sm:h-7 rounded-md font-bold ring-1 transition-transform text-[8px] sm:text-[10px] tabular-nums ${
                             CELL_CLASS[cell.status]
                           } ${clickable ? 'hover:scale-105 cursor-pointer' : 'cursor-default'}`}
                         >
-                          {CELL_LABEL[cell.status]}
+                          {cell.status === 'mes'
+                            ? cell.mesOutput
+                            : cell.status === 'manual'
+                              ? cell.manualOutput
+                              : cell.status === 'overlap'
+                                ? cell.mesOutput + cell.manualOutput
+                                : CELL_LABEL[cell.status]}
                         </button>
                       </td>
                     );
