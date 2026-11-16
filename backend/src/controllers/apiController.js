@@ -21,6 +21,15 @@ const SQL_LINE_INPUT_JOIN = `
     GROUP BY mcp.work_centre_id, DATE(mcp.prod_date)
   ) line_input ON line_input.work_centre_id = %WC% AND line_input.prod_date = %DATE%`;
 
+const SQL_MACHINE_INPUT_JOIN = `
+  LEFT JOIN (
+    SELECT work_centre_id, DATE(prod_date) AS prod_date, machine_id, SUM(output_pairs) AS total_input
+    FROM machine_centre_production
+    WHERE button_status = 2
+    GROUP BY work_centre_id, DATE(prod_date), machine_id
+  ) machine_input ON machine_input.work_centre_id = %WC%
+    AND machine_input.prod_date = %DATE% AND machine_input.machine_id = %MACHINE%`;
+
 const SQL_LINE_EOL_JOIN = `
   LEFT JOIN (
     SELECT mcp.work_centre_id, DATE(mcp.prod_date) AS prod_date, SUM(mcp.output_pairs) AS line_eol_output
@@ -130,13 +139,26 @@ async function enrichRowsWithMesWip(rows) {
     const key = `${wcId}|${dateStr}`;
     if (!cache.has(key)) {
       let wip = 0;
+      let openingWip = 0;
       if (Number.isFinite(wcId) && wcId > 0 && dateStr) {
         const snap = await wipStateService.computeAndPersistWip(wcId, dateStr);
         wip = Math.round(Number(snap.currentWip) || 0);
+        openingWip = Math.round(Number(snap.openingWip) || 0);
       }
-      cache.set(key, wip);
+      cache.set(key, { wip, openingWip });
     }
-    out.push({ ...row, wip: cache.get(key) });
+    const { wip, openingWip } = cache.get(key);
+    const totalInput = Number(row.total_input) || 0;
+    const totalOutput = Number(row.total_output) || 0;
+    const totalPlanned = Number(row.total_planned_qty) || 0;
+    out.push({
+      ...row,
+      wip,
+      opening_wip: openingWip,
+      input_vs_output: totalInput - totalOutput,
+      input_vs_output_percent: totalInput > 0 ? Math.round((totalOutput / totalInput) * 100) : 0,
+      planned_vs_output_percent: totalPlanned > 0 ? Math.round((totalOutput / totalPlanned) * 100) : 0,
+    });
   }
   return out;
 }
@@ -210,10 +232,16 @@ class ApiController {
   async getHourlyProductionStatus(req, res) {
     try {
       res.set('Cache-Control', 'no-store');
-      const { fromDate, toDate, workCentreId, machineId, search, page, limit } = req.query;
+      const { fromDate, toDate, workCentreId, machineId, groupBy, search, page, limit } = req.query;
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
+
+      // Line-wise mode: combine all machines of each line into a single row per line/day.
+      if (String(groupBy || '') === 'line') {
+        return await this.getHourlyProductionByLine(req, res, { fromDate, toDate, workCentreId, search, p, l, offset });
+      }
+
       const allMachinesSelected = String(machineId || '') === '__all__';
       let resolvedMachineId = machineId && !allMachinesSelected ? String(machineId) : null;
       if (!resolvedMachineId && workCentreId) {
@@ -252,29 +280,32 @@ class ApiController {
       const baseQuery = `
         FROM machine_centre_production mcp
         LEFT JOIN work_centres wc ON mcp.work_centre_id = wc.id
+        LEFT JOIN machine_centres mc ON mcp.machine_id = mc.machine_id AND mcp.work_centre_id = mc.work_centre_id
         LEFT JOIN production_plan pp ON mcp.work_centre_id = pp.work_centre_id AND DATE(mcp.prod_date) = pp.plan_date
         LEFT JOIN customers c ON pp.customer_id = c.id
         LEFT JOIN styles s ON pp.style_id = s.id
         LEFT JOIN colors col ON pp.color_id = col.id
         LEFT JOIN leather l ON pp.leather_id = l.id
         LEFT JOIN groups_master g ON pp.group_id = g.id
-        ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
+        ${SQL_MACHINE_INPUT_JOIN
+          .replace(/%WC%/g, 'mcp.work_centre_id')
+          .replace(/%DATE%/g, 'DATE(mcp.prod_date)')
+          .replace(/%MACHINE%/g, 'mcp.machine_id')}
         ${where}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, mcp.machine_id, wc.name, pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, mcp.machine_id, wc.name, mc.machine_name, mc.name,
+          pp.total_target_per_day, machine_input.total_input, c.name, s.name, col.name, l.name, g.name`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [rawRows] = await db.query(`
-        SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, mcp.machine_id, wc.name as line, c.name as customer, s.name as article_no,
+        SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, mcp.machine_id, wc.name as line,
+          COALESCE(mc.machine_name, mc.name, mcp.machine_id) as machine_name, c.name as customer, s.name as article_no,
           col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
-          COALESCE(line_input.total_input, 0) as total_input,
-          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          COALESCE(machine_input.total_input, 0) as total_input,
+          ROUND((COALESCE(machine_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
           SUM(mcp.output_pairs) as total_output,
           ROUND((SUM(mcp.output_pairs) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
-          ROUND(
-            SUM(mcp.output_pairs) / NULLIF(COUNT(DISTINCT HOUR(mcp.start_time)), 0),
-            1
-          ) as avg_hourly_output,
+          ROUND(SUM(mcp.output_pairs) / 8, 0) as avg_hourly_output,
           SUM(CASE WHEN HOUR(mcp.start_time)=9 THEN mcp.output_pairs ELSE 0 END) as \`9_10\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=10 THEN mcp.output_pairs ELSE 0 END) as \`10_11\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=11 THEN mcp.output_pairs ELSE 0 END) as \`11_12\`,
@@ -295,16 +326,77 @@ class ApiController {
     }
   }
 
+  /**
+   * Hourly production aggregated per LINE (all machines of a line combined into one row/day).
+   * Output is summed across every machine of the line; input uses the line's input machine.
+   */
+  async getHourlyProductionByLine(req, res, ctx) {
+    try {
+      const { fromDate, toDate, workCentreId, search, p, l, offset } = ctx;
+
+      let where = 'WHERE DATE(mcp.prod_date) BETWEEN ? AND ? AND mcp.button_status = 2';
+      const params = [fromDate, toDate];
+      if (workCentreId) { where += ' AND mcp.work_centre_id = ?'; params.push(workCentreId); }
+      if (search) { where += ' AND (wc.name LIKE ? OR c.name LIKE ? OR s.name LIKE ? OR col.name LIKE ?)'; const s = `%${search}%`; params.push(s, s, s, s); }
+
+      const baseQuery = `
+        FROM machine_centre_production mcp
+        LEFT JOIN work_centres wc ON mcp.work_centre_id = wc.id
+        LEFT JOIN production_plan pp ON mcp.work_centre_id = pp.work_centre_id AND DATE(mcp.prod_date) = pp.plan_date
+        LEFT JOIN customers c ON pp.customer_id = c.id
+        LEFT JOIN styles s ON pp.style_id = s.id
+        LEFT JOIN colors col ON pp.color_id = col.id
+        LEFT JOIN leather l ON pp.leather_id = l.id
+        LEFT JOIN groups_master g ON pp.group_id = g.id
+        ${SQL_LINE_INPUT_JOIN
+          .replace(/%WC%/g, 'mcp.work_centre_id')
+          .replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
+        ${where}
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name,
+          pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
+
+      const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
+      const [rawRows] = await db.query(`
+        SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, NULL as machine_id, wc.name as line,
+          'All machines' as machine_name, c.name as customer, s.name as article_no,
+          col.name as color, l.name as leather, g.name as \`group\`,
+          pp.total_target_per_day as total_planned_qty,
+          COALESCE(line_input.total_input, 0) as total_input,
+          ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
+          SUM(mcp.output_pairs) as total_output,
+          ROUND((SUM(mcp.output_pairs) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
+          ROUND(SUM(mcp.output_pairs) / 8, 0) as avg_hourly_output,
+          SUM(CASE WHEN HOUR(mcp.start_time)=9 THEN mcp.output_pairs ELSE 0 END) as \`9_10\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=10 THEN mcp.output_pairs ELSE 0 END) as \`10_11\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=11 THEN mcp.output_pairs ELSE 0 END) as \`11_12\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=12 THEN mcp.output_pairs ELSE 0 END) as \`12_1\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=14 THEN mcp.output_pairs ELSE 0 END) as \`2_3\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=15 THEN mcp.output_pairs ELSE 0 END) as \`3_4\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=16 THEN mcp.output_pairs ELSE 0 END) as \`4_5\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=17 THEN mcp.output_pairs ELSE 0 END) as \`5_6\`,
+          SUM(CASE WHEN HOUR(mcp.start_time)=18 THEN mcp.output_pairs ELSE 0 END) as \`6_7\`
+        ${baseQuery} ORDER BY date, wc.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+
+      const data = await enrichRowsWithMesWip(rawRows);
+
+      res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
+    } catch (error) {
+      logger.error('Error getting line-wise hourly production:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
   async getLineProcessEfficiency(req, res) {
     try {
-      const { fromDate, toDate, workCentreId, search, page, limit } = req.query;
+      const { fromDate, toDate, workCentreId, machineId, search, page, limit } = req.query;
       if (!fromDate || !toDate) return res.status(400).json({ success: false, error: 'fromDate and toDate are required' });
 
       const { page: p, limit: l, offset } = paginate(page, limit);
-      logger.info(`Line efficiency search: "${search}", workCentreId: ${workCentreId}, params: ${JSON.stringify(req.query)}`);
+      logger.info(`Line efficiency search: "${search}", workCentreId: ${workCentreId}, machineId: ${machineId}, params: ${JSON.stringify(req.query)}`);
       let where = 'WHERE 1=1';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND mcs.work_centre_id = ?'; params.push(workCentreId); }
+      if (machineId && String(machineId) !== '__all__') { where += ' AND mcs.machine_id = ?'; params.push(String(machineId)); }
       if (search) { where += ' AND (wc.name LIKE ? OR mc.name LIKE ? OR mc.machine_name LIKE ? OR c.name LIKE ?)'; const s = `%${search}%`; params.push(s,s,s,s); }
 
       const baseQuery = `

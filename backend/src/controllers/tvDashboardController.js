@@ -305,6 +305,69 @@ exports.getDashboard = async (req, res) => {
             { total_rework: 0, total_rejection: 0 }
         );
 
+        // Rework % = rework / total output recorded in rework_rejection (line-wise and all lines).
+        const [[reworkLineAgg]] = await pool.query(`
+            SELECT COALESCE(SUM(total_output_pairs), 0) AS total_output,
+                   COALESCE(SUM(rework_qty), 0) AS rework_qty,
+                   COALESCE(SUM(rejection_qty), 0) AS rejection_qty
+            FROM rework_rejection
+            WHERE work_centre_id = ? AND DATE(production_date) = DATE(?)
+        `, [workCentreId, today]);
+        const [[reworkAllAgg]] = await pool.query(`
+            SELECT COALESCE(SUM(total_output_pairs), 0) AS total_output,
+                   COALESCE(SUM(rework_qty), 0) AS rework_qty,
+                   COALESCE(SUM(rejection_qty), 0) AS rejection_qty
+            FROM rework_rejection
+            WHERE DATE(production_date) = DATE(?)
+        `, [today]);
+        const toReworkPercents = (agg) => {
+            const out = Number(agg.total_output) || 0;
+            return {
+                total_output: out,
+                total_rework: Number(agg.rework_qty) || 0,
+                total_rejection: Number(agg.rejection_qty) || 0,
+                rework_percent: out > 0 ? Math.round((Number(agg.rework_qty) / out) * 1000) / 10 : 0,
+                rejection_percent: out > 0 ? Math.round((Number(agg.rejection_qty) / out) * 1000) / 10 : 0,
+            };
+        };
+        reworkTotals.total_output = Number(reworkLineAgg.total_output) || 0;
+        reworkTotals.rework_percent = toReworkPercents(reworkLineAgg).rework_percent;
+        reworkTotals.rejection_percent = toReworkPercents(reworkLineAgg).rejection_percent;
+        const reworkOverall = toReworkPercents(reworkAllAgg);
+
+        // Multi-article line: per-article target / output / WIP (null for single-article lines).
+        let lineArticles = null;
+        try {
+            const summary = await require('../services/articleAttributionService').getLineArticleSummary(workCentreId, today);
+            lineArticles = summary.multi_article ? summary : null;
+        } catch (articleErr) {
+            console.warn(`Line article summary unavailable for WC ${workCentreId}: ${articleErr.message}`);
+        }
+
+        // Breakdown loss: minutes per event and total as % of available machine-minutes (480 min shift x machines on line).
+        const SHIFT_MINS = 480;
+        const nowMs = Date.now();
+        const breakdownMins = (row) => {
+            const live = Number(row.button_status) === 1;
+            const startRaw = live ? (row.idle_start_time || row.start_time) : (row.start_time || row.idle_start_time);
+            const start = startRaw ? new Date(startRaw).getTime() : NaN;
+            const end = row.finish_time && !live ? new Date(row.finish_time).getTime() : nowMs;
+            if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+            return Math.round(((end - start) / 60000) * 10) / 10;
+        };
+        breakdowns.forEach((row) => { row.duration_mins = breakdownMins(row); });
+        const [[machineCountRow]] = await pool.query(
+            'SELECT COUNT(*) AS c FROM machine_centres WHERE work_centre_id = ?',
+            [workCentreId]
+        );
+        const breakdownTotalMins = Math.round(breakdowns.reduce((s, r) => s + r.duration_mins, 0) * 10) / 10;
+        const availableMachineMins = SHIFT_MINS * Math.max(1, Number(machineCountRow.c) || 1);
+        const breakdownLoss = {
+            total_mins: breakdownTotalMins,
+            percent: Math.round((breakdownTotalMins / availableMachineMins) * 1000) / 10,
+            events: breakdowns.length,
+        };
+
         // ── 9. Line Performance with MES WIP ─────────────────────────────────
         // Fetch raw line data first, then enrich with MES WIP per line.
         const [linePerformanceRaw] = await pool.query(`
@@ -446,6 +509,9 @@ exports.getDashboard = async (req, res) => {
                     machineTimeLosses,
                     reworkEntries: reworkRows,
                     reworkTotals,
+                    reworkOverall,
+                    breakdownLoss,
+                    lineArticles,
                     linePerformance,
                     workCentreName: wcData[0]?.name || 'N/A',
                     perLineTimeLosses: await (async () => {
