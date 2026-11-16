@@ -264,7 +264,7 @@ const REPORT_OPTIONS: { value: ReportType; label: string; icon: React.ReactNode;
 ];
 
 /** Temporarily hidden from the report picker — remove entries to re-enable. */
-const HIDDEN_REPORT_TYPES: ReadonlySet<ReportType> = new Set(['attendance', 'employee']);
+const HIDDEN_REPORT_TYPES: ReadonlySet<ReportType> = new Set(['attendance']);
 const SHOW_DAILY_INACTIVE_REPORT_CALLOUT = true;
 
 const VISIBLE_REPORT_OPTIONS = REPORT_OPTIONS.filter((o) => !HIDDEN_REPORT_TYPES.has(o.value));
@@ -620,12 +620,19 @@ const computeReportSummaryStats = (rows: any[], apiReport: ApiReportType) => {
         { label: 'Attendance rate', value: `${Math.round((present / rows.length) * 100)}%` },
       ];
     }
-    case 'rework-rejection':
+    case 'rework-rejection': {
+      const output = sum('output');
+      const rework = sum('rework_qty');
+      const rejection = sum('rejection_qty');
+      const pct = (n: number) => `${output > 0 ? Math.round((n / output) * 1000) / 10 : 0}%`;
       return [
-        { label: 'Rework qty', value: sum('rework_qty') },
-        { label: 'Rejection qty', value: sum('rejection_qty') },
-        { label: 'Output', value: sum('output') },
+        { label: 'Rework qty', value: rework },
+        { label: 'Rejection qty', value: rejection },
+        { label: 'Output', value: output },
+        { label: 'Rework %', value: pct(rework) },
+        { label: 'Rejection %', value: pct(rejection) },
       ];
+    }
     case 'employee-output':
       return [{ label: 'Total output', value: sum('total_output') }, { label: 'Employees', value: rows.length }];
     case 'employee-performance':
@@ -656,12 +663,18 @@ const computeReportSummaryStats = (rows: any[], apiReport: ApiReportType) => {
         { label: 'Avg shift eff.', value: `${avg('shift_efficiency_pct')}%` },
       ];
     case 'bottleneck':
-    case 'breakdown':
+    case 'breakdown': {
+      const totalMins = Math.round(sum('duration_mins') * 10) / 10;
+      const machines = new Set(rows.map((row) => String(row.machine_id ?? ''))).size || 1;
+      const days = new Set(rows.map((row) => String(row.date ?? '').slice(0, 10))).size || 1;
+      const lossPct = Math.round((totalMins / (480 * machines * days)) * 1000) / 10;
       return [
         { label: 'Events', value: rows.length },
-        { label: 'Total duration', value: `${sum('duration_mins')}m` },
+        { label: 'Total duration', value: `${totalMins}m` },
+        { label: 'Loss % (of 480 min shift x machines x days)', value: `${lossPct}%` },
         { label: 'In progress', value: rows.filter((r) => r.status === 'In progress').length },
       ];
+    }
     default:
       return [{ label: 'Rows', value: rows.length }];
   }

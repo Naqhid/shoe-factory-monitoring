@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
 const { getRoutingMinsColumnName, getPairsPerRoutingBin } = require('../utils/routingMinsColumn');
 const wipStateService = require('../services/wipStateService');
+const articleAttributionService = require('../services/articleAttributionService');
 const { aggregateMachineCycleLosses } = require('../utils/cycleLossMins');
 
 const refreshLineWipForDate = async (workCentreId, prodDate) => {
@@ -473,18 +474,36 @@ exports.create = async (req, res, next) => {
     const normalizedIdleStartTime = toMySqlDateTimeOrNull(idle_start_time);
     const normalizedIdleStopTime = toMySqlDateTimeOrNull(idle_stop_time);
 
+    // Multi-article lines: record which article this cycle counts against (null on single-article lines).
+    let planArticleId = null;
+    try {
+      const attribution = await articleAttributionService.resolveCycleArticle({
+        workCentreId: work_centre_id,
+        machineId: machine_id,
+        prodDate: formattedDate,
+        requestedArticleId: req.body.plan_article_id,
+      });
+      planArticleId = attribution.planArticleId;
+    } catch (attrErr) {
+      if (attrErr.status) {
+        return res.status(attrErr.status).json({ success: false, message: attrErr.message });
+      }
+      logger.warn(`Article attribution skipped for machine ${machine_id}: ${attrErr.message}`);
+    }
+
     const [result] = await db.query(
       `INSERT INTO machine_centre_production
        (prod_date, work_centre_id, machine_id, emp_id, output_pairs, target_mins,
-        start_time, finish_time, idle_start_time, idle_stop_time, button_status)
-       VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
+        start_time, finish_time, idle_start_time, idle_stop_time, button_status, plan_article_id)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)`,
       [formattedDate, work_centre_id, machine_id, emp_id,
        output_pairs !== undefined ? output_pairs : 0,
        target_mins || 0,
        normalizedFinishTime,
        normalizedIdleStartTime,
        normalizedIdleStopTime,
-       requestedStatus]
+       requestedStatus,
+       planArticleId]
     );
 
     res.status(201).json({

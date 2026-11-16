@@ -1042,6 +1042,46 @@ export const TVDashboard: React.FC = () => {
                             })}
                         </tbody>
                     </table>
+                    {lowerSection?.lineArticles?.multi_article && (
+                        <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/60 px-2 py-1.5">
+                            <p className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-blue-900 mb-1">
+                                {currentLineName} · articles running in parallel
+                            </p>
+                            <table className="w-full text-[10px] sm:text-xs">
+                                <thead>
+                                    <tr className="text-blue-900/80">
+                                        <th className="px-1.5 py-1 text-left font-bold">ARTICLE</th>
+                                        <th className="px-1.5 py-1 text-center font-bold">TARGET</th>
+                                        <th className="px-1.5 py-1 text-center font-bold">OUTPUT</th>
+                                        <th className="px-1.5 py-1 text-center font-bold">WIP</th>
+                                        <th className="px-1.5 py-1 text-center font-bold">%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {lowerSection.lineArticles.articles.map((a: any) => (
+                                        <tr key={a.plan_article_id} className={`border-t border-blue-100 ${a.running ? '' : 'opacity-60'}`}>
+                                            <td className="px-1.5 py-1 font-semibold text-slate-900">
+                                                {a.style_name}
+                                                {!a.running && <span className="ml-1 text-[9px] uppercase text-slate-500">(not running)</span>}
+                                            </td>
+                                            <td className="px-1.5 py-1 text-center tabular-nums">{a.target}</td>
+                                            <td className="px-1.5 py-1 text-center tabular-nums font-bold text-green-700">{a.output}</td>
+                                            <td className="px-1.5 py-1 text-center tabular-nums">{a.wip}</td>
+                                            <td className="px-1.5 py-1 text-center tabular-nums">{a.completion_percent}%</td>
+                                        </tr>
+                                    ))}
+                                    {Number(lowerSection.lineArticles.unassigned?.output || 0) > 0 && (
+                                        <tr className="border-t border-blue-100 text-amber-800">
+                                            <td className="px-1.5 py-1 font-semibold">Unassigned</td>
+                                            <td className="px-1.5 py-1" />
+                                            <td className="px-1.5 py-1 text-center tabular-nums font-bold">{lowerSection.lineArticles.unassigned.output}</td>
+                                            <td className="px-1.5 py-1" colSpan={2} />
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
                         </div>
                         <div className="min-w-full h-full flex flex-col min-h-0" style={{ background: 'rgba(239,246,255,0.95)', borderRadius: '12px', overflow: 'hidden' }}>
@@ -1311,12 +1351,24 @@ export const TVDashboard: React.FC = () => {
                                                     </span>
                                                 </div>
                                             </div>
+                                            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-amber-300/70 pt-1.5 text-[10px] sm:text-[11px] font-bold text-amber-950 tabular-nums">
+                                                <span>Line rework {Number(reworkTotals.rework_percent || 0)}% · rejection {Number(reworkTotals.rejection_percent || 0)}%</span>
+                                                <span>
+                                                    All lines rework {Number(lowerSection?.reworkOverall?.rework_percent || 0)}% · rejection {Number(lowerSection?.reworkOverall?.rejection_percent || 0)}%
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
 
                                 {kind === 'breakdown' && (
                                         <div className="h-full min-h-0 flex flex-col gap-1.5 overflow-auto px-0.5">
+                                            <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-red-100 px-2.5 py-1.5 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wide text-red-950 ring-1 ring-red-200">
+                                                <span>Breakdown loss</span>
+                                                <span className="tabular-nums">
+                                                    {Math.round(Number(lowerSection?.breakdownLoss?.total_mins || 0))} min · {Number(lowerSection?.breakdownLoss?.percent || 0)}%
+                                                </span>
+                                            </div>
                                             {breakdownList.slice(0, 4).map((item: any, index: number) =>
                                                 renderStoppageCard(item, 'breakdown', index, breakdownList.length === 1, breakdownList.length > 1)
                                             )}

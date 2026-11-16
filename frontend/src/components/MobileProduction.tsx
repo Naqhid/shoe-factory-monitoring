@@ -10,6 +10,7 @@ import { computeShiftTargetPairs, getProductiveShiftTotals, isWithinShiftHours }
 import { formatTime12NoAmPm } from '../utils/dateTimeFormat';
 import { LateCyclesTodayModal } from './LateCyclesTodayModal';
 import { StoppageReasonModal } from './StoppageReasonModal';
+import { fetchLineArticles, type LineArticleSummary } from './LineArticlesPanel';
 
 const formatPairsPerHour = (value: number | null | undefined) => {
     if (value == null || !Number.isFinite(value)) return '—';
@@ -562,6 +563,39 @@ export const MobileProduction: React.FC = () => {
         routingPairsPerBin,
         productionData?.target_mins,
     ]);
+
+    // ── Multi-article line: which article this machine works on ──────────────
+    const [lineArticles, setLineArticles] = useState<LineArticleSummary | null>(null);
+    const [selectedArticleId, setSelectedArticleId] = useState<string>('');
+    const articleMachineId = String(resolvedMachineId || productionData?.machine_id || '');
+    const articleLineId = productionData?.work_centre_id;
+    useEffect(() => {
+        if (!articleLineId) return;
+        let cancelled = false;
+        const load = () => {
+            const now = new Date();
+            const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            fetchLineArticles(articleLineId, today)
+                .then((data) => { if (!cancelled) setLineArticles(data); })
+                .catch(() => { if (!cancelled) setLineArticles(null); });
+        };
+        load();
+        const timer = window.setInterval(load, 30_000);
+        return () => { cancelled = true; window.clearInterval(timer); };
+    }, [articleLineId, totalOutputToday]);
+    const thisMachineArticle = React.useMemo(() => {
+        if (!lineArticles?.multi_article) return null;
+        const m = lineArticles.machines.find((x) => x.machine_id === articleMachineId);
+        return {
+            shared: Boolean(m?.shared),
+            assigned: lineArticles.articles.find((a) => a.plan_article_id === m?.plan_article_id) || null,
+        };
+    }, [lineArticles, articleMachineId]);
+    useEffect(() => {
+        if (thisMachineArticle?.assigned && !selectedArticleId) {
+            setSelectedArticleId(String(thisMachineArticle.assigned.plan_article_id));
+        }
+    }, [thisMachineArticle, selectedArticleId]);
 
     const outputExpectedNow = dailyPaceSnapshot?.expected ?? 0;
     // Box count uses the planning pairs/tray value; dropdown (1–12) is for target time / finish qty only.
@@ -1689,7 +1723,9 @@ export const MobileProduction: React.FC = () => {
                         finish_time: toLocalDateTimePayloadValue(productionData?.finish_time),
                         idle_start_time: toLocalDateTimePayloadValue(productionData?.idle_start_time),
                         idle_stop_time: toLocalDateTimePayloadValue(productionData?.idle_stop_time),
-                        button_status: 1
+                        button_status: 1,
+                        // Multi-article line: the article this cycle counts against (shared machines pick it).
+                        plan_article_id: selectedArticleId || undefined,
                     };
                     const response = await apiFetch(`${API_BASE}/api/mobile-production`, {
                         method: 'POST',
@@ -2449,6 +2485,35 @@ export const MobileProduction: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
+                                {thisMachineArticle && (
+                                    <div className="col-span-2 md:col-span-6 rounded-lg bg-white/10 p-2 ring-1 ring-inset ring-amber-300/40">
+                                        <p className="text-xs opacity-80">Article (multi-article line)</p>
+                                        {thisMachineArticle.shared ? (
+                                            <select
+                                                value={selectedArticleId}
+                                                onChange={(e) => setSelectedArticleId(e.target.value)}
+                                                className="mt-1 w-full rounded-md bg-white px-2 py-1.5 text-sm font-semibold text-slate-900"
+                                            >
+                                                <option value="">Select article for this cycle</option>
+                                                {lineArticles?.articles.map((a) => (
+                                                    <option key={a.plan_article_id} value={a.plan_article_id}>
+                                                        {a.style_name} — {a.output}/{a.target} · WIP {a.wip}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : thisMachineArticle.assigned ? (
+                                            <p className="font-semibold">
+                                                {thisMachineArticle.assigned.style_name}
+                                                <span className="ml-2 text-xs font-normal opacity-80">
+                                                    output {thisMachineArticle.assigned.output}/{thisMachineArticle.assigned.target} ·
+                                                    WIP {thisMachineArticle.assigned.wip} · {thisMachineArticle.assigned.completion_percent}%
+                                                </span>
+                                            </p>
+                                        ) : (
+                                            <p className="font-semibold text-amber-200">No article assigned — ask your supervisor. Output is recorded as unassigned.</p>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex items-center space-x-2 bg-white/10 rounded-lg p-2 shadow-[inset_3px_0_0_0_rgba(236,72,153,0.4)]">
                                     <div className="min-w-0">
                                         <p className="text-xs opacity-80">SMV %</p>

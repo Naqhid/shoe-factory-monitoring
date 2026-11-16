@@ -94,6 +94,32 @@ const initDb = async () => {
       )
     `);
     logger.info('rework_rejection table ready');
+    // Multi-article planning: one row per article when a line runs several articles on the same day.
+    // production_plan stays the single line/day header (total target = sum of the article targets).
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS production_plan_articles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        plan_id INT NOT NULL,
+        sequence_no INT NOT NULL,
+        style_id INT NOT NULL,
+        customer_id INT NOT NULL,
+        group_id INT NULL,
+        leather_id INT NULL,
+        color_id INT NULL,
+        total_target_per_day INT NOT NULL,
+        target_pairs_per_tray INT NOT NULL,
+        tray_count INT NULL,
+        man_hours_minutes INT NOT NULL,
+        smv_per_pair DECIMAL(10,4) NOT NULL,
+        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_plan_article_style (plan_id, style_id),
+        KEY idx_plan_articles_plan (plan_id, sequence_no)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    logger.info('production_plan_articles table ready');
+    await require('./services/articleAttributionService').ensureSchema();
+    logger.info('article assignment / attribution schema ready');
     await db.execute(`
       CREATE TABLE IF NOT EXISTS missed_action_states (
         issue_key VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -782,6 +808,47 @@ app.post('/api/production-planning', authenticate, requireProductionPlanningAcce
 app.post('/api/production-planning/bulk', authenticate, requireProductionPlanningAccess, productionPlanningController.createBulk.bind(productionPlanningController));
 app.post('/api/production-planning/:id/restore', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.restore.bind(productionPlanningController));
 app.put('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, validate(validate.schemas.productionPlan), productionPlanningController.update.bind(productionPlanningController));
+// Multi-article line: per-article summary (read by planning, TV and mobile) and machine assignment
+app.get('/api/line-articles', async (req, res) => {
+  try {
+    const articleAttributionService = require('./services/articleAttributionService');
+    const { work_centre_id, date } = req.query;
+    if (!work_centre_id) return res.status(400).json({ success: false, error: 'work_centre_id is required' });
+    const data = await articleAttributionService.getLineArticleSummary(work_centre_id, date);
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('Error getting line articles:', error);
+    res.status(error.status || 500).json({ success: false, error: error.message });
+  }
+});
+app.get('/api/line-articles/history', authenticate, async (req, res) => {
+  try {
+    const articleAttributionService = require('./services/articleAttributionService');
+    const data = await articleAttributionService.getAssignmentHistory(req.query.work_centre_id, req.query.date);
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('Error getting article assignment history:', error);
+    res.status(error.status || 500).json({ success: false, error: error.message });
+  }
+});
+app.post('/api/line-articles/assign', authenticate, requireProductionPlanningAccess, async (req, res) => {
+  try {
+    const articleAttributionService = require('./services/articleAttributionService');
+    const user = req.user || {};
+    const data = await articleAttributionService.assignMachines({
+      workCentreId: req.body.work_centre_id,
+      dateKey: req.body.date,
+      machineIds: req.body.machine_ids,
+      planArticleId: req.body.plan_article_id,
+      assignedBy: String(user.username || user.name || user.email || user.id || ''),
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('Error assigning machines to article:', error);
+    res.status(error.status || 500).json({ success: false, error: error.message });
+  }
+});
+app.put('/api/production-planning/:id/articles', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.updateArticles.bind(productionPlanningController));
 app.delete('/api/production-planning/:id', authenticate, requireProductionPlanningAccess, validate.numericId, productionPlanningController.delete.bind(productionPlanningController));
 
 // Line schedule (article-on-line assignments)

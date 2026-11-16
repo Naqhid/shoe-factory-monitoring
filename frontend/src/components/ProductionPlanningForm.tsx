@@ -24,6 +24,7 @@ import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 import { Pagination } from './Pagination';
 import { SearchableSelect } from './SearchableSelect';
+import { LineArticlesPanel } from './LineArticlesPanel';
 import * as XLSX from 'xlsx';
 import { todayDateKey, dayBeforeDateKey, dayAfterDateKey, parseDateKey } from '../utils/compareDateUtils';
 
@@ -339,7 +340,15 @@ export const ProductionPlanningForm: React.FC = () => {
     setShowModal(true);
   };
 
-  const addPlanLine = () => setLines((prev) => [...prev, emptyLine()]);
+  // When editing, a new row is another article on the same line.
+  const addPlanLine = () =>
+    setLines((prev) => [
+      ...prev,
+      { ...emptyLine(), work_centre_id: editingId ? (prev[0]?.work_centre_id || '') : '' },
+    ]);
+
+  const removePlanLine = (idx: number) =>
+    setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
 
   const handleCopyPlansFrom = async (sourceDate: string) => {
     const workCentreId = lines[0]?.work_centre_id;
@@ -368,7 +377,14 @@ export const ProductionPlanningForm: React.FC = () => {
         return;
       }
 
-      setLines(sourcePlans.map((p) => planRecordToLineItem(p)));
+      // A multi-article plan is copied as one row per article.
+      const copiedRows = sourcePlans.flatMap((p) => {
+        const articles = Array.isArray(p.articles) ? (p.articles as Record<string, unknown>[]) : [];
+        return articles.length > 1
+          ? articles.map((a) => ({ ...a, work_centre_id: p.work_centre_id }))
+          : [p];
+      });
+      setLines(copiedRows.map((p) => planRecordToLineItem(p)));
       const targetLabel = formatPlanDateLabel(planDate);
       const sourceLabel = formatPlanDateLabel(sourceDate);
       toast.success(
@@ -396,23 +412,30 @@ export const ProductionPlanningForm: React.FC = () => {
         setEditingId(id);
         setPlanDate(parseDateKey(plan.plan_date) || todayDateKey());
         setPlanToDate(parseDateKey(plan.plan_date) || todayDateKey());
-        setLines([{
-          style_id: String(plan.style_id),
-          customer_id: String(plan.customer_id),
-          group_id: String(plan.group_id || ''),
-          leather_id: String(plan.leather_id || ''),
-          color_id: String(plan.color_id || ''),
-          customer_name: plan.customer_name || '',
-          group_name: plan.group_name || '',
-          leather_name: plan.leather_name || '',
-          color_name: plan.color_name || '',
-          work_centre_id: String(plan.work_centre_id),
-          total_target_per_day: String(plan.total_target_per_day),
-          target_pairs_per_tray: String(plan.target_pairs_per_tray),
-          tray_count: String(plan.tray_count || '0'),
-          man_hours_minutes: String(plan.man_hours_minutes),
-          smv_per_pair: String(plan.smv_per_pair),
-        }]);
+        if (Array.isArray(plan.articles) && plan.articles.length > 1) {
+          // Multi-article plan: one editable row per article, all on the same line.
+          setLines(plan.articles.map((a: Record<string, unknown>) =>
+            planRecordToLineItem({ ...a, work_centre_id: plan.work_centre_id })
+          ));
+        } else {
+          setLines([{
+            style_id: String(plan.style_id),
+            customer_id: String(plan.customer_id),
+            group_id: String(plan.group_id || ''),
+            leather_id: String(plan.leather_id || ''),
+            color_id: String(plan.color_id || ''),
+            customer_name: plan.customer_name || '',
+            group_name: plan.group_name || '',
+            leather_name: plan.leather_name || '',
+            color_name: plan.color_name || '',
+            work_centre_id: String(plan.work_centre_id),
+            total_target_per_day: String(plan.total_target_per_day),
+            target_pairs_per_tray: String(plan.target_pairs_per_tray),
+            tray_count: String(plan.tray_count || '0'),
+            man_hours_minutes: String(plan.man_hours_minutes),
+            smv_per_pair: String(plan.smv_per_pair),
+          }]);
+        }
         setShowModal(true);
       }
     } catch (error) {
@@ -497,7 +520,28 @@ export const ProductionPlanningForm: React.FC = () => {
           man_hours_minutes: parseInt(l.man_hours_minutes),
           smv_per_pair: parseFloat(l.smv_per_pair),
         };
-        const res = await apiFetch(`${API_BASE}/api/production-planning/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const toArticlePayload = (item: LineItem) => ({
+          plan_date: planDate,
+          style_id: parseInt(item.style_id),
+          customer_id: parseInt(item.customer_id),
+          group_id: item.group_id ? parseInt(item.group_id) : null,
+          leather_id: item.leather_id ? parseInt(item.leather_id) : null,
+          color_id: item.color_id ? parseInt(item.color_id) : null,
+          work_centre_id: parseInt(item.work_centre_id),
+          total_target_per_day: parseInt(item.total_target_per_day),
+          target_pairs_per_tray: parseInt(item.target_pairs_per_tray),
+          tray_count: parseInt(item.tray_count || '0'),
+          man_hours_minutes: parseInt(item.man_hours_minutes),
+          smv_per_pair: parseFloat(item.smv_per_pair),
+        });
+        // More than one article on the line: save the plan and all its articles together.
+        const res = toSave.length > 1
+          ? await apiFetch(`${API_BASE}/api/production-planning/${editingId}/articles`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ plan_date: planDate, lines: toSave.map(toArticlePayload) }),
+            })
+          : await apiFetch(`${API_BASE}/api/production-planning/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const result = await res.json();
         if (result.success) {
           toast.success('Plan updated');
@@ -889,6 +933,8 @@ export const ProductionPlanningForm: React.FC = () => {
         </div>
       ) : null}
 
+      <LineArticlesPanel workCentres={workCentres} date={filterDate || todayDateKey()} />
+
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[400px]">
         <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-end">
@@ -1037,7 +1083,23 @@ export const ProductionPlanningForm: React.FC = () => {
               {plans.map((p) => (
                 <tr key={p.id} className={`hover:bg-slate-50/80 ${p.is_deleted ? 'bg-rose-50/40' : ''}`}>
                   <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">{formatPlanDateLabel(p.plan_date)}</td>
-                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">{p.style_name}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">
+                    {Array.isArray(p.articles) && p.articles.length > 1 ? (
+                      <div className="space-y-0.5">
+                        {p.articles.map((a: any) => (
+                          <div key={a.id} className="flex items-center justify-between gap-3">
+                            <span>{a.style_name}</span>
+                            <span className="text-xs font-bold text-blue-700 tabular-nums">{Number(a.total_target_per_day || 0).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        <span className="inline-block text-[10px] font-bold uppercase text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200 rounded-full px-1.5 py-0.5">
+                          {p.articles.length} articles
+                        </span>
+                      </div>
+                    ) : (
+                      p.style_name
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     <span className="inline-flex items-center gap-1.5">
                       <Factory className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden />
@@ -1115,7 +1177,11 @@ export const ProductionPlanningForm: React.FC = () => {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-bold text-gray-900">{p.style_name}</span>
+                    <span className="text-sm font-bold text-gray-900">
+                      {Array.isArray(p.articles) && p.articles.length > 1
+                        ? p.articles.map((a: any) => `${a.style_name} (${Number(a.total_target_per_day || 0).toLocaleString()})`).join(' + ')
+                        : p.style_name}
+                    </span>
                     {p.is_deleted ? (
                       <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 ring-1 ring-rose-200">Deleted</span>
                     ) : (
@@ -1184,7 +1250,7 @@ export const ProductionPlanningForm: React.FC = () => {
       {showModal && (() => {
         const cellInput = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400';
         const cellReadOnly = 'w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-slate-50 text-slate-700';
-        const modalLines = editingId ? [lines[0] ?? emptyLine()] : lines;
+        const modalLines = lines.length > 0 ? lines : [emptyLine()];
         const yesterdaySourceLabel = formatPlanDateLabel(dayBeforeDateKey(planDate));
         const todaySourceLabel = formatPlanDateLabel(todayDateKey());
 
@@ -1270,16 +1336,15 @@ export const ProductionPlanningForm: React.FC = () => {
                           </button>
                         </>
                       )}
-                      {!editingId && (
-                        <button
-                          type="button"
-                          onClick={addPlanLine}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-semibold"
-                        >
-                          <Plus className="h-3.5 w-3.5" aria-hidden />
-                          Add line
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={addPlanLine}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-semibold"
+                        title="Add a line, or another article on the same line (pick the same work centre)"
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden />
+                        {editingId ? 'Add article' : 'Add line'}
+                      </button>
                       <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200">
                         Routing fields auto-fill when you pick a style
                       </span>
@@ -1303,6 +1368,7 @@ export const ProductionPlanningForm: React.FC = () => {
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Boxes</th>
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">Man hrs</th>
                           <th className="text-left py-2.5 px-2 text-[11px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">SMV</th>
+                          {modalLines.length > 1 && <th className="py-2.5 px-2" aria-label="Remove" />}
                         </tr>
                       </thead>
                       <tbody>
@@ -1423,6 +1489,18 @@ export const ProductionPlanningForm: React.FC = () => {
                             <td className="py-2 px-2 align-top min-w-[72px]">
                               <input readOnly value={line.smv_per_pair} className={`${cellReadOnly} tabular-nums`} placeholder="—" />
                             </td>
+                            {modalLines.length > 1 && (
+                              <td className="py-2 px-2 align-top">
+                                <button
+                                  type="button"
+                                  onClick={() => removePlanLine(idx)}
+                                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                                  title="Remove this row"
+                                >
+                                  <Trash2 className="h-4 w-4" aria-hidden />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -1460,7 +1538,17 @@ export const ProductionPlanningForm: React.FC = () => {
                     {modalLines.map((line, idx) => (
                       <div key={`plan-line-mobile-${idx}-${line.work_centre_id || 'new'}`} className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
                         {modalLines.length > 1 && (
-                          <p className="text-[10px] font-bold uppercase text-gray-400">Line {idx + 1}</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-bold uppercase text-gray-400">Row {idx + 1}</p>
+                            <button
+                              type="button"
+                              onClick={() => removePlanLine(idx)}
+                              className="p-1 rounded-lg text-red-500 hover:bg-red-50"
+                              title="Remove this row"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden />
+                            </button>
+                          </div>
                         )}
                         <div className="grid grid-cols-2 gap-2">
                           <div className="col-span-2">
