@@ -372,6 +372,29 @@ const initDb = async () => {
       await db.execute('ALTER TABLE rework_rejection ADD COLUMN production_cycle_id BIGINT NULL');
       logger.info('Added production_cycle_id to rework_rejection');
     } catch (e) { if (e.code !== 'ER_DUP_FIELDNAME') throw e; }
+    // Add defect_reason to rework_rejection if missing
+    try {
+      await db.execute('ALTER TABLE rework_rejection ADD COLUMN defect_reason VARCHAR(255) NULL');
+      logger.info('Added defect_reason to rework_rejection');
+    } catch (e) { if (e.code !== 'ER_DUP_FIELDNAME') throw e; }
+    // Managed list of rework/rejection defect reasons (CRUD from the entry dropdown)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS rework_reasons (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_rework_reasons_name (name)
+      )
+    `);
+    const [[{ reasonCount }]] = await db.execute('SELECT COUNT(*) AS reasonCount FROM rework_reasons');
+    if (reasonCount === 0) {
+      const seed = ['Upper shape cut', 'Grain mismatch', 'Color mismatch', 'Stitching open', 'Uneven stitching',
+        'Uneven trimming', 'Fold issues', 'Attachment issues', 'Dirty stain', 'Over pasting', 'Wrong size components'];
+      for (let i = 0; i < seed.length; i++) {
+        await db.execute('INSERT INTO rework_reasons (name, sort_order) VALUES (?, ?)', [seed[i], i + 1]);
+      }
+    }
     // Add stoppage_reason to machine_centre_production if missing
     try {
       await db.execute('ALTER TABLE machine_centre_production ADD COLUMN stoppage_reason VARCHAR(255) NULL');
@@ -1038,6 +1061,10 @@ app.get('/api/rework-rejection', authenticate, requireReworkAccess, reworkReject
 app.post('/api/rework-rejection', authenticate, requireReworkAccess, validate(validate.schemas.reworkRejection), checkDayLock('production_date', 'work_centre_id'), reworkRejectionController.save.bind(reworkRejectionController));
 app.put('/api/rework-rejection/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.update.bind(reworkRejectionController));
 app.delete('/api/rework-rejection/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.delete.bind(reworkRejectionController));
+app.get('/api/rework-reasons', authenticate, requireReworkAccess, reworkRejectionController.listReasons.bind(reworkRejectionController));
+app.post('/api/rework-reasons', authenticate, requireReworkAccess, reworkRejectionController.createReason.bind(reworkRejectionController));
+app.put('/api/rework-reasons/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.updateReason.bind(reworkRejectionController));
+app.delete('/api/rework-reasons/:id', authenticate, requireReworkAccess, validate.numericId, reworkRejectionController.deleteReason.bind(reworkRejectionController));
 app.get('/api/rework-rejection/cycles', authenticate, requireReworkAccess, reworkRejectionController.getCyclesForDate.bind(reworkRejectionController));
 
 // Role routes

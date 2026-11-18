@@ -69,11 +69,11 @@ class ReworkRejectionController {
       for (const row of rows) {
         await conn.execute(
           `INSERT INTO rework_rejection 
-           (work_centre_id, production_date, machine_centre_name, total_output_pairs, bins_completed, rework_qty, rejection_qty, reason_category, reason, saved_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+           (work_centre_id, production_date, machine_centre_name, total_output_pairs, bins_completed, rework_qty, rejection_qty, reason_category, reason, defect_reason, saved_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
           [work_centre_id, production_date, row.machine_centre_name, row.total_output_pairs,
            row.bins_completed, row.rework_qty || 0, row.rejection_qty || 0,
-           row.reason_category || null, row.reason || null]
+           row.reason_category || null, row.reason || null, row.defect_reason || null]
         );
       }
       await conn.commit();
@@ -90,7 +90,7 @@ class ReworkRejectionController {
   async update(req, res) {
     try {
       const { id } = req.params;
-      const { rework_qty, rejection_qty, reason_category, reason } = req.body;
+      const { rework_qty, rejection_qty, reason_category, reason, defect_reason } = req.body;
       const [existingRows] = await db.execute(
         `SELECT total_output_pairs FROM rework_rejection WHERE id = ?`,
         [id]
@@ -109,13 +109,72 @@ class ReworkRejectionController {
         return res.status(400).json({ success: false, error: rowError });
       }
       const [result] = await db.execute(
-        `UPDATE rework_rejection SET rework_qty = ?, rejection_qty = ?, reason_category = ?, reason = ? WHERE id = ?`,
-        [rework_qty ?? 0, rejection_qty ?? 0, reason_category || null, reason || null, id]
+        `UPDATE rework_rejection SET rework_qty = ?, rejection_qty = ?, reason_category = ?, reason = ?, defect_reason = ? WHERE id = ?`,
+        [rework_qty ?? 0, rejection_qty ?? 0, reason_category || null, reason || null, defect_reason || null, id]
       );
       if (result.affectedRows === 0) return res.status(404).json({ success: false, error: 'Record not found' });
       res.json({ success: true });
     } catch (error) {
       logger.error('Error updating rework rejection:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async listReasons(req, res) {
+    try {
+      const [rows] = await db.execute('SELECT id, name FROM rework_reasons ORDER BY sort_order, id');
+      res.json({ success: true, data: rows });
+    } catch (error) {
+      logger.error('Error listing rework reasons:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async createReason(req, res) {
+    try {
+      const name = String(req.body.name || '').trim();
+      if (!name || name.length > 255) {
+        return res.status(400).json({ success: false, error: 'Reason name is required (max 255 characters)' });
+      }
+      const [[{ nextOrder }]] = await db.execute('SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextOrder FROM rework_reasons');
+      const [result] = await db.execute('INSERT INTO rework_reasons (name, sort_order) VALUES (?, ?)', [name, nextOrder]);
+      res.json({ success: true, data: { id: result.insertId, name } });
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ success: false, error: 'This reason already exists' });
+      }
+      logger.error('Error creating rework reason:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async updateReason(req, res) {
+    try {
+      const { id } = req.params;
+      const name = String(req.body.name || '').trim();
+      if (!name || name.length > 255) {
+        return res.status(400).json({ success: false, error: 'Reason name is required (max 255 characters)' });
+      }
+      const [result] = await db.execute('UPDATE rework_reasons SET name = ? WHERE id = ?', [name, id]);
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, error: 'Reason not found' });
+      res.json({ success: true });
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ success: false, error: 'This reason already exists' });
+      }
+      logger.error('Error updating rework reason:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async deleteReason(req, res) {
+    try {
+      const { id } = req.params;
+      const [result] = await db.execute('DELETE FROM rework_reasons WHERE id = ?', [id]);
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, error: 'Reason not found' });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error deleting rework reason:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }

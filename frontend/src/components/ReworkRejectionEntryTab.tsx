@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ReworkReasonDropdown } from './ReworkReasonDropdown';
 import { API_BASE_URL, apiFetch } from '../services/api';
 import {
   M4_BADGE_CLASS,
@@ -26,6 +27,7 @@ interface SavedRecord {
   rejection_qty: number;
   reason_category: string;
   reason: string;
+  defect_reason?: string | null;
   saved_at: string;
   production_date: string;
 }
@@ -81,6 +83,7 @@ const defaultFormState = () => ({
   rejectionQty: 0,
   reasonCategory: '',
   reason: '',
+  defectReason: '',
   notes: '',
 });
 
@@ -245,6 +248,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
         rejectionQty: Number(rec.rejection_qty || 0),
         reasonCategory: rec.reason_category || '',
         reason: rec.reason || '',
+        defectReason: rec.defect_reason || '',
         notes: '',
       });
     } else {
@@ -265,6 +269,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
     rejection_qty: rec.rejection_qty,
     reason_category: rec.reason_category,
     reason: rec.reason,
+    defect_reason: rec.defect_reason || null,
   });
 
   const saveEntry = async () => {
@@ -296,6 +301,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
       rejection_qty: rejectionQty,
       reason_category: form.reasonCategory || null,
       reason: reasonText || null,
+      defect_reason: form.defectReason || null,
     };
 
     setSaving(true);
@@ -309,6 +315,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
             rejection_qty: rejectionQty,
             reason_category: form.reasonCategory,
             reason: reasonText,
+            defect_reason: form.defectReason || null,
           }),
         });
         const result = await response.json();
@@ -484,7 +491,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      {rec.reason ? formatReasonDisplayLabel(rec.reason) : '—'}
+                      {rec.defect_reason && <div className="text-red-700">{rec.defect_reason}</div>}
+                      {rec.reason ? formatReasonDisplayLabel(rec.reason) : !rec.defect_reason && '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -749,6 +757,17 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                       {cat}
                     </button>
                   ))}
+                </div>
+
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Defect Reason <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <div className="mb-4">
+                  <ReworkReasonDropdown
+                    value={form.defectReason}
+                    onChange={(v) => setForm((prev) => ({ ...prev, defectReason: v }))}
+                    className={fieldCls}
+                  />
                 </div>
 
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
