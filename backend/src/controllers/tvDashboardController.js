@@ -34,7 +34,7 @@ const EOL_MACHINE_LINE_2A = '07';
 exports.getWorkCentres = async (req, res) => {
     try {
         const [workCentres] = await pool.query(
-            `SELECT id, name FROM work_centres WHERE ${ACTIVE_WORK_CENTRE_WHERE} ORDER BY id`
+            `SELECT id, name, sequence_no FROM work_centres WHERE ${ACTIVE_WORK_CENTRE_WHERE} ORDER BY (sequence_no IS NULL), sequence_no, id`
         );
         res.json({ success: true, data: workCentres });
     } catch (error) {
@@ -335,6 +335,21 @@ exports.getDashboard = async (req, res) => {
         reworkTotals.rejection_percent = toReworkPercents(reworkLineAgg).rejection_percent;
         const reworkOverall = toReworkPercents(reworkAllAgg);
 
+        // Per-line rework/rejection for today (Line Performance table and the Rework dialog).
+        const [reworkByLineRows] = await pool.query(`
+            SELECT work_centre_id,
+                   COALESCE(SUM(total_output_pairs), 0) AS total_output,
+                   COALESCE(SUM(rework_qty), 0) AS rework_qty,
+                   COALESCE(SUM(rejection_qty), 0) AS rejection_qty
+            FROM rework_rejection
+            WHERE DATE(production_date) = DATE(?)
+            GROUP BY work_centre_id
+        `, [today]);
+        const reworkByLine = {};
+        for (const row of reworkByLineRows) {
+            reworkByLine[Number(row.work_centre_id)] = toReworkPercents(row);
+        }
+
         // Multi-article line: per-article target / output / WIP (null for single-article lines).
         let lineArticles = null;
         try {
@@ -416,7 +431,7 @@ exports.getDashboard = async (req, res) => {
                 GROUP BY work_centre_id
             ) mcsall ON wc.id = mcsall.work_centre_id
             WHERE ${activeWorkCentreWhere('wc')}
-            ORDER BY wc.id
+            ORDER BY (wc.sequence_no IS NULL), wc.sequence_no, wc.id
         `, [today, today, today]);
 
         // Enrich each line with MES WIP (Opening WIP + Input - Output)
@@ -510,6 +525,7 @@ exports.getDashboard = async (req, res) => {
                     reworkEntries: reworkRows,
                     reworkTotals,
                     reworkOverall,
+                    reworkByLine,
                     breakdownLoss,
                     lineArticles,
                     linePerformance,

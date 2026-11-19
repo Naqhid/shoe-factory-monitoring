@@ -171,7 +171,17 @@ async function getExistingPlan(conn, planDate, workCentreId) {
 
 async function applyChangeover(payload = {}) {
   const workCentreId = Number(payload.work_centre_id);
-  const styleId = Number(payload.style_id);
+  // One or more articles. `articles` wins; `style_id` keeps the single-article callers working.
+  const rawArticles = Array.isArray(payload.articles) && payload.articles.length > 0
+    ? payload.articles
+    : [{ style_id: payload.style_id, total_target_per_day: payload.total_target_per_day }];
+  const articleInputs = rawArticles.map((a) => ({
+    style_id: Number(a.style_id),
+    total_target_per_day:
+      a.total_target_per_day != null && a.total_target_per_day !== '' ? Number(a.total_target_per_day) : null,
+  }));
+  const styleId = articleInputs[0]?.style_id;
+  const isMultiArticle = articleInputs.length > 1;
   const fromDate = parseDateKey(payload.from_date || payload.assignment_date);
   const explicitTo = parseDateKey(payload.to_date);
   const openEnded = payload.open_ended === true
@@ -180,10 +190,23 @@ async function applyChangeover(payload = {}) {
   const toDate = openEnded ? fromDate : explicitTo;
   const updatePlan = payload.update_plan !== false;
   const notes = payload.notes || null;
-  const totalTargetOverride = payload.total_target_per_day;
 
-  if (!workCentreId || !styleId || !fromDate) {
+  if (!workCentreId || !styleId || !fromDate || articleInputs.some((a) => !a.style_id)) {
     throw Object.assign(new Error('work_centre_id, style_id, and from_date are required'), { status: 400 });
+  }
+  if (isMultiArticle) {
+    if (!updatePlan) {
+      throw Object.assign(
+        new Error('Multiple articles on one line are saved through the production plan. Enable "Update plan".'),
+        { status: 400 }
+      );
+    }
+    if (new Set(articleInputs.map((a) => a.style_id)).size !== articleInputs.length) {
+      throw Object.assign(new Error('The same article is selected more than once'), { status: 409 });
+    }
+    if (articleInputs.some((a) => !Number.isInteger(a.total_target_per_day) || a.total_target_per_day < 1)) {
+      throw Object.assign(new Error('Enter a target per day for every article'), { status: 400 });
+    }
   }
   if (!toDate) {
     throw Object.assign(new Error('Invalid start date'), { status: 400 });
@@ -202,16 +225,21 @@ async function applyChangeover(payload = {}) {
 
   return withTransaction(async (conn) => {
     await assertExists(conn, 'work_centres', workCentreId, 'Work centre');
-    await assertExists(conn, 'styles', styleId, 'Style');
-
-    const routing = await fetchRoutingForStyle(conn, styleId);
-    if (!routing) {
-      throw Object.assign(
-        new Error('No production routing found for the selected style. Create routing first.'),
-        { status: 422 }
-      );
+    const routings = [];
+    for (const article of articleInputs) {
+      await assertExists(conn, 'styles', article.style_id, 'Style');
+      const articleRouting = await fetchRoutingForStyle(conn, article.style_id);
+      if (!articleRouting) {
+        const [styleRows] = await conn.execute('SELECT code FROM styles WHERE id = ? LIMIT 1', [article.style_id]);
+        throw Object.assign(
+          new Error(`No production routing found for article ${styleRows[0]?.code || article.style_id}. Create routing first.`),
+          { status: 422 }
+        );
+      }
+      routings.push(articleRouting);
     }
-
+    // The first article is the line's primary article (stored in the assignment).
+    const routing = routings[0];
     const header = routing.header;
     const assignmentBase = {
       work_centre_id: workCentreId,
@@ -234,14 +262,24 @@ async function applyChangeover(payload = {}) {
       let planResult = null;
       if (updatePlan) {
         const existingPlan = await getExistingPlan(conn, assignmentDate, workCentreId);
-        const planPayload = buildPlanPayload(
-          routing,
-          workCentreId,
-          assignmentDate,
-          existingPlan,
-          { total_target_per_day: totalTargetOverride }
+        const planPayloads = routings.map((articleRouting, idx) =>
+          buildPlanPayload(
+            articleRouting,
+            workCentreId,
+            assignmentDate,
+            existingPlan,
+            { total_target_per_day: articleInputs[idx].total_target_per_day }
+          )
         );
-        planResult = await getPlanningController().validateAndUpsertPlan(conn, planPayload);
+        const planning = getPlanningController();
+        if (planPayloads.length === 1) {
+          planResult = await planning.validateAndUpsertPlan(conn, planPayloads[0]);
+        } else {
+          // Same multi-article storage as Production Planning: header row + one row per article.
+          await planning.validateArticleGroup(conn, planPayloads);
+          planResult = await planning.validateAndUpsertPlan(conn, planPayloads[0], null, { keepArticles: true });
+          await planning.replacePlanArticles(conn, planResult.id, planPayloads);
+        }
       }
 
       results.push({
@@ -252,12 +290,15 @@ async function applyChangeover(payload = {}) {
     }
 
     // ── Auto-assign machines to line on changeover ──────────────────────────
-    // 1. Get new article's routing machine IDs
+    // 1. Get the routing machine IDs of ALL selected articles (union), so the line's
+    //    machine list covers every article running on it.
+    const headerIds = routings.map((r) => r.header.id);
     const [newRoutingLines] = await conn.execute(
-      'SELECT machine_centre_id FROM production_routing_lines WHERE routing_header_id = ?',
-      [header.id]
+      `SELECT machine_centre_id FROM production_routing_lines
+       WHERE routing_header_id IN (${headerIds.map(() => '?').join(',')})`,
+      headerIds
     );
-    const newMachineIds = newRoutingLines.map((r) => r.machine_centre_id);
+    const newMachineIds = [...new Set(newRoutingLines.map((r) => r.machine_centre_id))];
 
     // 2. Get ALL machines currently assigned to this work centre
     const affectedOldWorkCentres = new Set();
@@ -297,6 +338,7 @@ async function applyChangeover(payload = {}) {
     return {
       work_centre_id: workCentreId,
       style_id: styleId,
+      style_ids: articleInputs.map((a) => a.style_id),
       from_date: fromDate,
       to_date: toDate,
       days_updated: results.length,
@@ -348,10 +390,33 @@ async function getBoard(assignmentDate) {
       AND pp.deleted_at IS NULL
      LEFT JOIN styles ps ON pp.style_id = ps.id
      WHERE ${activeWorkCentreWhere('wc')}
-     ORDER BY wc.code, wc.name`,
+     ORDER BY (wc.sequence_no IS NULL), wc.sequence_no, wc.code, wc.name`,
     [dateKey, dateKey]
   );
-  return { assignment_date: dateKey, lines: rows };
+
+  // Multi-article plans: list every article of the line/day plan.
+  const planIds = rows.map((r) => r.plan_id).filter(Boolean);
+  const articlesByPlan = new Map();
+  if (planIds.length > 0) {
+    const [articleRows] = await db.query(
+      `SELECT a.plan_id, a.style_id, a.sequence_no, a.total_target_per_day,
+              s.code AS style_code, s.name AS style_name
+       FROM production_plan_articles a
+       JOIN styles s ON s.id = a.style_id
+       WHERE a.plan_id IN (?)
+       ORDER BY a.plan_id, a.sequence_no`,
+      [planIds]
+    );
+    for (const a of articleRows) {
+      if (!articlesByPlan.has(a.plan_id)) articlesByPlan.set(a.plan_id, []);
+      articlesByPlan.get(a.plan_id).push(a);
+    }
+  }
+  const lines = rows.map((r) => ({
+    ...r,
+    plan_articles: r.plan_id ? articlesByPlan.get(r.plan_id) || [] : [],
+  }));
+  return { assignment_date: dateKey, lines };
 }
 
 async function listAssignments(filters = {}) {

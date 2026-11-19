@@ -3,6 +3,12 @@ const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/transaction');
 const { clearLineMachineCache } = require('../services/lineMachineResolver');
 
+const parseSequenceNo = (v) => {
+  if (v === undefined || v === null || v === '') return null;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? null : n;
+};
+
 class MasterController {
   getArchiveEnabledTables() {
     return ['customers', 'groups_master', 'leather', 'styles', 'colors', 'work_centres', 'machine_centres', 'employees'];
@@ -378,7 +384,7 @@ class MasterController {
            LEFT JOIN machine_centres mc_eol
              ON mc_eol.work_centre_id = wc.id AND mc_eol.machine_id = wc.eol_machine_id
            ${where}
-           ORDER BY wc.code
+           ORDER BY (wc.sequence_no IS NULL), wc.sequence_no, wc.code
            LIMIT ? OFFSET ?`,
           [...params, limit, offset]
         );
@@ -583,9 +589,9 @@ class MasterController {
           const inputId = input_machine_id ? String(input_machine_id).trim() : null;
           const eolId = eol_machine_id ? String(eol_machine_id).trim() : null;
           const [r] = await conn.execute(
-            `INSERT INTO work_centres (code, name, input_machine_id, eol_machine_id)
-             VALUES (?, ?, ?, ?)`,
-            [code, name, inputId, eolId]
+            `INSERT INTO work_centres (code, name, input_machine_id, eol_machine_id, sequence_no)
+             VALUES (?, ?, ?, ?, ?)`,
+            [code, name, inputId, eolId, parseSequenceNo(data.sequence_no)]
           );
           if (inputId || eolId) {
             await this.validateLineMachineAssignment(conn, r.insertId, inputId, eolId);
@@ -601,8 +607,8 @@ class MasterController {
             if (wc.length === 0) throw Object.assign(new Error('Work centre not found'), { status: 400 });
           }
           [r] = await conn.execute(
-            `INSERT INTO ${table} (code, name, machine_id, machine_name, work_centre_id) VALUES (?, ?, ?, ?, ?)`,
-            [code, name, machine_id, machine_name || null, work_centre_id || null]
+            `INSERT INTO ${table} (code, name, machine_id, machine_name, work_centre_id, sequence_no) VALUES (?, ?, ?, ?, ?, ?)`,
+            [code, name, machine_id, machine_name || null, work_centre_id || null, parseSequenceNo(data.sequence_no)]
           );
         } else {
           [r] = await conn.execute(`INSERT INTO ${table} (code, name) VALUES (?, ?)`, [code, name]);
@@ -685,10 +691,21 @@ class MasterController {
         if (table === 'work_centres') {
           const inputId = input_machine_id ? String(input_machine_id).trim() : null;
           const eolId = eol_machine_id ? String(eol_machine_id).trim() : null;
-          await this.validateLineMachineAssignment(conn, Number(id), inputId, eolId);
+          // Only validate machines that are being changed, so an old assignment that has since
+          // left the line does not block saving other fields (e.g. Sequence No).
+          const [[current]] = await conn.execute(
+            'SELECT input_machine_id, eol_machine_id FROM work_centres WHERE id = ?',
+            [id]
+          );
+          const changedInput = inputId !== (current?.input_machine_id || null) ? inputId : null;
+          const changedEol = eolId !== (current?.eol_machine_id || null) ? eolId : null;
+          if (inputId && eolId && inputId === eolId) {
+            throw Object.assign(new Error('Input machine and EOL machine must be different'), { status: 400 });
+          }
+          await this.validateLineMachineAssignment(conn, Number(id), changedInput, changedEol);
           await conn.execute(
-            `UPDATE work_centres SET code = ?, name = ?, input_machine_id = ?, eol_machine_id = ? WHERE id = ?`,
-            [code, name, inputId, eolId, id]
+            `UPDATE work_centres SET code = ?, name = ?, input_machine_id = ?, eol_machine_id = ?, sequence_no = ? WHERE id = ?`,
+            [code, name, inputId, eolId, parseSequenceNo(data.sequence_no), id]
           );
           return;
         }
@@ -709,13 +726,13 @@ class MasterController {
             await conn.execute('UPDATE machine_centre_summary SET machine_id = ? WHERE machine_id = ?', [machine_id, oldMachineId]);
             await conn.execute('SET FOREIGN_KEY_CHECKS = 1');
             await conn.execute(
-              `UPDATE ${table} SET code = ?, name = ?, machine_name = ?, work_centre_id = ? WHERE id = ?`,
-              [code, name, machine_name || null, work_centre_id || null, id]
+              `UPDATE ${table} SET code = ?, name = ?, machine_name = ?, work_centre_id = ?, sequence_no = ? WHERE id = ?`,
+              [code, name, machine_name || null, work_centre_id || null, parseSequenceNo(data.sequence_no), id]
             );
           } else {
             await conn.execute(
-              `UPDATE ${table} SET code = ?, name = ?, machine_id = ?, machine_name = ?, work_centre_id = ? WHERE id = ?`,
-              [code, name, machine_id, machine_name || null, work_centre_id || null, id]
+              `UPDATE ${table} SET code = ?, name = ?, machine_id = ?, machine_name = ?, work_centre_id = ?, sequence_no = ? WHERE id = ?`,
+              [code, name, machine_id, machine_name || null, work_centre_id || null, parseSequenceNo(data.sequence_no), id]
             );
           }
         } else {

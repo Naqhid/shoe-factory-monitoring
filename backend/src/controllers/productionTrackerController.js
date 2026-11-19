@@ -392,8 +392,8 @@ class ProductionTrackerController {
         LEFT JOIN production_plan pp ON wc.id = pp.work_centre_id AND DATE(pp.plan_date) = DATE(?) AND pp.deleted_at IS NULL
         LEFT JOIN machine_centre_summary mcs ON wc.id = mcs.work_centre_id AND DATE(mcs.prod_date) = DATE(?)
         WHERE ${activeWorkCentreWhere('wc')}
-        GROUP BY wc.id, wc.name
-        ORDER BY wc.id
+        GROUP BY wc.id, wc.name, wc.sequence_no
+        ORDER BY (wc.sequence_no IS NULL), wc.sequence_no, wc.id
       `, [date, date]);
 
       res.json({

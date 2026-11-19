@@ -9,7 +9,7 @@ import { TvMachinePacePanel, TvMachinePaceLegend } from './TvMachinePacePanel';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals } from '../utils/shiftPaceUtils';
 import { wipTextClass, formatWip, formatInput } from '../utils/wipUtils';
 import { formatSinceTimeHHMM, formatTimeRangeHHMM } from '../utils/dateTimeFormat';
-import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
+import { minutesToDurationParts, formatDurationMinutesString } from '../utils/formatCycleDuration';
 import { M4_BADGE_CLASS, M4_REASON_ROW_CLASS, M4_REASON_TEXT_CLASS } from '../utils/m4ReasonUtils';
 
 const formatPairsPerHour = (value: number | null) => {
@@ -256,6 +256,7 @@ export const TVDashboard: React.FC = () => {
     const [detailCarouselResetToken, setDetailCarouselResetToken] = useState(0);
     const [insightCarouselIndex, setInsightCarouselIndex] = useState(0);
     const [insightCarouselProgress, setInsightCarouselProgress] = useState(0);
+    const [showReworkDialog, setShowReworkDialog] = useState(false);
     const [machinePaceRows, setMachinePaceRows] = useState<any[]>([]);
     const [allLinesMachinePace, setAllLinesMachinePace] = useState<Record<number, { name: string; rows: any[] }>>({});
 
@@ -279,13 +280,10 @@ export const TVDashboard: React.FC = () => {
         for (const wc of workCentres) {
             slides.push(`time_loss_${wc.id}`);
         }
-        const rework = Array.isArray(dashboardData?.lowerSection?.reworkEntries)
-            ? dashboardData.lowerSection.reworkEntries
-            : [];
+        // Rework / Rejection is shown in the top dialog and the Line Performance table, not as a slide.
         const breakdowns = Array.isArray(dashboardData?.lowerSection?.breakdowns)
             ? dashboardData.lowerSection.breakdowns
             : [];
-        if (rework.length > 0) slides.push('rework');
         if (breakdowns.length > 0) slides.push('breakdown');
         return slides;
     }, [dashboardData, workCentres]);
@@ -776,6 +774,18 @@ export const TVDashboard: React.FC = () => {
                             )}
                             <button
                                 type="button"
+                                onClick={() => setShowReworkDialog(true)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/90 hover:bg-amber-300 text-amber-950 text-[10px] sm:text-xs font-extrabold shrink-0 transition-colors shadow-sm"
+                                title="Open Rework / Rejection details"
+                            >
+                                <RotateCcw className="h-3 w-3" aria-hidden />
+                                <span className="tabular-nums">{Number(lowerSection?.reworkOverall?.total_rework || 0)}</span>
+                                <XCircle className="h-3 w-3 ml-1" aria-hidden />
+                                <span className="tabular-nums">{Number(lowerSection?.reworkOverall?.total_rejection || 0)}</span>
+                                <span className="hidden sm:inline uppercase tracking-wide">Rework / Rejection</span>
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => setShowStatusBar(v => !v)}
                                 className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors shrink-0"
                                 title={showStatusBar ? 'Hide status' : 'Show status'}
@@ -991,13 +1001,13 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">WIP</th>
-                                {/* <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
-                                <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th> */}
+                                <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th>
                             </tr>
                         </thead>
                         <tbody>
                             {lowerSection.linePerformance?.map((line: any, index: number) => {
-                                // const rw = reworkSummary[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
+                                const rw = lowerSection?.reworkByLine?.[line.work_centre_id] || { total_rework: 0, total_rejection: 0 };
                                 const lineTarget = Number(line.target || 0);
                                 const lineInputPercent = lineTarget > 0
                                     ? Math.round((Number(line.input || 0) / lineTarget) * 100)
@@ -1035,8 +1045,8 @@ export const TVDashboard: React.FC = () => {
                                         }`}>
                                             {formatWip(line.wip)}
                                         </td>
-                                        {/* <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums">{rw.total_rework}</td>
-                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums">{rw.total_rejection}</td> */}
+                                        <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums">{rw.total_rework}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums">{rw.total_rejection}</td>
                                     </tr>
                                 );
                             })}
@@ -1298,7 +1308,7 @@ export const TVDashboard: React.FC = () => {
                                                                 : 'text-red-700 bg-red-50 border border-red-200';
                                                         return (
                                                             <span className={`text-[9px] sm:text-[10px] font-black tabular-nums shrink-0 px-1 py-px rounded leading-tight ${tone}`}>
-                                                                {formatDurationString(net)}
+                                                                {formatDurationMinutesString(net)}
                                                             </span>
                                                         );
                                                     })()}
@@ -1311,7 +1321,7 @@ export const TVDashboard: React.FC = () => {
                                                         netMins > 0 ? 'text-emerald-800' : netMins < 0 ? 'text-red-800' : 'text-gray-700'
                                                     }`}
                                                 >
-                                                    {formatDurationString(netMins)}
+                                                    {formatDurationMinutesString(netMins)}
                                                 </span>
                                             </div>
                                         </div>
@@ -1322,44 +1332,6 @@ export const TVDashboard: React.FC = () => {
                                     )}
                                 </>);
                                 })()}
-
-                                {kind === 'rework' && (
-                                    <div className="h-full min-h-0 flex flex-col overflow-hidden">
-                                        <div className="mb-2 shrink-0 rounded-lg bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 px-2.5 py-1.5 text-white shadow-sm">
-                                            <div className="flex items-center justify-center gap-1.5 flex-wrap text-center">
-                                                <p className="text-[11px] sm:text-xs font-extrabold tracking-wide">{currentLineName}</p>
-                                                <span className="text-[10px] text-white/50">|</span>
-                                                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-50">Rework / Rejection</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex-1 min-h-0 flex flex-col gap-1.5 overflow-auto pr-0.5">
-                                            {reworkEntries.slice(0, 6).map((row: any, index: number) =>
-                                                renderReworkCard(row, index, reworkEntries.length === 1)
-                                            )}
-                                        </div>
-                                        <div className="shrink-0 mt-1.5 rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-100 via-amber-50 to-orange-100 px-2.5 py-2 shadow-sm">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="text-[10px] sm:text-[11px] font-extrabold text-amber-950 uppercase tracking-wide">Line total</span>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="inline-flex items-center gap-1 rounded-md bg-yellow-200/90 px-2 py-0.5 text-[10px] sm:text-[11px] font-black tabular-nums text-yellow-950 ring-1 ring-yellow-300">
-                                                        <RotateCcw className="h-3 w-3" aria-hidden />
-                                                        {totalReworkQty}
-                                                    </span>
-                                                    <span className="inline-flex items-center gap-1 rounded-md bg-red-200/90 px-2 py-0.5 text-[10px] sm:text-[11px] font-black tabular-nums text-red-950 ring-1 ring-red-300">
-                                                        <XCircle className="h-3 w-3" aria-hidden />
-                                                        {totalRejectionQty}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-amber-300/70 pt-1.5 text-[10px] sm:text-[11px] font-bold text-amber-950 tabular-nums">
-                                                <span>Line rework {Number(reworkTotals.rework_percent || 0)}% · rejection {Number(reworkTotals.rejection_percent || 0)}%</span>
-                                                <span>
-                                                    All lines rework {Number(lowerSection?.reworkOverall?.rework_percent || 0)}% · rejection {Number(lowerSection?.reworkOverall?.rejection_percent || 0)}%
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
 
                                 {kind === 'breakdown' && (
                                         <div className="h-full min-h-0 flex flex-col gap-1.5 overflow-auto px-0.5">
@@ -1382,6 +1354,96 @@ export const TVDashboard: React.FC = () => {
                 </div>
             </div>
             </div>
+
+            {showReworkDialog && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Rework and rejection"
+                    onClick={() => setShowReworkDialog(false)}
+                >
+                    <div
+                        className="w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 px-4 py-3 text-white">
+                            <p className="text-sm sm:text-base font-extrabold uppercase tracking-wide">Rework / Rejection · Today</p>
+                            <button
+                                type="button"
+                                onClick={() => setShowReworkDialog(false)}
+                                className="rounded-lg px-2 py-1 text-lg leading-none hover:bg-white/20"
+                                aria-label="Close"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="flex-1 min-h-0 overflow-auto p-4 space-y-4">
+                            {/* Overall (all lines) */}
+                            <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-100 via-amber-50 to-orange-100 px-3 py-3">
+                                <p className="text-[11px] font-extrabold uppercase tracking-wide text-amber-950">Overall · all lines</p>
+                                <div className="mt-2 grid grid-cols-2 gap-3">
+                                    <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-center">
+                                        <p className="text-[10px] font-bold uppercase text-yellow-800">Rework</p>
+                                        <p className="text-2xl font-black tabular-nums text-yellow-900">{Number(lowerSection?.reworkOverall?.total_rework || 0)}</p>
+                                        <p className="text-[11px] font-bold tabular-nums text-yellow-800">{Number(lowerSection?.reworkOverall?.rework_percent || 0)}%</p>
+                                    </div>
+                                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center">
+                                        <p className="text-[10px] font-bold uppercase text-red-800">Rejection</p>
+                                        <p className="text-2xl font-black tabular-nums text-red-900">{Number(lowerSection?.reworkOverall?.total_rejection || 0)}</p>
+                                        <p className="text-[11px] font-bold tabular-nums text-red-800">{Number(lowerSection?.reworkOverall?.rejection_percent || 0)}%</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Each line */}
+                            <div>
+                                <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-700">Each line</p>
+                                <table className="w-full text-xs sm:text-sm">
+                                    <thead>
+                                        <tr className="border-b-2 border-gray-200 bg-gray-50">
+                                            <th className="px-2 py-1.5 text-left font-bold text-gray-700">LINE</th>
+                                            <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
+                                            <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK %</th>
+                                            <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th>
+                                            <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(lowerSection.linePerformance || []).map((line: any) => {
+                                            const rw = lowerSection?.reworkByLine?.[line.work_centre_id];
+                                            return (
+                                                <tr key={line.work_centre_id} className="border-b border-gray-100">
+                                                    <td className="px-2 py-1.5 font-semibold text-gray-800">{line.line_name}</td>
+                                                    <td className="px-2 py-1.5 text-center font-bold tabular-nums text-yellow-700">{Number(rw?.total_rework || 0)}</td>
+                                                    <td className="px-2 py-1.5 text-center tabular-nums text-gray-600">{Number(rw?.rework_percent || 0)}%</td>
+                                                    <td className="px-2 py-1.5 text-center font-bold tabular-nums text-red-700">{Number(rw?.total_rejection || 0)}</td>
+                                                    <td className="px-2 py-1.5 text-center tabular-nums text-gray-600">{Number(rw?.rejection_percent || 0)}%</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Machine detail of the line currently on screen */}
+                            <div>
+                                <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-700">
+                                    {currentLineName} · by machine
+                                </p>
+                                {reworkEntries.length === 0 ? (
+                                    <p className="text-sm text-gray-500">No rework or rejection recorded on this line today.</p>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {reworkEntries.map((row: any, index: number) => renderReworkCard(row, index, false))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

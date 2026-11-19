@@ -22,6 +22,7 @@ interface MasterRecord {
   eol_machine_id?: string | null;
   input_machine_label?: string | null;
   eol_machine_label?: string | null;
+  sequence_no?: number | null;
 }
 
 interface MasterFormProps {
@@ -49,6 +50,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
     machine_centre_id: '',
     input_machine_id: '',
     eol_machine_id: '',
+    sequence_no: '',
   });
   const [loading, setLoading] = React.useState(false);
   const [fetchLoading, setFetchLoading] = React.useState(false);
@@ -145,7 +147,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
   }, [currentPage, itemsPerPage, table, debouncedSearch, showArchived, selectedStyleId]);
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '', machine_centre_id: '', input_machine_id: '', eol_machine_id: '' });
+    setFormData({ code: '', name: '', machine_id: '', machine_name: '', work_centre_id: '', machine_centre_id: '', input_machine_id: '', eol_machine_id: '', sequence_no: '' });
     setEditingRecord(null);
     setShowForm(false);
   };
@@ -183,6 +185,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
           machine_centre_id: formData.machine_centre_id ? Number(formData.machine_centre_id) : null,
           input_machine_id: formData.input_machine_id || null,
           eol_machine_id: formData.eol_machine_id || null,
+          sequence_no: formData.sequence_no === '' ? null : Number(formData.sequence_no),
         }),
       });
 
@@ -213,6 +216,7 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
       machine_centre_id: record.machine_centre_id ? String(record.machine_centre_id) : '',
       input_machine_id: record.input_machine_id || '',
       eol_machine_id: record.eol_machine_id || '',
+      sequence_no: record.sequence_no != null ? String(record.sequence_no) : '',
     });
     setShowForm(true);
   };
@@ -530,6 +534,23 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                 </div>
               )}
 
+              {(table === 'work_centres' || table === 'machine_centres') && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Sequence No</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formData.sequence_no}
+                    onChange={(e) => setFormData({ ...formData, sequence_no: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+                    placeholder="e.g., 1"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {table === 'work_centres' ? 'Order of lines on dashboards, tracker and reports.' : 'Order of machines on reports.'}
+                  </p>
+                </div>
+              )}
+
               {table === 'work_centres' && editingRecord && (
                 <>
                   <div>
@@ -540,6 +561,9 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                       className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                     >
                       <option value="">Auto-detect</option>
+                      {formData.input_machine_id && !lineMachineOptions.some((mc) => mc.machine_id === formData.input_machine_id) && (
+                        <option value={formData.input_machine_id}>{formData.input_machine_id} — not on this line (select Auto-detect to clear)</option>
+                      )}
                       {lineMachineOptions.map((mc) => (
                         <option key={mc.id} value={mc.machine_id || ''}>{mc.machine_id} — {mc.name}</option>
                       ))}
@@ -554,6 +578,9 @@ export const MasterForm: React.FC<MasterFormProps> = ({ title, table }) => {
                       className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
                     >
                       <option value="">Auto-detect</option>
+                      {formData.eol_machine_id && !lineMachineOptions.some((mc) => mc.machine_id === formData.eol_machine_id) && (
+                        <option value={formData.eol_machine_id}>{formData.eol_machine_id} — not on this line (select Auto-detect to clear)</option>
+                      )}
                       {lineMachineOptions.map((mc) => (
                         <option key={`eol-${mc.id}`} value={mc.machine_id || ''}>{mc.machine_id} — {mc.name}</option>
                       ))}

@@ -41,7 +41,27 @@ interface BoardLine {
   plan_style_id: number | null;
   plan_style_code: string | null;
   plan_style_name: string | null;
+  /** All articles of the line/day plan when more than one runs on the line. */
+  plan_articles?: Array<{
+    style_id: number;
+    style_code: string;
+    style_name: string;
+    sequence_no: number;
+    total_target_per_day: number;
+  }>;
 }
+
+/** One article selected in the changeover dialog. */
+interface ArticleRow {
+  styleId: string;
+  code: string;
+  name: string;
+  target: string;
+  routing: RoutingPreview | null;
+  loading: boolean;
+}
+
+const MAX_ARTICLES_PER_LINE = 20;
 
 interface RoutingPreview {
   customer_name?: string;
@@ -110,15 +130,12 @@ export const LineScheduleForm: React.FC = () => {
 
   const [showModal, setShowModal] = React.useState(false);
   const [selectedLine, setSelectedLine] = React.useState<BoardLine | null>(null);
-  const [changeoverStyleId, setChangeoverStyleId] = React.useState('');
+  const [articleRows, setArticleRows] = React.useState<ArticleRow[]>([]);
   const [startDate, setStartDate] = React.useState(todayKey());
   const [usePlanRange, setUsePlanRange] = React.useState(false);
   const [planThroughDate, setPlanThroughDate] = React.useState(todayKey());
   const [updatePlan, setUpdatePlan] = React.useState(true);
   const [notes, setNotes] = React.useState('');
-  const [routingPreview, setRoutingPreview] = React.useState<RoutingPreview | null>(null);
-  const [loadingRouting, setLoadingRouting] = React.useState(false);
-
   // History panel state
   const [showHistory, setShowHistory] = React.useState(false);
   const [historyLine, setHistoryLine] = React.useState<BoardLine | null>(null);
@@ -192,53 +209,93 @@ export const LineScheduleForm: React.FC = () => {
 
   const openChangeover = (line: BoardLine) => {
     setSelectedLine(line);
-    setChangeoverStyleId(line.style_id ? String(line.style_id) : '');
     setStartDate(boardDate);
     setUsePlanRange(false);
     setPlanThroughDate(boardDate);
     setUpdatePlan(true);
     setNotes(line.notes || '');
-    setRoutingPreview(null);
     setStyleSearch('');
+
+    // Start from what the line runs today: all plan articles when it is a multi-article line.
+    const initial: ArticleRow[] =
+      line.plan_articles && line.plan_articles.length > 1
+        ? line.plan_articles.map((a) => ({
+            styleId: String(a.style_id),
+            code: a.style_code,
+            name: a.style_name,
+            target: String(a.total_target_per_day ?? ''),
+            routing: null,
+            loading: true,
+          }))
+        : line.style_id
+          ? [{
+              styleId: String(line.style_id),
+              code: line.style_code || '',
+              name: line.style_name || '',
+              target: '',
+              routing: null,
+              loading: true,
+            }]
+          : [];
+    setArticleRows(initial);
     setShowModal(true);
-    if (line.style_id) {
-      loadRoutingPreview(String(line.style_id));
-    }
+    initial.forEach((row) => loadArticleRouting(row.styleId, { keepTarget: row.target !== '' }));
   };
 
   const closeModal = () => {
     setShowModal(false);
     setSelectedLine(null);
-    setChangeoverStyleId('');
-    setRoutingPreview(null);
+    setArticleRows([]);
   };
 
-  const loadRoutingPreview = async (styleId: string) => {
-    if (!styleId) {
-      setRoutingPreview(null);
-      return;
-    }
-    setLoadingRouting(true);
+  const patchArticleRow = (styleId: string, patch: Partial<ArticleRow>) => {
+    setArticleRows((rows) => rows.map((r) => (r.styleId === styleId ? { ...r, ...patch } : r)));
+  };
+
+  const loadArticleRouting = async (styleId: string, opts: { keepTarget?: boolean } = {}) => {
     try {
       const res = await apiFetch(`${API_BASE}/api/production-routing/style/${styleId}`);
       const json = await res.json();
       if (res.ok && json.success) {
-        setRoutingPreview(json.data);
+        const routing: RoutingPreview = json.data;
+        setArticleRows((rows) =>
+          rows.map((r) =>
+            r.styleId === styleId
+              ? {
+                  ...r,
+                  routing,
+                  loading: false,
+                  target: opts.keepTarget && r.target ? r.target : String(routing.target_per_day ?? ''),
+                }
+              : r
+          )
+        );
       } else {
-        setRoutingPreview(null);
+        patchArticleRow(styleId, { routing: null, loading: false });
         if (res.status !== 404) toast.error(json.error || 'Could not load routing');
       }
     } catch {
-      setRoutingPreview(null);
+      patchArticleRow(styleId, { routing: null, loading: false });
       toast.error('Error loading routing preview');
-    } finally {
-      setLoadingRouting(false);
     }
   };
 
-  const handleStylePick = (styleId: string) => {
-    setChangeoverStyleId(styleId);
-    loadRoutingPreview(styleId);
+  /** Click a style to add it to the line, click again to remove it. */
+  const handleStylePick = (style: MasterOption) => {
+    const styleId = String(style.id);
+    if (articleRows.some((r) => r.styleId === styleId)) {
+      setArticleRows((rows) => rows.filter((r) => r.styleId !== styleId));
+      return;
+    }
+    if (articleRows.length >= MAX_ARTICLES_PER_LINE) {
+      toast.error(`A line can have at most ${MAX_ARTICLES_PER_LINE} articles`);
+      return;
+    }
+    setArticleRows((rows) => [
+      ...rows,
+      { styleId, code: style.code, name: style.name, target: '', routing: null, loading: true },
+    ]);
+    loadArticleRouting(styleId);
   };
 
   const openHistory = async (line: BoardLine) => {
@@ -323,8 +380,17 @@ export const LineScheduleForm: React.FC = () => {
   };
 
   const submitChangeover = async () => {
-    if (!selectedLine || !changeoverStyleId) {
-      toast.error('Select a style for the changeover');
+    if (!selectedLine || articleRows.length === 0) {
+      toast.error('Select at least one style for the changeover');
+      return;
+    }
+    if (articleRows.some((r) => !r.routing)) {
+      toast.error('Every selected article needs a production routing');
+      return;
+    }
+    const multi = articleRows.length > 1;
+    if (multi && articleRows.some((r) => !Number.isInteger(Number(r.target)) || Number(r.target) < 1)) {
+      toast.error('Enter a target per day for every article');
       return;
     }
     if (!startDate) {
@@ -341,8 +407,13 @@ export const LineScheduleForm: React.FC = () => {
       const body: Record<string, unknown> = {
         work_centre_id: selectedLine.work_centre_id,
         from_date: startDate,
-        style_id: Number(changeoverStyleId),
-        update_plan: updatePlan,
+        style_id: Number(articleRows[0].styleId),
+        articles: articleRows.map((r) => ({
+          style_id: Number(r.styleId),
+          // A single article keeps the routing's own target; several need an explicit target each.
+          total_target_per_day: multi ? Number(r.target) : null,
+        })),
+        update_plan: multi ? true : updatePlan,
         notes: notes.trim() || null,
         open_ended: !usePlanRange,
       };
@@ -572,10 +643,24 @@ export const LineScheduleForm: React.FC = () => {
                     <p className="text-xs text-gray-500 pl-6">
                       {[line.leather_name, line.color_name].filter(Boolean).join(' · ') || '—'}
                     </p>
-                    {line.plan_style_name && (
-                      <p className="text-xs text-gray-500 pl-6">
-                        Plan: {line.plan_style_code} — {line.plan_style_name}
-                      </p>
+                    {line.plan_articles && line.plan_articles.length > 1 ? (
+                      <div className="pl-6 pt-1 space-y-0.5">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-violet-600">
+                          {line.plan_articles.length} articles today
+                        </p>
+                        {line.plan_articles.map((a) => (
+                          <p key={a.style_id} className="text-xs text-gray-600">
+                            {a.sequence_no}. {a.style_code} — {a.style_name}
+                            <span className="ml-1 tabular-nums text-gray-400">({a.total_target_per_day})</span>
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      line.plan_style_name && (
+                        <p className="text-xs text-gray-500 pl-6">
+                          Plan: {line.plan_style_code} — {line.plan_style_name}
+                        </p>
+                      )
                     )}
                     {line.notes && (
                       <p className="text-xs italic text-gray-500 pl-6 mt-1">{line.notes}</p>
@@ -678,7 +763,12 @@ export const LineScheduleForm: React.FC = () => {
               )}
 
               <div>
-                <label className="text-xs font-semibold text-gray-600">Style</label>
+                <label className="text-xs font-semibold text-gray-600">
+                  Style{' '}
+                  <span className="font-normal text-gray-500">
+                    (select one, or several to run multiple articles on this line)
+                  </span>
+                </label>
                 <div className="relative mt-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <input
@@ -693,41 +783,96 @@ export const LineScheduleForm: React.FC = () => {
                   {filteredStyles.length === 0 ? (
                     <p className="p-3 text-sm text-gray-500">No styles found</p>
                   ) : (
-                    filteredStyles.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => handleStylePick(String(s.id))}
-                        className={`block w-full px-3 py-2 text-left text-sm hover:bg-violet-50 ${
-                          changeoverStyleId === String(s.id) ? 'bg-violet-100 font-semibold' : ''
-                        }`}
-                      >
-                        <span className="font-mono text-violet-700">{s.code}</span> — {s.name}
-                      </button>
-                    ))
+                    filteredStyles.map((s) => {
+                      const picked = articleRows.some((r) => r.styleId === String(s.id));
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => handleStylePick(s)}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-violet-50 ${
+                            picked ? 'bg-violet-100 font-semibold' : ''
+                          }`}
+                        >
+                          <input type="checkbox" checked={picked} readOnly className="pointer-events-none rounded border-gray-300" />
+                          <span>
+                            <span className="font-mono text-violet-700">{s.code}</span> — {s.name}
+                          </span>
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               </div>
 
-              {loadingRouting ? (
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading routing…
+              {articleRows.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-600">
+                    {articleRows.length > 1
+                      ? `Articles on this line (${articleRows.length}) — the first is the primary article`
+                      : 'Selected article'}
+                  </p>
+                  {articleRows.map((row, idx) => (
+                    <div key={row.styleId} className="rounded-lg bg-slate-50 p-3 text-sm text-gray-700 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-gray-900">
+                          {articleRows.length > 1 && (
+                            <span className="mr-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                              #{idx + 1}
+                            </span>
+                          )}
+                          <span className="font-mono text-violet-700">{row.code}</span> — {row.name}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setArticleRows((rows) => rows.filter((r) => r.styleId !== row.styleId))}
+                          className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                          title="Remove article"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {row.loading ? (
+                        <div className="flex items-center gap-2 text-gray-500">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Loading routing…
+                        </div>
+                      ) : row.routing ? (
+                        <>
+                          <p className="text-xs text-gray-600">
+                            Customer: {row.routing.customer_name || '—'} · Routing target/day:{' '}
+                            {row.routing.target_per_day ?? '—'} · SMV: {row.routing.tot_smv ?? '—'}
+                          </p>
+                          {articleRows.length > 1 && (
+                            <label className="flex items-center gap-2 pt-1 text-xs font-semibold text-gray-600">
+                              Target per day
+                              <input
+                                type="number"
+                                min={1}
+                                value={row.target}
+                                onChange={(e) => patchArticleRow(row.styleId, { target: e.target.value })}
+                                className="w-28 rounded-lg border border-gray-300 px-2 py-1 text-sm font-normal"
+                              />
+                            </label>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-amber-700">No routing found for this style — create routing first.</p>
+                      )}
+                    </div>
+                  ))}
+                  {articleRows.length > 1 && (
+                    <p className="text-xs text-gray-500">
+                      The line&apos;s machine list will include the machine centres of all selected articles. The line target is the sum of the article targets.
+                    </p>
+                  )}
                 </div>
-              ) : routingPreview ? (
-                <div className="rounded-lg bg-slate-50 p-3 text-sm text-gray-700 space-y-1">
-                  <p className="font-semibold text-gray-900">Routing defaults</p>
-                  <p>Customer: {routingPreview.customer_name || '—'}</p>
-                  <p>Target/day: {routingPreview.target_per_day ?? '—'}</p>
-                  <p>SMV: {routingPreview.tot_smv ?? '—'}</p>
-                </div>
-              ) : changeoverStyleId ? (
-                <p className="text-sm text-amber-700">No routing found for this style — create routing first.</p>
-              ) : null}
+              )}
 
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input
                   type="checkbox"
-                  checked={updatePlan}
+                  checked={articleRows.length > 1 ? true : updatePlan}
+                  disabled={articleRows.length > 1}
                   onChange={(e) => setUpdatePlan(e.target.checked)}
                   className="rounded border-gray-300"
                 />
@@ -759,7 +904,7 @@ export const LineScheduleForm: React.FC = () => {
               <button
                 type="button"
                 onClick={submitChangeover}
-                disabled={saving || !changeoverStyleId || !routingPreview}
+                disabled={saving || articleRows.length === 0 || articleRows.some((r) => r.loading || !r.routing)}
                 className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Repeat2 className="h-4 w-4" />}

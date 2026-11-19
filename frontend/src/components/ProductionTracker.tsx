@@ -35,7 +35,7 @@ import { HourlyOutputChart } from './HourlyOutputChart';
 import { Reports } from './Reports';
 import { formatInput, formatWip } from '../utils/wipUtils';
 import { buildMachinePaceSnapshot, getProductiveShiftTotals, SHIFT_END_MINUTES, SHIFT_START_MINUTES } from '../utils/shiftPaceUtils';
-import { minutesToDurationParts, formatDurationString } from '../utils/formatCycleDuration';
+import { minutesToDurationParts, formatDurationMinutesString } from '../utils/formatCycleDuration';
 import { formatSinceTimeHHMM, formatTime12NoAmPm } from '../utils/dateTimeFormat';
 import { TimeLossReasonDialog } from './TimeLossReasonDialog';
 import { ProductionDayLockPanel } from './ProductionDayLockPanel';
@@ -71,21 +71,21 @@ const machineKeysMatch = (left: string, right: string) => {
 
 const formatSignedNetBalance = (netMins: number) => {
   if (Math.abs(netMins) * 60 < 1) return null;
-  const dur = formatDurationString(netMins);
+  const dur = formatDurationMinutesString(netMins);
   return netMins < 0 ? `${dur} loss` : `${dur} gain`;
 };
 
 /** Duration only for card badges (label already says Time loss / Net balance). */
 const formatNetBalanceDuration = (netMins: number) => {
   if (Math.abs(netMins) * 60 < 1) return null;
-  return formatDurationString(netMins);
+  return formatDurationMinutesString(netMins);
 };
 
 /** Shift time remaining — whole minutes and seconds, no decimals. */
 const formatShiftTimeLeft = (minutes: number) => {
   const parts = minutesToDurationParts(Math.max(0, minutes));
   if (parts.wholeMinutes <= 0 && parts.hours <= 0 && parts.seconds <= 0) return '0s left';
-  if (parts.hours > 0) return `${parts.hours}h ${parts.wholeMinutes}m ${parts.seconds}s left`;
+  if (parts.hours > 0) return `${parts.hours * 60 + parts.wholeMinutes}m ${parts.seconds}s left`;
   if (parts.wholeMinutes <= 0) return `${parts.seconds}s left`;
   if (parts.seconds <= 0) return `${parts.wholeMinutes}m left`;
   return `${parts.wholeMinutes}m ${parts.seconds}s left`;
@@ -351,7 +351,7 @@ export const ProductionTracker: React.FC = () => {
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isSmallScreen, setIsSmallScreen] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [lineSearch, setLineSearch] = useState('');
-  const [lineSort, setLineSort] = useState<'risk' | 'efficiency' | 'output_gap'>('risk');
+  const [lineSort, setLineSort] = useState<'sequence' | 'risk' | 'efficiency' | 'output_gap'>('sequence');
   const [refreshMode, setRefreshMode] = useState<'10s' | '30s' | 'manual'>('10s');
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
   const [machineLossMeta, setMachineLossMeta] = useState<MachineTimeLossMeta[]>([]);
@@ -573,6 +573,7 @@ export const ProductionTracker: React.FC = () => {
       ? mapped.filter(({ line }: any) => String(line.line_name || '').toLowerCase().includes(text))
       : mapped;
     const sorted = [...filtered].sort((a, b) => {
+      if (lineSort === 'sequence') return a.index - b.index;
       if (lineSort === 'efficiency') return b.outputPct - a.outputPct;
       if (lineSort === 'output_gap') return b.gap - a.gap;
       return b.riskScore - a.riskScore;
@@ -2208,9 +2209,10 @@ export const ProductionTracker: React.FC = () => {
                 <p className="text-xs font-semibold text-slate-500 mb-1.5">Sort order</p>
                 <select
                   value={lineSort}
-                  onChange={(e) => setLineSort(e.target.value as 'risk' | 'efficiency' | 'output_gap')}
+                  onChange={(e) => setLineSort(e.target.value as 'sequence' | 'risk' | 'efficiency' | 'output_gap')}
                   className="w-full rounded-lg px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200"
                 >
+                  <option value="sequence">Sort: Line sequence</option>
                   <option value="risk">Sort: Risk first</option>
                   <option value="efficiency">Sort: Output % high to low</option>
                   <option value="output_gap">Sort: Output gap high to low</option>

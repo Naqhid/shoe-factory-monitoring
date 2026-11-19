@@ -1738,6 +1738,16 @@ export const MissedActionsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  /** Calendar date of a cycle, e.g. "19 Nov 2026". Needed for multi-day ranges. */
+  const fmtEventDate = (row: { start_time?: string | null; finish_time?: string | null }) => {
+    const raw = row.start_time || row.finish_time;
+    if (!raw) return '-';
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime())
+      ? '-'
+      : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
   const exportDailyCsv = () => {
     if (dailyFilteredEvents.length === 0) return;
     const headers = ['line', 'machine', 'operator', 'start_time', 'finish_time', 'target_mins', 'actual_mins', 'inactive_mins', 'extra_mins'];
@@ -1958,7 +1968,7 @@ export const MissedActionsPage: React.FC = () => {
         doc.text('CYCLE DETAILS', margin, y + 3);
         y += 7;
 
-        const headerLabels = ['Operator', 'Start', 'Finish', 'Target', 'Actual', 'Output', 'Started Late', 'Finished Late', 'Finished Early', 'On Time', 'Time Loss'];
+        const headerLabels = ['Date', 'Operator', 'Start', 'Finish', 'Target', 'Actual', 'Output', 'Started Late', 'Finished Late', 'Finished Early', 'On Time', 'Time Loss'];
 
         dailyVisibleLineMachineGroups.forEach((line) => {
           // Line header bar
@@ -2006,6 +2016,7 @@ export const MissedActionsPage: React.FC = () => {
               const isOnTime = (actual <= target && inactive === 0) || finishedEarly > 0;
               const timeLoss = inactive + extra;
               return [
+                fmtEventDate(row),
                 `${row.employee_name} (${row.employee_code})`,
                 row.start_time ? formatTime12NoAmPmSec(new Date(row.start_time)) : '-',
                 row.finish_time ? formatTime12NoAmPmSec(new Date(row.finish_time)) : '-',
@@ -2036,7 +2047,7 @@ export const MissedActionsPage: React.FC = () => {
             const totalTimeLoss = totalInactive + totalExtra;
             const summaryRow = [
               `SUMMARY (${machine.events.length} cycles)`,
-              '', '',
+              '', '', '',
               '',
               formatMinutes(totalActual),
               String(totalOutput),
@@ -2049,7 +2060,7 @@ export const MissedActionsPage: React.FC = () => {
 
             const bottomSummaryRow = [
               `SUMMARY — ${machine.machineName}`,
-              '', '',
+              '', '', '',
               '',
               formatMinutes(totalActual),
               String(totalOutput),
@@ -2074,8 +2085,8 @@ export const MissedActionsPage: React.FC = () => {
                   data.cell.styles.textColor = [30, 58, 138];
                   data.cell.styles.fontStyle = 'bold';
                 }
-                // On Time column (index 9): green for Yes, red for No
-                if (data.section === 'body' && data.column.index === 9) {
+                // On Time column (index 10): green for Yes, red for No
+                if (data.section === 'body' && data.column.index === 10) {
                   const val = data.cell.raw as string;
                   if (val === 'Yes') {
                     data.cell.styles.textColor = [22, 163, 74];
@@ -3886,6 +3897,7 @@ export const MissedActionsPage: React.FC = () => {
                                           <span className="text-[10px] font-semibold">{isOnTime ? <span className="text-green-600">✓ On Time</span> : <span className="text-red-500">✗ Late</span>}</span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[10px]">
+                                          <div className="col-span-3"><span className="text-gray-500">Date:</span> <span className="font-semibold text-gray-700">{fmtEventDate(row)}</span></div>
                                           <div><span className="text-gray-500">Start:</span> <span className="text-gray-700">{row.start_time ? formatTime12NoAmPm(new Date(row.start_time)) : '-'}</span></div>
                                           <div><span className="text-gray-500">Finish:</span> <span className="text-gray-700">{row.finish_time ? formatTime12NoAmPm(new Date(row.finish_time)) : '-'}</span></div>
                                           <div><span className="text-gray-500">Output:</span> <span className="font-semibold text-emerald-700">{row.output_pairs ?? 0}</span></div>
@@ -3905,6 +3917,7 @@ export const MissedActionsPage: React.FC = () => {
                                 <table className="min-w-full">
                                   <thead className="bg-white border-b border-gray-100">
                                     <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Date</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Operator</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Start</th>
                                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase">Finish</th>
@@ -3920,7 +3933,7 @@ export const MissedActionsPage: React.FC = () => {
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
                                     <tr className="bg-blue-50">
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">Summary</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800" colSpan={2}>Summary</td>
                                       <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>
                                         Cycles: {machine.events.length}
                                       </td>
@@ -3942,6 +3955,7 @@ export const MissedActionsPage: React.FC = () => {
                                       const timeLoss = inactive + extra;
                                       return (
                                       <tr key={row.id}>
+                                        <td className="px-3 py-2.5 text-sm text-gray-700 whitespace-nowrap">{fmtEventDate(row)}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.employee_name} ({row.employee_code})</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.start_time ? formatTime12NoAmPmSec(new Date(row.start_time)) : '-'}</td>
                                         <td className="px-3 py-2.5 text-sm text-gray-700">{row.finish_time ? formatTime12NoAmPmSec(new Date(row.finish_time)) : '-'}</td>
@@ -3957,7 +3971,7 @@ export const MissedActionsPage: React.FC = () => {
                                       );
                                     })}
                                     <tr className="bg-blue-50 border-t-2 border-blue-200">
-                                      <td className="px-3 py-2 text-xs font-bold text-blue-800">Summary</td>
+                                      <td className="px-3 py-2 text-xs font-bold text-blue-800" colSpan={2}>Summary</td>
                                       <td className="px-3 py-2 text-xs text-blue-800" colSpan={3}>Cycles: {machine.events.length}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-blue-800">{formatDurationString(machine.events.reduce((s, e) => s + Number(e.actual_mins || 0), 0))}</td>
                                       <td className="px-3 py-2 text-xs font-bold text-blue-800">{machine.events.reduce((s, e) => s + Number(e.output_pairs || 0), 0)}</td>

@@ -341,6 +341,14 @@ const initDb = async () => {
         if (e.code !== 'ER_DUP_FIELDNAME') throw e;
       }
     }
+    for (const tbl of ['work_centres', 'machine_centres']) {
+      try {
+        await db.execute(`ALTER TABLE ${tbl} ADD COLUMN sequence_no INT NULL`);
+        logger.info(`Added sequence_no to ${tbl}`);
+      } catch (e) {
+        if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+      }
+    }
     try {
       await db.execute(`
         UPDATE work_centres wc

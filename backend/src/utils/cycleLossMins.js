@@ -338,6 +338,8 @@ async function buildMachineTimeLossReportRows(pool, { fromDate, toDate, workCent
       DATE(mcp.prod_date) AS date,
       mcp.work_centre_id,
       wc.name AS line,
+      wc.sequence_no AS line_seq,
+      mc.sequence_no AS machine_seq,
       mcp.machine_id,
       COALESCE(mc.name, mc.machine_name, CONCAT('Machine ', mcp.machine_id)) AS machine_name,
       mcp.start_time,
@@ -401,6 +403,8 @@ async function buildMachineTimeLossReportRows(pool, { fromDate, toDate, workCent
         date: dateKey,
         work_centre_id: wcId,
         line: row.line || 'N/A',
+        line_seq: row.line_seq ?? null,
+        machine_seq: row.machine_seq ?? null,
         machine_id: machineId,
         machine_name: row.machine_name || `Machine ${machineId}`,
         net_mins: 0,
@@ -451,10 +455,15 @@ async function buildMachineTimeLossReportRows(pool, { fromDate, toDate, workCent
     );
   }
 
+  // Sequence-wise: newest date first, then line sequence, then machine sequence (unset sorts last).
+  const seqKey = (v) => (v == null ? Number.MAX_SAFE_INTEGER : Number(v));
   out.sort((a, b) => {
-    if (b.abs_net_mins !== a.abs_net_mins) return b.abs_net_mins - a.abs_net_mins;
     if (a.date !== b.date) return String(b.date).localeCompare(String(a.date));
-    return String(a.line || '').localeCompare(String(b.line || ''));
+    if (seqKey(a.line_seq) !== seqKey(b.line_seq)) return seqKey(a.line_seq) - seqKey(b.line_seq);
+    const lineCmp = String(a.line || '').localeCompare(String(b.line || ''));
+    if (lineCmp !== 0) return lineCmp;
+    if (seqKey(a.machine_seq) !== seqKey(b.machine_seq)) return seqKey(a.machine_seq) - seqKey(b.machine_seq);
+    return String(a.machine_id || '').localeCompare(String(b.machine_id || ''), undefined, { numeric: true });
   });
 
   return out;
