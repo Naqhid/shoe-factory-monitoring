@@ -10,6 +10,10 @@ const {
 const wipStateService = require('../services/wipStateService');
 const { buildMachineTimeLossReportRows } = require('../utils/cycleLossMins');
 
+/** Report ordering: lines then machines by configured sequence_no (unset sorts last, then by name). */
+const SQL_ORDER_LINE_SEQ = '(wc.sequence_no IS NULL), wc.sequence_no, wc.name';
+const SQL_ORDER_MACHINE_SEQ = '(mc.sequence_no IS NULL), mc.sequence_no';
+
 /** Per-line input from work_centres.input_machine_id (fallback 01). */
 const SQL_LINE_INPUT_JOIN = `
   LEFT JOIN (
@@ -292,12 +296,13 @@ class ApiController {
           .replace(/%DATE%/g, 'DATE(mcp.prod_date)')
           .replace(/%MACHINE%/g, 'mcp.machine_id')}
         ${where}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, mcp.machine_id, wc.name, mc.machine_name, mc.name,
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, mcp.machine_id, wc.name, wc.sequence_no, mc.sequence_no, mc.machine_name, mc.name,
           pp.total_target_per_day, machine_input.total_input, c.name, s.name, col.name, l.name, g.name`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [rawRows] = await db.query(`
         SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, mcp.machine_id, wc.name as line,
+          wc.sequence_no as line_seq, mc.sequence_no as machine_seq,
           COALESCE(mc.machine_name, mc.name, mcp.machine_id) as machine_name, c.name as customer, s.name as article_no,
           col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
@@ -315,7 +320,7 @@ class ApiController {
           SUM(CASE WHEN HOUR(mcp.start_time)=16 THEN mcp.output_pairs ELSE 0 END) as \`4_5\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=17 THEN mcp.output_pairs ELSE 0 END) as \`5_6\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=18 THEN mcp.output_pairs ELSE 0 END) as \`6_7\`
-        ${baseQuery} ORDER BY date, wc.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ}, ${SQL_ORDER_MACHINE_SEQ}, mcp.machine_id LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       const data = await enrichRowsWithMesWip(rawRows);
 
@@ -352,12 +357,13 @@ class ApiController {
           .replace(/%WC%/g, 'mcp.work_centre_id')
           .replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${where}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name,
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, wc.sequence_no,
           pp.total_target_per_day, line_input.total_input, c.name, s.name, col.name, l.name, g.name`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [rawRows] = await db.query(`
         SELECT DATE(mcp.prod_date) as date, mcp.work_centre_id, NULL as machine_id, wc.name as line,
+          wc.sequence_no as line_seq, NULL as machine_seq,
           'All machines' as machine_name, c.name as customer, s.name as article_no,
           col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
@@ -375,7 +381,7 @@ class ApiController {
           SUM(CASE WHEN HOUR(mcp.start_time)=16 THEN mcp.output_pairs ELSE 0 END) as \`4_5\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=17 THEN mcp.output_pairs ELSE 0 END) as \`5_6\`,
           SUM(CASE WHEN HOUR(mcp.start_time)=18 THEN mcp.output_pairs ELSE 0 END) as \`6_7\`
-        ${baseQuery} ORDER BY date, wc.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ} LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       const data = await enrichRowsWithMesWip(rawRows);
 
@@ -415,7 +421,8 @@ class ApiController {
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [rawRows] = await db.query(`
         SELECT DATE(mcs.prod_date) as date, mcs.work_centre_id, mcs.machine_id,
-          wc.name as line, COALESCE(mc.machine_name, mc.name) as process,
+          wc.name as line, wc.sequence_no as line_seq, mc.sequence_no as machine_seq,
+          COALESCE(mc.machine_name, mc.name) as process,
           c.name as customer, s.name as article_no, col.name as color, l.name as leather, g.name as \`group\`,
           pp.total_target_per_day as total_planned_qty,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -424,7 +431,7 @@ class ApiController {
           ROUND((mcs.total_output_pairs/NULLIF(pp.total_target_per_day,0))*100,1) as output_percent,
           mcs.total_target_mins as total_standard_mins_value, mcs.total_actual_mins as total_produced_mins_value,
           ROUND(pp.total_target_per_day*(mcs.total_target_mins/(8*60)),0) as targeted_output_smv
-        ${baseQuery} ORDER BY date, wc.name, process LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ}, ${SQL_ORDER_MACHINE_SEQ}, process LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
       const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx, { usePaceDailyForPlannedQty: true });
@@ -469,7 +476,7 @@ class ApiController {
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [data] = await db.query(`
-        SELECT wc.name as line, e.name as emp_name, e.code as emp_code, dates.d as date,
+        SELECT wc.name as line, wc.sequence_no as line_seq, e.name as emp_name, e.code as emp_code, dates.d as date,
           CASE WHEN ms.emp_id IS NOT NULL THEN 'Present' ELSE 'Absent' END as status,
           ms.activated_at as login_time,
           COALESCE(pp.total_target_per_day, 0) as target,
@@ -477,7 +484,7 @@ class ApiController {
           ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
           COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent
-        ${baseQuery} ORDER BY dates.d, wc.name, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY dates.d, ${SQL_ORDER_LINE_SEQ}, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -506,7 +513,11 @@ class ApiController {
         ${where}`;
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [data] = await db.query(`
-        SELECT DATE(rr.production_date) as date, wc.name as line, rr.machine_centre_name as machine,
+        SELECT DATE(rr.production_date) as date, wc.name as line, wc.sequence_no as line_seq,
+          (SELECT MIN(mcq.sequence_no) FROM machine_centres mcq
+            WHERE mcq.work_centre_id = rr.work_centre_id
+              AND (mcq.machine_name = rr.machine_centre_name OR mcq.name = rr.machine_centre_name)) as machine_seq,
+          rr.machine_centre_name as machine,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
           ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
@@ -517,7 +528,7 @@ class ApiController {
           ROUND((rr.rework_qty/NULLIF(rr.total_output_pairs,0))*100,2) as rework_percent,
           ROUND((rr.rejection_qty/NULLIF(rr.total_output_pairs,0))*100,2) as rejection_percent,
           rr.reason_category, rr.reason
-        ${baseQuery} ORDER BY date, wc.name, rr.machine_centre_name LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ}, (machine_seq IS NULL), machine_seq, rr.machine_centre_name LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -552,12 +563,13 @@ class ApiController {
         ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${where}
         GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, mcp.emp_id, mcp.machine_id,
-          e.code, e.name, wc.name, mc.machine_id, mc.machine_name, mc.name,
+          e.code, e.name, wc.name, wc.sequence_no, mc.sequence_no, mc.machine_id, mc.machine_name, mc.name,
           pp.total_target_per_day, line_input.total_input, line_eol.line_eol_output`;
 
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM (SELECT 1 ${baseQuery}) t`, params);
       const [data] = await db.query(`
-        SELECT DATE(mcp.prod_date) as date, wc.name as line, e.code as emp_code, e.name as emp_name,
+        SELECT DATE(mcp.prod_date) as date, wc.name as line, wc.sequence_no as line_seq, mc.sequence_no as machine_seq,
+          e.code as emp_code, e.name as emp_name,
           mcp.machine_id, COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -565,7 +577,7 @@ class ApiController {
           SUM(mcp.output_pairs) as total_output,
           COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent
-        ${baseQuery} ORDER BY date, wc.name, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ}, ${SQL_ORDER_MACHINE_SEQ}, mcp.machine_id, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {
@@ -598,7 +610,8 @@ class ApiController {
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [rawRows] = await db.query(`
         SELECT DATE(mcs.prod_date) as date, mcs.work_centre_id, mcs.machine_id,
-          wc.name as line, e.code as emp_code, e.name as emp_name,
+          wc.name as line, wc.sequence_no as line_seq, mc.sequence_no as machine_seq,
+          e.code as emp_code, e.name as emp_name,
           COALESCE(mc.machine_name, mc.name) as machine_name,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
@@ -608,7 +621,7 @@ class ApiController {
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
           mcs.total_target_mins as target_mins, mcs.total_actual_mins as actual_mins,
           mcs.total_idle_mins as idle_mins
-        ${baseQuery} ORDER BY date, wc.name, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ}, ${SQL_ORDER_MACHINE_SEQ}, mcs.machine_id, e.name LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       const routingCtx = await loadRoutingMinsMap(fromDate, toDate, workCentreId);
       const data = enrichRowsWithPaceEfficiency(rawRows, routingCtx, {
@@ -766,7 +779,7 @@ class ApiController {
       const [rows] = await db.query(`
         SELECT
           DATE(mcp.prod_date) as date,
-          mcp.work_centre_id, wc.name AS work_centre_name,
+          mcp.work_centre_id, wc.name AS work_centre_name, wc.sequence_no AS line_seq, mc.sequence_no AS machine_seq,
           mcp.machine_id, mc.machine_name,
           mcp.emp_id, e.name AS employee_name,
           COUNT(CASE WHEN mcp.button_status = 2 THEN 1 END) AS cycles,
@@ -793,8 +806,8 @@ class ApiController {
         ${SQL_LINE_INPUT_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         ${SQL_LINE_EOL_JOIN.replace(/%WC%/g, 'mcp.work_centre_id').replace(/%DATE%/g, 'DATE(mcp.prod_date)')}
         WHERE DATE(mcp.prod_date) BETWEEN ? AND ? ${wcWhere}
-        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name
-        ORDER BY date, wc.name, mcp.machine_id
+        GROUP BY DATE(mcp.prod_date), mcp.work_centre_id, wc.name, wc.sequence_no, mc.sequence_no, mcp.machine_id, mc.machine_name, mcp.emp_id, e.name
+        ORDER BY date, ${SQL_ORDER_LINE_SEQ}, ${SQL_ORDER_MACHINE_SEQ}, mcp.machine_id
       `, params);
 
       const routingMinsCol = await getRoutingMinsColumnName();

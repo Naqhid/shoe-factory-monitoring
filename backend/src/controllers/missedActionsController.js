@@ -165,7 +165,7 @@ const queryDailyCycleEvents = async (dateFrom, dateTo) => {
       AND mcp.button_status = 2
       AND mcp.start_time IS NOT NULL
       AND mcp.finish_time IS NOT NULL
-    ORDER BY wc.name, mcp.machine_id, mcp.start_time
+    ORDER BY (wc.sequence_no IS NULL), wc.sequence_no, wc.name, (mc.sequence_no IS NULL), mc.sequence_no, mcp.machine_id, mcp.start_time
     `,
     [dateFrom, dateTo]
   );
@@ -571,7 +571,7 @@ exports.getWeeklyTrend = async (req, res, next) => {
     });
 
     // Use dashboard-style machine loss calculation (same as TV dashboard & Reports time-loss)
-    const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE deleted_at IS NULL AND COALESCE(is_active, 1) = 1 ORDER BY id');
+    const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE deleted_at IS NULL AND COALESCE(is_active, 1) = 1 ORDER BY (sequence_no IS NULL), sequence_no, id');
     const dateKeys = enumerateDateKeys(
       new Date(new Date(endDate + 'T00:00:00').getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
       endDate
@@ -642,7 +642,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
         AND mcp.start_time IS NOT NULL
         AND mcp.finish_time IS NOT NULL
         AND wc.deleted_at IS NULL AND COALESCE(wc.is_active, 1) = 1
-      ORDER BY wc.name, mcp.machine_id, mcp.start_time
+      ORDER BY (wc.sequence_no IS NULL), wc.sequence_no, wc.name, (mc.sequence_no IS NULL), mc.sequence_no, mcp.machine_id, mcp.start_time
       `,
       [dateFrom, dateTo]
     );
@@ -712,7 +712,7 @@ exports.getMissedActionsDailyReport = async (req, res, next) => {
     const dateKeys = enumerateDateKeys(dateFrom, dateTo);
     let workCentres = [];
     if (lineFilter === 'all') {
-      const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE deleted_at IS NULL AND COALESCE(is_active, 1) = 1 ORDER BY id');
+      const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE deleted_at IS NULL AND COALESCE(is_active, 1) = 1 ORDER BY (sequence_no IS NULL), sequence_no, id');
       workCentres = wcRows;
     } else {
       const [wcRows] = await db.query('SELECT id, name FROM work_centres WHERE name = ? AND deleted_at IS NULL AND COALESCE(is_active, 1) = 1 LIMIT 1', [lineFilter]);
