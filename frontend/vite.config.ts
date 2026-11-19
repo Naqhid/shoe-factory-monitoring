@@ -1,0 +1,147 @@
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
+import path from 'path'
+
+const certPath = path.resolve(__dirname, 'cert')
+const keyFile = path.join(certPath, 'key.pem')
+const certFile = path.join(certPath, 'cert.pem')
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  /** Enable HTTPS automatically when cert files exist (needed for PWA install over LAN IP). */
+  const httpsConfig =
+    fs.existsSync(keyFile) && fs.existsSync(certFile)
+      ? { key: fs.readFileSync(keyFile), cert: fs.readFileSync(certFile) }
+      : undefined
+  /** Factory LAN without internet: set VITE_DISABLE_PWA=true so Chrome is not blocked by a service worker. */
+  const disablePwa = env.VITE_DISABLE_PWA === 'true'
+  /** Split-dev proxy — set VITE_DEV_API_PROXY in frontend/.env.local (develop: 3001, feature: 3101). */
+  const devApiProxyTarget = env.VITE_DEV_API_PROXY?.trim()
+  const devApiProxy = devApiProxyTarget
+    ? {
+        '/api': { target: devApiProxyTarget, changeOrigin: true },
+        '/health': { target: devApiProxyTarget, changeOrigin: true },
+      }
+    : undefined
+
+  return {
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico', 'icon.svg'],
+      manifest: {
+        name: 'ProdPulse - Smart Production Tracking System',
+        short_name: 'ProdPulse',
+        description: 'Smart production tracking system for real-time manufacturing monitoring',
+        start_url: '/',
+        display: 'standalone',
+        orientation: 'any',
+        theme_color: '#2563eb',
+        background_color: '#ffffff',
+        scope: '/',
+        categories: ['productivity', 'business'],
+       icons: [
+  {
+    src: '/favicon.ico',
+    sizes: '64x64 32x32 24x24 16x16',
+    type: 'image/x-icon',
+  },
+  {
+    src: '/icon-192.png',
+    sizes: '192x192',
+    type: 'image/png',
+    purpose: 'any',
+  },
+  {
+    src: '/icon-512.png',
+    sizes: '512x512',
+    type: 'image/png',
+    purpose: 'any',
+  },
+  {
+    src: '/icon-512.png',
+    sizes: '512x512',
+    type: 'image/png',
+    purpose: 'maskable',
+  },
+  {
+    src: '/icon.svg',
+    sizes: 'any',
+    type: 'image/svg+xml',
+    purpose: 'any',
+  },
+],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api/, /^\/health/],
+        // Clean old caches on new SW activation to prevent stale chunk errors
+        cleanupOutdatedCaches: true,
+        // Skip waiting so new SW activates immediately
+        skipWaiting: true,
+        clientsClaim: true,
+        runtimeCaching: [
+          {
+            urlPattern: /^https?:\/\/.*\/api\/.*/i,
+            handler: 'NetworkOnly',
+          },
+          {
+            // JS/CSS chunks: network-first with short timeout to avoid stale chunks
+            urlPattern: /\.(?:js|css)$/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'static-assets',
+              networkTimeoutSeconds: 3,
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24, // 1 day
+              },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        enabled: true,
+      },
+    }),
+  ],
+  base: '/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'query-vendor': ['react-query', 'axios'],
+          'ui-vendor': ['lucide-react', 'react-hot-toast'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+  },
+  server: {
+    port: 3002,
+    host: '0.0.0.0',
+    https: httpsConfig,
+    ...(devApiProxy ? { proxy: devApiProxy } : {}),
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom', 'react-query'],
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{js,ts,tsx}'],
+  },
+  }
+})
