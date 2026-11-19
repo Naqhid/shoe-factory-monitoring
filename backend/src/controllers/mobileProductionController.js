@@ -1636,11 +1636,26 @@ exports.updateStatus = async (req, res, next) => {
         const now = new Date();
         const elapsedSeconds = startTime ? Math.floor((now - startTime) / 1000) : 0;
         
-        if (startTime && elapsedSeconds < 60) {
+        // Minimum minutes before FINISH is configurable in Settings (dashboard_settings.min_finish_mins); default 1
+        let minFinishMins = 1;
+        try {
+          const [cfgRows] = await db.execute(
+            "SELECT setting_value FROM dashboard_settings WHERE setting_key = 'min_finish_mins' LIMIT 1"
+          );
+          if (cfgRows[0]) {
+            const parsed = Number(JSON.parse(cfgRows[0].setting_value));
+            if (Number.isFinite(parsed) && parsed >= 0) minFinishMins = parsed;
+          }
+        } catch (cfgErr) {
+          logger.warn(`Could not read min_finish_mins, using default 1: ${cfgErr.message}`);
+        }
+        const minFinishSeconds = Math.round(minFinishMins * 60);
+
+        if (startTime && elapsedSeconds < minFinishSeconds) {
           logger.warn(`[GHOST-DETECTED] Record ${id} being finished after only ${elapsedSeconds} seconds! Machine=${existingRecord.machine_id}, Emp=${existingRecord.emp_id}. Blocking suspicious finish.`);
           return res.status(400).json({
             success: false,
-            message: `Cannot finish production cycle after only ${elapsedSeconds} seconds. Minimum cycle time is 1 minute.`
+            message: `Cannot finish production cycle after only ${elapsedSeconds} seconds. Minimum cycle time is ${minFinishMins} minute${minFinishMins === 1 ? '' : 's'}.`
           });
         }
         

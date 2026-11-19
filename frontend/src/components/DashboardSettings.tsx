@@ -38,6 +38,8 @@ export const DashboardSettings: React.FC = () => {
   const [thresholds, setThresholds] = React.useState<ColorThreshold[]>(DEFAULT_THRESHOLDS);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [minFinishMins, setMinFinishMins] = React.useState<string>('1');
+  const [savingMinFinish, setSavingMinFinish] = React.useState(false);
 
   React.useEffect(() => {
     loadSettings();
@@ -49,6 +51,9 @@ export const DashboardSettings: React.FC = () => {
       const json = await res.json();
       if (json.success && json.data?.efficiency_colors?.thresholds) {
         setThresholds(json.data.efficiency_colors.thresholds);
+      }
+      if (json.success && json.data?.min_finish_mins != null) {
+        setMinFinishMins(String(json.data.min_finish_mins));
       }
     } catch {
       // Use defaults
@@ -85,6 +90,33 @@ export const DashboardSettings: React.FC = () => {
       toast.error('Network error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveMinFinish = async () => {
+    const value = Number(minFinishMins);
+    if (!Number.isFinite(value) || value < 0 || value > 60) {
+      toast.error('Enter a value between 0 and 60 minutes');
+      return;
+    }
+    setSavingMinFinish(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/dashboard-settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ min_finish_mins: value }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setMinFinishMins(String(value));
+        toast.success('Minimum cycle time saved');
+      } else {
+        toast.error(json.error || 'Failed to save');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setSavingMinFinish(false);
     }
   };
 
@@ -132,6 +164,39 @@ export const DashboardSettings: React.FC = () => {
             <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Dashboard Settings</h1>
             <p className="text-xs sm:text-sm text-gray-500">Configure efficiency color thresholds</p>
           </div>
+        </div>
+      </div>
+
+      {/* Minimum cycle time before FINISH (all machines) */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden mb-4 sm:mb-6">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+          <h2 className="text-sm sm:text-base font-bold text-gray-900">Minimum Cycle Time Before Finish</h2>
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+            Applies to all machines. FINISH is blocked until a cycle has run for at least this many minutes. Use 0 to disable.
+          </p>
+        </div>
+        <div className="p-3 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              max="60"
+              step="0.5"
+              value={minFinishMins}
+              onChange={(e) => setMinFinishMins(e.target.value)}
+              className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center"
+            />
+            <span className="text-sm text-gray-600">minutes</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveMinFinish}
+            disabled={savingMinFinish}
+            className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50 w-full sm:w-auto sm:ml-auto"
+          >
+            {savingMinFinish ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save
+          </button>
         </div>
       </div>
 
