@@ -275,8 +275,6 @@ export const ReworkRejectionTrackerPage: React.FC = () => {
             dateTo={dateTo}
             refreshKey={refreshKey}
             selectedWorkCentre={selectedWorkCentre}
-            selectedMachineCentre={selectedMachineCentre}
-            machineCentres={machineCentres}
             workCentres={workCentres}
             isSupervisor={isSupervisor}
             supervisorWorkCentreId={supervisorWorkCentreId}

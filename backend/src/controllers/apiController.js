@@ -502,7 +502,7 @@ class ApiController {
       let where = 'WHERE DATE(rr.production_date) BETWEEN ? AND ?';
       const params = [fromDate, toDate];
       if (workCentreId) { where += ' AND rr.work_centre_id = ?'; params.push(workCentreId); }
-      if (search) { where += ' AND (wc.name LIKE ? OR rr.machine_centre_name LIKE ? OR rr.reason LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
+      if (search) { where += ' AND (wc.name LIKE ? OR rr.reason LIKE ? OR rr.reason_category LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
 
       const baseQuery = `
         FROM rework_rejection rr
@@ -514,21 +514,17 @@ class ApiController {
       const [[{ total }]] = await db.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
       const [data] = await db.query(`
         SELECT DATE(rr.production_date) as date, wc.name as line, wc.sequence_no as line_seq,
-          (SELECT MIN(mcq.sequence_no) FROM machine_centres mcq
-            WHERE mcq.work_centre_id = rr.work_centre_id
-              AND (mcq.machine_name = rr.machine_centre_name OR mcq.name = rr.machine_centre_name)) as machine_seq,
-          rr.machine_centre_name as machine,
           COALESCE(pp.total_target_per_day, 0) as target,
           COALESCE(line_input.total_input, 0) as total_input,
           ROUND((COALESCE(line_input.total_input, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as input_percent,
           rr.total_output_pairs as output,
           COALESCE(line_eol.line_eol_output, 0) as line_eol_output,
           ROUND((COALESCE(line_eol.line_eol_output, 0) / NULLIF(pp.total_target_per_day, 0)) * 100, 1) as output_percent,
-          rr.bins_completed, rr.rework_qty, rr.rejection_qty,
+          rr.rework_qty, rr.rejection_qty,
           ROUND((rr.rework_qty/NULLIF(rr.total_output_pairs,0))*100,2) as rework_percent,
           ROUND((rr.rejection_qty/NULLIF(rr.total_output_pairs,0))*100,2) as rejection_percent,
           rr.reason_category, rr.reason
-        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ}, (machine_seq IS NULL), machine_seq, rr.machine_centre_name LIMIT ? OFFSET ?`, [...params, l, offset]);
+        ${baseQuery} ORDER BY date, ${SQL_ORDER_LINE_SEQ}, rr.saved_at, rr.id LIMIT ? OFFSET ?`, [...params, l, offset]);
 
       res.json({ success: true, data, pagination: { total, page: p, limit: l, totalPages: Math.ceil(total / l) } });
     } catch (error) {

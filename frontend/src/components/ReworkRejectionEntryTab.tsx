@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   Building,
   ClipboardList,
-  Cpu,
   Edit,
   Loader2,
   Trash2,
@@ -30,12 +29,8 @@ interface SavedRecord {
   defect_reason?: string | null;
   saved_at: string;
   production_date: string;
-}
-
-interface MachineCentre {
-  id: number;
-  name: string;
-  machine_id: string;
+  work_centre_id?: number;
+  work_centre_name?: string | null;
 }
 
 interface WorkCentre {
@@ -49,8 +44,6 @@ interface Props {
   dateTo?: string;
   refreshKey?: number;
   selectedWorkCentre: string;
-  selectedMachineCentre: string;
-  machineCentres: MachineCentre[];
   workCentres: WorkCentre[];
   isSupervisor: boolean;
   supervisorWorkCentreId: string;
@@ -75,10 +68,8 @@ const REWORK_CFG = {
 const inputClass = (focusRing: string) =>
   `w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white shadow-sm transition-colors focus:outline-none focus:ring-2 ${focusRing} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`;
 
+// Rework / rejection is recorded per line (overall line issue), not per machine.
 const defaultFormState = () => ({
-  machineId: '',
-  totalOutput: 0,
-  targetPairs: 12,
   reworkQty: 0,
   rejectionQty: 0,
   reasonCategory: '',
@@ -93,8 +84,6 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   dateTo,
   refreshKey,
   selectedWorkCentre,
-  selectedMachineCentre,
-  machineCentres,
   workCentres,
   isSupervisor,
   supervisorWorkCentreId,
@@ -108,9 +97,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   const [editId, setEditId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(defaultFormState);
-  const [loadingOutput, setLoadingOutput] = useState(false);
   const [formWorkCentre, setFormWorkCentre] = useState('');
-  const [formMachineCentres, setFormMachineCentres] = useState<MachineCentre[]>([]);
 
   const wcId = isSupervisor ? supervisorWorkCentreId : selectedWorkCentre;
   const fieldCls = inputClass(REWORK_CFG.focusRing);
@@ -128,7 +115,6 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
       } else {
         query.set('date', dateFrom || selectedDate);
       }
-      if (selectedMachineCentre) query.set('machine_centre_name', selectedMachineCentre);
       const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection?${query.toString()}`);
       const result = await response.json();
       if (result.success) {
@@ -148,102 +134,21 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
     if (selectedDate) {
       fetchSavedRecords();
     }
-  }, [wcId, selectedDate, selectedMachineCentre, dateFrom, dateTo, refreshKey]);
-
-  const loadMachineOutput = async (machineId: string) => {
-    if (!formWorkCentre || !selectedDate || !machineId) return;
-    setLoadingOutput(true);
-    try {
-      const response = await apiFetch(
-        `${API_BASE_URL}/api/tv-dashboard/machine-centres/${formWorkCentre}?date=${selectedDate}`
-      );
-      const result = await response.json();
-      if (result.success && Array.isArray(result.data)) {
-        const machine = formMachineCentres.find((mc) => mc.machine_id === machineId);
-        const row = result.data.find(
-          (r: { machine_centre_name?: string; machine_id?: string }) =>
-            r.machine_centre_name === machine?.name ||
-            String(r.machine_id) === String(machineId)
-        );
-        if (row) {
-          const target = Number(row.target_pairs || 12);
-          const output = Number(row.total_output_pairs || 0);
-          setForm((prev) => ({
-            ...prev,
-            totalOutput: output,
-            targetPairs: target,
-          }));
-        } else {
-          setForm((prev) => ({ ...prev, totalOutput: 0, targetPairs: 12 }));
-          toast.error('No production output found for this machine today');
-        }
-      }
-    } catch {
-      toast.error('Failed to load machine output');
-    } finally {
-      setLoadingOutput(false);
-    }
-  };
-
-  useEffect(() => {
-    if (form.machineId && modalOpen) {
-      void loadMachineOutput(form.machineId);
-    }
-  }, [form.machineId, modalOpen, formWorkCentre, selectedDate]);
-
-  // Fetch machine centres for the form's selected work centre
-  useEffect(() => {
-    const fetchFormMachineCentres = async () => {
-      if (!formWorkCentre) {
-        setFormMachineCentres([]);
-        return;
-      }
-      try {
-        const params = new URLSearchParams();
-        params.set('work_centre_id', formWorkCentre);
-        params.set('limit', '500');
-        const response = await apiFetch(`${API_BASE_URL}/api/masters/machine_centres?${params.toString()}`);
-        const result = await response.json();
-        if (result.success) {
-          setFormMachineCentres(result.data);
-          // Auto-select EOL (Final Output) machine if no machine is already selected
-          if (!form.machineId) {
-            const eolMachine = result.data.find((mc: MachineCentre) =>
-              /final\s*output|final\s*inspection/i.test(mc.name)
-            );
-            if (eolMachine) {
-              setForm((prev) => ({ ...prev, machineId: eolMachine.machine_id }));
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching machine centres for form:', error);
-      }
-    };
-    if (modalOpen) fetchFormMachineCentres();
-  }, [formWorkCentre, modalOpen]);
+  }, [wcId, selectedDate, dateFrom, dateTo, refreshKey]);
 
   const resetForm = () => {
     setEditId(null);
     setFormWorkCentre(isSupervisor ? supervisorWorkCentreId : (selectedWorkCentre || ''));
-    // Auto-select the EOL (Final Output) machine from form's machine list
-    const eolMachine = formMachineCentres.find((mc) =>
-      /final\s*output|final\s*inspection/i.test(mc.name)
-    );
-    setForm({ ...defaultFormState(), machineId: eolMachine?.machine_id || '' });
+    setForm(defaultFormState());
   };
 
   const openModal = (rec?: SavedRecord) => {
     if (rec) {
-      // Try parent's machineCentres first; formMachineCentres will be loaded by useEffect
-      const machine = machineCentres.find((mc) => mc.name === rec.machine_centre_name)
-        || formMachineCentres.find((mc) => mc.name === rec.machine_centre_name);
       setEditId(rec.id);
-      setFormWorkCentre(isSupervisor ? supervisorWorkCentreId : (selectedWorkCentre || ''));
+      setFormWorkCentre(
+        isSupervisor ? supervisorWorkCentreId : String(rec.work_centre_id ?? selectedWorkCentre ?? '')
+      );
       setForm({
-        machineId: machine?.machine_id || '',
-        totalOutput: Number(rec.total_output_pairs || 0),
-        targetPairs: 12,
         reworkQty: Number(rec.rework_qty || 0),
         rejectionQty: Number(rec.rejection_qty || 0),
         reasonCategory: rec.reason_category || '',
@@ -258,33 +163,13 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
     setModalOpen(true);
   };
 
-  const binsCompleted = (output: number, target: number) =>
-    target > 0 ? Math.floor(output / target) : 0;
-
-  const recordToRow = (rec: SavedRecord) => ({
-    machine_centre_name: rec.machine_centre_name,
-    total_output_pairs: rec.total_output_pairs,
-    bins_completed: rec.bins_completed,
-    rework_qty: rec.rework_qty,
-    rejection_qty: rec.rejection_qty,
-    reason_category: rec.reason_category,
-    reason: rec.reason,
-    defect_reason: rec.defect_reason || null,
-  });
-
   const saveEntry = async () => {
     if (!formWorkCentre || !selectedDate) {
-      toast.error('Please select date and work centre (line)');
-      return;
-    }
-    const machine = formMachineCentres.find((mc) => mc.machine_id === form.machineId);
-    if (!machine) {
-      toast.error('Please select a machine');
+      toast.error('Please select date and line');
       return;
     }
     const reworkQty = Number(form.reworkQty || 0);
     const rejectionQty = Number(form.rejectionQty || 0);
-    const totalOutput = Number(form.totalOutput || 0);
     if ((reworkQty > 0 || rejectionQty > 0) && !form.reasonCategory) {
       toast.error('Please select a reason category when entering rework or rejection');
       return;
@@ -293,10 +178,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
       ? `${form.reason.trim()} — ${form.notes.trim()}`
       : form.reason.trim();
 
+    // Line-level entry: the backend fills in the line's output for the day.
     const rowPayload = {
-      machine_centre_name: machine.name,
-      total_output_pairs: totalOutput,
-      bins_completed: binsCompleted(totalOutput, form.targetPairs),
       rework_qty: reworkQty,
       rejection_qty: rejectionQty,
       reason_category: form.reasonCategory || null,
@@ -325,20 +208,15 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
         }
         toast.success('Rework / rejection entry updated');
       } else {
-        const duplicate = savedRecords.find((r) => r.machine_centre_name === machine.name);
-        const mergedRows = duplicate
-          ? savedRecords.map((r) =>
-              r.machine_centre_name === machine.name ? { ...recordToRow(r), ...rowPayload } : recordToRow(r)
-            )
-          : [...savedRecords.map(recordToRow), rowPayload];
-
+        // Send only the new entry; the backend appends it without touching existing rows.
         const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             work_centre_id: Number(formWorkCentre),
             production_date: selectedDate,
-            rows: mergedRows,
+            rows: [rowPayload],
+            append: true,
           }),
         });
         const result = await response.json();
@@ -360,7 +238,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
   };
 
   const deleteEntry = async (rec: SavedRecord) => {
-    if (!window.confirm(`Delete rework/rejection entry for ${rec.machine_centre_name}?`)) return;
+    if (!window.confirm(`Delete rework/rejection entry for ${rec.work_centre_name || 'this line'}?`)) return;
     setSaving(true);
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/rework-rejection/${rec.id}`, {
@@ -405,7 +283,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
               {REWORK_CFG.label}
             </h2>
             <p className="text-xs sm:text-sm text-gray-600 max-w-xl">
-              Add rework and rejection quantities per machine for the selected work centre and date.
+              Add rework and rejection quantities for the selected line and date.
             </p>
           </div>
         </div>
@@ -454,9 +332,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saved</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Machine</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Line</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Output</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Bins</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Rework</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Rejection</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
@@ -468,9 +345,8 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                 {savedRecords.map((rec) => (
                   <tr key={rec.id} className={`hover:bg-gray-50 ${rec.rejection_qty > 10 ? 'bg-red-50/50' : ''}`}>
                     <td className="px-4 py-3 text-sm text-gray-600">{formatDateTime(rec.saved_at)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{rec.machine_centre_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{rec.work_centre_name || '—'}</td>
                     <td className="px-4 py-3 text-sm text-center text-gray-900">{rec.total_output_pairs}</td>
-                    <td className="px-4 py-3 text-sm text-center text-gray-900">{rec.bins_completed}</td>
                     <td className="px-4 py-3 text-sm text-center font-semibold text-yellow-600">
                       {rec.rework_qty}
                     </td>
@@ -527,7 +403,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
               </tbody>
               <tfoot className="bg-gray-50">
                 <tr>
-                  <td colSpan={4} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right">
+                  <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right">
                     Totals:
                   </td>
                   <td className="px-4 py-3 text-sm font-bold text-yellow-600 text-center">
@@ -547,7 +423,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
               <div key={rec.id} className={`rounded-xl border p-3 shadow-sm ${rec.rejection_qty > 10 ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <span className="text-sm font-bold text-gray-900">{rec.machine_centre_name}</span>
+                    <span className="text-sm font-bold text-gray-900">{rec.work_centre_name || '—'}</span>
                     {rec.reason_category && (
                       <span className={`ml-2 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold ring-1 ${M4_BADGE_CLASS[rec.reason_category] || 'bg-gray-100 text-gray-700 ring-gray-200'}`}>
                         {rec.reason_category}
@@ -568,14 +444,10 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                     )}
                   </div>
                 </div>
-                <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-4 gap-2 text-center">
+                <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-3 gap-2 text-center">
                   <div>
                     <p className="text-[9px] font-bold uppercase text-gray-400">Output</p>
                     <p className="text-sm font-bold text-gray-900 tabular-nums">{rec.total_output_pairs}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-bold uppercase text-gray-400">Bins</p>
-                    <p className="text-sm tabular-nums text-gray-700">{rec.bins_completed}</p>
                   </div>
                   <div>
                     <p className="text-[9px] font-bold uppercase text-yellow-600">Rework</p>
@@ -647,9 +519,9 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
             <div className="overflow-y-auto flex-1 px-5 py-5 sm:px-6 space-y-5">
               <section className={`rounded-xl border p-4 ${REWORK_CFG.sectionClass}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
-                  Line & Machine
+                  Line
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
                       <Building className="h-4 w-4 text-gray-400" aria-hidden />
@@ -665,10 +537,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                     ) : (
                       <select
                         value={formWorkCentre}
-                        onChange={(e) => {
-                          setFormWorkCentre(e.target.value);
-                          setForm((prev) => ({ ...prev, machineId: '' }));
-                        }}
+                        onChange={(e) => setFormWorkCentre(e.target.value)}
                         className={fieldCls}
                       >
                         <option value="">Select Line</option>
@@ -679,24 +548,6 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                     )}
                   </div>
                   <div>
-                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-                      <Cpu className="h-4 w-4 text-gray-400" aria-hidden />
-                      Machine Centre <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={form.machineId}
-                      onChange={(e) => setForm((prev) => ({ ...prev, machineId: e.target.value }))}
-                      disabled={!formWorkCentre}
-                      className={fieldCls}
-                    >
-                      <option value="">{formWorkCentre ? 'Select Machine' : 'Select a line first'}</option>
-                      {formMachineCentres.map((mc) => (
-                        <option key={mc.id} value={mc.machine_id}>
-                          {mc.machine_id} - {mc.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                 </div>
               </section>
 
@@ -760,7 +611,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                 </div>
 
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Defect Reason <span className="text-gray-400 font-normal">(optional)</span>
+                  Select Reason
                 </label>
                 <div className="mb-4">
                   <ReworkReasonDropdown
@@ -771,7 +622,7 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                 </div>
 
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Typing <span className="text-gray-400 font-normal">(optional)</span>
+                  Typing
                 </label>
                 <input
                   type="text"

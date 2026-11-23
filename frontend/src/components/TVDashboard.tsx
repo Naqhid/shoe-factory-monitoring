@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock, ClipboardList, RotateCcw, XCircle } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
+
+/** Rework / rejection % colour — lower is better (0% green, up to 2% amber, above red). */
+const qualityPctBgClass = (pct: number) =>
+    pct <= 0 ? 'bg-emerald-500' : pct <= 2 ? 'bg-amber-500' : 'bg-red-500';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { loadEfficiencyThresholds, getEfficiencyBgClass } from '../utils/efficiencyColors';
 // import { TvPlanPacePanel } from './TvPlanPacePanel';
@@ -172,7 +176,7 @@ export const TVDashboard: React.FC = () => {
 
         return (
             <div
-                key={`rework-${index}-${row.machine_centre_name}`}
+                key={`rework-${index}-${row.id ?? ''}`}
                 className={[
                     'w-full max-w-full rounded-xl border-2 border-l-[6px] bg-gradient-to-br from-white via-amber-50/40 to-orange-50/60',
                     'ring-1 shadow-md flex flex-col min-h-0',
@@ -189,9 +193,9 @@ export const TVDashboard: React.FC = () => {
                         className={`font-extrabold text-slate-900 leading-snug line-clamp-2 flex-1 text-left ${
                             soloOnSlide ? 'text-sm sm:text-base' : 'text-[11px] sm:text-xs'
                         }`}
-                        title={row.machine_centre_name}
+                        title={row.work_centre_name || ''}
                     >
-                        {row.machine_centre_name}
+                        {row.work_centre_name || 'Line'}
                     </p>
                 </div>
 
@@ -812,18 +816,6 @@ export const TVDashboard: React.FC = () => {
                             )}
                             <button
                                 type="button"
-                                onClick={() => setShowReworkDialog(true)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/90 hover:bg-amber-300 text-amber-950 text-[10px] sm:text-xs font-extrabold shrink-0 transition-colors shadow-sm"
-                                title="Open Rework / Rejection details"
-                            >
-                                <RotateCcw className="h-3 w-3" aria-hidden />
-                                <span className="tabular-nums">{Number(lowerSection?.reworkOverall?.total_rework || 0)}</span>
-                                <XCircle className="h-3 w-3 ml-1" aria-hidden />
-                                <span className="tabular-nums">{Number(lowerSection?.reworkOverall?.total_rejection || 0)}</span>
-                                <span className="hidden sm:inline uppercase tracking-wide">Rework / Rejection</span>
-                            </button>
-                            <button
-                                type="button"
                                 onClick={() => setShowStatusBar(v => !v)}
                                 className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors shrink-0"
                                 title={showStatusBar ? 'Hide status' : 'Show status'}
@@ -925,7 +917,7 @@ export const TVDashboard: React.FC = () => {
                                     : partialWarning || errorMessage}
                         </div>
                     )}
-                    <div className="grid grid-cols-6 gap-1 sm:gap-2 min-w-0">
+                    <div className="grid grid-cols-7 gap-1 sm:gap-2 min-w-0">
                         {/* ── Target ── */}
                         <div className="bg-white/25 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-0 max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none">
                             <Target className="h-4 w-4 sm:h-7 sm:w-7 text-white mx-auto mb-0.5 sm:mb-1 drop-shadow-md" />
@@ -970,6 +962,19 @@ export const TVDashboard: React.FC = () => {
                                 {formatWip(topSection.currentWip)}
                             </div>
                         </div>
+                        {/* ── Rework / Rejection (all lines today) — opens details dialog ── */}
+                        <button
+                            type="button"
+                            onClick={() => setShowReworkDialog(true)}
+                            title="Open Rework / Rejection details"
+                            className="bg-blue-800/70 hover:bg-blue-800/90 ring-1 ring-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 transition-colors cursor-pointer motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-[250ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none"
+                        >
+                            <RefreshCw className="h-4 w-4 sm:h-7 sm:w-7 text-[#FACC15] mx-auto mb-0.5 sm:mb-1 drop-shadow-md" aria-hidden />
+                            <div className="text-white text-[9px] sm:text-xs mb-0.5 font-extrabold uppercase tracking-wide truncate">Rework / Rejection</div>
+                            <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
+                                {Number(lowerSection?.reworkOverall?.total_rework || 0)} / {Number(lowerSection?.reworkOverall?.total_rejection || 0)}
+                            </div>
+                        </button>
                     </div>
                     {/* ── Performance emoji — shown below KPI row (disabled) ── */}
                     {/* <div className="flex justify-center mt-1.5 sm:mt-2">
@@ -1037,9 +1042,7 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">TARGET</th>
                                 {/* INPUT column — live Heel Grip Machine quantity */}
                                 <th className="px-2 py-1.5 text-center font-bold text-cyan-600">INPUT</th>
-                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">INPUT %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT</th>
-                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">WIP</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th>
@@ -1069,15 +1072,13 @@ export const TVDashboard: React.FC = () => {
                                         </td>
                                         <td className="px-2 py-2 text-center font-bold text-blue-600 tabular-nums">{line.target}</td>
                                         {/* INPUT — live Heel Grip Machine quantity for this line */}
-                                        <td className="px-2 py-2 text-center font-bold text-cyan-600 tabular-nums">
+                                        <td className="px-2 py-2 text-center font-bold text-cyan-600 tabular-nums whitespace-nowrap">
                                             {formatInput(line.input)}
+                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${getEfficiencyBgClass(lineInputPercent)}`}>{lineInputPercent}%</span>
                                         </td>
-                                        <td className="px-2 py-2 text-center">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${getEfficiencyBgClass(lineInputPercent)}`}>{lineInputPercent}%</span>
-                                        </td>
-                                        <td className="px-2 py-2 text-center font-bold text-green-600 tabular-nums">{line.output}</td>
-                                        <td className="px-2 py-2 text-center">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-sm ${getEfficiencyBgClass(Number(line.output_percentage))}`}>{line.output_percentage}%</span>
+                                        <td className="px-2 py-2 text-center font-bold text-green-600 tabular-nums whitespace-nowrap">
+                                            {line.output}
+                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${getEfficiencyBgClass(Number(line.output_percentage))}`}>{line.output_percentage}%</span>
                                         </td>
                                         {/* WIP — MES formula: Opening WIP + Input - Output */}
                                         <td className={`px-2 py-2 text-center font-bold tabular-nums ${
@@ -1085,8 +1086,14 @@ export const TVDashboard: React.FC = () => {
                                         }`}>
                                             {formatWip(line.wip)}
                                         </td>
-                                        <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums">{rw.total_rework}</td>
-                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums">{rw.total_rejection}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums whitespace-nowrap">
+                                            {rw.total_rework}
+                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${qualityPctBgClass(Number(rw.rework_percent || 0))}`}>{Number(rw.rework_percent || 0)}%</span>
+                                        </td>
+                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums whitespace-nowrap">
+                                            {rw.total_rejection}
+                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${qualityPctBgClass(Number(rw.rejection_percent || 0))}`}>{Number(rw.rejection_percent || 0)}%</span>
+                                        </td>
                                     </tr>
                                 );
                             })}

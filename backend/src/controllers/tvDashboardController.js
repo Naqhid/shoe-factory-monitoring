@@ -289,12 +289,13 @@ exports.getDashboard = async (req, res) => {
         `, [workCentreId, today]);
 
         const [reworkRows] = await pool.query(`
-            SELECT machine_centre_name, rework_qty, rejection_qty, reason_category, reason
-            FROM rework_rejection
-            WHERE work_centre_id = ?
-              AND DATE(production_date) = DATE(?)
-              AND (rework_qty > 0 OR rejection_qty > 0)
-            ORDER BY (rework_qty + rejection_qty) DESC, machine_centre_name ASC
+            SELECT rr.id, wc.name AS work_centre_name, rr.rework_qty, rr.rejection_qty, rr.reason_category, rr.reason
+            FROM rework_rejection rr
+            LEFT JOIN work_centres wc ON wc.id = rr.work_centre_id
+            WHERE rr.work_centre_id = ?
+              AND DATE(rr.production_date) = DATE(?)
+              AND (rr.rework_qty > 0 OR rr.rejection_qty > 0)
+            ORDER BY (rr.rework_qty + rr.rejection_qty) DESC, rr.id ASC
         `, [workCentreId, today]);
 
         const reworkTotals = reworkRows.reduce(
