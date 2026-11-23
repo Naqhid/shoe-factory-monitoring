@@ -261,24 +261,56 @@ export const TVDashboard: React.FC = () => {
     const [allLinesMachinePace, setAllLinesMachinePace] = useState<Record<number, { name: string; rows: any[] }>>({});
 
     const DETAIL_CAROUSEL_FIXED_SLIDES = 2; // Line table + Hourly chart
-    const DETAIL_CAROUSEL_LABELS = useMemo(() => {
-        const labels = ['Line table', 'Hourly chart'];
-        workCentres.forEach((wc: any) => labels.push(wc.name));
-        return labels;
-    }, [workCentres]);
+    // One machine slide per line; a line running several articles in parallel gets one slide per article.
+    const detailLineSlides = useMemo(() => {
+        const out: { key: string; wc: any; article: any | null; label: string }[] = [];
+        workCentres.forEach((wc: any) => {
+            const articles = dashboardData?.lowerSection?.perLineTimeLosses?.[wc.id]?.articles;
+            if (Array.isArray(articles) && articles.length > 1) {
+                articles.forEach((art: any) =>
+                    out.push({
+                        key: `${wc.id}_${art.style_id}`,
+                        wc,
+                        article: art,
+                        label: `${wc.name} · ${art.style_code || art.style_name || art.style_id}`,
+                    })
+                );
+            } else {
+                out.push({ key: String(wc.id), wc, article: null, label: wc.name });
+            }
+        });
+        return out;
+    }, [workCentres, dashboardData]);
+    // Parallel-articles table gets its own slide (after Hourly chart) when a line runs several articles.
+    const hasParallelArticlesSlide = Boolean(dashboardData?.lowerSection?.lineArticles?.multi_article);
+    const FIRST_LINE_SLIDE_INDEX = hasParallelArticlesSlide ? 3 : 2;
+    const DETAIL_CAROUSEL_LABELS = useMemo(
+        () => [
+            'Line table',
+            'Hourly chart',
+            ...(hasParallelArticlesSlide ? ['Articles in parallel'] : []),
+            ...detailLineSlides.map((s) => s.label),
+        ],
+        [detailLineSlides, hasParallelArticlesSlide]
+    );
     const DETAIL_CAROUSEL_SLIDES = DETAIL_CAROUSEL_LABELS.length;
     const DETAIL_CAROUSEL_MS = 60000;
     const INSIGHT_CAROUSEL_MS = 15000;
 
     type InsightSlideKind = string; // 'time_loss_<wcId>' | 'rework' | 'breakdown'
 
-    const perLineTimeLosses: Record<number, { lineName: string; losses: any[] }> = dashboardData?.lowerSection?.perLineTimeLosses || {};
+    const perLineTimeLosses: Record<number, { lineName: string; losses: any[]; articles?: any[] }> = dashboardData?.lowerSection?.perLineTimeLosses || {};
 
     const insightSlides = useMemo((): string[] => {
         const slides: string[] = [];
-        // Add one time_loss slide per active line
+        // One time_loss slide per active line; a line running several articles gets one slide per article.
         for (const wc of workCentres) {
-            slides.push(`time_loss_${wc.id}`);
+            const articles = dashboardData?.lowerSection?.perLineTimeLosses?.[wc.id]?.articles;
+            if (Array.isArray(articles) && articles.length > 1) {
+                for (const art of articles) slides.push(`time_loss_${wc.id}_${art.style_id}`);
+            } else {
+                slides.push(`time_loss_${wc.id}`);
+            }
         }
         // Rework / Rejection is shown in the top dialog and the Line Performance table, not as a slide.
         const breakdowns = Array.isArray(dashboardData?.lowerSection?.breakdowns)
@@ -643,6 +675,12 @@ export const TVDashboard: React.FC = () => {
     // Add per-line time loss labels dynamically
     for (const wc of workCentres) {
         insightSlideLabels[`time_loss_${wc.id}`] = wc.name;
+        const lineArticles = perLineTimeLosses[wc.id]?.articles;
+        if (Array.isArray(lineArticles)) {
+            for (const art of lineArticles) {
+                insightSlideLabels[`time_loss_${wc.id}_${art.style_id}`] = `${wc.name} · ${art.style_code || art.style_name || art.style_id}`;
+            }
+        }
     }
     const insightTabStyles: Record<string, { base: string; active: string }> = {
         rework: { base: 'bg-amber-100 text-amber-900 ring-amber-300', active: 'ring-amber-500' },
@@ -952,7 +990,7 @@ export const TVDashboard: React.FC = () => {
                 <div className="flex-shrink-0 border-b border-gray-100 px-3 sm:px-4 pt-3 pb-2">
                     <div className="flex items-center justify-between gap-2 min-w-0 overflow-hidden">
                     <div className="flex items-center min-w-0 flex-1 overflow-hidden gap-2">
-                    {detailCarouselIndex >= 2 ? (
+                    {detailCarouselIndex >= FIRST_LINE_SLIDE_INDEX ? (
                         <div className="flex items-center min-w-0 flex-1 gap-2 sm:gap-4 text-sm sm:text-base font-bold leading-tight overflow-hidden">
                             <span className="text-blue-600 truncate min-w-0" title={DETAIL_CAROUSEL_LABELS[detailCarouselIndex] || currentLineName}>
                                 {DETAIL_CAROUSEL_LABELS[detailCarouselIndex] || currentLineName}
@@ -970,6 +1008,8 @@ export const TVDashboard: React.FC = () => {
                                     ? 'LINE PERFORMANCE'
                                     : detailCarouselIndex === 1
                                     ? 'All Lines - Hourly Output'
+                                    : hasParallelArticlesSlide && detailCarouselIndex === 2
+                                    ? `${currentLineName} - Articles running in parallel`
                                     : `${DETAIL_CAROUSEL_LABELS[detailCarouselIndex]} - Machines`}
                             </h3>
                         </div>
@@ -1052,8 +1092,22 @@ export const TVDashboard: React.FC = () => {
                             })}
                         </tbody>
                     </table>
-                    {lowerSection?.lineArticles?.multi_article && (
-                        <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/60 px-2 py-1.5">
+                </div>
+                        </div>
+                        <div className="min-w-full h-full flex flex-col min-h-0" style={{ background: 'rgba(239,246,255,0.95)', borderRadius: '12px', overflow: 'hidden' }}>
+                            <HourlyOutputChart
+                                workCentreId={'all'}
+                                workCentreName={'All Lines'}
+                                showProgress={false}
+                                progress={progress}
+                                date={currentDate}
+                                fitContainer
+                                hideTitle
+                            />
+                        </div>
+                        {lowerSection?.lineArticles?.multi_article && (
+                            <div className="min-w-full h-full flex flex-col min-h-0 overflow-auto p-3 sm:p-4 pt-2 bg-white">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50/60 px-2 py-1.5">
                             <p className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-blue-900 mb-1">
                                 {currentLineName} · articles running in parallel
                             </p>
@@ -1091,20 +1145,8 @@ export const TVDashboard: React.FC = () => {
                                 </tbody>
                             </table>
                         </div>
-                    )}
-                </div>
-                        </div>
-                        <div className="min-w-full h-full flex flex-col min-h-0" style={{ background: 'rgba(239,246,255,0.95)', borderRadius: '12px', overflow: 'hidden' }}>
-                            <HourlyOutputChart
-                                workCentreId={'all'}
-                                workCentreName={'All Lines'}
-                                showProgress={false}
-                                progress={progress}
-                                date={currentDate}
-                                fitContainer
-                                hideTitle
-                            />
-                        </div>
+                            </div>
+                        )}
                         {/* Plan pace slide — hidden from carousel; Full line card on machine pace covers line-level plan */}
                         {/* <div className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
                             {planPaceSnapshot ? (
@@ -1118,9 +1160,13 @@ export const TVDashboard: React.FC = () => {
                                 </div>
                             )}
                         </div> */}
-                        {workCentres.map((wc: any) => {
+                        {detailLineSlides.map(({ key: slideKey, wc, article, label: slideLabel }) => {
                             const wcPace = allLinesMachinePace[wc.id];
-                            const wcRows = wcPace?.rows || [];
+                            const allWcRows = wcPace?.rows || [];
+                            const articleMachineIds = article ? new Set((article.machine_ids || []).map(String)) : null;
+                            const wcRows = articleMachineIds
+                                ? allWcRows.filter((row: any) => articleMachineIds.has(String(row.machine_id)))
+                                : allWcRows;
                             const wcSnapshots = wcRows.map((row: any) =>
                                 buildMachinePaceSnapshot(
                                     String(row.machine_id),
@@ -1131,8 +1177,8 @@ export const TVDashboard: React.FC = () => {
                                 )
                             );
                             const wcLinePerf = linePerformanceRows.find((l: any) => Number(l.work_centre_id) === Number(wc.id));
-                            const wcTarget = Number(wcLinePerf?.target ?? 0);
-                            const wcOutput = Number(wcLinePerf?.output ?? 0);
+                            const wcTarget = article ? Number(article.target ?? 0) : Number(wcLinePerf?.target ?? 0);
+                            const wcOutput = article ? Number(article.output ?? 0) : Number(wcLinePerf?.output ?? 0);
                             // Compute expectedNow and projectedEod for work-centre full-line card
                             let wcExpectedNow: number | undefined;
                             let wcProjectedEod: number | undefined;
@@ -1145,11 +1191,11 @@ export const TVDashboard: React.FC = () => {
                                 }
                             }
                             return (
-                                <div key={wc.id} className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
+                                <div key={slideKey} className="min-w-full h-full flex flex-col min-h-0 overflow-hidden bg-slate-100">
                                     <TvMachinePacePanel
                                         machines={wcSnapshots}
                                         linePlan={{
-                                            lineName: wc.name,
+                                            lineName: slideLabel,
                                             dailyTarget: wcTarget,
                                             lineOutput: wcOutput,
                                             expectedNow: wcExpectedNow,
@@ -1169,7 +1215,7 @@ export const TVDashboard: React.FC = () => {
                         />
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                        {detailCarouselIndex >= 2 && lineRecoveryStats && lineRecoveryStats.gapToTarget > 0 && lineRecoveryStats.pairsPerHrNeeded != null ? (
+                        {detailCarouselIndex >= FIRST_LINE_SLIDE_INDEX && lineRecoveryStats && lineRecoveryStats.gapToTarget > 0 && lineRecoveryStats.pairsPerHrNeeded != null ? (
                             <div className="inline-flex flex-wrap items-center gap-2 sm:gap-2.5 rounded-lg bg-gradient-to-r from-amber-100 via-amber-50 to-orange-50 px-2.5 sm:px-3 py-1.5 ring-2 ring-amber-400/80 shadow-md min-w-0">
                                 <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wide text-amber-950 whitespace-nowrap">
                                     Speed to hit today’s plan (pairs/hr)
@@ -1190,7 +1236,7 @@ export const TVDashboard: React.FC = () => {
                                     </span>
                                 </div>
                             </div>
-                        ) : detailCarouselIndex >= 2 && linePaceTarget > 0 ? (
+                        ) : detailCarouselIndex >= FIRST_LINE_SLIDE_INDEX && linePaceTarget > 0 ? (
                             <span className="inline-flex items-center rounded-lg bg-emerald-100 px-2.5 py-1 text-[9px] sm:text-[10px] font-bold text-emerald-800 ring-2 ring-emerald-300 shadow-sm">
                                 On track for today’s target
                             </span>
@@ -1274,9 +1320,13 @@ export const TVDashboard: React.FC = () => {
                                 {insightSlides.map((kind) => (
                                 <div key={kind} className="flex-[0_0_100%] w-full h-full min-h-0 flex flex-col text-center px-1 py-0.5">
                                 {kind.startsWith('time_loss_') && (() => {
-                                    const wcId = Number(kind.replace('time_loss_', ''));
+                                    const [wcPart, stylePart] = kind.replace('time_loss_', '').split('_');
+                                    const wcId = Number(wcPart);
                                     const lineData = perLineTimeLosses[wcId];
-                                    const rows = lineData?.losses || [];
+                                    const articleData = stylePart
+                                        ? lineData?.articles?.find((a: any) => String(a.style_id) === stylePart)
+                                        : null;
+                                    const rows = articleData ? articleData.losses || [] : lineData?.losses || [];
                                     const lineName = lineData?.lineName || '';
                                     const netMins = rows.reduce((sum: number, row: any) => sum + Number(row.net_mins || 0), 0);
                                     return (<>

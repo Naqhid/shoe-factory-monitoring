@@ -27,7 +27,12 @@ class LineStyleAssignmentController {
   async changeover(req, res) {
     try {
       const data = await lineStyleAssignmentService.applyChangeover(req.body || {});
-      res.json({ success: true, data, message: `Article updated for ${data.days_updated} day(s).` });
+      res.json({
+        success: true,
+        data,
+        warnings: data.warnings || [],
+        message: `Article updated for ${data.days_updated} day(s).`,
+      });
     } catch (error) {
       logger.error('Error applying line changeover:', error);
       res.status(error.status || 500).json({ success: false, error: error.message });

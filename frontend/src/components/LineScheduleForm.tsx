@@ -17,6 +17,14 @@ import {
 import toast from 'react-hot-toast';
 import { API_BASE_URL as API_BASE, apiFetch } from '../services/api';
 
+/** Show each backend changeover warning (e.g. skipped duplicate-name machines) as its own toast. */
+function showChangeoverWarnings(warnings: unknown) {
+  if (!Array.isArray(warnings)) return;
+  warnings.forEach((w) => {
+    if (typeof w === 'string' && w) toast(w, { icon: '⚠️', duration: 10000 });
+  });
+}
+
 interface MasterOption {
   id: number;
   code: string;
@@ -368,6 +376,7 @@ export const LineScheduleForm: React.FC = () => {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Reassignment failed');
       toast.success(`Style moved to target line`);
+      showChangeoverWarnings(json.warnings);
       loadBoard();
     } catch (err: any) {
       toast.error(err.message || 'Failed to reassign style');
@@ -429,6 +438,7 @@ export const LineScheduleForm: React.FC = () => {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Changeover failed');
       toast.success(json.message || 'Article updated on line');
+      showChangeoverWarnings(json.warnings);
       closeModal();
       if (startDate <= boardDate && (!usePlanRange || planThroughDate >= boardDate)) {
         loadBoard();

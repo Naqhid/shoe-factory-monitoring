@@ -24,7 +24,8 @@ export function formatDurationString(minutes: number): string {
 
 /** Like formatDurationString but never rolls over into hours: 92 minutes reads "92 m 0 s". */
 export function formatDurationMinutesString(minutes: number): string {
-  if (!Number.isFinite(minutes) || minutes <= 0) return '0 m 0 s';
+  // Net time loss is negative (loss) or positive (gain); show the magnitude, not 0.
+  if (!Number.isFinite(minutes) || minutes === 0) return '0 m 0 s';
   const totalSec = Math.floor(Math.abs(minutes) * 60 + 1e-9);
   return `${Math.floor(totalSec / 60)} m ${totalSec % 60} s`;
 }

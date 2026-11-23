@@ -535,7 +535,62 @@ exports.getDashboard = async (req, res) => {
                         for (const line of linePerformance) {
                             const lineWcId = Number(line.work_centre_id);
                             const lineLosses = await aggregateMachineCycleLosses(pool, lineWcId, today);
-                            result[lineWcId] = { lineName: line.line_name, losses: lineLosses };
+
+                            // Several articles on one line: split the losses per article (by routing machines)
+                            // so the dashboard can show each article in its own carousel slide.
+                            let articles = [];
+                            try {
+                                const [planArticles] = await pool.query(`
+                                    SELECT a.style_id, a.total_target_per_day, s.code AS style_code, s.name AS style_name
+                                    FROM production_plan pp
+                                    JOIN production_plan_articles a ON a.plan_id = pp.id
+                                    JOIN styles s ON s.id = a.style_id
+                                    WHERE pp.work_centre_id = ? AND DATE(pp.plan_date) = DATE(?) AND pp.deleted_at IS NULL
+                                    ORDER BY a.sequence_no, a.id
+                                `, [lineWcId, today]);
+                                if (planArticles.length > 1) {
+                                    for (const art of planArticles) {
+                                        const [routingMachines] = await pool.query(`
+                                            SELECT prl.machine_centre_id
+                                            FROM production_routing_lines prl
+                                            WHERE prl.routing_header_id = (
+                                                SELECT prh.id FROM production_routing_header prh
+                                                WHERE prh.style_id = ? AND DATE(prh.created_on) <= DATE(?)
+                                                ORDER BY prh.created_on DESC, prh.id DESC
+                                                LIMIT 1
+                                            )
+                                            ORDER BY prl.id
+                                        `, [art.style_id, today]);
+                                        const machineIds = routingMachines.map((r) => String(r.machine_centre_id));
+                                        const ids = new Set(machineIds);
+                                        // Article output = output of its last routing machine (end of line).
+                                        let artOutput = 0;
+                                        if (machineIds.length > 0) {
+                                            const [[outRow]] = await pool.query(
+                                                `SELECT COALESCE(SUM(total_output_pairs), 0) AS output
+                                                 FROM machine_centre_summary
+                                                 WHERE work_centre_id = ? AND DATE(prod_date) = DATE(?) AND machine_id = ?`,
+                                                [lineWcId, today, machineIds[machineIds.length - 1]]
+                                            );
+                                            artOutput = Number(outRow?.output || 0);
+                                        }
+                                        articles.push({
+                                            style_id: art.style_id,
+                                            style_code: art.style_code,
+                                            style_name: art.style_name,
+                                            target: Number(art.total_target_per_day || 0),
+                                            output: artOutput,
+                                            machine_ids: machineIds,
+                                            losses: lineLosses.filter((l) => ids.has(String(l.machine_id))),
+                                        });
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Per-article time loss split failed:', e.message);
+                                articles = [];
+                            }
+
+                            result[lineWcId] = { lineName: line.line_name, losses: lineLosses, articles };
                         }
                         return result;
                     })()

@@ -27,24 +27,6 @@ const legendDivider = () => (
 /** Legend for carousel header — same size as line title; colors match Progress / EOD columns. */
 export const TvMachinePaceLegend: React.FC = () => (
   <div className="flex items-center gap-4 sm:gap-6 shrink-0 whitespace-nowrap font-bold leading-tight">
-    <span
-      className="inline-flex items-center gap-1.5 text-emerald-700"
-      title="In progress: actual pairs vs target for the shift so far"
-    >
-      {legendDot('bg-emerald-600')}
-      <span>In progress</span>
-      <span className="font-semibold text-slate-500">actual / target</span>
-    </span>
-    {legendDivider()}
-    <span
-      className="inline-flex items-center gap-1.5 text-blue-700"
-      title="EOD column: projection / daily target"
-    >
-      {legendDot('bg-blue-600')}
-      <span>EOD</span>
-      <span className="font-semibold text-slate-500">projected / plan</span>
-    </span>
-    {legendDivider()}
     <span className="inline-flex items-center gap-1.5 text-slate-600" title="Efficiency shown in circle">
       <span className="font-semibold text-amber-900 bg-amber-200 px-2 py-0.5 rounded ring-1 ring-amber-300">Circle = Eff %</span>
     </span>

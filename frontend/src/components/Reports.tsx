@@ -1968,8 +1968,8 @@ export const Reports: React.FC = () => {
         <table className="min-w-full">
           <thead>
             <tr>
-              {['Date', 'Line', 'Seq', 'Machine ID', 'Machine', 'Net balance', 'Reason'].map((h) => (
-                <Th key={h} center={h === 'Net balance' || h === 'Seq'}>{h}</Th>
+              {['Date', 'Line', 'Machine ID', 'Machine', 'Net balance', 'Reason'].map((h) => (
+                <Th key={h} center={h === 'Net balance'}>{h}</Th>
               ))}
             </tr>
           </thead>
@@ -1981,7 +1981,6 @@ export const Reports: React.FC = () => {
                 <tr key={`${row.date}-${row.machine_id}-${i}`} className={`${rowTone} even:bg-slate-50/40 transition-colors`}>
                   <Td><span className="font-medium text-slate-600">{row.date ? fmtDate(row.date) : '—'}</span></Td>
                   <Td>{row.line ? <LineBadge name={row.line} /> : '—'}</Td>
-                  <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
                   <Td center><span className="font-mono font-semibold text-slate-600">{row.machine_id}</span></Td>
                   <Td><span className="font-medium">{row.machine_name || '—'}</span></Td>
                   <Td center>{netBalanceBadge(net)}</Td>
@@ -1996,7 +1995,7 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-blue-600 text-white">
-              <td colSpan={5} className="px-3 py-2.5 text-sm font-bold">{data!.length} machine-days</td>
+              <td colSpan={4} className="px-3 py-2.5 text-sm font-bold">{data!.length} machine-days</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center tabular-nums">{netTotalLabel}</td>
               <td className="px-3 py-2.5" />
             </tr>
@@ -2074,7 +2073,7 @@ export const Reports: React.FC = () => {
       <table className="min-w-full">
         <thead>
           <tr>
-            {['Date', 'Seq', 'Machine', 'Employee', 'Line', 'Shift target', 'Cycles', 'Box', 'Output', 'Active Mins', 'Utilisation', 'Shift Efficiency'].map((h) => (
+            {['Date', 'Machine', 'Employee', 'Line', 'Shift target', 'Cycles', 'Box', 'Output', 'Active Mins', 'Utilisation', 'Shift Efficiency'].map((h) => (
               <Th key={h} center={h === 'Shift target' || h === 'Box' || h === 'Utilisation' || h === 'Shift Efficiency'}>{h}</Th>
             ))}
           </tr>
@@ -2083,7 +2082,6 @@ export const Reports: React.FC = () => {
           {data!.map((row: any, i: number) => (
             <tr key={i} className="hover:bg-slate-50/80 even:bg-slate-50/40 transition-colors">
               <Td><span className="font-medium text-slate-600">{row.date ? fmtDate(row.date) : '—'}</span></Td>
-              <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
               <Td>
                 <span className="font-medium">{row.machine_id}</span>
                 {row.machine_name ? <span className="text-xs text-slate-500 block">{row.machine_name}</span> : null}
@@ -2111,7 +2109,7 @@ export const Reports: React.FC = () => {
         </tbody>
         <tfoot>
           <tr className="bg-blue-600 text-white">
-            <td colSpan={6} className="px-3 py-2.5 text-xs sm:text-sm font-bold">
+            <td colSpan={5} className="px-3 py-2.5 text-xs sm:text-sm font-bold">
               Totals · Shift 09:05–17:35 (480 min excl. lunch)
             </td>
             <td className="px-3 py-2.5 text-sm font-bold text-center">{data!.reduce((s: number, r: any) => s + Number(r.cycles || 0), 0)}</td>
@@ -2191,9 +2189,9 @@ export const Reports: React.FC = () => {
     metricHeaders.push('Closing WIP', 'Avg/Hr');
     const hourHeaders = HOURLY_HOUR_KEYS.map((k) => HOURLY_HOUR_LABELS[k]);
     const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
-    const allHeaders = ['Date', 'Line', 'Seq', 'Machine', ...productHeaders, ...metricHeaders, ...hourHeaders];
+    const allHeaders = ['Date', 'Line', 'Machine', ...productHeaders, ...metricHeaders, ...hourHeaders];
     const leftAlign = new Set(['Date', 'Line', 'Machine', ...HOURLY_PRODUCT_HEADERS]);
-    const labelColSpan = 4 + productHeaders.length;
+    const labelColSpan = 3 + productHeaders.length;
     const stickyLineLeft = 96;
 
     return (
@@ -2225,7 +2223,6 @@ export const Reports: React.FC = () => {
                   <Td stickyLeft={stickyLineLeft} rowShade={shaded}>
                     <LineBadge name={row.line} />
                   </Td>
-                  <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
                   <Td>{row.machine_name || row.machine_id}</Td>
                   {showProductDetails && (
                     <>
@@ -2310,7 +2307,7 @@ export const Reports: React.FC = () => {
   const renderLineEfficiency = () => {
     const avgEff = data!.length ? Math.round(data!.reduce((s, row) => s + (parseFloat(row.efficiency_percent) || 0), 0) / data!.length) : 0;
     const productHeaders = showProductDetails ? [...HOURLY_PRODUCT_HEADERS] : [];
-    const baseHeaders = ['Date', 'Line', 'Seq', 'Machine', ...productHeaders, 'Target as per SMV mins', 'Output'];
+    const baseHeaders = ['Date', 'Line', 'Machine', ...productHeaders, 'Target as per SMV mins', 'Output'];
     const lineHeaders: string[] = [...baseHeaders];
     if (showPeriodCompare) {
       comparePeriods.forEach((p) => lineHeaders.push(`Output vs ${comparePeriodHeaderLabel(p)}`));
@@ -2334,7 +2331,6 @@ export const Reports: React.FC = () => {
               <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
-                <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
                 <Td><span className="font-medium">{row.process}</span></Td>
                 {showProductDetails && (
                   <>
@@ -2374,14 +2370,13 @@ export const Reports: React.FC = () => {
       <TableWrap>
         <table className="min-w-full">
           <thead><tr>
-            {['Date','Line','Seq','Emp Code','Employee Name','Status','Login Time'].map(h => <Th key={h} center={['Status','Login Time'].includes(h)}>{h}</Th>)}
+            {['Date','Line','Emp Code','Employee Name','Status','Login Time'].map(h => <Th key={h} center={['Status','Login Time'].includes(h)}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
               <tr key={i} className={`hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors ${row.status === 'Absent' ? 'bg-red-50/40' : ''}`}>
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
-                <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
                 <Td><span className="font-mono text-gray-600">{row.emp_code}</span></Td>
                 <Td><span className="font-medium">{row.emp_name}</span></Td>
                 <Td center>
@@ -2396,7 +2391,7 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-blue-600 text-white">
-              <td colSpan={5} className="px-3 py-2.5 text-sm font-bold">{data!.length} records</td>
+              <td colSpan={4} className="px-3 py-2.5 text-sm font-bold">{data!.length} records</td>
               <td className="px-3 py-2.5 text-sm text-center font-bold">
                 ✓ {present} Present &nbsp;|&nbsp; ✗ {absent} Absent
               </td>
@@ -2415,14 +2410,13 @@ export const Reports: React.FC = () => {
       <TableWrap>
         <table className="min-w-full">
           <thead><tr>
-            {['Date','Line','Seq','Machine','Output','Rework','Rejection','Rework %','Rejection %','Category','Reason'].map(h => <Th key={h} center={!['Date','Line','Machine','Category','Reason'].includes(h)}>{h}</Th>)}
+            {['Date','Line','Machine','Output','Rework','Rejection','Rework %','Rejection %','Category','Reason'].map(h => <Th key={h} center={!['Date','Line','Machine','Category','Reason'].includes(h)}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
               <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
-                <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
                 <Td>{row.machine}</Td>
                 <Td center><span className="font-semibold">{r(row.output)}</span></Td>
                 <Td center><span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs font-bold">{r(row.rework_qty)}</span></Td>
@@ -2436,7 +2430,7 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-blue-600 text-white">
-              <td colSpan={5} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+              <td colSpan={4} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRework} rework</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalRejection} rejection</td>
               <td colSpan={4}></td>
@@ -2453,14 +2447,13 @@ export const Reports: React.FC = () => {
       <TableWrap>
         <table className="min-w-full">
           <thead><tr>
-            {['Date','Line','Seq','Emp Code','Employee Name','Machine ID','Machine Name','EOD target','Total Output','Output %'].map(h => <Th key={h} center={!['Date','Line','Emp Code','Employee Name','Machine Name'].includes(h)}>{h}</Th>)}
+            {['Date','Line','Emp Code','Employee Name','Machine ID','Machine Name','EOD target','Total Output','Output %'].map(h => <Th key={h} center={!['Date','Line','Emp Code','Employee Name','Machine Name'].includes(h)}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
               <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
-                <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
                 <Td><span className="font-mono text-gray-600">{row.emp_code}</span></Td>
                 <Td><span className="font-medium">{row.emp_name}</span></Td>
                 <Td center><span className="font-mono font-bold text-gray-500">{row.machine_id}</span></Td>
@@ -2475,7 +2468,7 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-blue-600 text-white">
-              <td colSpan={8} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+              <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput} total pairs</td>
               <td></td>
             </tr>
@@ -2498,14 +2491,13 @@ export const Reports: React.FC = () => {
       <TableWrap>
         <table className="min-w-full">
           <thead><tr>
-            {['Date','Line','Seq','Emp Code','Employee','Machine ID','Machine','EOD target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency % (in progress)','Grade'].map(h => <Th key={h} center={!['Date','Line','Emp Code','Employee','Machine'].includes(h)}>{h}</Th>)}
+            {['Date','Line','Emp Code','Employee','Machine ID','Machine','EOD target','Output','Output %','Target Mins','Actual Mins','Idle Mins','Efficiency % (in progress)','Grade'].map(h => <Th key={h} center={!['Date','Line','Emp Code','Employee','Machine'].includes(h)}>{h}</Th>)}
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {data!.map((row, i) => (
               <tr key={i} className="hover:bg-blue-50/30 even:bg-slate-50/30 transition-colors">
                 <Td><span className="font-medium text-slate-600">{fmtDate(row.date)}</span></Td>
                 <Td><LineBadge name={row.line} /></Td>
-                <Td center><span className="font-mono font-semibold text-slate-600">{rowSeq(row)}</span></Td>
                 <Td><span className="font-mono text-gray-600">{row.emp_code}</span></Td>
                 <Td><span className="font-medium">{row.emp_name}</span></Td>
                 <Td center><span className="font-mono font-bold text-gray-500">{row.machine_id}</span></Td>
@@ -2527,7 +2519,7 @@ export const Reports: React.FC = () => {
           </tbody>
           <tfoot>
             <tr className="bg-blue-600 text-white">
-              <td colSpan={8} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
+              <td colSpan={7} className="px-3 py-2.5 text-sm font-bold">{data!.length} rows</td>
               <td className="px-3 py-2.5 text-sm font-bold text-center">{totalOutput}</td>
               <td></td>
               <td colSpan={3}></td>

@@ -298,7 +298,7 @@ async function applyChangeover(payload = {}) {
        WHERE routing_header_id IN (${headerIds.map(() => '?').join(',')})`,
       headerIds
     );
-    const newMachineIds = [...new Set(newRoutingLines.map((r) => r.machine_centre_id))];
+    const routingMachineIds = [...new Set(newRoutingLines.map((r) => r.machine_centre_id))];
 
     // 2. Get ALL machines currently assigned to this work centre
     const affectedOldWorkCentres = new Set();
@@ -307,6 +307,52 @@ async function applyChangeover(payload = {}) {
       [workCentreId]
     );
     const currentMachineIds = currentlyAssigned.map((r) => r.machine_id);
+
+    // machine_centres has UNIQUE (work_centre_id, name), so a line can hold only one machine
+    // per step name (e.g. "Input"). When several selected articles bring machines with the same
+    // name, keep the first one (preferring a machine already on this line) and skip the rest.
+    const warnings = [];
+    let newMachineIds = routingMachineIds;
+    if (routingMachineIds.length > 0) {
+      const ph = routingMachineIds.map(() => '?').join(',');
+      const [machineRows] = await conn.execute(
+        `SELECT machine_id, name FROM machine_centres WHERE machine_id IN (${ph})`,
+        routingMachineIds
+      );
+      const nameById = new Map(machineRows.map((r) => [r.machine_id, r.name]));
+      const currentSet = new Set(currentMachineIds);
+      const ordered = [
+        ...routingMachineIds.filter((id) => currentSet.has(id)),
+        ...routingMachineIds.filter((id) => !currentSet.has(id)),
+      ];
+      const keptByName = new Map();
+      const normalize = (n) => String(n).trim().toLowerCase();
+      // Names that stay on the line, so a renamed machine never collides with them.
+      for (const id of ordered) {
+        const name = nameById.get(id);
+        if (name != null && !keptByName.has(normalize(name))) keptByName.set(normalize(name), id);
+      }
+      const seen = new Set();
+      for (const id of ordered) {
+        const name = nameById.get(id);
+        if (name == null) continue;
+        const key = normalize(name);
+        if (!seen.has(key)) {
+          seen.add(key);
+          continue;
+        }
+        // Duplicate name on this line: rename the machine (keeps the original text, so
+        // name-based lookups such as '%Final Output%' still match) and assign it anyway.
+        let newName = `${name} (${id})`;
+        let n = 2;
+        while (keptByName.has(normalize(newName))) newName = `${name} (${id}) ${n++}`;
+        await conn.execute('UPDATE machine_centres SET name = ? WHERE machine_id = ?', [newName, id]);
+        keptByName.set(normalize(newName), id);
+        warnings.push(
+          `Machine ${id}: name changed from "${name}" to "${newName}" so it could be assigned to this line (machine ${keptByName.get(key)} already uses "${name}").`
+        );
+      }
+    }
 
     // 3. Release machines currently on this line that are NOT in new article
     const newMachineSet = new Set(newMachineIds);
@@ -343,6 +389,7 @@ async function applyChangeover(payload = {}) {
       to_date: toDate,
       days_updated: results.length,
       results,
+      warnings,
     };
   });
 }
