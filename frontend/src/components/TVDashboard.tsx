@@ -3,9 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Target, Activity, Wifi, WifiOff, RefreshCw, AlertTriangle, ArrowDownToLine, PackageOpen, Wrench, Clock, ClipboardList, RotateCcw, XCircle } from 'lucide-react';
 import { API_BASE_URL, apiFetch } from '../services/api';
 
-/** Rework / rejection % colour — lower is better (0% green, up to 2% amber, above red). */
-const qualityPctBgClass = (pct: number) =>
-    pct <= 0 ? 'bg-emerald-500' : pct <= 2 ? 'bg-amber-500' : 'bg-red-500';
 import { HourlyOutputChart } from './HourlyOutputChart';
 import { loadEfficiencyThresholds, getEfficiencyBgClass } from '../utils/efficiencyColors';
 // import { TvPlanPacePanel } from './TvPlanPacePanel';
@@ -639,6 +636,18 @@ export const TVDashboard: React.FC = () => {
     const isStale = secondsSinceUpdate !== null && secondsSinceUpdate > 30;
     const isCriticalStale = secondsSinceUpdate !== null && secondsSinceUpdate > 120;
     const linePerformanceRows = Array.isArray(lowerSection?.linePerformance) ? lowerSection.linePerformance : [];
+    const hasRework = linePerformanceRows.some(
+        (line: any) => Number(lowerSection?.reworkByLine?.[line.work_centre_id]?.total_rework || 0) > 0
+    );
+    const hasReworkPercent = linePerformanceRows.some(
+        (line: any) => Number(lowerSection?.reworkByLine?.[line.work_centre_id]?.rework_percent || 0) > 0
+    );
+    const hasRejection = linePerformanceRows.some(
+        (line: any) => Number(lowerSection?.reworkByLine?.[line.work_centre_id]?.total_rejection || 0) > 0
+    );
+    const hasRejectionPercent = linePerformanceRows.some(
+        (line: any) => Number(lowerSection?.reworkByLine?.[line.work_centre_id]?.rejection_percent || 0) > 0
+    );
     const currentLinePerformance = linePerformanceRows.find(
         (line: any) => Number(line.work_centre_id) === Number(currentWorkCentreId)
     );
@@ -967,12 +976,19 @@ export const TVDashboard: React.FC = () => {
                             type="button"
                             onClick={() => setShowReworkDialog(true)}
                             title="Open Rework / Rejection details"
-                            className="bg-blue-800/70 hover:bg-blue-800/90 ring-1 ring-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 transition-colors cursor-pointer motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-[250ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none"
+                            className="bg-white/25 hover:bg-white/35 max-sm:bg-white/40 backdrop-blur-md rounded-md sm:rounded-lg p-1.5 sm:p-3 text-center shadow-lg min-w-0 transition-colors cursor-pointer motion-safe:opacity-0 motion-safe:animate-tv-section-in motion-safe:delay-[250ms] max-sm:opacity-100 max-sm:motion-safe:animate-none motion-reduce:opacity-100 motion-reduce:animate-none"
                         >
                             <RefreshCw className="h-4 w-4 sm:h-7 sm:w-7 text-[#FACC15] mx-auto mb-0.5 sm:mb-1 drop-shadow-md" aria-hidden />
                             <div className="text-white text-[9px] sm:text-xs mb-0.5 font-extrabold uppercase tracking-wide truncate">Rework / Rejection</div>
                             <div className="text-white text-sm sm:text-2xl font-bold drop-shadow-md tabular-nums leading-none">
-                                {Number(lowerSection?.reworkOverall?.total_rework || 0)} / {Number(lowerSection?.reworkOverall?.total_rejection || 0)}
+                                {(() => {
+                                    const rework = Number(lowerSection?.reworkOverall?.total_rework || 0);
+                                    const rejection = Number(lowerSection?.reworkOverall?.total_rejection || 0);
+                                    if (rework > 0 && rejection > 0) return `${rework} / ${rejection}`;
+                                    if (rework > 0) return `${rework} /`;
+                                    if (rejection > 0) return `/ ${rejection}`;
+                                    return '';
+                                })()}
                             </div>
                         </button>
                     </div>
@@ -1040,12 +1056,16 @@ export const TVDashboard: React.FC = () => {
                                 <th className="px-2 py-1.5 text-left font-bold text-gray-700">LINE</th>
                                 <th className="px-2 py-1.5 text-left font-bold text-gray-500">ARTICLE</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">TARGET</th>
-                                {/* INPUT column — live Heel Grip Machine quantity */}
+                                {/* INPUT columns — live Heel Grip Machine quantity and percent */}
                                 <th className="px-2 py-1.5 text-center font-bold text-cyan-600">INPUT</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-cyan-600">INPUT %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT</th>
+                                <th className="px-2 py-1.5 text-center font-bold text-gray-700">OUTPUT %</th>
                                 <th className="px-2 py-1.5 text-center font-bold text-gray-700">WIP</th>
-                                <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
-                                <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th>
+                                {hasRework && <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>}
+                                {hasReworkPercent && <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK %</th>}
+                                {hasRejection && <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th>}
+                                {hasRejectionPercent && <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION %</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -1074,11 +1094,15 @@ export const TVDashboard: React.FC = () => {
                                         {/* INPUT — live Heel Grip Machine quantity for this line */}
                                         <td className="px-2 py-2 text-center font-bold text-cyan-600 tabular-nums whitespace-nowrap">
                                             {formatInput(line.input)}
-                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${getEfficiencyBgClass(lineInputPercent)}`}>{lineInputPercent}%</span>
+                                        </td>
+                                        <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">
+                                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${getEfficiencyBgClass(lineInputPercent)}`}>{lineInputPercent}%</span>
                                         </td>
                                         <td className="px-2 py-2 text-center font-bold text-green-600 tabular-nums whitespace-nowrap">
                                             {line.output}
-                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${getEfficiencyBgClass(Number(line.output_percentage))}`}>{line.output_percentage}%</span>
+                                        </td>
+                                        <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">
+                                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${getEfficiencyBgClass(Number(line.output_percentage))}`}>{line.output_percentage}%</span>
                                         </td>
                                         {/* WIP — MES formula: Opening WIP + Input - Output */}
                                         <td className={`px-2 py-2 text-center font-bold tabular-nums ${
@@ -1086,14 +1110,26 @@ export const TVDashboard: React.FC = () => {
                                         }`}>
                                             {formatWip(line.wip)}
                                         </td>
-                                        <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums whitespace-nowrap">
-                                            {rw.total_rework}
-                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${qualityPctBgClass(Number(rw.rework_percent || 0))}`}>{Number(rw.rework_percent || 0)}%</span>
-                                        </td>
-                                        <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums whitespace-nowrap">
-                                            {rw.total_rejection}
-                                            <span className={`ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-sm align-middle ${qualityPctBgClass(Number(rw.rejection_percent || 0))}`}>{Number(rw.rejection_percent || 0)}%</span>
-                                        </td>
+                                        {hasRework && (
+                                            <td className="px-2 py-2 text-center font-bold text-yellow-600 tabular-nums whitespace-nowrap">
+                                                {Number(rw.total_rework || 0) > 0 ? rw.total_rework : ''}
+                                            </td>
+                                        )}
+                                        {hasReworkPercent && (
+                                            <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">
+                                                {Number(rw.rework_percent || 0) > 0 ? `${Number(rw.rework_percent)}%` : ''}
+                                            </td>
+                                        )}
+                                        {hasRejection && (
+                                            <td className="px-2 py-2 text-center font-bold text-red-600 tabular-nums whitespace-nowrap">
+                                                {Number(rw.total_rejection || 0) > 0 ? rw.total_rejection : ''}
+                                            </td>
+                                        )}
+                                        {hasRejectionPercent && (
+                                            <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">
+                                                {Number(rw.rejection_percent || 0) > 0 ? `${Number(rw.rejection_percent)}%` : ''}
+                                            </td>
+                                        )}
                                     </tr>
                                 );
                             })}
@@ -1441,16 +1477,24 @@ export const TVDashboard: React.FC = () => {
                             <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-100 via-amber-50 to-orange-100 px-3 py-3">
                                 <p className="text-[11px] font-extrabold uppercase tracking-wide text-amber-950">Overall · all lines</p>
                                 <div className="mt-2 grid grid-cols-2 gap-3">
-                                    <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-center">
-                                        <p className="text-[10px] font-bold uppercase text-yellow-800">Rework</p>
-                                        <p className="text-2xl font-black tabular-nums text-yellow-900">{Number(lowerSection?.reworkOverall?.total_rework || 0)}</p>
-                                        <p className="text-[11px] font-bold tabular-nums text-yellow-800">{Number(lowerSection?.reworkOverall?.rework_percent || 0)}%</p>
-                                    </div>
-                                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center">
-                                        <p className="text-[10px] font-bold uppercase text-red-800">Rejection</p>
-                                        <p className="text-2xl font-black tabular-nums text-red-900">{Number(lowerSection?.reworkOverall?.total_rejection || 0)}</p>
-                                        <p className="text-[11px] font-bold tabular-nums text-red-800">{Number(lowerSection?.reworkOverall?.rejection_percent || 0)}%</p>
-                                    </div>
+                                    {Number(lowerSection?.reworkOverall?.total_rework || 0) > 0 && (
+                                        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-center">
+                                            <p className="text-[10px] font-bold uppercase text-yellow-800">Rework</p>
+                                            <p className="text-2xl font-black tabular-nums text-yellow-900">{Number(lowerSection?.reworkOverall?.total_rework || 0)}</p>
+                                            {Number(lowerSection?.reworkOverall?.rework_percent || 0) > 0 && (
+                                                <p className="text-[11px] font-bold tabular-nums text-yellow-800">{Number(lowerSection?.reworkOverall?.rework_percent)}%</p>
+                                            )}
+                                        </div>
+                                    )}
+                                    {Number(lowerSection?.reworkOverall?.total_rejection || 0) > 0 && (
+                                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center">
+                                            <p className="text-[10px] font-bold uppercase text-red-800">Rejection</p>
+                                            <p className="text-2xl font-black tabular-nums text-red-900">{Number(lowerSection?.reworkOverall?.total_rejection || 0)}</p>
+                                            {Number(lowerSection?.reworkOverall?.rejection_percent || 0) > 0 && (
+                                                <p className="text-[11px] font-bold tabular-nums text-red-800">{Number(lowerSection?.reworkOverall?.rejection_percent)}%</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1461,10 +1505,10 @@ export const TVDashboard: React.FC = () => {
                                     <thead>
                                         <tr className="border-b-2 border-gray-200 bg-gray-50">
                                             <th className="px-2 py-1.5 text-left font-bold text-gray-700">LINE</th>
-                                            <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>
-                                            <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK %</th>
-                                            <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th>
-                                            <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION %</th>
+                                            {hasRework && <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK</th>}
+                                            {hasReworkPercent && <th className="px-2 py-1.5 text-center font-bold text-yellow-600">REWORK %</th>}
+                                            {hasRejection && <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION</th>}
+                                            {hasRejectionPercent && <th className="px-2 py-1.5 text-center font-bold text-red-600">REJECTION %</th>}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1473,10 +1517,10 @@ export const TVDashboard: React.FC = () => {
                                             return (
                                                 <tr key={line.work_centre_id} className="border-b border-gray-100">
                                                     <td className="px-2 py-1.5 font-semibold text-gray-800">{line.line_name}</td>
-                                                    <td className="px-2 py-1.5 text-center font-bold tabular-nums text-yellow-700">{Number(rw?.total_rework || 0)}</td>
-                                                    <td className="px-2 py-1.5 text-center tabular-nums text-gray-600">{Number(rw?.rework_percent || 0)}%</td>
-                                                    <td className="px-2 py-1.5 text-center font-bold tabular-nums text-red-700">{Number(rw?.total_rejection || 0)}</td>
-                                                    <td className="px-2 py-1.5 text-center tabular-nums text-gray-600">{Number(rw?.rejection_percent || 0)}%</td>
+                                                    {hasRework && <td className="px-2 py-1.5 text-center font-bold tabular-nums text-yellow-700">{Number(rw?.total_rework || 0) > 0 ? Number(rw.total_rework) : ''}</td>}
+                                                    {hasReworkPercent && <td className="px-2 py-1.5 text-center tabular-nums text-gray-600">{Number(rw?.rework_percent || 0) > 0 ? `${Number(rw.rework_percent)}%` : ''}</td>}
+                                                    {hasRejection && <td className="px-2 py-1.5 text-center font-bold tabular-nums text-red-700">{Number(rw?.total_rejection || 0) > 0 ? Number(rw.total_rejection) : ''}</td>}
+                                                    {hasRejectionPercent && <td className="px-2 py-1.5 text-center tabular-nums text-gray-600">{Number(rw?.rejection_percent || 0) > 0 ? `${Number(rw.rejection_percent)}%` : ''}</td>}
                                                 </tr>
                                             );
                                         })}

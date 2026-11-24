@@ -547,7 +547,6 @@ export const ReworkRejectionEntryTab: React.FC<Props> = ({
                       </select>
                     )}
                   </div>
-                  <div>
                 </div>
               </section>
 
