@@ -1,5 +1,6 @@
 const db = require('../../config/database');
 const logger = require('../utils/logger');
+const wipStateService = require('../services/wipStateService');
 
 class ReworkRejectionController {
   validateRow(row) {
@@ -13,10 +14,11 @@ class ReworkRejectionController {
       return 'rework_qty and rejection_qty must be non-negative numbers';
     }
     if (reworkQty + rejectionQty > totalOutput) {
-      return `Rework + rejection (${reworkQty + rejectionQty}) cannot exceed total output (${totalOutput})`;
+      return `Rework + rejection (${reworkQty + rejectionQty}) cannot exceed the line's output today (${totalOutput})`;
     }
-    if ((reworkQty > 0 || rejectionQty > 0) && (!row.reason_category || !String(row.reason || '').trim())) {
-      return 'Reason category and reason are required when rework/rejection is greater than zero';
+    // Only the category is required; typed reason and selected defect reason are optional.
+    if ((reworkQty > 0 || rejectionQty > 0) && !row.reason_category) {
+      return 'Reason category is required when rework/rejection is greater than zero';
     }
     return null;
   }
@@ -47,10 +49,19 @@ class ReworkRejectionController {
     const conn = await db.getConnection();
     try {
       await conn.beginTransaction();
-      const { work_centre_id, production_date, rows } = req.body;
+      const { work_centre_id, production_date, rows, append } = req.body;
       if (!work_centre_id || !production_date || !Array.isArray(rows) || rows.length === 0) {
         return res.status(400).json({ success: false, error: 'work_centre_id, production_date and rows are required' });
       }
+      // Rework / rejection is a line-level issue: output is the line's end-of-line output
+      // for the day (no machine). Callers may still pass total_output_pairs explicitly.
+      const lineOutput = Math.round(Number(await wipStateService.getEolOutput(Number(work_centre_id), production_date)) || 0);
+      for (const row of rows) {
+        if (row.total_output_pairs == null || row.total_output_pairs === '') row.total_output_pairs = lineOutput;
+        row.machine_centre_name = null;
+        row.bins_completed = 0;
+      }
+
       for (const row of rows) {
         const validationError = this.validateRow(row);
         if (validationError) {
@@ -59,12 +70,15 @@ class ReworkRejectionController {
         }
       }
 
-      // Idempotent save: replace existing rows for same work centre + date.
-      await conn.execute(
-        `DELETE FROM rework_rejection
-         WHERE work_centre_id = ? AND DATE(production_date) = DATE(?)`,
-        [work_centre_id, production_date]
-      );
+      // append=true: just add the given rows (single "Add Entry").
+      // Otherwise idempotent save: replace existing rows for same work centre + date.
+      if (!append) {
+        await conn.execute(
+          `DELETE FROM rework_rejection
+           WHERE work_centre_id = ? AND DATE(production_date) = DATE(?)`,
+          [work_centre_id, production_date]
+        );
+      }
 
       for (const row of rows) {
         await conn.execute(

@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    @apply overflow-hidden;
+    overscroll-behavior: none;
+  }
+  body {
+    @apply bg-gray-50 font-sans;
+  }
+}
+
+@layer utilities {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@layer components {
+  .machine-card {
+    @apply bg-white rounded-lg shadow-md p-4 border-l-4 transition-all hover:shadow-lg;
+  }
+  
+  .machine-running {
+    @apply border-l-running;
+  }
+  
+  .machine-idle {
+    @apply border-l-idle;
+  }
+  
+  .efficiency-excellent {
+    @apply text-green-600 bg-green-50;
+  }
+  
+  .efficiency-good {
+    @apply text-yellow-600 bg-yellow-50;
+  }
+  
+  .efficiency-average {
+    @apply text-orange-600 bg-orange-50;
+  }
+  
+  .efficiency-poor {
+    @apply text-red-600 bg-red-50;
+  }
+}
